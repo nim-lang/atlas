@@ -42,6 +42,6 @@ atlas use malebolgia
 Now `import malebolgia` in your Nim code and run the compiler as usual:
 
 ```
-echo "import malebogia" >myproject.nim
+echo "import malebolgia" >myproject.nim
 nim c myproject.nim
 ```
