@@ -690,7 +690,8 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
   var mapping: seq[(string, string, Version)] = @[]
   # Version selection:
   for i in 0..<g.nodes.len:
-    if g.nodes[i].active:
+    let av {.cursor.} = g.availableVersions[g.nodes[i].name]
+    if g.nodes[i].active and av.len > 0:
       # A -> (exactly one of: A1, A2, A3)
       b.openOpr(OrForm)
       b.openOpr(NotForm)
@@ -698,7 +699,6 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
       b.closeOpr
       b.openOpr(ExactlyOneOfForm)
 
-      let av {.cursor.} = g.availableVersions[g.nodes[i].name]
       var q = g.nodes[i].query
       if g.nodes[i].algo == SemVer: q = toSemVer(q)
       if g.nodes[i].algo == MinVer:
@@ -768,7 +768,8 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
           if err != "":
             error c, w.name, err
           elif w.algo != MinVer:
-            collectAvailableVersions c, g, w
+            withDir c, destDir:
+              collectAvailableVersions c, g, w
     elif w.algo != MinVer:
       withDir c, dir:
         collectAvailableVersions c, g, w
@@ -966,7 +967,7 @@ proc autoWorkspace(currentDir: string): string =
 
 proc createWorkspaceIn(workspace, depsDir: string) =
   if not fileExists(workspace / AtlasWorkspace):
-    writeFile workspace / AtlasWorkspace, "deps=\"$#\"" % escape(depsDir, "", "")
+    writeFile workspace / AtlasWorkspace, "deps=\"$#\"\nresolver=\"MaxVer\"\n" % escape(depsDir, "", "")
   createDir absoluteDepsDir(workspace, depsDir)
 
 proc parseOverridesFile(c: var AtlasContext; filename: string) =
