@@ -403,29 +403,34 @@ proc fillPackageLookupTable(c: var AtlasContext) =
       c.p[unicode.toLower entry.name] = entry.url
 
 proc toUrl(c: var AtlasContext; p: string): Uri =
-  ## turn argument into the appropriate project URL
+  # turn argument into the appropriate project URL
 
-  # # either the project name or the URL can be overwritten!
-  # if UsesOverrides in c.flags:
-  #   result = c.overrides.substitute(p)
-  #   if result.len > 0:
-  #     return result
+  # either the project name or the URL can be overwritten!
+  let p = if UsesOverrides in c.flags: c.overrides.substitute(p)
+          else: p
+  
+  try:
+    result = p.parseUri()
+  except UriParseError:
+    result = initUri()
+  
+  if result.scheme != "":
+    # only parsed the project name
+    # either the project name or the URL can be overwritten!
+    var p = if UsesOverrides in c.flags: c.overrides.substitute(p)
+            else: p
+    
+    fillPackageLookupTable(c)
+    p = c.p.getOrDefault(unicode.toLower p)
 
-  # if p.getUrl():
-  #   result = 
-  # else:
-  #   # either the project name or the URL can be overwritten!
-  #   fillPackageLookupTable(c)
-  #   result = c.p.getOrDefault(unicode.toLower p)
+    if result.len == 0:
+      result = getUrlFromGithub(p)
+      if result.len == 0:
+        inc c.errors
 
-  #   if result.len == 0:
-  #     result = getUrlFromGithub(p)
-  #     if result.len == 0:
-  #       inc c.errors
-
-  #   if UsesOverrides in c.flags:
-  #     let newUrl = c.overrides.substitute(result)
-  #     if newUrl.len > 0: return newUrl
+    if UsesOverrides in c.flags:
+      let newUrl = c.overrides.substitute(result)
+      if newUrl.len > 0: return newUrl
 
 proc toName(p: string | Uri): PackageName =
   when p is Uri:
