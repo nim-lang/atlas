@@ -84,6 +84,7 @@ proc writeVersion() =
 
 const
   MockupRun = defined(atlasTests)
+  UnitTests = defined(atlasUnitTests)
   TestsDir = "atlas/tests"
 
 type
@@ -124,7 +125,7 @@ type
   LockFile = object # serialized as JSON so an object for extensibility
     items: OrderedTable[string, LockFileEntry]
 
-  Flag = enum
+  Flag* = enum
     KeepCommits
     CfgHere
     UsesOverrides
@@ -133,7 +134,7 @@ type
     ShowGraph
     AutoEnv
 
-  AtlasContext = object
+  AtlasContext* = object
     projectDir, workspace, depsDir, currentDir: string
     hasPackageList: bool
     flags: set[Flag]
@@ -419,16 +420,19 @@ proc toUrlRaw(c: var AtlasContext; p: string): string =
     result = c.p.getOrDefault(unicode.toLower p)
 
     if result.len == 0:
-      result = getUrlFromGithub(p)
-      if result.len == 0:
+      let url = getUrlFromGithub(p)
+      if url.isNone:
+        warn c, p.PackageName, "package not found on github"
         inc c.errors
 
     if UsesOverrides in c.flags:
       let newUrl = c.overrides.substitute(result)
       if newUrl.len > 0: return newUrl
 
-proc toUrl(c: var AtlasContext; p: string): Uri =
-  result = toUrlRaw(c, p).parseUri()
+proc toUrl*(c: var AtlasContext; p: string): Uri =
+  let url = toUrlRaw(c, p)
+  # echo "url: ", url
+  result = url.parseUri()
 
 # proc toUrl(c: var AtlasContext; p: string): Uri =
 #   # turn argument into the appropriate project URL

@@ -1,5 +1,10 @@
 
-import std / [json, os, sets, strutils, httpclient, uri]
+import std / [json, os, sets, strutils, httpclient, uri, options]
+
+const
+  MockupRun = defined(atlasTests)
+  UnitTests = defined(atlasUnitTests)
+  TestsDir = "atlas/tests"
 
 type
   Package* = ref object
@@ -44,6 +49,7 @@ proc fromJson*(obj: JSonNode): Package =
 const PackagesDir* = "packages"
 
 proc getPackages*(workspaceDir: string): seq[Package] =
+  echo "getPackages: '", workspaceDir, "'"
   result = @[]
   var uniqueNames = initHashSet[string]()
   var jsonFiles = 0
@@ -72,16 +78,21 @@ proc toTags(j: JsonNode): seq[string] =
       result.add elem.getStr("")
 
 proc singleGithubSearch(term: string): JsonNode =
-  # For example:
-  # https://api.github.com/search/repositories?q=weave+language:nim
-  var client = newHttpClient()
-  try:
-    let x = client.getContent("https://api.github.com/search/repositories?q=" & encodeUrl(term) & "+language:nim")
-    result = parseJson(x)
-  except:
-    result = parseJson("{\"items\": []}")
-  finally:
-    client.close()
+  # when UnitTests:
+  #   # let packages = json.parseFile(path)
+  #   echo "CWD: ", getCurrentDir()
+  #   return parseJson("{\"items\": []}")
+  # else:
+    # For example:
+    # https://api.github.com/search/repositories?q=weave+language:nim
+    var client = newHttpClient()
+    try:
+      let x = client.getContent("https://api.github.com/search/repositories?q=" & encodeUrl(term) & "+language:nim")
+      result = parseJson(x)
+    except:
+      result = parseJson("{\"items\": []}")
+    finally:
+      client.close()
 
 proc githubSearch(seen: var HashSet[string]; terms: seq[string]) =
   for term in terms:
@@ -99,18 +110,18 @@ proc githubSearch(seen: var HashSet[string]; terms: seq[string]) =
       if not seen.containsOrIncl(p.url):
         echo p
 
-proc getUrlFromGithub*(term: string): string =
+proc getUrlFromGithub*(term: string): Option[string] =
   let results = singleGithubSearch(term)
   var matches = 0
-  result = ""
+  result = string.none
   for j in items(results.getOrDefault("items")):
     if cmpIgnoreCase(j.getOrDefault("name").getStr, term) == 0:
       if matches == 0:
-        result = j.getOrDefault("html_url").getStr
+        result = j.getOrDefault("html_url").getStr.some
       inc matches
   if matches != 1:
     # ambiguous, not ok!
-    result = ""
+    result = string.none
 
 proc search*(pkgList: seq[Package]; terms: seq[string]) =
   var seen = initHashSet[string]()
