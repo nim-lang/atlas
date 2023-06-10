@@ -3,10 +3,7 @@
 
 import std / strutils
 
-when defined(atlasStandAlone):
-  import compiler / [ast, idents, msgs, syntaxes, options, pathutils]
-else:
-  import ".." / ".." / nim / compiler / [ast, idents, msgs, syntaxes, options, pathutils]
+import compiler / [ast, idents, msgs, syntaxes, options, pathutils]
 
 type
   NimbleFileInfo* = object
