@@ -1,5 +1,7 @@
 nimcache/
 nimblecache/
 htmldocs/
+bin/
+*.exe
 src/*
 !src/*.*
