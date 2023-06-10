@@ -3,5 +3,6 @@ nimblecache/
 htmldocs/
 bin/
 *.exe
+src/atlas.exe
 src/*
 !src/*.*
