@@ -14,12 +14,14 @@ let
     "bytes2human": "https://github.com/juancarlospaco/nim-bytes2human",
   }
 
+proc initBasicWorkspace(typ: type AtlasContext): AtlasContext =
+    result.workspace = currentSourcePath().parentDir / "ws_basic"
+
 suite "urls and naming":
 
   test "basic urls":
 
-    var c: AtlasContext
-    c.workspace = ".".absolutePath
+    var c = AtlasContext.initBasicWorkspace()
 
     for name, url in basicExamples.items:
       echo "\nname: ", name
