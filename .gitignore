@@ -3,3 +3,4 @@ nimblecache/
 htmldocs/
 src/*
 !src/*.*
+config.nims
