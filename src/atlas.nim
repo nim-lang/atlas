@@ -208,7 +208,7 @@ proc exec(c: var AtlasContext; cmd: Command; args: openArray[string]): (string, 
     when ProduceTest:
       echo "cmd ", cmd, " args ", args, " --> ", result
 
-proc cloneUrl(c: var AtlasContext; url, dest: string; cloneUsingHttps: bool): string =
+proc cloneUrl(c: var AtlasContext; url: Uri, dest: string; cloneUsingHttps: bool): string =
   when MockupRun:
     result = ""
   else:
@@ -389,7 +389,7 @@ proc updatePackages(c: var AtlasContext) =
       gitPull(c, PackageName PackagesDir)
   else:
     withDir c, c.workspace:
-      let err = cloneUrl(c, "https://github.com/nim-lang/packages", PackagesDir, false)
+      let err = cloneUrl(c, parseUri "https://github.com/nim-lang/packages", PackagesDir, false)
       if err != "":
         error c, PackageName(PackagesDir), err
 
@@ -780,7 +780,7 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
     selectNode c, g, w
     if oldErrors == c.errors:
       if KeepCommits notin c.flags and w.algo == MinVer:
-        if not w.url.startsWith(FileProtocol):
+        if w.url.scheme != FileProtocol:
           checkoutCommit(c, g, w)
         else:
           withDir c, (if i != 0 or startIsDep: c.depsDir else: c.workspace):
@@ -798,9 +798,12 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
   if c.lockMode == genLock:
     writeFile c.currentDir / LockFileName, toJson(c.lockFile).pretty
 
-proc createGraph(c: var AtlasContext; start, url: string): DepGraph =
-  result = DepGraph(nodes: @[Dependency(name: toName(start), url: url, commit: "", self: 0,
-                                       algo: c.defaultAlgo)])
+proc createGraph(c: var AtlasContext; start: string, url: Uri): DepGraph =
+  result = DepGraph(nodes: @[Dependency(name: toName(start),
+                                        url: url,
+                                        commit: "",
+                                        self: 0,
+                                        algo: c.defaultAlgo)])
   result.byName.mgetOrPut(toName(start), @[]).add 0
 
 proc traverse(c: var AtlasContext; start: string; startIsDep: bool): seq[CfgPath] =
@@ -808,7 +811,7 @@ proc traverse(c: var AtlasContext; start: string; startIsDep: bool): seq[CfgPath
   let url = toUrl(c, start)
   var g = createGraph(c, start, url)
 
-  if url == "":
+  if $url == "":
     error c, toName(start), "cannot resolve package name"
     return
 
@@ -874,7 +877,7 @@ proc installDependencies(c: var AtlasContext; nimbleFile: string; startIsDep: bo
   # 2. install deps from .nimble
   var g = DepGraph(nodes: @[])
   let (_, pkgname, _) = splitFile(nimbleFile)
-  let dep = Dependency(name: toName(pkgname), url: "", commit: "", self: 0,
+  let dep = Dependency(name: toName(pkgname), url: parseUri "", commit: "", self: 0,
                        algo: c.defaultAlgo)
   discard collectDeps(c, g, -1, dep, nimbleFile)
   let paths = traverseLoop(c, g, startIsDep)
