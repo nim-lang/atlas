@@ -14,6 +14,9 @@ proc getFilePath*(x: Uri): string =
   result &= x.path
   result &= x.query
 
+proc isUrl*(x: string): bool =
+  x.startsWith("git://") or x.startsWith("https://") or x.startsWith("http://")
+
 proc getUrl*(x: string): Option[Uri] =
   try:
     let u = parseUri(x)
