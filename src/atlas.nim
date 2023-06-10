@@ -406,16 +406,12 @@ proc toUrl(c: var AtlasContext; p: string): Uri =
   # turn argument into the appropriate project URL
 
   # either the project name or the URL can be overwritten!
-  let p = if UsesOverrides in c.flags: c.overrides.substitute(p)
-          else: p
-  
   try:
     result = p.parseUri()
   except UriParseError:
     result = initUri()
   
-  if result.scheme != "":
-    # only parsed the project name
+  if result.scheme == "": # assuming it's just a package name
     # either the project name or the URL can be overwritten!
     var p = if UsesOverrides in c.flags: c.overrides.substitute(p)
             else: p
@@ -423,14 +419,14 @@ proc toUrl(c: var AtlasContext; p: string): Uri =
     fillPackageLookupTable(c)
     p = c.p.getOrDefault(unicode.toLower p)
 
-    if result.len == 0:
-      result = getUrlFromGithub(p)
-      if result.len == 0:
+    if p.len == 0:
+      p = getUrlFromGithub(p)
+      if p.len == 0:
         inc c.errors
-
-    if UsesOverrides in c.flags:
-      let newUrl = c.overrides.substitute(result)
-      if newUrl.len > 0: return newUrl
+  
+  if UsesOverrides in c.flags:
+    let p = c.overrides.substitute($result)
+    if p != "": result = p.parseUri
 
 proc toName(p: string | Uri): PackageName =
   when p is Uri:
