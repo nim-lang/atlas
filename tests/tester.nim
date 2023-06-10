@@ -8,12 +8,9 @@ if execShellCmd("nim c -r src/versions.nim") != 0:
 
 var failures = 0
 
-when defined(develop):
-  const atlasExe = "bin" / "atlas".addFileExt(ExeExt)
-  if execShellCmd("nim c -o:$# src/atlas.nim" % [atlasExe]) != 0:
-    quit("FAILURE: compilation of atlas failed")
-else:
-  const atlasExe = "atlas".addFileExt(ExeExt)
+const atlasExe = "bin" / "atlas".addFileExt(ExeExt)
+if execShellCmd("nim c -o:$# src/atlas.nim" % [atlasExe]) != 0:
+  quit("FAILURE: compilation of atlas failed")
 
 proc exec(cmd: string) =
   if execShellCmd(cmd) != 0:
@@ -92,7 +89,7 @@ proc testSemVer() =
 
   createDir "myproject"
   withDir "myproject":
-    exec "atlas --showGraph use F"
+    exec ("../../../" & atlasExe) & " --showGraph use F"
 
 withDir "tests/ws_semver":
   testSemVer()
