@@ -17,7 +17,7 @@ nim c src/atlas.nim
 
 # Tutorial
 
-Create a new workspace. A workspace contains everything we need and can savely be deleted after
+Create a new workspace. A workspace contains everything we need and can safely be deleted after
 this tutorial:
 
 ```
