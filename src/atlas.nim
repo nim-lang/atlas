@@ -646,7 +646,7 @@ proc selectDir(a, b: string): string = (if dirExists(a): a else: b)
 
 proc copyFromDisk(c: var AtlasContext; w: Dependency) =
   let destDir = toDestDir(w.name)
-  var u = w.url.substr(FileProtocol.len)
+  var u = w.url.getFilePath()
   if u.startsWith("./"): u = c.workspace / u.substr(2)
   copyDir(selectDir(u & "@" & w.commit, u), destDir)
   writeFile destDir / ThisVersion, w.commit
@@ -763,7 +763,7 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
     let dir = selectDir(c.workspace / destDir, c.depsDir / destDir)
     if not dirExists(dir):
       withDir c, (if i != 0 or startIsDep: c.depsDir else: c.workspace):
-        if w.url.startsWith(FileProtocol):
+        if w.url.scheme == FileProtocol:
           copyFromDisk c, w
         else:
           let err = cloneUrl(c, w.url, destDir, false)
