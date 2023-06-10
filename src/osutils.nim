@@ -1,10 +1,18 @@
 ## OS utilities like 'withDir'.
 ## (c) 2021 Andreas Rumpf
 
-import os, strutils, osproc
+import os, strutils, osproc, uri, options
 
-proc isUrl*(x: string): bool =
-  x.startsWith("git://") or x.startsWith("https://") or x.startsWith("http://")
+export uri, options
+
+proc getUrl*(x: string): Option[Uri] =
+  try:
+    let u = parseUri(x)
+    # x.startsWith("git://") or x.startsWith("https://") or x.startsWith("http://")
+    if u.scheme in ["git", "https", "http", "hg"]:
+      result = some u
+  except UriParseError:
+    result = Uri.none
 
 proc cloneUrl*(url, dest: string; cloneUsingHttps: bool): string =
   ## Returns an error message on error or else "".
