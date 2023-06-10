@@ -2,6 +2,7 @@
 
 import std/unittest
 import std/uri
+import std/os
 
 import atlas
 
@@ -18,6 +19,7 @@ suite "urls and naming":
   test "basic urls":
 
     var c: AtlasContext
+    c.workspace = ".".absolutePath
 
     for name, url in basicExamples.items:
       echo "\nname: ", name

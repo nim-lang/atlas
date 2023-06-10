@@ -49,7 +49,6 @@ proc fromJson*(obj: JSonNode): Package =
 const PackagesDir* = "packages"
 
 proc getPackages*(workspaceDir: string): seq[Package] =
-  echo "getPackages: '", workspaceDir, "'"
   result = @[]
   var uniqueNames = initHashSet[string]()
   var jsonFiles = 0
@@ -78,11 +77,11 @@ proc toTags(j: JsonNode): seq[string] =
       result.add elem.getStr("")
 
 proc singleGithubSearch(term: string): JsonNode =
-  # when UnitTests:
-  #   # let packages = json.parseFile(path)
-  #   echo "CWD: ", getCurrentDir()
-  #   return parseJson("{\"items\": []}")
-  # else:
+  when UnitTests:
+    # let packages = json.parseFile(path)
+    echo "CWD: ", getCurrentDir()
+    return parseJson("{\"items\": []}")
+  else:
     # For example:
     # https://api.github.com/search/repositories?q=weave+language:nim
     var client = newHttpClient()

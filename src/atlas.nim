@@ -135,7 +135,7 @@ type
     AutoEnv
 
   AtlasContext* = object
-    projectDir, workspace, depsDir, currentDir: string
+    projectDir*, workspace*, depsDir*, currentDir*: string
     hasPackageList: bool
     flags: set[Flag]
     p: Table[string, string] # name -> url mapping
@@ -398,7 +398,8 @@ proc fillPackageLookupTable(c: var AtlasContext) =
   if not c.hasPackageList:
     c.hasPackageList = true
     when not MockupRun:
-      updatePackages(c)
+      if not fileExists(c.workspace / PackagesDir / "packages.json"):
+        updatePackages(c)
     let plist = getPackages(when MockupRun: TestsDir else: c.workspace)
     for entry in plist:
       c.p[unicode.toLower entry.name] = entry.url
