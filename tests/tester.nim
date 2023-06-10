@@ -89,7 +89,7 @@ proc testSemVer() =
 
   createDir "myproject"
   withDir "myproject":
-    exec ("../../../" & atlasExe) & " --showGraph use F"
+    exec atlasExe & " --showGraph use F"
 
 withDir "tests/ws_semver":
   testSemVer()
