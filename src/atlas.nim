@@ -404,64 +404,39 @@ proc fillPackageLookupTable(c: var AtlasContext) =
     for entry in plist:
       c.p[unicode.toLower entry.name] = entry.url
 
+proc toUrl*(c: var AtlasContext; p: string): Uri =
+  ## turn argument into the appropriate project URL
 
-proc toUrlRaw(c: var AtlasContext; p: string): string =
-  if p.isUrl:
-    if UsesOverrides in c.flags:
-      result = c.overrides.substitute(p)
-      if result.len > 0: return result
-    result = p
-  else:
-    # either the project name or the URL can be overwritten!
-    if UsesOverrides in c.flags:
-      result = c.overrides.substitute(p)
-      if result.len > 0: return result
-
+  try:
+    result = p.parseUri()
+  except UriParseError:
+    result = initUri()
+  
+  if result.scheme == "":
+    # assuming it's just a package name
     fillPackageLookupTable(c)
-    result = c.p.getOrDefault(unicode.toLower p)
 
-    if result.len == 0:
+    # the project name can be overwritten!
+    var p = if UsesOverrides in c.flags: c.overrides.substitute(p)
+            else: p
+    
+    let lookup = c.p.getOrDefault(unicode.toLower p)
+    if lookup != "":
+      # found local package
+      result = lookup.parseUri()
+    else:
+      # failed to find package locally
       let url = getUrlFromGithub(p)
       if url.isSome:
-        result = url.get()
+        result = url.get().parseUri()
       else:
         warn c, p.PackageName, "package not found on github"
         inc c.errors
-
-    if UsesOverrides in c.flags:
-      let newUrl = c.overrides.substitute(result)
-      if newUrl.len > 0: return newUrl
-
-proc toUrl*(c: var AtlasContext; p: string): Uri =
-  let url = toUrlRaw(c, p)
-  # echo "url: ", url
-  result = url.parseUri()
-
-# proc toUrl(c: var AtlasContext; p: string): Uri =
-#   # turn argument into the appropriate project URL
-
-#   # either the project name or the URL can be overwritten!
-#   try:
-#     result = p.parseUri()
-#   except UriParseError:
-#     result = initUri()
   
-#   if result.scheme == "": # assuming it's just a package name
-#     # either the project name or the URL can be overwritten!
-#     var p = if UsesOverrides in c.flags: c.overrides.substitute(p)
-#             else: p
-    
-#     fillPackageLookupTable(c)
-#     p = c.p.getOrDefault(unicode.toLower p)
-
-#     if p.len == 0:
-#       p = getUrlFromGithub(p)
-#       if p.len == 0:
-#         inc c.errors
-  
-#   if UsesOverrides in c.flags:
-#     let p = c.overrides.substitute($result)
-#     if p != "": result = p.parseUri
+  # the URL can be overwritten!
+  if UsesOverrides in c.flags:
+    let p = c.overrides.substitute($result)
+    if p != "": result = p.parseUri()
 
 proc toName(p: string | Uri): PackageName =
   when p is Uri:
