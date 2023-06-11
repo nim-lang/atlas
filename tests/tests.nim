@@ -8,10 +8,23 @@ import atlas
 
 let
   basicExamples = {
-    "balls": "https://github.com/disruptek/balls/tree/master",
-    "npeg": "https://github.com/zevv/npeg",
-    "sync": "https://github.com/planetis-m/sync",
-    "bytes2human": "https://github.com/juancarlospaco/nim-bytes2human",
+    "balls": (
+      # input: "https://github.com/disruptek/balls/tree/master",
+      input: "https://github.com/disruptek/balls",
+      output: "https://github.com/disruptek/balls",
+    ),
+    "npeg": (
+      input: "https://github.com/zevv/npeg",
+      output: "https://github.com/zevv/npeg",
+    ),
+    "sync": (
+      input: "https://github.com/planetis-m/sync",
+      output: "https://github.com/planetis-m/sync",
+    ),
+    "bytes2human": (
+      input: "https://github.com/juancarlospaco/nim-bytes2human",
+      output: "https://github.com/juancarlospaco/nim-bytes2human",
+    )
   }
 
 proc initBasicWorkspace(typ: type AtlasContext): AtlasContext =
@@ -24,10 +37,10 @@ suite "urls and naming":
     var c = AtlasContext.initBasicWorkspace()
 
     for name, url in basicExamples.items:
-      echo "\nname: ", name
-      let ures = toUrl(c, url)
-      echo "ures: ", $ures
+      let ures = toUrl(c, url.input)
       check ures.hostname == "github.com"
+      check $ures == url.output
 
       let nres = toUrl(c, name)
-      echo "nres: ", $nres
+      check nres.hostname == "github.com"
+      check $nres == url.output
