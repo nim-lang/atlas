@@ -81,7 +81,7 @@ proc singleGithubSearch(term: string): JsonNode =
   when UnitTests:
     let filename = "query_github_" & term & ".json"
     let path = getProjectPath().absolutePath / "test_data" / filename
-    return json.parseFile(path)
+    result = json.parseFile(path)
   else:
     # For example:
     # https://api.github.com/search/repositories?q=weave+language:nim
@@ -115,9 +115,9 @@ proc getUrlFromGithub*(term: string): Option[string] =
   var matches = 0
   result = string.none
   for j in items(results.getOrDefault("items")):
-    if cmpIgnoreCase(j.getOrDefault("name").getStr, term) == 0:
-      if matches == 0:
-        result = j.getOrDefault("html_url").getStr.some
+    let name = j.getOrDefault("name").getStr
+    if cmpIgnoreCase(name, term) == 0:
+      result = some j.getOrDefault("html_url").getStr
       inc matches
   if matches != 1:
     # ambiguous, not ok!

@@ -422,7 +422,9 @@ proc toUrlRaw(c: var AtlasContext; p: string): string =
 
     if result.len == 0:
       let url = getUrlFromGithub(p)
-      if url.isNone:
+      if url.isSome:
+        result = url.get()
+      else:
         warn c, p.PackageName, "package not found on github"
         inc c.errors
 
