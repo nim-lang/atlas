@@ -38,6 +38,10 @@ proc cloneUrl*(url: Uri, dest: string; cloneUsingHttps: bool): string =
 
   var isGithub = false
   if modUrl.hostname == "github.com":
+    if modUrl.path.endsWith("/"):
+      # github + https + trailing url slash causes a
+      # checkout/ls-remote to fail with Repository not found
+      modUrl.path = modUrl.path[0 .. ^2]
     isGithub = true
 
   let (_, exitCode) = execCmdEx("git ls-remote --quiet --tags " & $modUrl)
