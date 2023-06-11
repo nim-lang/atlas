@@ -8,7 +8,7 @@ if execShellCmd("nim c -r src/versions.nim") != 0:
 
 var failures = 0
 
-const atlasExe = "bin" / "atlas".addFileExt(ExeExt)
+let atlasExe = absolutePath("bin" / "atlas".addFileExt(ExeExt))
 if execShellCmd("nim c -o:$# src/atlas.nim" % [atlasExe]) != 0:
   quit("FAILURE: compilation of atlas failed")
 
