@@ -17,14 +17,14 @@ proc getFilePath*(x: Uri): string =
 proc isUrl*(x: string): bool =
   x.startsWith("git://") or x.startsWith("https://") or x.startsWith("http://")
 
-proc getUrl*(x: string): Option[Uri] =
+proc getUrl*(x: string): Uri =
   try:
     let u = parseUri(x)
     # x.startsWith("git://") or x.startsWith("https://") or x.startsWith("http://")
     if u.scheme in ["git", "https", "http", "hg"]:
-      result = some u
+      result = u
   except UriParseError:
-    result = Uri.none
+    discard
 
 proc cloneUrl*(url: Uri, dest: string; cloneUsingHttps: bool): string =
   ## Returns an error message on error or else "".
@@ -33,11 +33,11 @@ proc cloneUrl*(url: Uri, dest: string; cloneUsingHttps: bool): string =
   if url.scheme == "git" and cloneUsingHttps:
     modUrl.scheme = "https"
 
-  # github + https + trailing url slash causes a
-  # checkout/ls-remote to fail with Repository not found
+  if url.scheme == "git":
+    modUrl.scheme = "" # git doesn't recognize git://
+
   var isGithub = false
-  if modUrl.hostname == "github.com" and modUrl.path.endsWith("/"):
-    modUrl.path = modUrl.path[0 .. ^2]
+  if modUrl.hostname == "github.com":
     isGithub = true
 
   let (_, exitCode) = execCmdEx("git ls-remote --quiet --tags " & $modUrl)

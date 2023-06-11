@@ -408,7 +408,7 @@ proc toUrl*(c: var AtlasContext; p: string): Uri =
   ## turn argument into the appropriate project URL
 
   try:
-    result = p.parseUri()
+    result = p.getUrl()
   except UriParseError:
     result = initUri()
   
@@ -423,12 +423,12 @@ proc toUrl*(c: var AtlasContext; p: string): Uri =
     let lookup = c.p.getOrDefault(unicode.toLower p)
     if lookup != "":
       # found local package
-      result = lookup.parseUri()
+      result = lookup.getUrl()
     else:
       # failed to find package locally
       let url = getUrlFromGithub(p)
       if url.isSome:
-        result = url.get().parseUri()
+        result = url.get().getUrl()
       else:
         warn c, p.PackageName, "package not found on github"
         inc c.errors
@@ -436,7 +436,7 @@ proc toUrl*(c: var AtlasContext; p: string): Uri =
   # the URL can be overwritten!
   if UsesOverrides in c.flags:
     let p = c.overrides.substitute($result)
-    if p != "": result = p.parseUri()
+    if p != "": result = p.getUrl()
 
 proc toName(p: string | Uri): PackageName =
   when p is Uri:

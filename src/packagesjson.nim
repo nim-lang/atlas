@@ -1,11 +1,17 @@
 
 import std / [json, os, sets, strutils, httpclient, uri, options]
-from macros import getProjectPath
 
 const
   MockupRun = defined(atlasTests)
   UnitTests = defined(atlasUnitTests)
   TestsDir = "atlas/tests"
+
+when UnitTests:
+  proc findAtlasDir*(): string =
+    result = currentSourcePath().absolutePath
+    while not result.endsWith("atlas"):
+      result = result.parentDir
+      assert result != "", "atlas dir not found!"
 
 type
   Package* = ref object
@@ -80,7 +86,7 @@ proc toTags(j: JsonNode): seq[string] =
 proc singleGithubSearch(term: string): JsonNode =
   when UnitTests:
     let filename = "query_github_" & term & ".json"
-    let path = getProjectPath().absolutePath / "test_data" / filename
+    let path = findAtlasDir() / "tests" / "test_data" / filename
     result = json.parseFile(path)
   else:
     # For example:
