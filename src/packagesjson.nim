@@ -1,5 +1,6 @@
 
 import std / [json, os, sets, strutils, httpclient, uri, options]
+from macros import getProjectPath
 
 const
   MockupRun = defined(atlasTests)
@@ -78,9 +79,9 @@ proc toTags(j: JsonNode): seq[string] =
 
 proc singleGithubSearch(term: string): JsonNode =
   when UnitTests:
-    # let packages = json.parseFile(path)
-    echo "CWD: ", getCurrentDir()
-    return parseJson("{\"items\": []}")
+    let filename = "query_github_" & term & ".json"
+    let path = getProjectPath().absolutePath / "test_data" / filename
+    return json.parseFile(path)
   else:
     # For example:
     # https://api.github.com/search/repositories?q=weave+language:nim
