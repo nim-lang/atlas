@@ -10,8 +10,10 @@
 ## a Nimble dependency and its dependencies recursively.
 
 import std / [parseopt, strutils, os, osproc, tables, sets, json, jsonutils,
-  parsecfg, streams, terminal, strscans, hashes]
+  parsecfg, streams, terminal, strscans, hashes, options]
 import parse_requires, osutils, packagesjson, compiledpatterns, versions, sat
+
+export osutils
 
 from unicode import nil
 
@@ -84,6 +86,7 @@ proc writeVersion() =
 
 const
   MockupRun = defined(atlasTests)
+  UnitTests = defined(atlasUnitTests)
   TestsDir = "atlas/tests"
 
 type
@@ -91,7 +94,8 @@ type
     noLock, genLock, useLock
 
   LockFileEntry = object
-    url, commit: string
+    url: PackageUrl
+    commit: string
 
   PackageName = distinct string
   CfgPath = distinct string # put into a config `--path:"../x"`
@@ -106,7 +110,8 @@ type
 
   Dependency = object
     name: PackageName
-    url, commit: string
+    url: PackageUrl
+    commit: string
     query: VersionInterval
     self: int # position in the graph
     parents: seq[int] # why we need this dependency
@@ -122,7 +127,7 @@ type
   LockFile = object # serialized as JSON so an object for extensibility
     items: OrderedTable[string, LockFileEntry]
 
-  Flag = enum
+  Flag* = enum
     KeepCommits
     CfgHere
     UsesOverrides
@@ -131,8 +136,8 @@ type
     ShowGraph
     AutoEnv
 
-  AtlasContext = object
-    projectDir, workspace, depsDir, currentDir: string
+  AtlasContext* = object
+    projectDir*, workspace*, depsDir*, currentDir*: string
     hasPackageList: bool
     flags: set[Flag]
     p: Table[string, string] # name -> url mapping
@@ -206,7 +211,7 @@ proc exec(c: var AtlasContext; cmd: Command; args: openArray[string]): (string, 
     when ProduceTest:
       echo "cmd ", cmd, " args ", args, " --> ", result
 
-proc cloneUrl(c: var AtlasContext; url, dest: string; cloneUsingHttps: bool): string =
+proc cloneUrl(c: var AtlasContext; url: PackageUrl, dest: string; cloneUsingHttps: bool): string =
   when MockupRun:
     result = ""
   else:
@@ -387,7 +392,7 @@ proc updatePackages(c: var AtlasContext) =
       gitPull(c, PackageName PackagesDir)
   else:
     withDir c, c.workspace:
-      let err = cloneUrl(c, "https://github.com/nim-lang/packages", PackagesDir, false)
+      let err = cloneUrl(c, getUrl "https://github.com/nim-lang/packages", PackagesDir, false)
       if err != "":
         error c, PackageName(PackagesDir), err
 
@@ -395,45 +400,55 @@ proc fillPackageLookupTable(c: var AtlasContext) =
   if not c.hasPackageList:
     c.hasPackageList = true
     when not MockupRun:
-      updatePackages(c)
+      if not fileExists(c.workspace / PackagesDir / "packages.json"):
+        updatePackages(c)
     let plist = getPackages(when MockupRun: TestsDir else: c.workspace)
     for entry in plist:
       c.p[unicode.toLower entry.name] = entry.url
 
-proc toUrl(c: var AtlasContext; p: string): string =
-  if p.isUrl:
-    if UsesOverrides in c.flags:
-      result = c.overrides.substitute(p)
-      if result.len > 0: return result
-    result = p
-  else:
-    # either the project name or the URL can be overwritten!
-    if UsesOverrides in c.flags:
-      result = c.overrides.substitute(p)
-      if result.len > 0: return result
+proc toUrl*(c: var AtlasContext; p: string): PackageUrl =
+  ## turn argument into the appropriate project URL
 
+  try:
+    result = p.getUrl()
+  except UriParseError:
+    result = getUrl("")
+  
+  if result.scheme == "":
+    # assuming it's just a package name
     fillPackageLookupTable(c)
-    result = c.p.getOrDefault(unicode.toLower p)
 
-    if result.len == 0:
-      result = getUrlFromGithub(p)
-      if result.len == 0:
+    # the project name can be overwritten!
+    var p = if UsesOverrides in c.flags: c.overrides.substitute(p)
+            else: p
+    
+    let lookup = c.p.getOrDefault(unicode.toLower p)
+    if lookup != "":
+      # found local package
+      result = lookup.getUrl()
+    else:
+      # failed to find package locally
+      let url = getUrlFromGithub(p)
+      if url.isSome:
+        result = url.get().getUrl()
+      else:
+        warn c, p.PackageName, "package not found on github"
         inc c.errors
+  
+  # the URL can be overwritten!
+  if UsesOverrides in c.flags:
+    let p = c.overrides.substitute($result)
+    if p != "": result = p.getUrl()
 
-    if UsesOverrides in c.flags:
-      let newUrl = c.overrides.substitute(result)
-      if newUrl.len > 0: return newUrl
-
-proc toName(p: string): PackageName =
-  if p.isUrl:
-    result = PackageName splitFile(p).name
+proc toName(p: string | PackageUrl): PackageName =
+  when p is PackageUrl:
+    result = PackageName splitFile($p).name
   else:
     result = PackageName p
 
 proc generateDepGraph(c: var AtlasContext; g: DepGraph) =
   proc repr(w: Dependency): string =
-    if w.url.endsWith("/"): w.url & w.commit
-    else: w.url & "/" & w.commit
+    $(w.url / w.commit)
 
   var dotGraph = ""
   for i in 0 ..< g.nodes.len:
@@ -471,8 +486,8 @@ proc getRequiredCommit(c: var AtlasContext; w: Dependency): string =
   elif isShortCommitHash(w.commit): shortToCommit(c, w.commit)
   else: w.commit
 
-proc getRemoteUrl(): string =
-  execProcess("git config --get remote.origin.url").strip()
+proc getRemoteUrl(): PackageUrl =
+  execProcess("git config --get remote.origin.url").strip().getUrl()
 
 proc genLockEntry(c: var AtlasContext; w: Dependency) =
   let url = getRemoteUrl()
@@ -488,7 +503,7 @@ proc commitFromLockFile(c: var AtlasContext; w: Dependency): string =
     result = entry.commit
     if entry.url != url:
       error c, w.name, "remote URL has been compromised: got: " &
-          url & " but wanted: " & entry.url
+          $url & " but wanted: " & $entry.url
   else:
     error c, w.name, "package is not listed in the lock file"
 
@@ -506,7 +521,7 @@ proc selectNode(c: var AtlasContext; g: var DepGraph; w: Dependency) =
   for e in items g.byName[w.name]:
     g.nodes[e].active = e == w.self
   if c.lockMode == genLock:
-    if w.url.startsWith(FileProtocol):
+    if w.url.scheme == FileProtocol:
       c.lockFile.items[w.name.string] = LockFileEntry(url: w.url, commit: w.commit)
     else:
       genLockEntry(c, w)
@@ -577,12 +592,12 @@ proc addUniqueDep(c: var AtlasContext; g: var DepGraph; parent: int;
     warn c, toName(pkg), "cannot resolve package name"
   else:
     let key = url / commit
-    if g.processed.hasKey(key):
-      g.nodes[g.processed[key]].parents.addUnique parent
+    if g.processed.hasKey($key):
+      g.nodes[g.processed[$key]].parents.addUnique parent
     else:
       let self = g.nodes.len
       g.byName.mgetOrPut(toName(pkg), @[]).add self
-      g.processed[key] = self
+      g.processed[$key] = self
       if c.lockMode == useLock:
         if c.lockfile.items.contains(pkg):
           g.nodes.add Dependency(name: toName(pkg),
@@ -644,7 +659,7 @@ proc selectDir(a, b: string): string = (if dirExists(a): a else: b)
 
 proc copyFromDisk(c: var AtlasContext; w: Dependency) =
   let destDir = toDestDir(w.name)
-  var u = w.url.substr(FileProtocol.len)
+  var u = w.url.getFilePath()
   if u.startsWith("./"): u = c.workspace / u.substr(2)
   copyDir(selectDir(u & "@" & w.commit, u), destDir)
   writeFile destDir / ThisVersion, w.commit
@@ -761,7 +776,7 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
     let dir = selectDir(c.workspace / destDir, c.depsDir / destDir)
     if not dirExists(dir):
       withDir c, (if i != 0 or startIsDep: c.depsDir else: c.workspace):
-        if w.url.startsWith(FileProtocol):
+        if w.url.scheme == FileProtocol:
           copyFromDisk c, w
         else:
           let err = cloneUrl(c, w.url, destDir, false)
@@ -778,7 +793,7 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
     selectNode c, g, w
     if oldErrors == c.errors:
       if KeepCommits notin c.flags and w.algo == MinVer:
-        if not w.url.startsWith(FileProtocol):
+        if w.url.scheme != FileProtocol:
           checkoutCommit(c, g, w)
         else:
           withDir c, (if i != 0 or startIsDep: c.depsDir else: c.workspace):
@@ -796,9 +811,12 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
   if c.lockMode == genLock:
     writeFile c.currentDir / LockFileName, toJson(c.lockFile).pretty
 
-proc createGraph(c: var AtlasContext; start, url: string): DepGraph =
-  result = DepGraph(nodes: @[Dependency(name: toName(start), url: url, commit: "", self: 0,
-                                       algo: c.defaultAlgo)])
+proc createGraph(c: var AtlasContext; start: string, url: PackageUrl): DepGraph =
+  result = DepGraph(nodes: @[Dependency(name: toName(start),
+                                        url: url,
+                                        commit: "",
+                                        self: 0,
+                                        algo: c.defaultAlgo)])
   result.byName.mgetOrPut(toName(start), @[]).add 0
 
 proc traverse(c: var AtlasContext; start: string; startIsDep: bool): seq[CfgPath] =
@@ -806,7 +824,7 @@ proc traverse(c: var AtlasContext; start: string; startIsDep: bool): seq[CfgPath
   let url = toUrl(c, start)
   var g = createGraph(c, start, url)
 
-  if url == "":
+  if $url == "":
     error c, toName(start), "cannot resolve package name"
     return
 
@@ -872,7 +890,7 @@ proc installDependencies(c: var AtlasContext; nimbleFile: string; startIsDep: bo
   # 2. install deps from .nimble
   var g = DepGraph(nodes: @[])
   let (_, pkgname, _) = splitFile(nimbleFile)
-  let dep = Dependency(name: toName(pkgname), url: "", commit: "", self: 0,
+  let dep = Dependency(name: toName(pkgname), url: getUrl "", commit: "", self: 0,
                        algo: c.defaultAlgo)
   discard collectDeps(c, g, -1, dep, nimbleFile)
   let paths = traverseLoop(c, g, startIsDep)
