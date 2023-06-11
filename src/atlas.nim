@@ -10,8 +10,10 @@
 ## a Nimble dependency and its dependencies recursively.
 
 import std / [parseopt, strutils, os, osproc, tables, sets, json, jsonutils,
-  parsecfg, streams, terminal, strscans, hashes, uri]
+  parsecfg, streams, terminal, strscans, hashes, options]
 import parse_requires, osutils, packagesjson, compiledpatterns, versions, sat
+
+export osutils
 
 from unicode import nil
 
@@ -92,7 +94,7 @@ type
     noLock, genLock, useLock
 
   LockFileEntry = object
-    url: Uri
+    url: PackageUrl
     commit: string
 
   PackageName = distinct string
@@ -108,7 +110,7 @@ type
 
   Dependency = object
     name: PackageName
-    url: Uri
+    url: PackageUrl
     commit: string
     query: VersionInterval
     self: int # position in the graph
@@ -209,7 +211,7 @@ proc exec(c: var AtlasContext; cmd: Command; args: openArray[string]): (string, 
     when ProduceTest:
       echo "cmd ", cmd, " args ", args, " --> ", result
 
-proc cloneUrl(c: var AtlasContext; url: Uri, dest: string; cloneUsingHttps: bool): string =
+proc cloneUrl(c: var AtlasContext; url: PackageUrl, dest: string; cloneUsingHttps: bool): string =
   when MockupRun:
     result = ""
   else:
@@ -390,7 +392,7 @@ proc updatePackages(c: var AtlasContext) =
       gitPull(c, PackageName PackagesDir)
   else:
     withDir c, c.workspace:
-      let err = cloneUrl(c, parseUri "https://github.com/nim-lang/packages", PackagesDir, false)
+      let err = cloneUrl(c, getUrl "https://github.com/nim-lang/packages", PackagesDir, false)
       if err != "":
         error c, PackageName(PackagesDir), err
 
@@ -404,13 +406,13 @@ proc fillPackageLookupTable(c: var AtlasContext) =
     for entry in plist:
       c.p[unicode.toLower entry.name] = entry.url
 
-proc toUrl*(c: var AtlasContext; p: string): Uri =
+proc toUrl*(c: var AtlasContext; p: string): PackageUrl =
   ## turn argument into the appropriate project URL
 
   try:
     result = p.getUrl()
   except UriParseError:
-    result = initUri()
+    result = getUrl("")
   
   if result.scheme == "":
     # assuming it's just a package name
@@ -438,8 +440,8 @@ proc toUrl*(c: var AtlasContext; p: string): Uri =
     let p = c.overrides.substitute($result)
     if p != "": result = p.getUrl()
 
-proc toName(p: string | Uri): PackageName =
-  when p is Uri:
+proc toName(p: string | PackageUrl): PackageName =
+  when p is PackageUrl:
     result = PackageName splitFile($p).name
   else:
     result = PackageName p
@@ -484,8 +486,8 @@ proc getRequiredCommit(c: var AtlasContext; w: Dependency): string =
   elif isShortCommitHash(w.commit): shortToCommit(c, w.commit)
   else: w.commit
 
-proc getRemoteUrl(): Uri =
-  execProcess("git config --get remote.origin.url").strip().parseUri()
+proc getRemoteUrl(): PackageUrl =
+  execProcess("git config --get remote.origin.url").strip().getUrl()
 
 proc genLockEntry(c: var AtlasContext; w: Dependency) =
   let url = getRemoteUrl()
@@ -809,7 +811,7 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
   if c.lockMode == genLock:
     writeFile c.currentDir / LockFileName, toJson(c.lockFile).pretty
 
-proc createGraph(c: var AtlasContext; start: string, url: Uri): DepGraph =
+proc createGraph(c: var AtlasContext; start: string, url: PackageUrl): DepGraph =
   result = DepGraph(nodes: @[Dependency(name: toName(start),
                                         url: url,
                                         commit: "",
@@ -888,7 +890,7 @@ proc installDependencies(c: var AtlasContext; nimbleFile: string; startIsDep: bo
   # 2. install deps from .nimble
   var g = DepGraph(nodes: @[])
   let (_, pkgname, _) = splitFile(nimbleFile)
-  let dep = Dependency(name: toName(pkgname), url: parseUri "", commit: "", self: 0,
+  let dep = Dependency(name: toName(pkgname), url: getUrl "", commit: "", self: 0,
                        algo: c.defaultAlgo)
   discard collectDeps(c, g, -1, dep, nimbleFile)
   let paths = traverseLoop(c, g, startIsDep)

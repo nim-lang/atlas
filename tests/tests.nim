@@ -1,7 +1,6 @@
 
 
 import std/unittest
-import std/uri
 import std/os
 
 import atlas

@@ -1,11 +1,16 @@
 ## OS utilities like 'withDir'.
 ## (c) 2021 Andreas Rumpf
 
-import os, strutils, osproc, uri, options
+import os, strutils, osproc, uri
 
-export uri, options
+export UriParseError
 
-proc getFilePath*(x: Uri): string =
+type
+  PackageUrl* = Uri
+
+export uri.`$`, uri.`/`
+
+proc getFilePath*(x: PackageUrl): string =
   assert x.scheme == "file"
   result = x.hostname
   if x.port.len() > 0:
@@ -17,16 +22,16 @@ proc getFilePath*(x: Uri): string =
 proc isUrl*(x: string): bool =
   x.startsWith("git://") or x.startsWith("https://") or x.startsWith("http://")
 
-proc getUrl*(x: string): Uri =
+proc getUrl*(x: string): PackageUrl =
   try:
-    let u = parseUri(x)
+    let u = parseUri(x).PackageUrl
     # x.startsWith("git://") or x.startsWith("https://") or x.startsWith("http://")
     if u.scheme in ["git", "https", "http", "hg"]:
       result = u
   except UriParseError:
     discard
 
-proc cloneUrl*(url: Uri, dest: string; cloneUsingHttps: bool): string =
+proc cloneUrl*(url: PackageUrl, dest: string; cloneUsingHttps: bool): string =
   ## Returns an error message on error or else "".
   result = ""
   var modUrl = url
