@@ -120,4 +120,4 @@ jobs:
       - name: Run tests
         run: |
           cd atlas
-          nim c -r -d:develop tests/tester.nim
+          nim c -r tests/tester.nim
