@@ -46,5 +46,5 @@
     "description": "Useful synchronization primitives",
     "license": "MIT",
     "web": "https://github.com/planetis-m/sync"
-  },
+  }
 ]
