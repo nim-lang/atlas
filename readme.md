@@ -3,12 +3,9 @@ The Atlas Package cloner. It manages an isolated workspace that contains project
 
 # Installation
 
-Upcoming Nim version 2.0 will ship with `atlas`. Building from source is unfortunately a bit complicated:
+Upcoming Nim version 2.0 will ship with `atlas`. Building from source:
 
 ```
-mkdir atlasbuild
-cd atlasbuild
-git clone https://github.com/nim-lang/nim.git
 git clone https://github.com/nim-lang/atlas.git
 cd atlas
 nim c src/atlas.nim
@@ -17,7 +14,7 @@ nim c src/atlas.nim
 
 # Tutorial
 
-Create a new workspace. A workspace contains everything we need and can savely be deleted after
+Create a new workspace. A workspace contains everything we need and can safely be deleted after
 this tutorial:
 
 ```
