@@ -120,5 +120,4 @@ jobs:
       - name: Run tests
         run: |
           cd atlas
-          export PATH="$PWD:$PATH"
           nim c -r tests/tester.nim
