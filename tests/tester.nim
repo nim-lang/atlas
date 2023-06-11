@@ -16,7 +16,8 @@ proc exec(cmd: string) =
   if execShellCmd(cmd) != 0:
     quit "FAILURE: " & cmd
 
-proc sameDirContents(expected, given: string) =
+proc sameDirContents(expected, given: string): bool =
+  result = true
   for _, e in walkDir(expected):
     let g = given / splitPath(e).tail
     if fileExists(g):
@@ -24,20 +25,22 @@ proc sameDirContents(expected, given: string) =
         echo "FAILURE: files differ: ", e
         echo diffFiles(e, g).output
         inc failures
+        result = false
     else:
       echo "FAILURE: file does not exist: ", g
       inc failures
+      result = false
 
 proc testWsConflict() =
   const myproject = "tests/ws_conflict/myproject"
   createDir(myproject)
   exec atlasExe & " --project=" & myproject & " --showGraph --genLock use https://github.com/apkg"
-  sameDirContents("tests/ws_conflict/expected", myproject)
-  removeDir("tests/ws_conflict/apkg")
-  removeDir("tests/ws_conflict/bpkg")
-  removeDir("tests/ws_conflict/cpkg")
-  removeDir("tests/ws_conflict/dpkg")
-  removeDir(myproject)
+  if sameDirContents("tests/ws_conflict/expected", myproject):
+    removeDir("tests/ws_conflict/apkg")
+    removeDir("tests/ws_conflict/bpkg")
+    removeDir("tests/ws_conflict/cpkg")
+    removeDir("tests/ws_conflict/dpkg")
+    removeDir(myproject)
 
 type
   Node = object
@@ -88,7 +91,9 @@ proc testSemVer() =
 
 withDir "tests/ws_semver":
   testSemVer()
-sameDirContents("tests/ws_semver/expected", "tests/ws_semver/myproject")
+if sameDirContents("tests/ws_semver/expected", "tests/ws_semver/myproject"):
+  removeDir("tests/ws_semver/myproject")
+  removeDir("tests/ws_semver/source")
 
 testWsConflict()
 if failures > 0: quit($failures & " failures occurred.")
