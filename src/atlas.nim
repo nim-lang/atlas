@@ -687,7 +687,8 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
   b.add newVar(VarId 0)
 
   assert g.nodes.len > 0
-  assert g.nodes[0].active
+  #assert g.nodes[0].active # this does not have to be true if some
+  # project is listed multiple times in the .nimble file.
   # Implications:
   for i in 0..<g.nodes.len:
     if g.nodes[i].active:
@@ -892,6 +893,7 @@ proc installDependencies(c: var AtlasContext; nimbleFile: string; startIsDep: bo
   let (_, pkgname, _) = splitFile(nimbleFile)
   let dep = Dependency(name: toName(pkgname), url: getUrl "", commit: "", self: 0,
                        algo: c.defaultAlgo)
+  g.byName.mgetOrPut(toName(pkgname), @[]).add 0
   discard collectDeps(c, g, -1, dep, nimbleFile)
   let paths = traverseLoop(c, g, startIsDep)
   patchNimCfg(c, paths, if CfgHere in c.flags: c.currentDir else: findSrcDir(c))

@@ -1,0 +1,9 @@
+digraph deps {
+"file://./source/F/#head" [label=""];
+"file://./source/E/2.0.0" [label=""];
+"file://./source/D/1.0.0" [label=""];
+"file://./source/C/1.0" [label=""];
+"file://./source/F/#head" -> "file://./source/E/2.0.0";
+"file://./source/E/2.0.0" -> "file://./source/D/1.0.0";
+"file://./source/D/1.0.0" -> "file://./source/C/1.0";
+}
