@@ -435,7 +435,6 @@ proc toUrlStr(c: var AtlasContext; p: string): string =
 proc toUrl*(c: var AtlasContext; p: string): PackageUrl =
   let urlstr = toUrlStr(c, p)
   result = urlstr.getUrl()
-  echo "toUrl: p: '", p, "' -> '", $result, "' (", urlstr, ") " 
 
 # proc toUrl*(c: var AtlasContext; p: string): PackageUrl =
 #   ## turn argument into the appropriate project URL
@@ -473,10 +472,8 @@ proc toUrl*(c: var AtlasContext; p: string): PackageUrl =
 
 proc toName(p: PackageUrl): PackageName =
   result = PackageName splitFile(p.path).name
-  echo "toName:URL: ", $p, " => ", result.string
 
 proc toName(p: string): PackageName =
-  echo "toName: ", p.repr
   assert not p.startsWith("http")
   result = PackageName p
 
@@ -525,7 +522,6 @@ proc getRemoteUrl(): PackageUrl =
 
 proc genLockEntry(c: var AtlasContext; w: Dependency) =
   let url = getRemoteUrl()
-  echo "genLockEntry: url: ", $url
   var commit = getRequiredCommit(c, w)
   if commit.len == 0 or needsCommitLookup(commit):
     commit = execProcess("git log -1 --pretty=format:%H").strip()
@@ -556,7 +552,6 @@ proc selectNode(c: var AtlasContext; g: var DepGraph; w: Dependency) =
   for e in items g.byName[w.name]:
     g.nodes[e].active = e == w.self
   if c.lockMode == genLock:
-    echo "selectNode: w.name: ", w.name.string
     if w.url.scheme == FileProtocol:
       c.lockFile.items[w.name.string] = LockFileEntry(url: $w.url, commit: w.commit)
     else:
@@ -680,7 +675,6 @@ proc collectDeps(c: var AtlasContext; g: var DepGraph; parent: int;
       error c, toName(nimbleFile), "invalid 'requires' syntax: " & r
     else:
       if cmpIgnoreCase(pkgUrl.path, "nim") != 0:
-        echo "collectDeps: ", $pkgName
         c.addUniqueDep g, parent, pkgUrl, query
       else:
         rememberNimVersion g, query
@@ -852,7 +846,6 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
     writeFile c.currentDir / LockFileName, toJson(c.lockFile).pretty
 
 proc createGraph(c: var AtlasContext; start: string, url: PackageUrl): DepGraph =
-  echo "createGraph: start: ", start
   result = DepGraph(nodes: @[Dependency(name: toName(start),
                                         url: url,
                                         commit: "",
@@ -931,11 +924,9 @@ proc installDependencies(c: var AtlasContext; nimbleFile: string; startIsDep: bo
   # 2. install deps from .nimble
   var g = DepGraph(nodes: @[])
   let (_, pkgname, _) = splitFile(nimbleFile)
-  echo "installDependencies: pkgname: ", pkgname
   let dep = Dependency(name: toName(pkgname), url: getUrl "", commit: "", self: 0,
                        algo: c.defaultAlgo)
   g.byName.mgetOrPut(toName(pkgname), @[]).add 0
-  echo "installDependencies: pkgname: ", pkgname
   discard collectDeps(c, g, -1, dep, nimbleFile)
   let paths = traverseLoop(c, g, startIsDep)
   patchNimCfg(c, paths, if CfgHere in c.flags: c.currentDir else: findSrcDir(c))
