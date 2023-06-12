@@ -16,7 +16,8 @@ proc exec(cmd: string) =
   if execShellCmd(cmd) != 0:
     quit "FAILURE: " & cmd
 
-proc sameDirContents(expected, given: string) =
+proc sameDirContents(expected, given: string): bool =
+  result = true
   for _, e in walkDir(expected):
     let g = given / splitPath(e).tail
     if fileExists(g):
@@ -24,20 +25,22 @@ proc sameDirContents(expected, given: string) =
         echo "FAILURE: files differ: ", e
         echo diffFiles(e, g).output
         inc failures
+        result = false
     else:
       echo "FAILURE: file does not exist: ", g
       inc failures
+      result = false
 
 proc testWsConflict() =
   const myproject = "tests/ws_conflict/myproject"
   createDir(myproject)
   exec atlasExe & " --project=" & myproject & " --showGraph --genLock use https://github.com/apkg"
-  sameDirContents("tests/ws_conflict/expected", myproject)
-  removeDir("tests/ws_conflict/apkg")
-  removeDir("tests/ws_conflict/bpkg")
-  removeDir("tests/ws_conflict/cpkg")
-  removeDir("tests/ws_conflict/dpkg")
-  removeDir(myproject)
+  if sameDirContents("tests/ws_conflict/expected", myproject):
+    removeDir("tests/ws_conflict/apkg")
+    removeDir("tests/ws_conflict/bpkg")
+    removeDir("tests/ws_conflict/cpkg")
+    removeDir("tests/ws_conflict/dpkg")
+    removeDir(myproject)
 
 type
   Node = object
@@ -57,29 +60,24 @@ template withDir(dir: string; body: untyped) =
     setCurrentDir(old)
 
 proc createNimblePackage(node: Node) =
-  let packagePath = node.name
-  createDir(packagePath)
-  withDir packagePath:
-    var nimbleContent = &"""
-# Nimble package file for {node.name}
-author = "Your Name"
-license = "MIT"
-
-# Dependencies
-    """
-    for d in node.deps:
-      nimbleContent.add &"requires \"{d}\""
-    writeFile(node.name & ".nimble", nimbleContent)
+  for v in node.versions:
+    let packagePath = if v != "1.0.0": node.name & "@" & v else: node.name
+    createDir(packagePath)
+    withDir packagePath:
+      var nimbleContent = ""
+      for d in node.deps:
+        nimbleContent.add &"requires \"{d}\""
+      writeFile(node.name & ".nimble", nimbleContent)
 
 proc testSemVer() =
   # Example graph data
-  var graph: seq[Node] = @[
+  let graph = @[
     createNode("A", @["1.0.0", "1.1.0", "2.0.0"], @[]),
     createNode("B", @["2.1.0", "3.0.0", "3.1.0"], @["A >= 1.0.0"]),
     createNode("C", @["1.2.0", "1.2.1"], @["B >= 2.0.0"]),
-    createNode("D", @["1.0.0", "1.1.0", "1.1.1"], @[]),
+    createNode("D", @["1.0.0", "1.1.0", "1.1.1"], @["C >= 1.0"]),
     createNode("E", @["2.0.0", "2.0.1", "2.1.0"], @["D >= 1.0.0"]),
-    createNode("F", @["1.0.0", "1.0.1", "1.1.0"], @["E >= 2.0.0"]),
+    createNode("F", @["1.0.0", "1.0.1", "1.1.0"], @["E >= 2.0.0"])
   ]
 
   createDir "source"
@@ -93,6 +91,9 @@ proc testSemVer() =
 
 withDir "tests/ws_semver":
   testSemVer()
+if sameDirContents("tests/ws_semver/expected", "tests/ws_semver/myproject"):
+  removeDir("tests/ws_semver/myproject")
+  removeDir("tests/ws_semver/source")
 
 testWsConflict()
 if failures > 0: quit($failures & " failures occurred.")

@@ -42,6 +42,9 @@ jobs:
       NIM_BRANCH: ${{ matrix.target.nim_branch }}
       NIM_ARCH: ${{ matrix.target.cpu }}
     steps:
+      - name: set `core.autocrlf` to false
+        run: git config --global core.autocrlf false
+
       - name: Checkout atlas
         uses: actions/checkout@v3
         with:
