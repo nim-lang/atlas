@@ -1,7 +1,7 @@
 ## OS utilities like 'withDir'.
 ## (c) 2021 Andreas Rumpf
 
-import os, strutils, osproc, uri
+import os, strutils, osproc, uri, json
 
 export UriParseError
 
@@ -20,13 +20,15 @@ proc getFilePath*(x: PackageUrl): string =
   result &= x.query
 
 proc isUrl*(x: string): bool =
-  x.startsWith("git://") or x.startsWith("https://") or x.startsWith("http://")
+  x.startsWith("git://") or
+  x.startsWith("https://") or
+  x.startsWith("http://") or
+  x.startsWith("file://")
 
 proc getUrl*(x: string): PackageUrl =
   try:
     let u = parseUri(x).PackageUrl
-    # x.startsWith("git://") or x.startsWith("https://") or x.startsWith("http://")
-    if u.scheme in ["git", "https", "http", "hg"]:
+    if u.scheme in ["git", "https", "http", "hg", "file"]:
       result = u
   except UriParseError:
     discard
@@ -55,6 +57,7 @@ proc cloneUrl*(url: PackageUrl, dest: string; cloneUsingHttps: bool): string =
     # retry multiple times to avoid annoying github timeouts:
     for i in 0..4:
       os.sleep(4000)
+      echo "Cloning URL: ", $modUrl
       xcode = execCmdEx("git ls-remote --quiet --tags " & $modUrl)[1]
       if xcode == QuitSuccess: break
 

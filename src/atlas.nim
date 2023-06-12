@@ -94,7 +94,7 @@ type
     noLock, genLock, useLock
 
   LockFileEntry = object
-    url: PackageUrl
+    url: string
     commit: string
 
   PackageName = distinct string
@@ -406,45 +406,79 @@ proc fillPackageLookupTable(c: var AtlasContext) =
     for entry in plist:
       c.p[unicode.toLower entry.name] = entry.url
 
-proc toUrl*(c: var AtlasContext; p: string): PackageUrl =
-  ## turn argument into the appropriate project URL
-
-  try:
-    result = p.getUrl()
-  except UriParseError:
-    result = getUrl("")
-  
-  if result.scheme == "":
-    # assuming it's just a package name
-    fillPackageLookupTable(c)
-
-    # the project name can be overwritten!
-    var p = if UsesOverrides in c.flags: c.overrides.substitute(p)
-            else: p
-    
-    let lookup = c.p.getOrDefault(unicode.toLower p)
-    if lookup != "":
-      # found local package
-      result = lookup.getUrl()
-    else:
-      # failed to find package locally
-      let url = getUrlFromGithub(p)
-      if url.isSome:
-        result = url.get().getUrl()
-      else:
-        warn c, p.PackageName, "package not found on github"
-        inc c.errors
-  
-  # the URL can be overwritten!
-  if UsesOverrides in c.flags:
-    let p = c.overrides.substitute($result)
-    if p != "": result = p.getUrl()
-
-proc toName(p: string | PackageUrl): PackageName =
-  when p is PackageUrl:
-    result = PackageName splitFile($p).name
+proc toUrlStr(c: var AtlasContext; p: string): string =
+  if p.isUrl:
+    if UsesOverrides in c.flags:
+      result = c.overrides.substitute(p)
+      if result.len > 0: return result
+    result = p
   else:
-    result = PackageName p
+    # either the project name or the URL can be overwritten!
+    if UsesOverrides in c.flags:
+      result = c.overrides.substitute(p)
+      if result.len > 0: return result
+
+    fillPackageLookupTable(c)
+    result = c.p.getOrDefault(unicode.toLower p)
+
+    if result.len == 0:
+      let res = getUrlFromGithub(p)
+      if res.isNone:
+        inc c.errors
+      else:
+        result = res.get()
+
+    if UsesOverrides in c.flags:
+      let newUrl = c.overrides.substitute(result)
+      if newUrl.len > 0: return newUrl
+
+proc toUrl*(c: var AtlasContext; p: string): PackageUrl =
+  let urlstr = toUrlStr(c, p)
+  result = urlstr.getUrl()
+  echo "toUrl: p: '", p, "' -> '", $result, "' (", urlstr, ") " 
+
+# proc toUrl*(c: var AtlasContext; p: string): PackageUrl =
+#   ## turn argument into the appropriate project URL
+
+#   try:
+#     result = p.getUrl()
+#   except UriParseError:
+#     result = getUrl("")
+  
+#   if result.scheme == "":
+#     # assuming it's just a package name
+#     fillPackageLookupTable(c)
+
+#     # the project name can be overwritten!
+#     var p = if UsesOverrides in c.flags: c.overrides.substitute(p)
+#             else: p
+    
+#     let lookup = c.p.getOrDefault(unicode.toLower p)
+#     if lookup != "":
+#       # found local package
+#       result = lookup.getUrl()
+#     else:
+#       # failed to find package locally
+#       let url = getUrlFromGithub(p)
+#       if url.isSome:
+#         result = url.get().getUrl()
+#       else:
+#         warn c, p.PackageName, "package not found on github"
+#         inc c.errors
+  
+#   # the URL can be overwritten!
+#   if UsesOverrides in c.flags:
+#     let p = c.overrides.substitute($result)
+#     if p != "": result = p.getUrl()
+
+proc toName(p: PackageUrl): PackageName =
+  result = PackageName splitFile(p.path).name
+  echo "toName:URL: ", $p, " => ", result.string
+
+proc toName(p: string): PackageName =
+  echo "toName: ", p.repr
+  assert not p.startsWith("http")
+  result = PackageName p
 
 proc generateDepGraph(c: var AtlasContext; g: DepGraph) =
   proc repr(w: Dependency): string =
@@ -491,17 +525,18 @@ proc getRemoteUrl(): PackageUrl =
 
 proc genLockEntry(c: var AtlasContext; w: Dependency) =
   let url = getRemoteUrl()
+  echo "genLockEntry: url: ", $url
   var commit = getRequiredCommit(c, w)
   if commit.len == 0 or needsCommitLookup(commit):
     commit = execProcess("git log -1 --pretty=format:%H").strip()
-  c.lockFile.items[w.name.string] = LockFileEntry(url: url, commit: commit)
+  c.lockFile.items[w.name.string] = LockFileEntry(url: $url, commit: commit)
 
 proc commitFromLockFile(c: var AtlasContext; w: Dependency): string =
   let url = getRemoteUrl()
   let entry = c.lockFile.items.getOrDefault(w.name.string)
   if entry.commit.len > 0:
     result = entry.commit
-    if entry.url != url:
+    if entry.url != $url:
       error c, w.name, "remote URL has been compromised: got: " &
           $url & " but wanted: " & $entry.url
   else:
@@ -513,7 +548,7 @@ proc dependencyDir(c: AtlasContext; w: Dependency): string =
     result = c.depsDir / w.name.string
 
 const
-  FileProtocol = "file://"
+  FileProtocol = "file"
   ThisVersion = "current_version.atlas"
 
 proc selectNode(c: var AtlasContext; g: var DepGraph; w: Dependency) =
@@ -521,8 +556,9 @@ proc selectNode(c: var AtlasContext; g: var DepGraph; w: Dependency) =
   for e in items g.byName[w.name]:
     g.nodes[e].active = e == w.self
   if c.lockMode == genLock:
+    echo "selectNode: w.name: ", w.name.string
     if w.url.scheme == FileProtocol:
-      c.lockFile.items[w.name.string] = LockFileEntry(url: w.url, commit: w.commit)
+      c.lockFile.items[w.name.string] = LockFileEntry(url: $w.url, commit: w.commit)
     else:
       genLockEntry(c, w)
 
@@ -584,10 +620,11 @@ proc addUnique[T](s: var seq[T]; elem: sink T) =
   if not s.contains(elem): s.add elem
 
 proc addUniqueDep(c: var AtlasContext; g: var DepGraph; parent: int;
-                  pkg: string; query: VersionInterval) =
+                  pkg: PackageUrl; query: VersionInterval) =
   let commit = versionKey(query)
   let oldErrors = c.errors
-  let url = toUrl(c, pkg)
+  let url = pkg
+  let name = pkg.toName
   if oldErrors != c.errors:
     warn c, toName(pkg), "cannot resolve package name"
   else:
@@ -596,20 +633,20 @@ proc addUniqueDep(c: var AtlasContext; g: var DepGraph; parent: int;
       g.nodes[g.processed[$key]].parents.addUnique parent
     else:
       let self = g.nodes.len
-      g.byName.mgetOrPut(toName(pkg), @[]).add self
+      g.byName.mgetOrPut(name, @[]).add self
       g.processed[$key] = self
       if c.lockMode == useLock:
-        if c.lockfile.items.contains(pkg):
-          g.nodes.add Dependency(name: toName(pkg),
-                                 url: c.lockfile.items[pkg].url,
-                                 commit: c.lockfile.items[pkg].commit,
+        if c.lockfile.items.contains(name.string):
+          g.nodes.add Dependency(name: name,
+                                 url: c.lockfile.items[name.string].url.getUrl(),
+                                 commit: c.lockfile.items[name.string].commit,
                                  self: self,
                                  parents: @[parent],
                                  algo: c.defaultAlgo)
         else:
-          error c, toName(pkg), "package is not listed in the lock file"
+          error c, pkg.toName, "package is not listed in the lock file"
       else:
-        g.nodes.add Dependency(name: toName(pkg), url: url, commit: commit,
+        g.nodes.add Dependency(name: name, url: url, commit: commit,
                                self: self,
                                query: query,
                                parents: @[parent],
@@ -637,12 +674,14 @@ proc collectDeps(c: var AtlasContext; g: var DepGraph; parent: int;
     while i < r.len and r[i] notin {'#', '<', '=', '>'} + Whitespace: inc i
     let pkgName = r.substr(0, i-1)
     var err = pkgName.len == 0
+    let pkgUrl = c.toUrl(pkgName)
     let query = parseVersionInterval(r, i, err)
     if err:
       error c, toName(nimbleFile), "invalid 'requires' syntax: " & r
     else:
-      if cmpIgnoreCase(pkgName, "nim") != 0:
-        c.addUniqueDep g, parent, pkgName, query
+      if cmpIgnoreCase(pkgUrl.path, "nim") != 0:
+        echo "collectDeps: ", $pkgName
+        c.addUniqueDep g, parent, pkgUrl, query
       else:
         rememberNimVersion g, query
   result = CfgPath(toDestDir(dep.name) / nimbleInfo.srcDir)
@@ -813,6 +852,7 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
     writeFile c.currentDir / LockFileName, toJson(c.lockFile).pretty
 
 proc createGraph(c: var AtlasContext; start: string, url: PackageUrl): DepGraph =
+  echo "createGraph: start: ", start
   result = DepGraph(nodes: @[Dependency(name: toName(start),
                                         url: url,
                                         commit: "",
@@ -891,9 +931,11 @@ proc installDependencies(c: var AtlasContext; nimbleFile: string; startIsDep: bo
   # 2. install deps from .nimble
   var g = DepGraph(nodes: @[])
   let (_, pkgname, _) = splitFile(nimbleFile)
+  echo "installDependencies: pkgname: ", pkgname
   let dep = Dependency(name: toName(pkgname), url: getUrl "", commit: "", self: 0,
                        algo: c.defaultAlgo)
   g.byName.mgetOrPut(toName(pkgname), @[]).add 0
+  echo "installDependencies: pkgname: ", pkgname
   discard collectDeps(c, g, -1, dep, nimbleFile)
   let paths = traverseLoop(c, g, startIsDep)
   patchNimCfg(c, paths, if CfgHere in c.flags: c.currentDir else: findSrcDir(c))
