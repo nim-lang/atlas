@@ -406,69 +406,35 @@ proc fillPackageLookupTable(c: var AtlasContext) =
     for entry in plist:
       c.p[unicode.toLower entry.name] = entry.url
 
-proc toUrlStr(c: var AtlasContext; p: string): string =
-  if p.isUrl:
-    if UsesOverrides in c.flags:
-      result = c.overrides.substitute(p)
-      if result.len > 0: return result
-    result = p
-  else:
-    # either the project name or the URL can be overwritten!
-    if UsesOverrides in c.flags:
-      result = c.overrides.substitute(p)
-      if result.len > 0: return result
-
-    fillPackageLookupTable(c)
-    result = c.p.getOrDefault(unicode.toLower p)
-
-    if result.len == 0:
-      let res = getUrlFromGithub(p)
-      if res.isNone:
-        inc c.errors
-      else:
-        result = res.get()
-
-    if UsesOverrides in c.flags:
-      let newUrl = c.overrides.substitute(result)
-      if newUrl.len > 0: return newUrl
-
 proc toUrl*(c: var AtlasContext; p: string): PackageUrl =
-  let urlstr = toUrlStr(c, p)
+  proc parseUrl(c: var AtlasContext; p: string): string =
+    if p.isUrl:
+      if UsesOverrides in c.flags:
+        result = c.overrides.substitute(p)
+        if result.len > 0: return result
+      result = p
+    else:
+      # either the project name or the URL can be overwritten!
+      if UsesOverrides in c.flags:
+        result = c.overrides.substitute(p)
+        if result.len > 0: return result
+
+      fillPackageLookupTable(c)
+      result = c.p.getOrDefault(unicode.toLower p)
+
+      if result.len == 0:
+        let res = getUrlFromGithub(p)
+        if res.isNone:
+          inc c.errors
+        else:
+          result = res.get()
+
+      if UsesOverrides in c.flags:
+        let newUrl = c.overrides.substitute(result)
+        if newUrl.len > 0: return newUrl
+  
+  let urlstr = parseUrl(c, p)
   result = urlstr.getUrl()
-
-# proc toUrl*(c: var AtlasContext; p: string): PackageUrl =
-#   ## turn argument into the appropriate project URL
-
-#   try:
-#     result = p.getUrl()
-#   except UriParseError:
-#     result = getUrl("")
-  
-#   if result.scheme == "":
-#     # assuming it's just a package name
-#     fillPackageLookupTable(c)
-
-#     # the project name can be overwritten!
-#     var p = if UsesOverrides in c.flags: c.overrides.substitute(p)
-#             else: p
-    
-#     let lookup = c.p.getOrDefault(unicode.toLower p)
-#     if lookup != "":
-#       # found local package
-#       result = lookup.getUrl()
-#     else:
-#       # failed to find package locally
-#       let url = getUrlFromGithub(p)
-#       if url.isSome:
-#         result = url.get().getUrl()
-#       else:
-#         warn c, p.PackageName, "package not found on github"
-#         inc c.errors
-  
-#   # the URL can be overwritten!
-#   if UsesOverrides in c.flags:
-#     let p = c.overrides.substitute($result)
-#     if p != "": result = p.getUrl()
 
 proc toName(p: PackageUrl): PackageName =
   result = PackageName splitFile(p.path).name
