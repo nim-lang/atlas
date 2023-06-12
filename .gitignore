@@ -9,4 +9,4 @@ src/*
 tests/*
 !tests/*.*
 atlas
-dep.png
+deps.png
