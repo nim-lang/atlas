@@ -407,7 +407,7 @@ proc fillPackageLookupTable(c: var AtlasContext) =
       c.p[unicode.toLower entry.name] = entry.url
 
 proc toUrl*(c: var AtlasContext; p: string): PackageUrl =
-  proc parseUrl(c: var AtlasContext; p: string): string =
+  proc lookup(c: var AtlasContext; p: string): string =
     if p.isUrl:
       if UsesOverrides in c.flags:
         result = c.overrides.substitute(p)
@@ -433,7 +433,7 @@ proc toUrl*(c: var AtlasContext; p: string): PackageUrl =
         let newUrl = c.overrides.substitute(result)
         if newUrl.len > 0: return newUrl
   
-  let urlstr = parseUrl(c, p)
+  let urlstr = lookup(c, p)
   result = urlstr.getUrl()
 
 proc toName(p: PackageUrl): PackageName =
