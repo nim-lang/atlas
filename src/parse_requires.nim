@@ -10,6 +10,7 @@ type
     requires*: seq[string]
     srcDir*: string
     tasks*: seq[(string, string)]
+    hasInstallHooks*: bool
 
 proc extract(n: PNode; conf: ConfigRef; result: var NimbleFileInfo) =
   case n.kind
@@ -30,6 +31,17 @@ proc extract(n: PNode; conf: ConfigRef; result: var NimbleFileInfo) =
       of "task":
         if n.len >= 3 and n[1].kind == nkIdent and n[2].kind in {nkStrLit..nkTripleStrLit}:
           result.tasks.add((n[1].ident.s, n[2].strVal))
+      of "before", "after":
+        #[
+          before install do:
+            exec "git submodule update --init"
+            var make = "make"
+            when defined(windows):
+              make = "mingw32-make"
+            exec make
+        ]#
+        if n.len >= 3 and n[1].kind == nkIdent and n[1].ident.s == "install":
+          result.hasInstallHooks = true
       else: discard
   of nkAsgn, nkFastAsgn:
     if n[0].kind == nkIdent and cmpIgnoreCase(n[0].ident.s, "srcDir") == 0:

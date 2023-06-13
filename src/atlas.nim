@@ -117,6 +117,7 @@ type
     self: int # position in the graph
     parents: seq[int] # why we need this dependency
     active: bool
+    hasInstallHooks: bool
     algo: ResolutionAlgorithm
   DepGraph = object
     nodes: seq[Dependency]
@@ -642,6 +643,8 @@ proc collectDeps(c: var AtlasContext; g: var DepGraph; parent: int;
   # else return "".
   assert nimbleFile != ""
   let nimbleInfo = extractRequiresInfo(c, nimbleFile)
+  if dep.self >= 0:
+    g.nodes[dep.self].hasInstallHooks = nimbleInfo.hasInstallHooks
   for r in nimbleInfo.requires:
     var i = 0
     while i < r.len and r[i] notin {'#', '<', '=', '>'} + Whitespace: inc i
@@ -702,8 +705,21 @@ template builder(pattern: string; body: untyped) =
 
 include $2
 """
+  InstallHookTemplate = """
 
-proc runNimScriptBuilder(c: var AtlasContext; p: (string, string); name: PackageName) =
+template after(name, body: untyped) =
+  when astToStr(name) == "install":
+    body
+
+template before(name, body: untyped) =
+  when astToStr(name) == "install":
+    body
+
+include $1
+
+"""
+
+proc runNimScript(c: var AtlasContext; scriptContent: string; name: PackageName) =
   const BuildNims = "atlas_build_temp.nims"
   var buildNims = "atlas_build_0.nims"
   var i = 1
@@ -714,14 +730,19 @@ proc runNimScriptBuilder(c: var AtlasContext; p: (string, string); name: Package
     buildNims = "atlas_build_" & $i & ".nims"
     inc i
 
-  let script = BuilderScriptTemplate % [p[0].escape, p[1].escape]
-  writeFile buildNims, script
+  writeFile buildNims, scriptContent
 
   let cmdLine = "nim e --hints:off " & quoteShell(buildNims)
   if os.execShellCmd(cmdLine) != 0:
     error c, name, "Nimscript failed: " & cmdLine
   else:
     removeFile buildNims
+
+proc runNimScriptInstallHook(c: var AtlasContext; nimbleFile: string; name: PackageName) =
+  runNimScript c, InstallHookTemplate % [nimbleFile.escape], name
+
+proc runNimScriptBuilder(c: var AtlasContext; p: (string, string); name: PackageName) =
+  runNimScript c, BuilderScriptTemplate % [p[0].escape, p[1].escape], name
 
 proc runBuildSteps(c: var AtlasContext; g: var DepGraph) =
   # `countdown` suffices to give us some kind of topological sort:
@@ -730,6 +751,10 @@ proc runBuildSteps(c: var AtlasContext; g: var DepGraph) =
       let destDir = toDestDir(g.nodes[i].name)
       let dir = selectDir(c.workspace / destDir, c.depsDir / destDir)
       tryWithDir dir:
+        if g.nodes[i].hasInstallHooks:
+          let nf = findNimbleFile(c, g.nodes[i])
+          if nf.len > 0:
+            runNimScriptInstallHook c, nf, g.nodes[i].name
         for p in mitems c.plugins.builderPatterns:
           let f = p[0] % dir.splitPath.tail
           if fileExists(f):
