@@ -186,3 +186,80 @@ atlas env devel
 ```
 
 When completed, run `source nim-1.6.12/activate.sh` on UNIX and `nim-1.6.12/activate.bat` on Windows.
+
+
+## Dependency resolution
+
+To change the used dependency resolution mechanism, edit the `resolver` value of
+your `atlas.workspace` file. The possible values are:
+
+### MaxVer
+
+The default resolution mechanism is called "MaxVer" where the highest available version is selected
+that still fits the requirements.
+
+Suppose you have a dependency called "mylibrary" with the following available versions:
+1.0.0, 1.1.0, and 2.0.0. `MaxVer` selects the version 2.0.0.
+
+
+
+### SemVer
+
+Adhere to Semantic Versioning (SemVer) by selecting the highest version that satisfies the specified
+version range. SemVer follows the format of `MAJOR.MINOR.PATCH`, where:
+
+MAJOR version indicates incompatible changes.
+
+MINOR version indicates backward-compatible new features.
+
+PATCH version indicates backward-compatible bug fixes.
+
+Consider the same "mylibrary" dependency with versions 1.0.0, 1.1.0, and 2.0.0. If you set the
+resolver to `SemVer` and specify a version range requirement of `>= 1.0.0`, the highest version
+that satisfies the range that does not introduce incompatible changes will be selected. In this
+case, the selected version would be 1.1.0.
+
+
+### MinVer
+
+For the "mylibrary" dependency with versions 1.0.0, 1.1.0, and 2.0.0, if you set the resolver
+to `MinVer` and specify multiple minimum versions, the highest version among the minimum
+required versions will be selected. For example, if you specify a minimum requirement of
+both `>=1.0.0` and `>=2.0.0`, the selected version would be 2.0.0.
+
+
+
+## Plugins
+
+Atlas operates on a graph of dependencies. A dependency is a git project of a specific commit.
+The graph and version selection algorithms are mostly programming language agnostic. Thus it is
+easy to integrate foreign projects as dependencies into your project.
+
+This is accomplished by Atlas plugins. A plugin is a NimScript snippet that can call into
+external tools via `exec`.
+
+To enable plugins, add the line `plugins="_plugins"` to your `atlas.workspace` file. Then create
+a directory `_plugins` in your workspace. Every `*.nims` file inside the plugins directory is
+integrated into Atlas.
+
+
+### Builders
+
+A builder is a build tool like `make` or `cmake`. What tool to use is determined by the existence
+of certain files in the project's top level directory. For example, a file `CMakeLists.txt`
+indicates a `cmake` based build:
+
+```nim
+
+builder "CMakeLists.txt":
+  mkDir "build"
+  withDir "build":
+    exec "cmake .."
+    exec "cmake --build . --config Release"
+
+```
+
+Save this as `_plugins/cmake.nims`. Then every dependency that contains a `CMakeLists.txt` file
+will be build with `cmake`.
+
+**Note**: To disable any kind of action that might run arbitrary code, use the `--noexec` switch.

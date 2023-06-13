@@ -10,6 +10,7 @@ type
     requires*: seq[string]
     srcDir*: string
     tasks*: seq[(string, string)]
+    hasInstallHooks*: bool
 
 proc extract(n: PNode; conf: ConfigRef; result: var NimbleFileInfo) =
   case n.kind
@@ -30,6 +31,17 @@ proc extract(n: PNode; conf: ConfigRef; result: var NimbleFileInfo) =
       of "task":
         if n.len >= 3 and n[1].kind == nkIdent and n[2].kind in {nkStrLit..nkTripleStrLit}:
           result.tasks.add((n[1].ident.s, n[2].strVal))
+      of "before", "after":
+        #[
+          before install do:
+            exec "git submodule update --init"
+            var make = "make"
+            when defined(windows):
+              make = "mingw32-make"
+            exec make
+        ]#
+        if n.len >= 3 and n[1].kind == nkIdent and n[1].ident.s == "install":
+          result.hasInstallHooks = true
       else: discard
   of nkAsgn, nkFastAsgn:
     if n[0].kind == nkIdent and cmpIgnoreCase(n[0].ident.s, "srcDir") == 0:
@@ -55,6 +67,37 @@ proc extractRequiresInfo*(nimbleFile: string): NimbleFileInfo =
   var parser: Parser
   if setupParser(parser, fileIdx, newIdentCache(), conf):
     extract(parseAll(parser), conf, result)
+    closeParser(parser)
+
+type
+  PluginInfo* = object
+    builderPatterns*: seq[(string, string)]
+
+proc extractPlugin(nimscriptFile: string; n: PNode; conf: ConfigRef; result: var PluginInfo) =
+  case n.kind
+  of nkStmtList, nkStmtListExpr:
+    for child in n:
+      extractPlugin(nimscriptFile, child, conf, result)
+  of nkCallKinds:
+    if n[0].kind == nkIdent:
+      case n[0].ident.s
+      of "builder":
+        if n.len >= 3 and n[1].kind in {nkStrLit..nkTripleStrLit}:
+          result.builderPatterns.add((n[1].strVal, nimscriptFile))
+      else: discard
+  else:
+    discard
+
+proc extractPluginInfo*(nimscriptFile: string; info: var PluginInfo) =
+  var conf = newConfigRef()
+  conf.foreignPackageNotes = {}
+  conf.notes = {}
+  conf.mainPackageNotes = {}
+
+  let fileIdx = fileInfoIdx(conf, AbsoluteFile nimscriptFile)
+  var parser: Parser
+  if setupParser(parser, fileIdx, newIdentCache(), conf):
+    extractPlugin(nimscriptFile, parseAll(parser), conf, info)
     closeParser(parser)
 
 const Operators* = {'<', '>', '=', '&', '@', '!', '^'}
