@@ -643,7 +643,7 @@ proc collectDeps(c: var AtlasContext; g: var DepGraph; parent: int;
   # else return "".
   assert nimbleFile != ""
   let nimbleInfo = extractRequiresInfo(c, nimbleFile)
-  if dep.self >= 0:
+  if dep.self >= 0 and dep.self < g.nodes.len:
     g.nodes[dep.self].hasInstallHooks = nimbleInfo.hasInstallHooks
   for r in nimbleInfo.requires:
     var i = 0
