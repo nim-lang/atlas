@@ -715,6 +715,9 @@ template before(name, body: untyped) =
   when astToStr(name) == "install":
     body
 
+proc getPkgDir*(): string = getCurrentDir()
+proc thisDir*(): string = getCurrentDir()
+
 include $1
 
 """
