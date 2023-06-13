@@ -11,3 +11,6 @@ bin = @["atlas"]
 # Dependencies
 
 requires "nim >= 1.6.0"
+
+task docs, "build Atlas's docs":
+  exec "nim rst2html --putenv:atlasversion=$1 doc/atlas.md" % version
