@@ -63,6 +63,7 @@ Options:
   --project=DIR         use DIR as the current project
   --genlock             generate a lock file (use with `clone` and `update`)
   --uselock             use the lock file for the build
+  --noexec              do not perform any action that may run arbitrary code
   --autoenv             detect the minimal Nim $version and setup a
                         corresponding Nim virtual environment
   --autoinit            auto initialize a workspace
@@ -135,6 +136,7 @@ type
     NoColors
     ShowGraph
     AutoEnv
+    NoExec
 
   AtlasContext* = object
     projectDir*, workspace*, depsDir*, currentDir*: string
@@ -149,6 +151,7 @@ type
     when MockupRun:
       step: int
       mockupSuccess: bool
+    plugins: PluginInfo
 
 proc `==`*(a, b: CfgPath): bool {.borrow.}
 
@@ -231,6 +234,15 @@ template withDir*(c: var AtlasContext; dir: string; body: untyped) =
       body
     finally:
       setCurrentDir(oldDir)
+
+template tryWithDir*(dir: string; body: untyped) =
+  let oldDir = getCurrentDir()
+  try:
+    if dirExists(dir):
+      setCurrentDir(dir)
+      body
+  finally:
+    setCurrentDir(oldDir)
 
 proc extractRequiresInfo(c: var AtlasContext; nimbleFile: string): NimbleFileInfo =
   result = extractRequiresInfo(nimbleFile)
@@ -432,7 +444,7 @@ proc toUrl*(c: var AtlasContext; p: string): PackageUrl =
       if UsesOverrides in c.flags:
         let newUrl = c.overrides.substitute(result)
         if newUrl.len > 0: return newUrl
-  
+
   let urlstr = lookup(c, p)
   result = urlstr.getUrl()
 
@@ -679,6 +691,50 @@ proc collectAvailableVersions(c: var AtlasContext; g: var DepGraph; w: Dependenc
     if not g.availableVersions.hasKey(w.name):
       g.availableVersions[w.name] = collectTaggedVersions(c)
 
+const
+  BuilderScriptTemplate = """
+
+const matchedPattern = $1
+
+template builder(pattern: string; body: untyped) =
+  when pattern == matchedPattern:
+    body
+
+include $2
+"""
+
+proc runNimScriptBuilder(c: var AtlasContext; p: (string, string); name: PackageName) =
+  const BuildNims = "atlas_build_temp.nims"
+  var buildNims = "atlas_build_0.nims"
+  var i = 1
+  while fileExists(buildNims):
+    if i >= 20:
+      error c, name, "could not create new: atlas_build_0.nims"
+      return
+    buildNims = "atlas_build_" & $i & ".nims"
+    inc i
+
+  let script = BuilderScriptTemplate % [p[0].escape, p[1].escape]
+  writeFile buildNims, script
+
+  let cmdLine = "nim e --hints:off " & quoteShell(buildNims)
+  if os.execShellCmd(cmdLine) != 0:
+    error c, name, "Nimscript failed: " & cmdLine
+  else:
+    removeFile buildNims
+
+proc runBuildSteps(c: var AtlasContext; g: var DepGraph) =
+  # `countdown` suffices to give us some kind of topological sort:
+  for i in countdown(g.nodes.len-1, 0):
+    if g.nodes[i].active:
+      let destDir = toDestDir(g.nodes[i].name)
+      let dir = selectDir(c.workspace / destDir, c.depsDir / destDir)
+      tryWithDir dir:
+        for p in mitems c.plugins.builderPatterns:
+          let f = p[0] % dir.splitPath.tail
+          if fileExists(f):
+            runNimScriptBuilder c, p, g.nodes[i].name
+
 proc resolve(c: var AtlasContext; g: var DepGraph) =
   var b = sat.Builder()
   b.openOpr(AndForm)
@@ -741,6 +797,8 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
         let dir = selectDir(c.workspace / destDir, c.depsDir / destDir)
         withDir c, dir:
           checkoutGitCommit(c, toName(destDir), mapping[i - g.nodes.len][1])
+    if NoExec notin c.flags:
+      runBuildSteps(c, g)
     when false:
       echo "selecting: "
       for i in g.nodes.len..<s.len:
@@ -1015,6 +1073,11 @@ proc parseOverridesFile(c: var AtlasContext; filename: string) =
   else:
     error c, toName(path), "cannot open: " & path
 
+proc readPluginsDir(c: var AtlasContext; dir: string) =
+  for k, f in walkDir(c.workspace / dir):
+    if k == pcFile and f.endsWith(".nims"):
+      extractPluginInfo f, c.plugins
+
 proc readConfig(c: var AtlasContext) =
   let configFile = c.workspace / AtlasWorkspace
   var f = newFileStream(configFile, fmRead)
@@ -1040,6 +1103,8 @@ proc readConfig(c: var AtlasContext) =
           c.defaultAlgo = parseEnum[ResolutionAlgorithm](e.value)
         except ValueError:
           warn c, toName(configFile), "ignored unknown resolver: " & e.key
+      of "plugins":
+        readPluginsDir(c, e.value)
       else:
         warn c, toName(configFile), "ignored unknown setting: " & e.key
     of cfgOption:
@@ -1233,6 +1298,7 @@ proc main =
       of "showgraph": c.flags.incl ShowGraph
       of "keep": c.flags.incl Keep
       of "autoenv": c.flags.incl AutoEnv
+      of "noexec": c.flags.incl NoExec
       of "genlock":
         if c.lockMode != useLock:
           c.lockMode = genLock
