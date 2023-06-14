@@ -628,14 +628,6 @@ proc detectWorkspace(currentDir: string): string =
       return result
     result = result.parentDir()
 
-proc absoluteDepsDir(workspace, value: string): string =
-  if value == ".":
-    result = workspace
-  elif isAbsolute(value):
-    result = value
-  else:
-    result = workspace / value
-
 proc autoWorkspace(currentDir: string): string =
   result = currentDir
   while result.len > 0 and dirExists(result / ".git"):

@@ -84,6 +84,14 @@ template toDestDir*(p: PackageName): string = p.string
 
 proc selectDir*(a, b: string): string = (if dirExists(a): a else: b)
 
+proc absoluteDepsDir*(workspace, value: string): string =
+  if value == ".":
+    result = workspace
+  elif isAbsolute(value):
+    result = value
+  else:
+    result = workspace / value
+
 template withDir*(c: var AtlasContext; dir: string; body: untyped) =
   when MockupRun:
     body
