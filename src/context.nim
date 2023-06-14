@@ -66,12 +66,18 @@ type
     AutoEnv
     NoExec
 
+  MsgKind = enum
+    Info = "[Info] ",
+    Warning = "[Warning] ",
+    Error = "[Error] "
+
   AtlasContext* = object
     projectDir*, workspace*, depsDir*, currentDir*: string
     hasPackageList*: bool
     flags*: set[Flag]
     p*: Table[string, string] # name -> url mapping
     errors*, warnings*: int
+    messages: seq[(MsgKind, PackageName, string)] # delayed output
     overrides*: Patterns
     lockMode*: LockMode
     lockFile*: LockFile
@@ -91,30 +97,39 @@ const
   ProduceTest* = false
 
 
-proc message*(c: var AtlasContext; category: string; p: PackageName; arg: string) =
+proc message(c: var AtlasContext; category: string; p: PackageName; arg: string) =
   var msg = category & "(" & p.string & ") " & arg
   stdout.writeLine msg
 
 proc warn*(c: var AtlasContext; p: PackageName; arg: string) =
-  if NoColors in c.flags:
-    message(c, "[Warning] ", p, arg)
-  else:
-    stdout.styledWriteLine(fgYellow, styleBright, "[Warning] ", resetStyle, fgCyan, "(", p.string, ")", resetStyle, " ", arg)
+  c.messages.add (Warning, p, arg)
   inc c.warnings
 
 proc error*(c: var AtlasContext; p: PackageName; arg: string) =
-  if NoColors in c.flags:
-    message(c, "[Error] ", p, arg)
-  else:
-    stdout.styledWriteLine(fgRed, styleBright, "[Error] ", resetStyle, fgCyan, "(", p.string, ")", resetStyle, " ", arg)
+  c.messages.add (Error, p, arg)
   inc c.errors
 
 proc info*(c: var AtlasContext; p: PackageName; arg: string) =
-  if NoColors in c.flags:
-    message(c, "[Info] ", p, arg)
-  else:
-    stdout.styledWriteLine(fgGreen, styleBright, "[Info] ", resetStyle, fgCyan, "(", p.string, ")", resetStyle, " ", arg)
+  c.messages.add (Info, p, arg)
 
+proc writeMessage(c: var AtlasContext; k: MsgKind; p: PackageName; arg: string) =
+  if NoColors in c.flags:
+    message(c, $k, p, arg)
+  else:
+    let color = case k
+                of Info: fgGreen
+                of Warning: fgYellow
+                of Error: fgRed
+    stdout.styledWriteLine(color, styleBright, $k, resetStyle, fgCyan, "(", p.string, ")", resetStyle, " ", arg)
+
+proc writePendingMessages*(c: var AtlasContext) =
+  for i in 0..<c.messages.len:
+    let (k, p, arg) = c.messages[i]
+    writeMessage c, k, p, arg
+  c.messages.setLen 0
+
+proc infoNow*(c: var AtlasContext; p: PackageName; arg: string) =
+  writeMessage c, Info, p, arg
 
 proc fatal*(msg: string) =
   when defined(debug):
@@ -125,5 +140,5 @@ proc toName*(p: PackageUrl): PackageName =
   result = PackageName splitFile(p.path).name
 
 proc toName*(p: string): PackageName =
-  assert not p.startsWith("http")
+  #assert not p.startsWith("http") # a package name can be `httpx`...
   result = PackageName p

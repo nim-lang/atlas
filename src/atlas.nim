@@ -11,7 +11,7 @@
 
 import std / [parseopt, strutils, os, osproc, tables, sets, json, jsonutils,
   parsecfg, streams, terminal, strscans, hashes, options]
-import context, runners, osutils, packagesjson, sat, gitops
+import context, runners, osutils, packagesjson, sat, gitops, nimenv
 
 export osutils, context
 
@@ -185,8 +185,6 @@ proc generateDepGraph(c: var AtlasContext; g: DepGraph) =
     discard
   else:
     discard execShellCmd("dot -Tpng -odeps.png " & quoteShell(dotFile))
-
-proc setupNimEnv(c: var AtlasContext; nimVersion: string)
 
 proc afterGraphActions(c: var AtlasContext; g: DepGraph) =
   if ShowGraph in c.flags:
@@ -704,96 +702,6 @@ proc readConfig(c: var AtlasContext) =
       error c, toName(configFile), e.msg
   close(p)
 
-const
-  BatchFile = """
-@echo off
-set PATH="$1";%PATH%
-"""
-  ShellFile = "export PATH=$1:$$PATH\n"
-
-const
-  ActivationFile = when defined(windows): "activate.bat" else: "activate.sh"
-
-proc infoAboutActivation(c: var AtlasContext; nimDest, nimVersion: string) =
-  when defined(windows):
-    info c, toName(nimDest), "RUN\nnim-" & nimVersion & "\\activate.bat"
-  else:
-    info c, toName(nimDest), "RUN\nsource nim-" & nimVersion & "/activate.sh"
-
-proc setupNimEnv(c: var AtlasContext; nimVersion: string) =
-  template isDevel(nimVersion: string): bool = nimVersion == "devel"
-
-  template exec(c: var AtlasContext; command: string) =
-    let cmd = command # eval once
-    if os.execShellCmd(cmd) != 0:
-      error c, toName("nim-" & nimVersion), "failed: " & cmd
-      return
-
-  let nimDest = "nim-" & nimVersion
-  if dirExists(c.workspace / nimDest):
-    if not fileExists(c.workspace / nimDest / ActivationFile):
-      info c, toName(nimDest), "already exists; remove or rename and try again"
-    else:
-      infoAboutActivation c, nimDest, nimVersion
-    return
-
-  var major, minor, patch: int
-  if nimVersion != "devel":
-    if not scanf(nimVersion, "$i.$i.$i", major, minor, patch):
-      error c, toName("nim"), "cannot parse version requirement"
-      return
-  let csourcesVersion =
-    if nimVersion.isDevel or (major == 1 and minor >= 9) or major >= 2:
-      # already uses csources_v2
-      "csources_v2"
-    elif major == 0:
-      "csources" # has some chance of working
-    else:
-      "csources_v1"
-  withDir c, c.workspace:
-    if not dirExists(csourcesVersion):
-      exec c, "git clone https://github.com/nim-lang/" & csourcesVersion
-    exec c, "git clone https://github.com/nim-lang/nim " & nimDest
-  withDir c, c.workspace / csourcesVersion:
-    when defined(windows):
-      exec c, "build.bat"
-    else:
-      let makeExe = findExe("make")
-      if makeExe.len == 0:
-        exec c, "sh build.sh"
-      else:
-        exec c, "make"
-  let nimExe0 = ".." / csourcesVersion / "bin" / "nim".addFileExt(ExeExt)
-  withDir c, c.workspace / nimDest:
-    let nimExe = "bin" / "nim".addFileExt(ExeExt)
-    copyFileWithPermissions nimExe0, nimExe
-    let dep = Dependency(name: toName(nimDest), commit: nimVersion, self: 0,
-                         algo: c.defaultAlgo,
-                         query: createQueryEq(if nimVersion.isDevel: Version"#head" else: Version(nimVersion)))
-    if not nimVersion.isDevel:
-      let commit = versionToCommit(c, dep)
-      if commit.len == 0:
-        error c, toName(nimDest), "cannot resolve version to a commit"
-        return
-      checkoutGitCommit(c, dep.name, commit)
-    exec c, nimExe & " c --noNimblePath --skipUserCfg --skipParentCfg --hints:off koch"
-    let kochExe = when defined(windows): "koch.exe" else: "./koch"
-    exec c, kochExe & " boot -d:release --skipUserCfg --skipParentCfg --hints:off"
-    exec c, kochExe & " tools --skipUserCfg --skipParentCfg --hints:off"
-    # remove any old atlas binary that we now would end up using:
-    if cmpPaths(getAppDir(), c.workspace / nimDest / "bin") != 0:
-      removeFile "bin" / "atlas".addFileExt(ExeExt)
-    # unless --keep is used delete the csources because it takes up about 2GB and
-    # is not necessary afterwards:
-    if Keep notin c.flags:
-      removeDir c.workspace / csourcesVersion / "c_code"
-    let pathEntry = (c.workspace / nimDest / "bin")
-    when defined(windows):
-      writeFile "activate.bat", BatchFile % pathEntry.replace('/', '\\')
-    else:
-      writeFile "activate.sh", ShellFile % pathEntry
-    infoAboutActivation c, nimDest, nimVersion
-
 proc listOutdated(c: var AtlasContext; dir: string) =
   var updateable = 0
   for k, f in walkDir(dir, relative=true):
@@ -810,7 +718,7 @@ proc listOutdated(c: var AtlasContext) =
     listOutdated c, c.depsDir
   listOutdated c, c.workspace
 
-proc main =
+proc main(c: var AtlasContext) =
   var action = ""
   var args: seq[string] = @[]
   template singleArg() =
@@ -825,7 +733,6 @@ proc main =
     if c.projectDir == c.workspace or c.projectDir == c.depsDir:
       fatal action & " command must be executed in a project, not in the workspace"
 
-  var c = AtlasContext(projectDir: getCurrentDir(), currentDir: getCurrentDir(), workspace: "")
   var autoinit = false
   for kind, key, val in getopt():
     case kind
@@ -897,7 +804,7 @@ proc main =
       c.workspace = detectWorkspace(c.currentDir)
       if c.workspace.len > 0:
         readConfig c
-        info c, toName(c.workspace.readableFile), "is the current workspace"
+        infoNow c, toName(c.workspace.readableFile), "is the current workspace"
       elif autoinit:
         c.workspace = autoWorkspace(c.currentDir)
         createWorkspaceIn c.workspace, c.depsDir
@@ -919,9 +826,6 @@ proc main =
     patchNimCfg c, deps, if CfgHere in c.flags: c.currentDir else: findSrcDir(c)
     when MockupRun:
       if not c.mockupSuccess:
-        fatal "There were problems."
-    else:
-      if c.errors > 0:
         fatal "There were problems."
   of "use":
     projectCmd()
@@ -992,6 +896,13 @@ proc main =
     listOutdated(c)
   else:
     fatal "Invalid action: " & action
+
+proc main =
+  var c = AtlasContext(projectDir: getCurrentDir(), currentDir: getCurrentDir(), workspace: "")
+  try:
+    main(c)
+  finally:
+    writePendingMessages(c)
 
 when isMainModule:
   main()
