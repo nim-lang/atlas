@@ -11,7 +11,7 @@
 
 import std / [parseopt, strutils, os, osproc, tables, sets, json, jsonutils,
   parsecfg, streams, terminal, strscans, hashes, options]
-import context, runners, parse_requires, osutils, packagesjson, compiledpatterns, versions, sat
+import context, runners, osutils, packagesjson, sat
 
 export osutils, context
 

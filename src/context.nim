@@ -3,6 +3,8 @@ import std / [strutils, os, osproc, tables, sets, json, jsonutils,
   parsecfg, streams, terminal, strscans, hashes, options, uri]
 import versions, parse_requires, compiledpatterns
 
+export versions, parse_requires, compiledpatterns
+
 const
   MockupRun* = defined(atlasTests)
   UnitTests* = defined(atlasUnitTests)
@@ -12,7 +14,6 @@ type
   PackageUrl* = Uri
 
 export uri.`$`, uri.`/`, uri.UriParseError
-
 
 type
   LockMode* = enum
