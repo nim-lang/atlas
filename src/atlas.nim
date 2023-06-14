@@ -810,7 +810,7 @@ proc listOutdated(c: var AtlasContext) =
     listOutdated c, c.depsDir
   listOutdated c, c.workspace
 
-proc main =
+proc main(c: var AtlasContext) =
   var action = ""
   var args: seq[string] = @[]
   template singleArg() =
@@ -825,7 +825,6 @@ proc main =
     if c.projectDir == c.workspace or c.projectDir == c.depsDir:
       fatal action & " command must be executed in a project, not in the workspace"
 
-  var c = AtlasContext(projectDir: getCurrentDir(), currentDir: getCurrentDir(), workspace: "")
   var autoinit = false
   for kind, key, val in getopt():
     case kind
@@ -920,9 +919,6 @@ proc main =
     when MockupRun:
       if not c.mockupSuccess:
         fatal "There were problems."
-    else:
-      if c.errors > 0:
-        fatal "There were problems."
   of "use":
     projectCmd()
     singleArg()
@@ -992,6 +988,13 @@ proc main =
     listOutdated(c)
   else:
     fatal "Invalid action: " & action
+
+proc main =
+  var c = AtlasContext(projectDir: getCurrentDir(), currentDir: getCurrentDir(), workspace: "")
+  try:
+    main(c)
+  finally:
+    writePendingMessages(c)
 
 when isMainModule:
   main()
