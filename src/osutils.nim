@@ -121,11 +121,6 @@ proc nimbleExec*(cmd: string; args: openArray[string]) =
     cmdLine.add quoteShell(args[i])
   discard os.execShellCmd(cmdLine)
 
-proc readLockFile*(filename: string): LockFile =
-  let jsonAsStr = readFile(filename)
-  let jsonTree = parseJson(jsonAsStr)
-  result = to(jsonTree, LockFile)
-
 proc dependencyDir*(c: AtlasContext; w: Dependency): string =
   result = c.workspace / w.name.string
   if not dirExists(result):

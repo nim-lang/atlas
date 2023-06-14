@@ -169,16 +169,12 @@ proc getRequiredCommit*(c: var AtlasContext; w: Dependency): string =
 proc getRemoteUrl*(): PackageUrl =
   execProcess("git config --get remote.origin.url").strip().getUrl()
 
-proc genLockEntry*(c: var AtlasContext; w: Dependency) =
-  let url = getRemoteUrl()
-  var commit = getRequiredCommit(c, w)
-  if commit.len == 0 or needsCommitLookup(commit):
-    commit = execProcess("git log -1 --pretty=format:%H").strip()
-  c.lockFile.items[w.name.string] = LockFileEntry(url: $url, commit: commit)
+proc getCurrentCommit*(): string =
+  result = execProcess("git log -1 --pretty=format:%H").strip()
 
 proc isOutdated*(c: var AtlasContext; f: string): bool =
   ## determine if the given git repo `f` is updateable
-  ## 
+  ##
   let (outp, status) = silentExec("git fetch", [])
   if status == 0:
     let (cc, status) = exec(c, GitLastTaggedRef, [])

@@ -228,6 +228,29 @@ required versions will be selected. For example, if you specify a minimum requir
 both `>=1.0.0` and `>=2.0.0`, the selected version would be 2.0.0.
 
 
+## Reproducible builds / lockfiles
+
+Atlas supports lockfiles for reproducible builds via its `pin` and `rep` commands.
+
+**Notice**: Atlas helps with reproducible builds, but it is not a complete solution.
+For a truely reproducible build you also need to pin the used C++ compiler, any
+third party dependencies ("libc" etc.) and the version of your operating system.
+
+
+### pin [atlas.lock]
+
+`atlas pin` can be run either in the workspace or in a specific project. It "pins" the used
+repositories to their current commit hashes.
+If run in the workspace the entire workspace is "pinned" in the `atlas.lock` file.
+If run in a project the project's dependencies but not the project itself is "pinned" in the
+lock file.
+
+### rep [atlas.lock]
+
+The `rep` command replays or repeats the projects to use the pinned commit hashes. If the
+projects have any "build" instructions these are performed too unless the `--noexec` switch
+is used.
+
 
 ## Plugins
 

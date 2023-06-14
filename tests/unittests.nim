@@ -3,7 +3,7 @@
 import std/[unittest, os, strutils]
 
 import context
-from atlas import resolveUrl
+from nameresolver import resolveUrl
 
 let
   basicExamples = {
@@ -111,7 +111,7 @@ suite "versions":
     check v"2.0.0" < v"2.0.0.1"
     check v"2.0.0" < v"20.0"
     check not (v"1.10.0" < v"1.2.0")
-  
+
   test "hashes":
     check v"1.0" < v"#head"
     check v"#branch" < v"#head"

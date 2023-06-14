@@ -116,18 +116,18 @@ proc githubSearch(seen: var HashSet[string]; terms: seq[string]) =
       if not seen.containsOrIncl(p.url):
         echo p
 
-proc getUrlFromGithub*(term: string): Option[string] =
+proc getUrlFromGithub*(term: string): string =
   let results = singleGithubSearch(term)
   var matches = 0
-  result = string.none
+  result = ""
   for j in items(results.getOrDefault("items")):
     let name = j.getOrDefault("name").getStr
     if cmpIgnoreCase(name, term) == 0:
-      result = some j.getOrDefault("html_url").getStr
+      result = j.getOrDefault("html_url").getStr
       inc matches
   if matches != 1:
     # ambiguous, not ok!
-    result = string.none
+    result = ""
 
 proc search*(pkgList: seq[Package]; terms: seq[string]) =
   var seen = initHashSet[string]()
