@@ -3,8 +3,8 @@
 import std / [strutils, os, sequtils, strformat]
 from std/private/gitutils import diffFiles
 
-if execShellCmd("nim c -r src/versions.nim") != 0:
-  quit("FAILURE: unit tests in src/versions.nim failed")
+if execShellCmd("nim c -r tests/unittests.nim") != 0:
+  quit("FAILURE: unit tests failed")
 
 var failures = 0
 
