@@ -3,7 +3,8 @@
 import std/unittest
 import std/os
 
-import atlas
+import context, osutils
+from atlas import resolveUrl
 
 let
   basicExamples = {
@@ -36,10 +37,10 @@ suite "urls and naming":
     var c = AtlasContext.initBasicWorkspace()
 
     for name, url in basicExamples.items:
-      let ures = toUrl(c, url.input)
+      let ures = resolveUrl(c, url.input)
       check ures.hostname == "github.com"
       check $ures == url.output
 
-      let nres = toUrl(c, name)
+      let nres = resolveUrl(c, name)
       check nres.hostname == "github.com"
       check $nres == url.output

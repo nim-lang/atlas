@@ -1,14 +1,11 @@
 ## OS utilities like 'withDir'.
 ## (c) 2021 Andreas Rumpf
 
-import os, strutils, osproc, uri, json
+import std / [os, strutils, osproc, uri]
+import context
 
-export UriParseError
-
-type
-  PackageUrl* = Uri
-
-export uri.`$`, uri.`/`
+template projectFromCurrentDir*(): PackageName =
+  PackageName(c.currentDir.splitPath.tail)
 
 proc getFilePath*(x: PackageUrl): string =
   assert x.scheme == "file"
@@ -80,3 +77,79 @@ proc cloneUrl*(url: PackageUrl, dest: string; cloneUsingHttps: bool): string =
       result = "Unable to identify url: " & $modUrl
   else:
     result = "Unable to identify url: " & $modUrl
+
+proc readableFile*(s: string): string = relativePath(s, getCurrentDir())
+
+template toDestDir*(p: PackageName): string = p.string
+
+proc selectDir*(a, b: string): string = (if dirExists(a): a else: b)
+
+proc absoluteDepsDir*(workspace, value: string): string =
+  if value == ".":
+    result = workspace
+  elif isAbsolute(value):
+    result = value
+  else:
+    result = workspace / value
+
+template withDir*(c: var AtlasContext; dir: string; body: untyped) =
+  when MockupRun:
+    body
+  else:
+    let oldDir = getCurrentDir()
+    try:
+      when ProduceTest:
+        echo "Current directory is now ", dir
+      setCurrentDir(dir)
+      body
+    finally:
+      setCurrentDir(oldDir)
+
+template tryWithDir*(dir: string; body: untyped) =
+  let oldDir = getCurrentDir()
+  try:
+    if dirExists(dir):
+      setCurrentDir(dir)
+      body
+  finally:
+    setCurrentDir(oldDir)
+
+proc silentExec*(cmd: string; args: openArray[string]): (string, int) =
+  var cmdLine = cmd
+  for i in 0..<args.len:
+    cmdLine.add ' '
+    cmdLine.add quoteShell(args[i])
+  result = osproc.execCmdEx(cmdLine)
+
+proc nimbleExec*(cmd: string; args: openArray[string]) =
+  var cmdLine = "nimble " & cmd
+  for i in 0..<args.len:
+    cmdLine.add ' '
+    cmdLine.add quoteShell(args[i])
+  discard os.execShellCmd(cmdLine)
+
+proc readLockFile*(filename: string): LockFile =
+  let jsonAsStr = readFile(filename)
+  let jsonTree = parseJson(jsonAsStr)
+  result = to(jsonTree, LockFile)
+
+proc dependencyDir*(c: AtlasContext; w: Dependency): string =
+  result = c.workspace / w.name.string
+  if not dirExists(result):
+    result = c.depsDir / w.name.string
+
+proc findNimbleFile*(c: AtlasContext; dep: Dependency): string =
+  when MockupRun:
+    result = TestsDir / dep.name.string & ".nimble"
+    doAssert fileExists(result), "file does not exist " & result
+  else:
+    let dir = dependencyDir(c, dep)
+    result = dir / (dep.name.string & ".nimble")
+    if not fileExists(result):
+      result = ""
+      for x in walkFiles(dir / "*.nimble"):
+        if result.len == 0:
+          result = x
+        else:
+          # ambiguous .nimble file
+          return ""

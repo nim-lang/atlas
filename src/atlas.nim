@@ -11,9 +11,9 @@
 
 import std / [parseopt, strutils, os, osproc, tables, sets, json, jsonutils,
   parsecfg, streams, terminal, strscans, hashes, options]
-import parse_requires, osutils, packagesjson, compiledpatterns, versions, sat
+import context, runners, osutils, packagesjson, sat, gitops
 
-export osutils
+export osutils, context
 
 from unicode import nil
 
@@ -85,137 +85,14 @@ proc writeVersion() =
   stdout.flushFile()
   quit(0)
 
-const
-  MockupRun = defined(atlasTests)
-  UnitTests = defined(atlasUnitTests)
-  TestsDir = "atlas/tests"
-
-type
-  LockMode = enum
-    noLock, genLock, useLock
-
-  LockFileEntry = object
-    url: string
-    commit: string
-
-  PackageName = distinct string
-  CfgPath = distinct string # put into a config `--path:"../x"`
-  DepRelation = enum
-    normal, strictlyLess, strictlyGreater
-
-  SemVerField = enum
-    major, minor, patch
-
-  ResolutionAlgorithm = enum
-    MinVer, SemVer, MaxVer
-
-  Dependency = object
-    name: PackageName
-    url: PackageUrl
-    commit: string
-    query: VersionInterval
-    self: int # position in the graph
-    parents: seq[int] # why we need this dependency
-    active: bool
-    hasInstallHooks: bool
-    algo: ResolutionAlgorithm
-  DepGraph = object
-    nodes: seq[Dependency]
-    processed: Table[string, int] # the key is (url / commit)
-    byName: Table[PackageName, seq[int]]
-    availableVersions: Table[PackageName, seq[(string, Version)]] # sorted, latest version comes first
-    bestNimVersion: Version # Nim is a special snowflake
-
-  LockFile = object # serialized as JSON so an object for extensibility
-    items: OrderedTable[string, LockFileEntry]
-
-  Flag* = enum
-    KeepCommits
-    CfgHere
-    UsesOverrides
-    Keep
-    NoColors
-    ShowGraph
-    AutoEnv
-    NoExec
-
-  AtlasContext* = object
-    projectDir*, workspace*, depsDir*, currentDir*: string
-    hasPackageList: bool
-    flags: set[Flag]
-    p: Table[string, string] # name -> url mapping
-    errors, warnings: int
-    overrides: Patterns
-    lockMode: LockMode
-    lockFile: LockFile
-    defaultAlgo: ResolutionAlgorithm
-    when MockupRun:
-      step: int
-      mockupSuccess: bool
-    plugins: PluginInfo
-
-proc `==`*(a, b: CfgPath): bool {.borrow.}
-
-proc `==`*(a, b: PackageName): bool {.borrow.}
-proc hash*(a: PackageName): Hash {.borrow.}
-
-const
-  InvalidCommit = "#head" #"<invalid commit>"
-  ProduceTest = false
-
-type
-  Command = enum
-    GitDiff = "git diff",
-    GitTag = "git tag",
-    GitTags = "git show-ref --tags",
-    GitLastTaggedRef = "git rev-list --tags --max-count=1",
-    GitDescribe = "git describe",
-    GitRevParse = "git rev-parse",
-    GitCheckout = "git checkout",
-    GitPush = "git push origin",
-    GitPull = "git pull",
-    GitCurrentCommit = "git log -n 1 --format=%H"
-    GitMergeBase = "git merge-base"
 
 include testdata
 
-proc silentExec(cmd: string; args: openArray[string]): (string, int) =
-  var cmdLine = cmd
-  for i in 0..<args.len:
-    cmdLine.add ' '
-    cmdLine.add quoteShell(args[i])
-  result = osproc.execCmdEx(cmdLine)
 
-proc nimbleExec(cmd: string; args: openArray[string]) =
-  var cmdLine = "nimble " & cmd
-  for i in 0..<args.len:
-    cmdLine.add ' '
-    cmdLine.add quoteShell(args[i])
-  discard os.execShellCmd(cmdLine)
-
-proc exec(c: var AtlasContext; cmd: Command; args: openArray[string]): (string, int) =
-  when MockupRun:
-    assert TestLog[c.step].cmd == cmd, $(TestLog[c.step].cmd, cmd, c.step)
-    case cmd
-    of GitDiff, GitTag, GitTags, GitLastTaggedRef, GitDescribe, GitRevParse, GitPush, GitPull, GitCurrentCommit:
-      result = (TestLog[c.step].output, TestLog[c.step].exitCode)
-    of GitCheckout:
-      assert args[0] == TestLog[c.step].output
-    of GitMergeBase:
-      let tmp = TestLog[c.step].output.splitLines()
-      assert tmp.len == 4, $tmp.len
-      assert tmp[0] == args[0]
-      assert tmp[1] == args[1]
-      assert tmp[3] == ""
-      result[0] = tmp[2]
-      result[1] = TestLog[c.step].exitCode
-    inc c.step
-  else:
-    result = silentExec($cmd, args)
-    when ProduceTest:
-      echo "cmd ", cmd, " args ", args, " --> ", result
-
-proc cloneUrl(c: var AtlasContext; url: PackageUrl, dest: string; cloneUsingHttps: bool): string =
+proc cloneUrl(c: var AtlasContext;
+              url: PackageUrl,
+              dest: string;
+              cloneUsingHttps: bool): string =
   when MockupRun:
     result = ""
   else:
@@ -223,171 +100,10 @@ proc cloneUrl(c: var AtlasContext; url: PackageUrl, dest: string; cloneUsingHttp
     when ProduceTest:
       echo "cloned ", url, " into ", dest
 
-template withDir*(c: var AtlasContext; dir: string; body: untyped) =
-  when MockupRun:
-    body
-  else:
-    let oldDir = getCurrentDir()
-    try:
-      when ProduceTest:
-        echo "Current directory is now ", dir
-      setCurrentDir(dir)
-      body
-    finally:
-      setCurrentDir(oldDir)
-
-template tryWithDir*(dir: string; body: untyped) =
-  let oldDir = getCurrentDir()
-  try:
-    if dirExists(dir):
-      setCurrentDir(dir)
-      body
-  finally:
-    setCurrentDir(oldDir)
-
 proc extractRequiresInfo(c: var AtlasContext; nimbleFile: string): NimbleFileInfo =
   result = extractRequiresInfo(nimbleFile)
   when ProduceTest:
     echo "nimble ", nimbleFile, " info ", result
-
-proc isCleanGit(c: var AtlasContext): string =
-  result = ""
-  let (outp, status) = exec(c, GitDiff, [])
-  if outp.len != 0:
-    result = "'git diff' not empty"
-  elif status != 0:
-    result = "'git diff' returned non-zero"
-
-proc message(c: var AtlasContext; category: string; p: PackageName; arg: string) =
-  var msg = category & "(" & p.string & ") " & arg
-  stdout.writeLine msg
-
-proc warn(c: var AtlasContext; p: PackageName; arg: string) =
-  if NoColors in c.flags:
-    message(c, "[Warning] ", p, arg)
-  else:
-    stdout.styledWriteLine(fgYellow, styleBright, "[Warning] ", resetStyle, fgCyan, "(", p.string, ")", resetStyle, " ", arg)
-  inc c.warnings
-
-proc error(c: var AtlasContext; p: PackageName; arg: string) =
-  if NoColors in c.flags:
-    message(c, "[Error] ", p, arg)
-  else:
-    stdout.styledWriteLine(fgRed, styleBright, "[Error] ", resetStyle, fgCyan, "(", p.string, ")", resetStyle, " ", arg)
-  inc c.errors
-
-proc info(c: var AtlasContext; p: PackageName; arg: string) =
-  if NoColors in c.flags:
-    message(c, "[Info] ", p, arg)
-  else:
-    stdout.styledWriteLine(fgGreen, styleBright, "[Info] ", resetStyle, fgCyan, "(", p.string, ")", resetStyle, " ", arg)
-
-template projectFromCurrentDir(): PackageName = PackageName(c.currentDir.splitPath.tail)
-
-proc readableFile(s: string): string = relativePath(s, getCurrentDir())
-
-proc sameVersionAs(tag, ver: string): bool =
-  const VersionChars = {'0'..'9', '.'}
-
-  proc safeCharAt(s: string; i: int): char {.inline.} =
-    if i >= 0 and i < s.len: s[i] else: '\0'
-
-  let idx = find(tag, ver)
-  if idx >= 0:
-    # we found the version as a substring inside the `tag`. But we
-    # need to watch out the the boundaries are not part of a
-    # larger/different version number:
-    result = safeCharAt(tag, idx-1) notin VersionChars and
-      safeCharAt(tag, idx+ver.len) notin VersionChars
-
-proc gitDescribeRefTag(c: var AtlasContext; commit: string): string =
-  let (lt, status) = exec(c, GitDescribe, ["--tags", commit])
-  result = if status == 0: strutils.strip(lt) else: ""
-
-proc getLastTaggedCommit(c: var AtlasContext): string =
-  let (ltr, status) = exec(c, GitLastTaggedRef, [])
-  if status == 0:
-    let lastTaggedRef = ltr.strip()
-    let lastTag = gitDescribeRefTag(c, lastTaggedRef)
-    if lastTag.len != 0:
-      result = lastTag
-
-proc collectTaggedVersions(c: var AtlasContext): seq[(string, Version)] =
-  let (outp, status) = exec(c, GitTags, [])
-  if status == 0:
-    result = parseTaggedVersions(outp)
-  else:
-    result = @[]
-
-proc versionToCommit(c: var AtlasContext; d: Dependency): string =
-  let allVersions = collectTaggedVersions(c)
-  case d.algo
-  of MinVer:
-    result = selectBestCommitMinVer(allVersions, d.query)
-  of SemVer:
-    result = selectBestCommitSemVer(allVersions, d.query)
-  of MaxVer:
-    result = selectBestCommitMaxVer(allVersions, d.query)
-
-proc shortToCommit(c: var AtlasContext; short: string): string =
-  let (cc, status) = exec(c, GitRevParse, [short])
-  result = if status == 0: strutils.strip(cc) else: ""
-
-proc checkoutGitCommit(c: var AtlasContext; p: PackageName; commit: string) =
-  let (_, status) = exec(c, GitCheckout, [commit])
-  if status != 0:
-    error(c, p, "could not checkout commit " & commit)
-
-proc gitPull(c: var AtlasContext; p: PackageName) =
-  let (_, status) = exec(c, GitPull, [])
-  if status != 0:
-    error(c, p, "could not 'git pull'")
-
-proc gitTag(c: var AtlasContext; tag: string) =
-  let (_, status) = exec(c, GitTag, [tag])
-  if status != 0:
-    error(c, c.projectDir.PackageName, "could not 'git tag " & tag & "'")
-
-proc pushTag(c: var AtlasContext; tag: string) =
-  let (outp, status) = exec(c, GitPush, [tag])
-  if status != 0:
-    error(c, c.projectDir.PackageName, "could not 'git push " & tag & "'")
-  elif outp.strip() == "Everything up-to-date":
-    info(c, c.projectDir.PackageName, "is up-to-date")
-  else:
-    info(c, c.projectDir.PackageName, "successfully pushed tag: " & tag)
-
-proc incrementTag(c: var AtlasContext; lastTag: string; field: Natural): string =
-  var startPos =
-    if lastTag[0] in {'0'..'9'}: 0
-    else: 1
-  var endPos = lastTag.find('.', startPos)
-  if field >= 1:
-    for i in 1 .. field:
-      if endPos == -1:
-        error c, projectFromCurrentDir(), "the last tag '" & lastTag & "' is missing . periods"
-        return ""
-      startPos = endPos + 1
-      endPos = lastTag.find('.', startPos)
-  if endPos == -1:
-    endPos = len(lastTag)
-  let patchNumber = parseInt(lastTag[startPos..<endPos])
-  lastTag[0..<startPos] & $(patchNumber + 1) & lastTag[endPos..^1]
-
-proc incrementLastTag(c: var AtlasContext; field: Natural): string =
-  let (ltr, status) = exec(c, GitLastTaggedRef, [])
-  if status == 0:
-    let
-      lastTaggedRef = ltr.strip()
-      lastTag = gitDescribeRefTag(c, lastTaggedRef)
-      currentCommit = exec(c, GitCurrentCommit, [])[0].strip()
-
-    if lastTaggedRef == currentCommit:
-      info c, c.projectDir.PackageName, "the current commit '" & currentCommit & "' is already tagged '" & lastTag & "'"
-      lastTag
-    else:
-      incrementTag(c, lastTag, field)
-  else: "v0.0.1" # assuming no tags have been made yet
 
 proc tag(c: var AtlasContext; tag: string) =
   gitTag(c, tag)
@@ -419,7 +135,7 @@ proc fillPackageLookupTable(c: var AtlasContext) =
     for entry in plist:
       c.p[unicode.toLower entry.name] = entry.url
 
-proc toUrl*(c: var AtlasContext; p: string): PackageUrl =
+proc resolveUrl*(c: var AtlasContext; p: string): PackageUrl =
   proc lookup(c: var AtlasContext; p: string): string =
     if p.isUrl:
       if UsesOverrides in c.flags:
@@ -448,13 +164,6 @@ proc toUrl*(c: var AtlasContext; p: string): PackageUrl =
 
   let urlstr = lookup(c, p)
   result = urlstr.getUrl()
-
-proc toName(p: PackageUrl): PackageName =
-  result = PackageName splitFile(p.path).name
-
-proc toName(p: string): PackageName =
-  assert not p.startsWith("http")
-  result = PackageName p
 
 proc generateDepGraph(c: var AtlasContext; g: DepGraph) =
   proc repr(w: Dependency): string =
@@ -485,26 +194,6 @@ proc afterGraphActions(c: var AtlasContext; g: DepGraph) =
   if AutoEnv in c.flags and g.bestNimVersion != Version"":
     setupNimEnv c, g.bestNimVersion.string
 
-proc needsCommitLookup(commit: string): bool {.inline.} =
-  '.' in commit or commit == InvalidCommit
-
-proc isShortCommitHash(commit: string): bool {.inline.} =
-  commit.len >= 4 and commit.len < 40
-
-proc getRequiredCommit(c: var AtlasContext; w: Dependency): string =
-  if needsCommitLookup(w.commit): versionToCommit(c, w)
-  elif isShortCommitHash(w.commit): shortToCommit(c, w.commit)
-  else: w.commit
-
-proc getRemoteUrl(): PackageUrl =
-  execProcess("git config --get remote.origin.url").strip().getUrl()
-
-proc genLockEntry(c: var AtlasContext; w: Dependency) =
-  let url = getRemoteUrl()
-  var commit = getRequiredCommit(c, w)
-  if commit.len == 0 or needsCommitLookup(commit):
-    commit = execProcess("git log -1 --pretty=format:%H").strip()
-  c.lockFile.items[w.name.string] = LockFileEntry(url: $url, commit: commit)
 
 proc commitFromLockFile(c: var AtlasContext; w: Dependency): string =
   let url = getRemoteUrl()
@@ -516,11 +205,6 @@ proc commitFromLockFile(c: var AtlasContext; w: Dependency): string =
           $url & " but wanted: " & $entry.url
   else:
     error c, w.name, "package is not listed in the lock file"
-
-proc dependencyDir(c: AtlasContext; w: Dependency): string =
-  result = c.workspace / w.name.string
-  if not dirExists(result):
-    result = c.depsDir / w.name.string
 
 const
   FileProtocol = "file"
@@ -574,22 +258,6 @@ proc checkoutCommit(c: var AtlasContext; g: var DepGraph; w: Dependency) =
                 warn c, w.name, "do not know which commit is more recent:",
                   currentCommit, "(current) or", w.commit, " =", requiredCommit, "(required)"
 
-proc findNimbleFile(c: AtlasContext; dep: Dependency): string =
-  when MockupRun:
-    result = TestsDir / dep.name.string & ".nimble"
-    doAssert fileExists(result), "file does not exist " & result
-  else:
-    let dir = dependencyDir(c, dep)
-    result = dir / (dep.name.string & ".nimble")
-    if not fileExists(result):
-      result = ""
-      for x in walkFiles(dir / "*.nimble"):
-        if result.len == 0:
-          result = x
-        else:
-          # ambiguous .nimble file
-          return ""
-
 proc addUnique[T](s: var seq[T]; elem: sink T) =
   if not s.contains(elem): s.add elem
 
@@ -626,13 +294,6 @@ proc addUniqueDep(c: var AtlasContext; g: var DepGraph; parent: int;
                                parents: @[parent],
                                algo: c.defaultAlgo)
 
-template toDestDir(p: PackageName): string = p.string
-
-proc readLockFile(filename: string): LockFile =
-  let jsonAsStr = readFile(filename)
-  let jsonTree = parseJson(jsonAsStr)
-  result = to(jsonTree, LockFile)
-
 proc rememberNimVersion(g: var DepGraph; q: VersionInterval) =
   let v = extractGeQuery(q)
   if v != Version"" and v > g.bestNimVersion: g.bestNimVersion = v
@@ -650,7 +311,7 @@ proc collectDeps(c: var AtlasContext; g: var DepGraph; parent: int;
     while i < r.len and r[i] notin {'#', '<', '=', '>'} + Whitespace: inc i
     let pkgName = r.substr(0, i-1)
     var err = pkgName.len == 0
-    let pkgUrl = c.toUrl(pkgName)
+    let pkgUrl = c.resolveUrl(pkgName)
     let query = parseVersionInterval(r, i, err)
     if err:
       error c, toName(nimbleFile), "invalid 'requires' syntax: " & r
@@ -668,8 +329,6 @@ proc collectNewDeps(c: var AtlasContext; g: var DepGraph; parent: int;
     result = collectDeps(c, g, parent, dep, nimbleFile)
   else:
     result = CfgPath toDestDir(dep.name)
-
-proc selectDir(a, b: string): string = (if dirExists(a): a else: b)
 
 proc copyFromDisk(c: var AtlasContext; w: Dependency) =
   let destDir = toDestDir(w.name)
@@ -694,96 +353,6 @@ proc collectAvailableVersions(c: var AtlasContext; g: var DepGraph; w: Dependenc
     if not g.availableVersions.hasKey(w.name):
       g.availableVersions[w.name] = collectTaggedVersions(c)
 
-const
-  BuilderScriptTemplate = """
-
-const matchedPattern = $1
-
-template builder(pattern: string; body: untyped) =
-  when pattern == matchedPattern:
-    body
-
-include $2
-"""
-  InstallHookTemplate = """
-
-var
-  packageName* = ""    ## Set this to the package name. It
-                       ## is usually not required to do that, nims' filename is
-                       ## the default.
-  version*: string     ## The package's version.
-  author*: string      ## The package's author.
-  description*: string ## The package's description.
-  license*: string     ## The package's license.
-  srcDir*: string      ## The package's source directory.
-  binDir*: string      ## The package's binary directory.
-  backend*: string     ## The package's backend.
-
-  skipDirs*, skipFiles*, skipExt*, installDirs*, installFiles*,
-    installExt*, bin*: seq[string] = @[] ## Nimble metadata.
-  requiresData*: seq[string] = @[] ## The package's dependencies.
-
-  foreignDeps*: seq[string] = @[] ## The foreign dependencies. Only
-                                  ## exported for 'distros.nim'.
-
-proc requires*(deps: varargs[string]) =
-  for d in deps: requiresData.add(d)
-
-template after(name, body: untyped) =
-  when astToStr(name) == "install":
-    body
-
-template before(name, body: untyped) =
-  when astToStr(name) == "install":
-    body
-
-proc getPkgDir*(): string = getCurrentDir()
-proc thisDir*(): string = getCurrentDir()
-
-include $1
-
-"""
-
-proc runNimScript(c: var AtlasContext; scriptContent: string; name: PackageName) =
-  const BuildNims = "atlas_build_temp.nims"
-  var buildNims = "atlas_build_0.nims"
-  var i = 1
-  while fileExists(buildNims):
-    if i >= 20:
-      error c, name, "could not create new: atlas_build_0.nims"
-      return
-    buildNims = "atlas_build_" & $i & ".nims"
-    inc i
-
-  writeFile buildNims, scriptContent
-
-  let cmdLine = "nim e --hints:off " & quoteShell(buildNims)
-  if os.execShellCmd(cmdLine) != 0:
-    error c, name, "Nimscript failed: " & cmdLine
-  else:
-    removeFile buildNims
-
-proc runNimScriptInstallHook(c: var AtlasContext; nimbleFile: string; name: PackageName) =
-  runNimScript c, InstallHookTemplate % [nimbleFile.escape], name
-
-proc runNimScriptBuilder(c: var AtlasContext; p: (string, string); name: PackageName) =
-  runNimScript c, BuilderScriptTemplate % [p[0].escape, p[1].escape], name
-
-proc runBuildSteps(c: var AtlasContext; g: var DepGraph) =
-  # `countdown` suffices to give us some kind of topological sort:
-  for i in countdown(g.nodes.len-1, 0):
-    if g.nodes[i].active:
-      let destDir = toDestDir(g.nodes[i].name)
-      let dir = selectDir(c.workspace / destDir, c.depsDir / destDir)
-      tryWithDir dir:
-        if g.nodes[i].hasInstallHooks:
-          let nf = findNimbleFile(c, g.nodes[i])
-          if nf.len > 0:
-            runNimScriptInstallHook c, nf, g.nodes[i].name
-        for p in mitems c.plugins.builderPatterns:
-          let f = p[0] % dir.splitPath.tail
-          if fileExists(f):
-            runNimScriptBuilder c, p, g.nodes[i].name
 
 proc resolve(c: var AtlasContext; g: var DepGraph) =
   var b = sat.Builder()
@@ -929,7 +498,7 @@ proc createGraph(c: var AtlasContext; start: string, url: PackageUrl): DepGraph 
 
 proc traverse(c: var AtlasContext; start: string; startIsDep: bool): seq[CfgPath] =
   # returns the list of paths for the nim.cfg file.
-  let url = toUrl(c, start)
+  let url = resolveUrl(c, start)
   var g = createGraph(c, start, url)
 
   if $url == "":
@@ -982,11 +551,6 @@ proc patchNimCfg(c: var AtlasContext; deps: seq[CfgPath]; cfgPath: string) =
         writeFile(cfg, cfgContent)
         info(c, projectFromCurrentDir(), "updated: " & cfg.readableFile)
 
-proc fatal*(msg: string) =
-  when defined(debug):
-    writeStackTrace()
-  quit "[Error] " & msg
-
 proc findSrcDir(c: var AtlasContext): string =
   for nimbleFile in walkPattern(c.currentDir / "*.nimble"):
     let nimbleInfo = extractRequiresInfo(c, nimbleFile)
@@ -1007,30 +571,15 @@ proc installDependencies(c: var AtlasContext; nimbleFile: string; startIsDep: bo
   afterGraphActions c, g
 
 proc updateDir(c: var AtlasContext; dir, filter: string) =
+  ## update the package's VCS
   for kind, file in walkDir(dir):
-    if kind == pcDir and dirExists(file / ".git"):
-      c.withDir file:
-        let pkg = PackageName(file)
-        let (remote, _) = osproc.execCmdEx("git remote -v")
-        if filter.len == 0 or filter in remote:
-          let diff = isCleanGit(c)
-          if diff != "":
-            warn(c, pkg, "has uncommitted changes; skipped")
-          else:
-            let (branch, _) = osproc.execCmdEx("git rev-parse --abbrev-ref HEAD")
-            if branch.strip.len > 0:
-              let (output, exitCode) = osproc.execCmdEx("git pull origin " & branch.strip)
-              if exitCode != 0:
-                error c, pkg, output
-              else:
-                info(c, pkg, "successfully updated")
-            else:
-              error c, pkg, "could not fetch current branch name"
+    if kind == pcDir and isGitDir(file):
+      gitops.updateDir(c, file, filter)
 
 proc patchNimbleFile(c: var AtlasContext; dep: string): string =
   let thisProject = c.currentDir.splitPath.tail
   let oldErrors = c.errors
-  let url = toUrl(c, dep)
+  let url = resolveUrl(c, dep)
   result = ""
   if oldErrors != c.errors:
     warn c, toName(dep), "cannot resolve package name"
@@ -1052,7 +601,7 @@ proc patchNimbleFile(c: var AtlasContext; dep: string): string =
           tokens.add token
         if tokens.len > 0:
           let oldErrors = c.errors
-          let urlB = toUrl(c, tokens[0])
+          let urlB = resolveUrl(c, tokens[0])
           if oldErrors != c.errors:
             warn c, toName(tokens[0]), "cannot resolve package name; found in: " & result
           if url == urlB:
@@ -1078,14 +627,6 @@ proc detectWorkspace(currentDir: string): string =
     if fileExists(result / AtlasWorkspace):
       return result
     result = result.parentDir()
-
-proc absoluteDepsDir(workspace, value: string): string =
-  if value == ".":
-    result = workspace
-  elif isAbsolute(value):
-    result = value
-  else:
-    result = workspace / value
 
 proc autoWorkspace(currentDir: string): string =
   result = currentDir
@@ -1253,39 +794,14 @@ proc setupNimEnv(c: var AtlasContext; nimVersion: string) =
       writeFile "activate.sh", ShellFile % pathEntry
     infoAboutActivation c, nimDest, nimVersion
 
-proc extractVersion(s: string): string =
-  var i = 0
-  while i < s.len and s[i] notin {'0'..'9'}: inc i
-  result = s.substr(i)
-
 proc listOutdated(c: var AtlasContext; dir: string) =
   var updateable = 0
   for k, f in walkDir(dir, relative=true):
-    if k in {pcDir, pcLinkToDir} and dirExists(dir / f / ".git"):
+    if k in {pcDir, pcLinkToDir} and isGitDir(dir / f):
       withDir c, dir / f:
-        let (outp, status) = silentExec("git fetch", [])
-        if status == 0:
-          let (cc, status) = exec(c, GitLastTaggedRef, [])
-          let latestVersion = strutils.strip(cc)
-          if status == 0 and latestVersion.len > 0:
-            # see if we're past that commit:
-            let (cc, status) = exec(c, GitCurrentCommit, [])
-            if status == 0:
-              let currentCommit = strutils.strip(cc)
-              if currentCommit != latestVersion:
-                # checkout the later commit:
-                # git merge-base --is-ancestor <commit> <commit>
-                let (cc, status) = exec(c, GitMergeBase, [currentCommit, latestVersion])
-                let mergeBase = strutils.strip(cc)
-                #if mergeBase != latestVersion:
-                #  echo f, " I'm at ", currentCommit, " release is at ", latestVersion, " merge base is ", mergeBase
-                if status == 0 and mergeBase == currentCommit:
-                  let v = extractVersion gitDescribeRefTag(c, latestVersion)
-                  if v.len > 0:
-                    info c, toName(f), "new version available: " & v
-                    inc updateable
-        else:
-          warn c, toName(f), "`git fetch` failed: " & outp
+        if gitops.isOutdated(c, f):
+          inc updateable
+
   if updateable == 0:
     info c, toName(c.workspace), "all packages are up to date"
 
