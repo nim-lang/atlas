@@ -11,12 +11,15 @@
 import std / [os, strscans, strutils]
 import context, gitops, osutils
 
-const
-  BatchFile = """
+when defined(windows):
+  const
+    BatchFile = """
 @echo off
 set PATH="$1";%PATH%
 """
-  ShellFile = "export PATH=$1:$$PATH\n"
+else:
+  const
+    ShellFile = "export PATH=$1:$$PATH\n"
 
 const
   ActivationFile = when defined(windows): "activate.bat" else: "activate.sh"

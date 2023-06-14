@@ -1,8 +1,14 @@
+#
+#           Atlas Package Cloner
+#        (c) Copyright 2023 Andreas Rumpf
+#
+#    See the file "copying.txt", included in this
+#    distribution, for details about the copyright.
+#
 
 import context, osutils
 
-import std / [strutils, os, osproc, tables, sets, json, jsonutils,
-  parsecfg, streams, terminal, strscans, hashes, options]
+import std / [strutils, os, osproc]
 
 const
   BuilderScriptTemplate* = """
@@ -55,7 +61,6 @@ include $1
 """
 
 proc runNimScript*(c: var AtlasContext; scriptContent: string; name: PackageName) =
-  const BuildNims = "atlas_build_temp.nims"
   var buildNims = "atlas_build_0.nims"
   var i = 1
   while fileExists(buildNims):

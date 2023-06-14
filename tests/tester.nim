@@ -34,7 +34,7 @@ proc sameDirContents(expected, given: string): bool =
 proc testWsConflict() =
   const myproject = "tests/ws_conflict/myproject"
   createDir(myproject)
-  exec atlasExe & " --project=" & myproject & " --showGraph --genLock use https://github.com/apkg"
+  exec atlasExe & " --project=" & myproject & " --showGraph use https://github.com/apkg"
   if sameDirContents("tests/ws_conflict/expected", myproject):
     removeDir("tests/ws_conflict/apkg")
     removeDir("tests/ws_conflict/bpkg")

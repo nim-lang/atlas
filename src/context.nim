@@ -1,6 +1,13 @@
+#
+#           Atlas Package Cloner
+#        (c) Copyright 2023 Andreas Rumpf
+#
+#    See the file "copying.txt", included in this
+#    distribution, for details about the copyright.
+#
 
-import std / [strutils, os, osproc, tables, sets, json, jsonutils,
-  parsecfg, streams, terminal, strscans, hashes, options, uri]
+import std / [strutils, os, tables, sets, json,
+  terminal, hashes, uri]
 import versions, parse_requires, compiledpatterns
 
 export tables, sets, json
@@ -10,6 +17,9 @@ const
   MockupRun* = defined(atlasTests)
   UnitTests* = defined(atlasUnitTests)
   TestsDir* = "atlas/tests"
+
+const
+  AtlasWorkspace* = "atlas.workspace"
 
 type
   PackageUrl* = Uri
@@ -25,13 +35,6 @@ proc getUrl*(x: string): PackageUrl =
 export uri.`$`, uri.`/`, uri.UriParseError
 
 type
-  LockMode* = enum
-    noLock, genLock, useLock
-
-  LockFileEntry* = object
-    url*: string
-    commit*: string
-
   PackageName* = distinct string
   CfgPath* = distinct string # put into a config `--path:"../x"`
   DepRelation* = enum
@@ -61,9 +64,6 @@ type
     availableVersions*: Table[PackageName, seq[(string, Version)]] # sorted, latest version comes first
     bestNimVersion*: Version # Nim is a special snowflake
 
-  LockFile* = object # serialized as JSON so an object for extensibility
-    items*: OrderedTable[string, LockFileEntry]
-
   Flag* = enum
     KeepCommits
     CfgHere
@@ -87,8 +87,6 @@ type
     errors*, warnings*: int
     messages: seq[(MsgKind, PackageName, string)] # delayed output
     overrides*: Patterns
-    lockMode*: LockMode
-    lockFile*: LockFile
     defaultAlgo*: ResolutionAlgorithm
     when MockupRun:
       step*: int
