@@ -135,7 +135,7 @@ proc fillPackageLookupTable(c: var AtlasContext) =
     for entry in plist:
       c.p[unicode.toLower entry.name] = entry.url
 
-proc toUrl*(c: var AtlasContext; p: string): PackageUrl =
+proc resolveUrl*(c: var AtlasContext; p: string): PackageUrl =
   proc lookup(c: var AtlasContext; p: string): string =
     if p.isUrl:
       if UsesOverrides in c.flags:
@@ -311,7 +311,7 @@ proc collectDeps(c: var AtlasContext; g: var DepGraph; parent: int;
     while i < r.len and r[i] notin {'#', '<', '=', '>'} + Whitespace: inc i
     let pkgName = r.substr(0, i-1)
     var err = pkgName.len == 0
-    let pkgUrl = c.toUrl(pkgName)
+    let pkgUrl = c.resolveUrl(pkgName)
     let query = parseVersionInterval(r, i, err)
     if err:
       error c, toName(nimbleFile), "invalid 'requires' syntax: " & r
@@ -498,7 +498,7 @@ proc createGraph(c: var AtlasContext; start: string, url: PackageUrl): DepGraph 
 
 proc traverse(c: var AtlasContext; start: string; startIsDep: bool): seq[CfgPath] =
   # returns the list of paths for the nim.cfg file.
-  let url = toUrl(c, start)
+  let url = resolveUrl(c, start)
   var g = createGraph(c, start, url)
 
   if $url == "":
@@ -579,7 +579,7 @@ proc updateDir(c: var AtlasContext; dir, filter: string) =
 proc patchNimbleFile(c: var AtlasContext; dep: string): string =
   let thisProject = c.currentDir.splitPath.tail
   let oldErrors = c.errors
-  let url = toUrl(c, dep)
+  let url = resolveUrl(c, dep)
   result = ""
   if oldErrors != c.errors:
     warn c, toName(dep), "cannot resolve package name"
@@ -601,7 +601,7 @@ proc patchNimbleFile(c: var AtlasContext; dep: string): string =
           tokens.add token
         if tokens.len > 0:
           let oldErrors = c.errors
-          let urlB = toUrl(c, tokens[0])
+          let urlB = resolveUrl(c, tokens[0])
           if oldErrors != c.errors:
             warn c, toName(tokens[0]), "cannot resolve package name; found in: " & result
           if url == urlB:
