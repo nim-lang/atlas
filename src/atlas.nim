@@ -896,7 +896,7 @@ proc main(c: var AtlasContext) =
       c.workspace = detectWorkspace(c.currentDir)
       if c.workspace.len > 0:
         readConfig c
-        info c, toName(c.workspace.readableFile), "is the current workspace"
+        infoNow c, toName(c.workspace.readableFile), "is the current workspace"
       elif autoinit:
         c.workspace = autoWorkspace(c.currentDir)
         createWorkspaceIn c.workspace, c.depsDir

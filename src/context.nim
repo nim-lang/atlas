@@ -112,18 +112,24 @@ proc error*(c: var AtlasContext; p: PackageName; arg: string) =
 proc info*(c: var AtlasContext; p: PackageName; arg: string) =
   c.messages.add (Info, p, arg)
 
+proc writeMessage(c: var AtlasContext; k: MsgKind; p: PackageName; arg: string) =
+  if NoColors in c.flags:
+    message(c, $k, p, arg)
+  else:
+    let color = case k
+                of Info: fgGreen
+                of Warning: fgYellow
+                of Error: fgRed
+    stdout.styledWriteLine(color, styleBright, $k, resetStyle, fgCyan, "(", p.string, ")", resetStyle, " ", arg)
+
 proc writePendingMessages*(c: var AtlasContext) =
   for i in 0..<c.messages.len:
     let (k, p, arg) = c.messages[i]
-    if NoColors in c.flags:
-      message(c, $k, p, arg)
-    else:
-      let color = case k
-                  of Info: fgGreen
-                  of Warning: fgYellow
-                  of Error: fgRed
-      stdout.styledWriteLine(color, styleBright, $k, resetStyle, fgCyan, "(", p.string, ")", resetStyle, " ", arg)
+    writeMessage c, k, p, arg
   c.messages.setLen 0
+
+proc infoNow*(c: var AtlasContext; p: PackageName; arg: string) =
+  writeMessage c, Info, p, arg
 
 proc fatal*(msg: string) =
   when defined(debug):
