@@ -1,5 +1,5 @@
 
-import context
+import context, osutils
 
 import std / [strutils, os, osproc, tables, sets, json, jsonutils,
   parsecfg, streams, terminal, strscans, hashes, options]

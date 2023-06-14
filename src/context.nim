@@ -3,6 +3,7 @@ import std / [strutils, os, osproc, tables, sets, json, jsonutils,
   parsecfg, streams, terminal, strscans, hashes, options, uri]
 import versions, parse_requires, compiledpatterns
 
+export tables, sets, json
 export versions, parse_requires, compiledpatterns
 
 const
@@ -89,19 +90,6 @@ const
   InvalidCommit* = "#head" #"<invalid commit>"
   ProduceTest* = false
 
-type
-  Command* = enum
-    GitDiff = "git diff",
-    GitTag = "git tag",
-    GitTags = "git show-ref --tags",
-    GitLastTaggedRef = "git rev-list --tags --max-count=1",
-    GitDescribe = "git describe",
-    GitRevParse = "git rev-parse",
-    GitCheckout = "git checkout",
-    GitPush = "git push origin",
-    GitPull = "git pull",
-    GitCurrentCommit = "git log -n 1 --format=%H"
-    GitMergeBase = "git merge-base"
 
 proc message*(c: var AtlasContext; category: string; p: PackageName; arg: string) =
   var msg = category & "(" & p.string & ") " & arg
@@ -127,31 +115,6 @@ proc info*(c: var AtlasContext; p: PackageName; arg: string) =
   else:
     stdout.styledWriteLine(fgGreen, styleBright, "[Info] ", resetStyle, fgCyan, "(", p.string, ")", resetStyle, " ", arg)
 
-template toDestDir*(p: PackageName): string = p.string
-
-proc selectDir*(a, b: string): string = (if dirExists(a): a else: b)
-
-template withDir*(c: var AtlasContext; dir: string; body: untyped) =
-  when MockupRun:
-    body
-  else:
-    let oldDir = getCurrentDir()
-    try:
-      when ProduceTest:
-        echo "Current directory is now ", dir
-      setCurrentDir(dir)
-      body
-    finally:
-      setCurrentDir(oldDir)
-
-template tryWithDir*(dir: string; body: untyped) =
-  let oldDir = getCurrentDir()
-  try:
-    if dirExists(dir):
-      setCurrentDir(dir)
-      body
-  finally:
-    setCurrentDir(oldDir)
 
 proc fatal*(msg: string) =
   when defined(debug):

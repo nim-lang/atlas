@@ -4,6 +4,9 @@
 import std / [os, strutils, osproc, uri]
 import context
 
+template projectFromCurrentDir*(): PackageName =
+  PackageName(c.currentDir.splitPath.tail)
+
 proc getFilePath*(x: PackageUrl): string =
   assert x.scheme == "file"
   result = x.hostname
@@ -75,6 +78,33 @@ proc cloneUrl*(url: PackageUrl, dest: string; cloneUsingHttps: bool): string =
   else:
     result = "Unable to identify url: " & $modUrl
 
+proc readableFile*(s: string): string = relativePath(s, getCurrentDir())
+
+template toDestDir*(p: PackageName): string = p.string
+
+proc selectDir*(a, b: string): string = (if dirExists(a): a else: b)
+
+template withDir*(c: var AtlasContext; dir: string; body: untyped) =
+  when MockupRun:
+    body
+  else:
+    let oldDir = getCurrentDir()
+    try:
+      when ProduceTest:
+        echo "Current directory is now ", dir
+      setCurrentDir(dir)
+      body
+    finally:
+      setCurrentDir(oldDir)
+
+template tryWithDir*(dir: string; body: untyped) =
+  let oldDir = getCurrentDir()
+  try:
+    if dirExists(dir):
+      setCurrentDir(dir)
+      body
+  finally:
+    setCurrentDir(oldDir)
 proc silentExec*(cmd: string; args: openArray[string]): (string, int) =
   var cmdLine = cmd
   for i in 0..<args.len:
@@ -88,25 +118,3 @@ proc nimbleExec*(cmd: string; args: openArray[string]) =
     cmdLine.add ' '
     cmdLine.add quoteShell(args[i])
   discard os.execShellCmd(cmdLine)
-
-proc exec*(c: var AtlasContext; cmd: Command; args: openArray[string]): (string, int) =
-  when MockupRun:
-    assert TestLog[c.step].cmd == cmd, $(TestLog[c.step].cmd, cmd, c.step)
-    case cmd
-    of GitDiff, GitTag, GitTags, GitLastTaggedRef, GitDescribe, GitRevParse, GitPush, GitPull, GitCurrentCommit:
-      result = (TestLog[c.step].output, TestLog[c.step].exitCode)
-    of GitCheckout:
-      assert args[0] == TestLog[c.step].output
-    of GitMergeBase:
-      let tmp = TestLog[c.step].output.splitLines()
-      assert tmp.len == 4, $tmp.len
-      assert tmp[0] == args[0]
-      assert tmp[1] == args[1]
-      assert tmp[3] == ""
-      result[0] = tmp[2]
-      result[1] = TestLog[c.step].exitCode
-    inc c.step
-  else:
-    result = silentExec($cmd, args)
-    when ProduceTest:
-      echo "cmd ", cmd, " args ", args, " --> ", result
