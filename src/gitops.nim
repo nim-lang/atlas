@@ -31,6 +31,11 @@ proc sameVersionAs*(tag, ver: string): bool =
     result = safeCharAt(tag, idx-1) notin VersionChars and
       safeCharAt(tag, idx+ver.len) notin VersionChars
 
+proc extractVersion*(s: string): string =
+  var i = 0
+  while i < s.len and s[i] notin {'0'..'9'}: inc i
+  result = s.substr(i)
+
 proc exec*(c: var AtlasContext; cmd: Command; args: openArray[string]): (string, int) =
   when MockupRun:
     assert TestLog[c.step].cmd == cmd, $(TestLog[c.step].cmd, cmd, c.step)
@@ -170,3 +175,30 @@ proc genLockEntry*(c: var AtlasContext; w: Dependency) =
   if commit.len == 0 or needsCommitLookup(commit):
     commit = execProcess("git log -1 --pretty=format:%H").strip()
   c.lockFile.items[w.name.string] = LockFileEntry(url: $url, commit: commit)
+
+proc listOutdated*(c: var AtlasContext; f: string): bool =
+  ## determine if the given git repo `f` is updateable
+  ## 
+  let (outp, status) = silentExec("git fetch", [])
+  if status == 0:
+    let (cc, status) = exec(c, GitLastTaggedRef, [])
+    let latestVersion = strutils.strip(cc)
+    if status == 0 and latestVersion.len > 0:
+      # see if we're past that commit:
+      let (cc, status) = exec(c, GitCurrentCommit, [])
+      if status == 0:
+        let currentCommit = strutils.strip(cc)
+        if currentCommit != latestVersion:
+          # checkout the later commit:
+          # git merge-base --is-ancestor <commit> <commit>
+          let (cc, status) = exec(c, GitMergeBase, [currentCommit, latestVersion])
+          let mergeBase = strutils.strip(cc)
+          #if mergeBase != latestVersion:
+          #  echo f, " I'm at ", currentCommit, " release is at ", latestVersion, " merge base is ", mergeBase
+          if status == 0 and mergeBase == currentCommit:
+            let v = extractVersion gitDescribeRefTag(c, latestVersion)
+            if v.len > 0:
+              info c, toName(f), "new version available: " & v
+              result = true
+  else:
+    warn c, toName(f), "`git fetch` failed: " & outp
