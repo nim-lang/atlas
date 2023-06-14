@@ -84,7 +84,7 @@ version. Thanks to this design, lock files are much less important.
 Atlas supports the following commands:
 
 
-## Use <url> / <package name>
+### Use <url> / <package name>
 
 Clone the package behind `url` or `package name` and its dependencies into
 the `_deps` directory and make it available for your current project which
@@ -138,7 +138,7 @@ if there are no uncommitted changes.
 Run `atlas --help` for more features.
 
 
-### Overrides
+## Overrides
 
 You can override how Atlas resolves a package name or a URL. The overrides use
 a simple pattern matching language and are flexible enough to integrate private
@@ -173,7 +173,7 @@ https://github.com/$+ -> https://utopia.forall/$#
 You can use `$1` or `$#` to refer to captures.
 
 
-### Virtual Nim environments
+## Virtual Nim environments
 
 Atlas supports setting up a virtual Nim environment via the `env` command. You can
 even install multiple different Nim versions into the same workspace.

@@ -14,6 +14,14 @@ const
 type
   PackageUrl* = Uri
 
+proc getUrl*(x: string): PackageUrl =
+  try:
+    let u = parseUri(x).PackageUrl
+    if u.scheme in ["git", "https", "http", "hg", "file"]:
+      result = u
+  except UriParseError:
+    discard
+
 export uri.`$`, uri.`/`, uri.UriParseError
 
 type
@@ -140,5 +148,7 @@ proc toName*(p: PackageUrl): PackageName =
   result = PackageName splitFile(p.path).name
 
 proc toName*(p: string): PackageName =
-  #assert not p.startsWith("http") # a package name can be `httpx`...
-  result = PackageName p
+  if p.contains("://"):
+    result = toName getUrl(p)
+  else:
+    result = PackageName p
