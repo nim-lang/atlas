@@ -76,7 +76,7 @@ proc collectDeps*(c: var AtlasContext; g: var DepGraph; parent: int;
     if err:
       error c, toName(nimbleFile), "invalid 'requires' syntax: " & r
     else:
-      if cmpIgnoreCase(pkgUrl.path, "nim") != 0:
+      if cmpIgnoreCase(pkgName, "nim") != 0:
         c.addUniqueDep g, parent, pkgUrl, query
       else:
         rememberNimVersion g, query
