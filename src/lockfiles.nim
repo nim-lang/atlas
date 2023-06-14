@@ -31,8 +31,6 @@ proc write(lock: LockFile; lockFilePath: string) =
 proc genLockEntry(c: var AtlasContext; lf: var LockFile; dir: string) =
   let url = getRemoteUrl()
   let commit = getCurrentCommit()
-  when defined(windows):
-    let dir = dir.replace('\\', '/')
   let name = dir.splitPath.tail
   lf.items[name] = LockFileEntry(dir: dir, url: $url, commit: commit)
 
@@ -40,7 +38,7 @@ proc genLockEntriesForDir(c: var AtlasContext; lf: var LockFile; dir: string) =
   for k, f in walkDir(dir):
     if k == pcDir and dirExists(f / ".git"):
       withDir c, f:
-        genLockEntry c, lf, f
+        genLockEntry c, lf, f.relativePath(dir, '/')
 
 proc pinWorkspace*(c: var AtlasContext; lockFilePath: string) =
   var lf = LockFile(items: initOrderedTable[string, LockFileEntry]())
@@ -78,22 +76,22 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string) =
         let destDir = toDestDir(w.name)
         let dir = selectDir(c.workspace / destDir, c.depsDir / destDir)
         tryWithDir dir:
-          genLockEntry c, lf, dir
+          genLockEntry c, lf, dir.relativePath(c.currentDir, '/')
     write lf, lockFilePath
 
 proc replay*(c: var AtlasContext; lockFilePath: string) =
   let lockFile = readLockFile(lockFilePath)
   let base = splitPath(lockFilePath).head
-  withDir c, base:
-    for _, v in pairs(lockFile.items):
-      if not dirExists(v.dir):
-        let err = osutils.cloneUrl(getUrl v.url, v.dir, false)
-        if err.len > 0:
-          error c, toName(lockFilePath), "could not clone: " & v.url
-          continue
-      withDir c, v.dir:
-        let url = $getRemoteUrl()
-        if v.url != url:
-          error c, toName(v.dir), "remote URL has been compromised: got: " &
-              url & " but wanted: " & v.url
-        checkoutGitCommit(c, toName(v.dir), v.commit)
+  for _, v in pairs(lockFile.items):
+    let dir = base / v.dir
+    if not dirExists(dir):
+      let err = osutils.cloneUrl(getUrl v.url, dir, false)
+      if err.len > 0:
+        error c, toName(lockFilePath), "could not clone: " & v.url
+        continue
+    withDir c, dir:
+      let url = $getRemoteUrl()
+      if v.url != url:
+        error c, toName(v.dir), "remote URL has been compromised: got: " &
+            url & " but wanted: " & v.url
+      checkoutGitCommit(c, toName(dir), v.commit)
