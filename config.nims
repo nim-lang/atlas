@@ -1,4 +1,7 @@
 
+task build, "Build local atlas":
+  exec "nim c -o:./atlas src/atlas.nim"
+
 task unitTests, "Runs unit tests":
   exec "nim c -r tests/tests.nim"
 
