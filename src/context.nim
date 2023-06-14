@@ -127,24 +127,3 @@ proc toName*(p: PackageUrl): PackageName =
 proc toName*(p: string): PackageName =
   assert not p.startsWith("http")
   result = PackageName p
-
-proc dependencyDir*(c: AtlasContext; w: Dependency): string =
-  result = c.workspace / w.name.string
-  if not dirExists(result):
-    result = c.depsDir / w.name.string
-
-proc findNimbleFile*(c: AtlasContext; dep: Dependency): string =
-  when MockupRun:
-    result = TestsDir / dep.name.string & ".nimble"
-    doAssert fileExists(result), "file does not exist " & result
-  else:
-    let dir = dependencyDir(c, dep)
-    result = dir / (dep.name.string & ".nimble")
-    if not fileExists(result):
-      result = ""
-      for x in walkFiles(dir / "*.nimble"):
-        if result.len == 0:
-          result = x
-        else:
-          # ambiguous .nimble file
-          return ""
