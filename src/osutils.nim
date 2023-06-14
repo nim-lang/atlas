@@ -1,14 +1,8 @@
 ## OS utilities like 'withDir'.
 ## (c) 2021 Andreas Rumpf
 
-import os, strutils, osproc, uri, json
-
-export UriParseError
-
-type
-  PackageUrl* = Uri
-
-export uri.`$`, uri.`/`
+import std / [os, strutils, osproc, uri]
+import context
 
 proc getFilePath*(x: PackageUrl): string =
   assert x.scheme == "file"
@@ -80,3 +74,39 @@ proc cloneUrl*(url: PackageUrl, dest: string; cloneUsingHttps: bool): string =
       result = "Unable to identify url: " & $modUrl
   else:
     result = "Unable to identify url: " & $modUrl
+
+proc silentExec*(cmd: string; args: openArray[string]): (string, int) =
+  var cmdLine = cmd
+  for i in 0..<args.len:
+    cmdLine.add ' '
+    cmdLine.add quoteShell(args[i])
+  result = osproc.execCmdEx(cmdLine)
+
+proc nimbleExec*(cmd: string; args: openArray[string]) =
+  var cmdLine = "nimble " & cmd
+  for i in 0..<args.len:
+    cmdLine.add ' '
+    cmdLine.add quoteShell(args[i])
+  discard os.execShellCmd(cmdLine)
+
+proc exec*(c: var AtlasContext; cmd: Command; args: openArray[string]): (string, int) =
+  when MockupRun:
+    assert TestLog[c.step].cmd == cmd, $(TestLog[c.step].cmd, cmd, c.step)
+    case cmd
+    of GitDiff, GitTag, GitTags, GitLastTaggedRef, GitDescribe, GitRevParse, GitPush, GitPull, GitCurrentCommit:
+      result = (TestLog[c.step].output, TestLog[c.step].exitCode)
+    of GitCheckout:
+      assert args[0] == TestLog[c.step].output
+    of GitMergeBase:
+      let tmp = TestLog[c.step].output.splitLines()
+      assert tmp.len == 4, $tmp.len
+      assert tmp[0] == args[0]
+      assert tmp[1] == args[1]
+      assert tmp[3] == ""
+      result[0] = tmp[2]
+      result[1] = TestLog[c.step].exitCode
+    inc c.step
+  else:
+    result = silentExec($cmd, args)
+    when ProduceTest:
+      echo "cmd ", cmd, " args ", args, " --> ", result

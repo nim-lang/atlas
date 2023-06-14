@@ -1,12 +1,18 @@
 
 import std / [strutils, os, osproc, tables, sets, json, jsonutils,
-  parsecfg, streams, terminal, strscans, hashes, options]
-import parse_requires, osutils, packagesjson, compiledpatterns, versions, sat
+  parsecfg, streams, terminal, strscans, hashes, options, uri]
+import versions, parse_requires, compiledpatterns
 
 const
   MockupRun* = defined(atlasTests)
   UnitTests* = defined(atlasUnitTests)
   TestsDir* = "atlas/tests"
+
+type
+  PackageUrl* = Uri
+
+export uri.`$`, uri.`/`, uri.UriParseError
+
 
 type
   LockMode* = enum
@@ -145,6 +151,11 @@ template tryWithDir*(dir: string; body: untyped) =
       body
   finally:
     setCurrentDir(oldDir)
+
+proc fatal*(msg: string) =
+  when defined(debug):
+    writeStackTrace()
+  quit "[Error] " & msg
 
 proc toName*(p: PackageUrl): PackageName =
   result = PackageName splitFile(p.path).name

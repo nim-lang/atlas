@@ -723,11 +723,6 @@ proc patchNimCfg(c: var AtlasContext; deps: seq[CfgPath]; cfgPath: string) =
         writeFile(cfg, cfgContent)
         info(c, projectFromCurrentDir(), "updated: " & cfg.readableFile)
 
-proc fatal*(msg: string) =
-  when defined(debug):
-    writeStackTrace()
-  quit "[Error] " & msg
-
 proc findSrcDir(c: var AtlasContext): string =
   for nimbleFile in walkPattern(c.currentDir / "*.nimble"):
     let nimbleInfo = extractRequiresInfo(c, nimbleFile)
