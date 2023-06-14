@@ -88,41 +88,6 @@ proc writeVersion() =
 
 include testdata
 
-proc silentExec(cmd: string; args: openArray[string]): (string, int) =
-  var cmdLine = cmd
-  for i in 0..<args.len:
-    cmdLine.add ' '
-    cmdLine.add quoteShell(args[i])
-  result = osproc.execCmdEx(cmdLine)
-
-proc nimbleExec(cmd: string; args: openArray[string]) =
-  var cmdLine = "nimble " & cmd
-  for i in 0..<args.len:
-    cmdLine.add ' '
-    cmdLine.add quoteShell(args[i])
-  discard os.execShellCmd(cmdLine)
-
-proc exec(c: var AtlasContext; cmd: Command; args: openArray[string]): (string, int) =
-  when MockupRun:
-    assert TestLog[c.step].cmd == cmd, $(TestLog[c.step].cmd, cmd, c.step)
-    case cmd
-    of GitDiff, GitTag, GitTags, GitLastTaggedRef, GitDescribe, GitRevParse, GitPush, GitPull, GitCurrentCommit:
-      result = (TestLog[c.step].output, TestLog[c.step].exitCode)
-    of GitCheckout:
-      assert args[0] == TestLog[c.step].output
-    of GitMergeBase:
-      let tmp = TestLog[c.step].output.splitLines()
-      assert tmp.len == 4, $tmp.len
-      assert tmp[0] == args[0]
-      assert tmp[1] == args[1]
-      assert tmp[3] == ""
-      result[0] = tmp[2]
-      result[1] = TestLog[c.step].exitCode
-    inc c.step
-  else:
-    result = silentExec($cmd, args)
-    when ProduceTest:
-      echo "cmd ", cmd, " args ", args, " --> ", result
 
 proc cloneUrl(c: var AtlasContext;
               url: PackageUrl,
@@ -328,11 +293,6 @@ proc addUniqueDep(c: var AtlasContext; g: var DepGraph; parent: int;
                                query: query,
                                parents: @[parent],
                                algo: c.defaultAlgo)
-
-proc readLockFile(filename: string): LockFile =
-  let jsonAsStr = readFile(filename)
-  let jsonTree = parseJson(jsonAsStr)
-  result = to(jsonTree, LockFile)
 
 proc rememberNimVersion(g: var DepGraph; q: VersionInterval) =
   let v = extractGeQuery(q)

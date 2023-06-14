@@ -15,6 +15,7 @@ type
     GitCurrentCommit = "git log -n 1 --format=%H"
     GitMergeBase = "git merge-base"
 
+proc isGitDir*(path: string): bool = dirExists(path / ".git")
 
 proc sameVersionAs*(tag, ver: string): bool =
   const VersionChars = {'0'..'9', '.'}

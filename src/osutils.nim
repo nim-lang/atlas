@@ -105,6 +105,7 @@ template tryWithDir*(dir: string; body: untyped) =
       body
   finally:
     setCurrentDir(oldDir)
+
 proc silentExec*(cmd: string; args: openArray[string]): (string, int) =
   var cmdLine = cmd
   for i in 0..<args.len:
@@ -118,3 +119,8 @@ proc nimbleExec*(cmd: string; args: openArray[string]) =
     cmdLine.add ' '
     cmdLine.add quoteShell(args[i])
   discard os.execShellCmd(cmdLine)
+
+proc readLockFile*(filename: string): LockFile =
+  let jsonAsStr = readFile(filename)
+  let jsonTree = parseJson(jsonAsStr)
+  result = to(jsonTree, LockFile)
