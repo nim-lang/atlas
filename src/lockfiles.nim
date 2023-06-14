@@ -72,7 +72,7 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string) =
 
   if c.errors == 0:
     # topo-sort:
-    for i in countdown(g.nodes.len-1, 0):
+    for i in countdown(g.nodes.len-1, 1):
       if g.nodes[i].active:
         let w = g.nodes[i]
         let destDir = toDestDir(w.name)
@@ -80,7 +80,6 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string) =
         tryWithDir dir:
           genLockEntry c, lf, dir
     write lf, lockFilePath
-
 
 proc replay*(c: var AtlasContext; lockFilePath: string) =
   let lockFile = readLockFile(lockFilePath)
