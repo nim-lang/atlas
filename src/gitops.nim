@@ -176,7 +176,7 @@ proc genLockEntry*(c: var AtlasContext; w: Dependency) =
     commit = execProcess("git log -1 --pretty=format:%H").strip()
   c.lockFile.items[w.name.string] = LockFileEntry(url: $url, commit: commit)
 
-proc listOutdated*(c: var AtlasContext; f: string): bool =
+proc isOutdated*(c: var AtlasContext; f: string): bool =
   ## determine if the given git repo `f` is updateable
   ## 
   let (outp, status) = silentExec("git fetch", [])
@@ -202,3 +202,22 @@ proc listOutdated*(c: var AtlasContext; f: string): bool =
               result = true
   else:
     warn c, toName(f), "`git fetch` failed: " & outp
+
+proc updateDir*(c: var AtlasContext; file, filter: string) =
+  withDir c, file:
+    let pkg = PackageName(file)
+    let (remote, _) = osproc.execCmdEx("git remote -v")
+    if filter.len == 0 or filter in remote:
+      let diff = isCleanGit(c)
+      if diff != "":
+        warn(c, pkg, "has uncommitted changes; skipped")
+      else:
+        let (branch, _) = osproc.execCmdEx("git rev-parse --abbrev-ref HEAD")
+        if branch.strip.len > 0:
+          let (output, exitCode) = osproc.execCmdEx("git pull origin " & branch.strip)
+          if exitCode != 0:
+            error c, pkg, output
+          else:
+            info(c, pkg, "successfully updated")
+        else:
+          error c, pkg, "could not fetch current branch name"

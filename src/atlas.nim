@@ -571,25 +571,10 @@ proc installDependencies(c: var AtlasContext; nimbleFile: string; startIsDep: bo
   afterGraphActions c, g
 
 proc updateDir(c: var AtlasContext; dir, filter: string) =
+  ## update the package's VCS
   for kind, file in walkDir(dir):
-    if kind == pcDir and dirExists(file / ".git"):
-      c.withDir file:
-        let pkg = PackageName(file)
-        let (remote, _) = osproc.execCmdEx("git remote -v")
-        if filter.len == 0 or filter in remote:
-          let diff = isCleanGit(c)
-          if diff != "":
-            warn(c, pkg, "has uncommitted changes; skipped")
-          else:
-            let (branch, _) = osproc.execCmdEx("git rev-parse --abbrev-ref HEAD")
-            if branch.strip.len > 0:
-              let (output, exitCode) = osproc.execCmdEx("git pull origin " & branch.strip)
-              if exitCode != 0:
-                error c, pkg, output
-              else:
-                info(c, pkg, "successfully updated")
-            else:
-              error c, pkg, "could not fetch current branch name"
+    if kind == pcDir and isGitDir(file):
+      gitops.updateDir(c, file, filter)
 
 proc patchNimbleFile(c: var AtlasContext; dep: string): string =
   let thisProject = c.currentDir.splitPath.tail
@@ -822,7 +807,7 @@ proc listOutdated(c: var AtlasContext; dir: string) =
   for k, f in walkDir(dir, relative=true):
     if k in {pcDir, pcLinkToDir} and isGitDir(dir / f):
       withDir c, dir / f:
-        if gitops.listOutdated(c, f):
+        if gitops.isOutdated(c, f):
           inc updateable
 
   if updateable == 0:
