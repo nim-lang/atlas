@@ -11,9 +11,9 @@
 
 import std / [parseopt, strutils, os, osproc, tables, sets, json, jsonutils,
   parsecfg, streams, terminal, strscans, hashes, options]
-import parse_requires, osutils, packagesjson, compiledpatterns, versions, sat
+import context, runners, parse_requires, osutils, packagesjson, compiledpatterns, versions, sat
 
-export osutils
+export osutils, context
 
 from unicode import nil
 
@@ -85,97 +85,6 @@ proc writeVersion() =
   stdout.flushFile()
   quit(0)
 
-const
-  MockupRun = defined(atlasTests)
-  UnitTests = defined(atlasUnitTests)
-  TestsDir = "atlas/tests"
-
-type
-  LockMode = enum
-    noLock, genLock, useLock
-
-  LockFileEntry = object
-    url: string
-    commit: string
-
-  PackageName = distinct string
-  CfgPath = distinct string # put into a config `--path:"../x"`
-  DepRelation = enum
-    normal, strictlyLess, strictlyGreater
-
-  SemVerField = enum
-    major, minor, patch
-
-  ResolutionAlgorithm = enum
-    MinVer, SemVer, MaxVer
-
-  Dependency = object
-    name: PackageName
-    url: PackageUrl
-    commit: string
-    query: VersionInterval
-    self: int # position in the graph
-    parents: seq[int] # why we need this dependency
-    active: bool
-    hasInstallHooks: bool
-    algo: ResolutionAlgorithm
-  DepGraph = object
-    nodes: seq[Dependency]
-    processed: Table[string, int] # the key is (url / commit)
-    byName: Table[PackageName, seq[int]]
-    availableVersions: Table[PackageName, seq[(string, Version)]] # sorted, latest version comes first
-    bestNimVersion: Version # Nim is a special snowflake
-
-  LockFile = object # serialized as JSON so an object for extensibility
-    items: OrderedTable[string, LockFileEntry]
-
-  Flag* = enum
-    KeepCommits
-    CfgHere
-    UsesOverrides
-    Keep
-    NoColors
-    ShowGraph
-    AutoEnv
-    NoExec
-
-  AtlasContext* = object
-    projectDir*, workspace*, depsDir*, currentDir*: string
-    hasPackageList: bool
-    flags: set[Flag]
-    p: Table[string, string] # name -> url mapping
-    errors, warnings: int
-    overrides: Patterns
-    lockMode: LockMode
-    lockFile: LockFile
-    defaultAlgo: ResolutionAlgorithm
-    when MockupRun:
-      step: int
-      mockupSuccess: bool
-    plugins: PluginInfo
-
-proc `==`*(a, b: CfgPath): bool {.borrow.}
-
-proc `==`*(a, b: PackageName): bool {.borrow.}
-proc hash*(a: PackageName): Hash {.borrow.}
-
-const
-  InvalidCommit = "#head" #"<invalid commit>"
-  ProduceTest = false
-
-type
-  Command = enum
-    GitDiff = "git diff",
-    GitTag = "git tag",
-    GitTags = "git show-ref --tags",
-    GitLastTaggedRef = "git rev-list --tags --max-count=1",
-    GitDescribe = "git describe",
-    GitRevParse = "git rev-parse",
-    GitCheckout = "git checkout",
-    GitPush = "git push origin",
-    GitPull = "git pull",
-    GitCurrentCommit = "git log -n 1 --format=%H"
-    GitMergeBase = "git merge-base"
 
 include testdata
 
@@ -223,28 +132,6 @@ proc cloneUrl(c: var AtlasContext; url: PackageUrl, dest: string; cloneUsingHttp
     when ProduceTest:
       echo "cloned ", url, " into ", dest
 
-template withDir*(c: var AtlasContext; dir: string; body: untyped) =
-  when MockupRun:
-    body
-  else:
-    let oldDir = getCurrentDir()
-    try:
-      when ProduceTest:
-        echo "Current directory is now ", dir
-      setCurrentDir(dir)
-      body
-    finally:
-      setCurrentDir(oldDir)
-
-template tryWithDir*(dir: string; body: untyped) =
-  let oldDir = getCurrentDir()
-  try:
-    if dirExists(dir):
-      setCurrentDir(dir)
-      body
-  finally:
-    setCurrentDir(oldDir)
-
 proc extractRequiresInfo(c: var AtlasContext; nimbleFile: string): NimbleFileInfo =
   result = extractRequiresInfo(nimbleFile)
   when ProduceTest:
@@ -257,30 +144,6 @@ proc isCleanGit(c: var AtlasContext): string =
     result = "'git diff' not empty"
   elif status != 0:
     result = "'git diff' returned non-zero"
-
-proc message(c: var AtlasContext; category: string; p: PackageName; arg: string) =
-  var msg = category & "(" & p.string & ") " & arg
-  stdout.writeLine msg
-
-proc warn(c: var AtlasContext; p: PackageName; arg: string) =
-  if NoColors in c.flags:
-    message(c, "[Warning] ", p, arg)
-  else:
-    stdout.styledWriteLine(fgYellow, styleBright, "[Warning] ", resetStyle, fgCyan, "(", p.string, ")", resetStyle, " ", arg)
-  inc c.warnings
-
-proc error(c: var AtlasContext; p: PackageName; arg: string) =
-  if NoColors in c.flags:
-    message(c, "[Error] ", p, arg)
-  else:
-    stdout.styledWriteLine(fgRed, styleBright, "[Error] ", resetStyle, fgCyan, "(", p.string, ")", resetStyle, " ", arg)
-  inc c.errors
-
-proc info(c: var AtlasContext; p: PackageName; arg: string) =
-  if NoColors in c.flags:
-    message(c, "[Info] ", p, arg)
-  else:
-    stdout.styledWriteLine(fgGreen, styleBright, "[Info] ", resetStyle, fgCyan, "(", p.string, ")", resetStyle, " ", arg)
 
 template projectFromCurrentDir(): PackageName = PackageName(c.currentDir.splitPath.tail)
 
@@ -449,13 +312,6 @@ proc toUrl*(c: var AtlasContext; p: string): PackageUrl =
   let urlstr = lookup(c, p)
   result = urlstr.getUrl()
 
-proc toName(p: PackageUrl): PackageName =
-  result = PackageName splitFile(p.path).name
-
-proc toName(p: string): PackageName =
-  assert not p.startsWith("http")
-  result = PackageName p
-
 proc generateDepGraph(c: var AtlasContext; g: DepGraph) =
   proc repr(w: Dependency): string =
     $(w.url / w.commit)
@@ -517,11 +373,6 @@ proc commitFromLockFile(c: var AtlasContext; w: Dependency): string =
   else:
     error c, w.name, "package is not listed in the lock file"
 
-proc dependencyDir(c: AtlasContext; w: Dependency): string =
-  result = c.workspace / w.name.string
-  if not dirExists(result):
-    result = c.depsDir / w.name.string
-
 const
   FileProtocol = "file"
   ThisVersion = "current_version.atlas"
@@ -574,22 +425,6 @@ proc checkoutCommit(c: var AtlasContext; g: var DepGraph; w: Dependency) =
                 warn c, w.name, "do not know which commit is more recent:",
                   currentCommit, "(current) or", w.commit, " =", requiredCommit, "(required)"
 
-proc findNimbleFile(c: AtlasContext; dep: Dependency): string =
-  when MockupRun:
-    result = TestsDir / dep.name.string & ".nimble"
-    doAssert fileExists(result), "file does not exist " & result
-  else:
-    let dir = dependencyDir(c, dep)
-    result = dir / (dep.name.string & ".nimble")
-    if not fileExists(result):
-      result = ""
-      for x in walkFiles(dir / "*.nimble"):
-        if result.len == 0:
-          result = x
-        else:
-          # ambiguous .nimble file
-          return ""
-
 proc addUnique[T](s: var seq[T]; elem: sink T) =
   if not s.contains(elem): s.add elem
 
@@ -625,8 +460,6 @@ proc addUniqueDep(c: var AtlasContext; g: var DepGraph; parent: int;
                                query: query,
                                parents: @[parent],
                                algo: c.defaultAlgo)
-
-template toDestDir(p: PackageName): string = p.string
 
 proc readLockFile(filename: string): LockFile =
   let jsonAsStr = readFile(filename)
@@ -669,8 +502,6 @@ proc collectNewDeps(c: var AtlasContext; g: var DepGraph; parent: int;
   else:
     result = CfgPath toDestDir(dep.name)
 
-proc selectDir(a, b: string): string = (if dirExists(a): a else: b)
-
 proc copyFromDisk(c: var AtlasContext; w: Dependency) =
   let destDir = toDestDir(w.name)
   var u = w.url.getFilePath()
@@ -694,96 +525,6 @@ proc collectAvailableVersions(c: var AtlasContext; g: var DepGraph; w: Dependenc
     if not g.availableVersions.hasKey(w.name):
       g.availableVersions[w.name] = collectTaggedVersions(c)
 
-const
-  BuilderScriptTemplate = """
-
-const matchedPattern = $1
-
-template builder(pattern: string; body: untyped) =
-  when pattern == matchedPattern:
-    body
-
-include $2
-"""
-  InstallHookTemplate = """
-
-var
-  packageName* = ""    ## Set this to the package name. It
-                       ## is usually not required to do that, nims' filename is
-                       ## the default.
-  version*: string     ## The package's version.
-  author*: string      ## The package's author.
-  description*: string ## The package's description.
-  license*: string     ## The package's license.
-  srcDir*: string      ## The package's source directory.
-  binDir*: string      ## The package's binary directory.
-  backend*: string     ## The package's backend.
-
-  skipDirs*, skipFiles*, skipExt*, installDirs*, installFiles*,
-    installExt*, bin*: seq[string] = @[] ## Nimble metadata.
-  requiresData*: seq[string] = @[] ## The package's dependencies.
-
-  foreignDeps*: seq[string] = @[] ## The foreign dependencies. Only
-                                  ## exported for 'distros.nim'.
-
-proc requires*(deps: varargs[string]) =
-  for d in deps: requiresData.add(d)
-
-template after(name, body: untyped) =
-  when astToStr(name) == "install":
-    body
-
-template before(name, body: untyped) =
-  when astToStr(name) == "install":
-    body
-
-proc getPkgDir*(): string = getCurrentDir()
-proc thisDir*(): string = getCurrentDir()
-
-include $1
-
-"""
-
-proc runNimScript(c: var AtlasContext; scriptContent: string; name: PackageName) =
-  const BuildNims = "atlas_build_temp.nims"
-  var buildNims = "atlas_build_0.nims"
-  var i = 1
-  while fileExists(buildNims):
-    if i >= 20:
-      error c, name, "could not create new: atlas_build_0.nims"
-      return
-    buildNims = "atlas_build_" & $i & ".nims"
-    inc i
-
-  writeFile buildNims, scriptContent
-
-  let cmdLine = "nim e --hints:off " & quoteShell(buildNims)
-  if os.execShellCmd(cmdLine) != 0:
-    error c, name, "Nimscript failed: " & cmdLine
-  else:
-    removeFile buildNims
-
-proc runNimScriptInstallHook(c: var AtlasContext; nimbleFile: string; name: PackageName) =
-  runNimScript c, InstallHookTemplate % [nimbleFile.escape], name
-
-proc runNimScriptBuilder(c: var AtlasContext; p: (string, string); name: PackageName) =
-  runNimScript c, BuilderScriptTemplate % [p[0].escape, p[1].escape], name
-
-proc runBuildSteps(c: var AtlasContext; g: var DepGraph) =
-  # `countdown` suffices to give us some kind of topological sort:
-  for i in countdown(g.nodes.len-1, 0):
-    if g.nodes[i].active:
-      let destDir = toDestDir(g.nodes[i].name)
-      let dir = selectDir(c.workspace / destDir, c.depsDir / destDir)
-      tryWithDir dir:
-        if g.nodes[i].hasInstallHooks:
-          let nf = findNimbleFile(c, g.nodes[i])
-          if nf.len > 0:
-            runNimScriptInstallHook c, nf, g.nodes[i].name
-        for p in mitems c.plugins.builderPatterns:
-          let f = p[0] % dir.splitPath.tail
-          if fileExists(f):
-            runNimScriptBuilder c, p, g.nodes[i].name
 
 proc resolve(c: var AtlasContext; g: var DepGraph) =
   var b = sat.Builder()
