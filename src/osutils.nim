@@ -22,16 +22,9 @@ proc isUrl*(x: string): bool =
   x.startsWith("http://") or
   x.startsWith("file://")
 
-proc getUrl*(x: string): PackageUrl =
-  try:
-    let u = parseUri(x).PackageUrl
-    if u.scheme in ["git", "https", "http", "hg", "file"]:
-      result = u
-  except UriParseError:
-    discard
-
 proc cloneUrl*(url: PackageUrl, dest: string; cloneUsingHttps: bool): string =
   ## Returns an error message on error or else "".
+  assert not dest.contains("://")
   result = ""
   var modUrl = url
   if url.scheme == "git" and cloneUsingHttps:
