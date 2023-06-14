@@ -8,7 +8,7 @@
 
 ## Lockfile implementation.
 
-import std / [tables, os, json, jsonutils]
+import std / [strutils, tables, os, json, jsonutils]
 import context, gitops, osutils, traversal
 
 type
