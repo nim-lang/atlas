@@ -153,7 +153,7 @@ proc toName*(p: string): PackageName =
   assert not p.startsWith("http")
   result = PackageName p
 
-proc dependencyDir(c: AtlasContext; w: Dependency): string =
+proc dependencyDir*(c: AtlasContext; w: Dependency): string =
   result = c.workspace / w.name.string
   if not dirExists(result):
     result = c.depsDir / w.name.string
