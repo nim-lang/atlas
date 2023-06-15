@@ -497,6 +497,7 @@ proc main(c: var AtlasContext) =
 
   var autoinit = false
   var explicitProjectOverride = false
+  var explicitDepsDirOverride = false
   for kind, key, val in getopt():
     case kind
     of cmdArgument:
@@ -530,6 +531,7 @@ proc main(c: var AtlasContext) =
       of "deps":
         if val.len > 0:
           c.depsDir = val
+          explicitDepsDirOverride = true
         else:
           writeHelp()
       of "cfghere": c.flags.incl CfgHere
@@ -569,6 +571,9 @@ proc main(c: var AtlasContext) =
 
   when MockupRun:
     c.depsDir = c.workspace
+  else:
+    if not explicitDepsDirOverride and action != "init":
+      c.depsDir = c.workspace
 
   case action
   of "":
