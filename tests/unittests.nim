@@ -2,7 +2,7 @@
 
 import std/[unittest, os, strutils]
 
-import context
+import context, osutils
 from nameresolver import resolveUrl
 
 let
@@ -27,7 +27,7 @@ let
   }
 
 proc initBasicWorkspace(typ: type AtlasContext): AtlasContext =
-    result.workspace = currentSourcePath().parentDir / "ws_basic"
+  result.workspace = currentSourcePath().parentDir / "ws_basic"
 
 suite "urls and naming":
 
@@ -138,3 +138,9 @@ suite "versions":
 
     let query4 = p"#head"
     assert selectBestCommitSemVer(tags, query4) == "24870f48c40da2146ce12ff1e675e6e7b9748355"
+
+  test "lastPathComponent":
+    assert lastPathComponent("/a/bc///") == "bc"
+    assert lastPathComponent("a/b") == "b"
+    assert lastPathComponent("meh/longer/here/") == "here"
+    assert lastPathComponent("meh/longer/here") == "here"

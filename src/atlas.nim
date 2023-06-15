@@ -397,7 +397,7 @@ proc updateDir(c: var AtlasContext; dir, filter: string) =
       gitops.updateDir(c, file, filter)
 
 proc patchNimbleFile(c: var AtlasContext; dep: string): string =
-  let thisProject = c.currentDir.splitPath.tail
+  let thisProject = c.currentDir.lastPathComponent
   let oldErrors = c.errors
   let url = resolveUrl(c, dep)
   result = ""
@@ -497,6 +497,7 @@ proc main(c: var AtlasContext) =
 
   var autoinit = false
   var explicitProjectOverride = false
+  var explicitDepsDirOverride = false
   for kind, key, val in getopt():
     case kind
     of cmdArgument:
@@ -530,6 +531,7 @@ proc main(c: var AtlasContext) =
       of "deps":
         if val.len > 0:
           c.depsDir = val
+          explicitDepsDirOverride = true
         else:
           writeHelp()
       of "cfghere": c.flags.incl CfgHere
@@ -569,6 +571,9 @@ proc main(c: var AtlasContext) =
 
   when MockupRun:
     c.depsDir = c.workspace
+  else:
+    if not explicitDepsDirOverride and action != "init":
+      c.depsDir = c.workspace
 
   case action
   of "":
@@ -619,7 +624,8 @@ proc main(c: var AtlasContext) =
     if c.workspace.len != 0:
       updatePackages(c)
       search getPackages(c.workspace), args
-    else: search @[], args
+    else:
+      search @[], args
   of "updateprojects":
     updateDir(c, c.workspace, if args.len == 0: "" else: args[0])
   of "updatedeps":
