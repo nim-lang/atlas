@@ -397,7 +397,7 @@ proc updateDir(c: var AtlasContext; dir, filter: string) =
       gitops.updateDir(c, file, filter)
 
 proc patchNimbleFile(c: var AtlasContext; dep: string): string =
-  let thisProject = c.currentDir.splitPath.tail
+  let thisProject = c.currentDir.lastPathComponent
   let oldErrors = c.errors
   let url = resolveUrl(c, dep)
   result = ""
@@ -619,7 +619,8 @@ proc main(c: var AtlasContext) =
     if c.workspace.len != 0:
       updatePackages(c)
       search getPackages(c.workspace), args
-    else: search @[], args
+    else:
+      search @[], args
   of "updateprojects":
     updateDir(c, c.workspace, if args.len == 0: "" else: args[0])
   of "updatedeps":

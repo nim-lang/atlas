@@ -2,10 +2,16 @@
 ## (c) 2021 Andreas Rumpf
 
 import std / [os, strutils, osproc, uri]
-import context
 
-template projectFromCurrentDir*(): PackageName =
-  PackageName(c.currentDir.splitPath.tail)
+proc lastPathComponent*(s: string): string =
+  var last = s.len - 1
+  while last >= 0 and s[last] in {DirSep, AltSep}: dec last
+  var first = last - 1
+  while first >= 0 and s[first] notin {DirSep, AltSep}: dec first
+  result = s.substr(first+1, last)
+
+type
+  PackageUrl* = Uri
 
 proc getFilePath*(x: PackageUrl): string =
   assert x.scheme == "file"
@@ -73,8 +79,6 @@ proc cloneUrl*(url: PackageUrl, dest: string; cloneUsingHttps: bool): string =
 
 proc readableFile*(s: string): string = relativePath(s, getCurrentDir())
 
-template toDestDir*(p: PackageName): string = p.string
-
 proc selectDir*(a, b: string): string = (if dirExists(a): a else: b)
 
 proc absoluteDepsDir*(workspace, value: string): string =
@@ -84,19 +88,6 @@ proc absoluteDepsDir*(workspace, value: string): string =
     result = value
   else:
     result = workspace / value
-
-template withDir*(c: var AtlasContext; dir: string; body: untyped) =
-  when MockupRun:
-    body
-  else:
-    let oldDir = getCurrentDir()
-    try:
-      when ProduceTest:
-        echo "Current directory is now ", dir
-      setCurrentDir(dir)
-      body
-    finally:
-      setCurrentDir(oldDir)
 
 template tryWithDir*(dir: string; body: untyped) =
   let oldDir = getCurrentDir()
@@ -120,24 +111,3 @@ proc nimbleExec*(cmd: string; args: openArray[string]) =
     cmdLine.add ' '
     cmdLine.add quoteShell(args[i])
   discard os.execShellCmd(cmdLine)
-
-proc dependencyDir*(c: AtlasContext; w: Dependency): string =
-  result = c.workspace / w.name.string
-  if not dirExists(result):
-    result = c.depsDir / w.name.string
-
-proc findNimbleFile*(c: AtlasContext; dep: Dependency): string =
-  when MockupRun:
-    result = TestsDir / dep.name.string & ".nimble"
-    doAssert fileExists(result), "file does not exist " & result
-  else:
-    let dir = dependencyDir(c, dep)
-    result = dir / (dep.name.string & ".nimble")
-    if not fileExists(result):
-      result = ""
-      for x in walkFiles(dir / "*.nimble"):
-        if result.len == 0:
-          result = x
-        else:
-          # ambiguous .nimble file
-          return ""

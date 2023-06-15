@@ -31,7 +31,7 @@ proc write(lock: LockFile; lockFilePath: string) =
 proc genLockEntry(c: var AtlasContext; lf: var LockFile; dir: string) =
   let url = getRemoteUrl()
   let commit = getCurrentCommit()
-  let name = dir.splitPath.tail
+  let name = dir.lastPathComponent
   lf.items[name] = LockFileEntry(dir: dir, url: $url, commit: commit)
 
 proc genLockEntriesForDir(c: var AtlasContext; lf: var LockFile; dir: string) =
@@ -50,7 +50,7 @@ proc pinWorkspace*(c: var AtlasContext; lockFilePath: string) =
 proc pinProject*(c: var AtlasContext; lockFilePath: string) =
   var lf = LockFile(items: initOrderedTable[string, LockFileEntry]())
 
-  let start = c.currentDir.splitPath.tail
+  let start = c.currentDir.lastPathComponent
   let url = getRemoteUrl()
   var g = createGraph(c, start, url)
 

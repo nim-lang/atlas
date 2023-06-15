@@ -96,6 +96,6 @@ proc runBuildSteps*(c: var AtlasContext; g: var DepGraph) =
           if nf.len > 0:
             runNimScriptInstallHook c, nf, g.nodes[i].name
         for p in mitems c.plugins.builderPatterns:
-          let f = p[0] % dir.splitPath.tail
+          let f = p[0] % dir.lastPathComponent
           if fileExists(f):
             runNimScriptBuilder c, p, g.nodes[i].name

@@ -8,7 +8,7 @@
 
 import std / [strutils, os, tables, sets, json,
   terminal, hashes, uri]
-import versions, parse_requires, compiledpatterns
+import versions, parse_requires, compiledpatterns, osutils
 
 export tables, sets, json
 export versions, parse_requires, compiledpatterns
@@ -20,9 +20,6 @@ const
 
 const
   AtlasWorkspace* = "atlas.workspace"
-
-type
-  PackageUrl* = Uri
 
 proc getUrl*(x: string): PackageUrl =
   try:
@@ -143,10 +140,51 @@ proc fatal*(msg: string) =
   quit "[Error] " & msg
 
 proc toName*(p: PackageUrl): PackageName =
-  result = PackageName splitFile(p.path).name
+  result = PackageName p.path.lastPathComponent
+  if result.string.endsWith(".git"):
+    result.string.setLen result.string.len - ".git".len
 
 proc toName*(p: string): PackageName =
   if p.contains("://"):
     result = toName getUrl(p)
   else:
     result = PackageName p
+
+template projectFromCurrentDir*(): PackageName =
+  PackageName(c.currentDir.lastPathComponent)
+
+template toDestDir*(p: PackageName): string = p.string
+
+proc dependencyDir*(c: AtlasContext; w: Dependency): string =
+  result = c.workspace / w.name.string
+  if not dirExists(result):
+    result = c.depsDir / w.name.string
+
+proc findNimbleFile*(c: AtlasContext; dep: Dependency): string =
+  when MockupRun:
+    result = TestsDir / dep.name.string & ".nimble"
+    doAssert fileExists(result), "file does not exist " & result
+  else:
+    let dir = dependencyDir(c, dep)
+    result = dir / (dep.name.string & ".nimble")
+    if not fileExists(result):
+      result = ""
+      for x in walkFiles(dir / "*.nimble"):
+        if result.len == 0:
+          result = x
+        else:
+          # ambiguous .nimble file
+          return ""
+
+template withDir*(c: var AtlasContext; dir: string; body: untyped) =
+  when MockupRun:
+    body
+  else:
+    let oldDir = getCurrentDir()
+    try:
+      when ProduceTest:
+        echo "Current directory is now ", dir
+      setCurrentDir(dir)
+      body
+    finally:
+      setCurrentDir(oldDir)
