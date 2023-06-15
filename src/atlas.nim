@@ -496,6 +496,7 @@ proc main(c: var AtlasContext) =
       fatal action & " command must be executed in a project, not in the workspace"
 
   var autoinit = false
+  var explicitProjectOverride = false
   for kind, key, val in getopt():
     case kind
     of cmdArgument:
@@ -514,11 +515,14 @@ proc main(c: var AtlasContext) =
           createWorkspaceIn c.workspace, c.depsDir
         elif val.len > 0:
           c.workspace = val
+          if not explicitProjectOverride:
+            c.currentDir = val
           createDir(val)
           createWorkspaceIn c.workspace, c.depsDir
         else:
           writeHelp()
       of "project":
+        explicitProjectOverride = true
         if isAbsolute(val):
           c.currentDir = val
         else:
@@ -580,7 +584,6 @@ proc main(c: var AtlasContext) =
       if not c.mockupSuccess:
         fatal "There were problems."
   of "use":
-    projectCmd()
     singleArg()
     let nimbleFile = patchNimbleFile(c, args[0])
     if nimbleFile.len > 0:
