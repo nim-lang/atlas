@@ -9,7 +9,7 @@
 ## Lockfile implementation.
 
 import std / [strutils, tables, os, json, jsonutils]
-import context, gitops, osutils, traversal
+import context, gitops, osutils, traversal, compilerversions
 
 type
   LockFileEntry* = object
@@ -24,11 +24,14 @@ type
     items*: OrderedTable[string, LockFileEntry]
     nimcfg*: string
     nimbleFile*: LockedNimbleFile
+    hostOS*, hostCPU*: string
+    nimVersion*, gccVersion*, clangVersion*: string
 
 proc readLockFile(filename: string): LockFile =
   let jsonAsStr = readFile(filename)
   let jsonTree = parseJson(jsonAsStr)
-  result = to(jsonTree, LockFile)
+  result = jsonTo(jsonTree, LockFile,
+    Joptions(allowExtraKeys: true, allowMissingKeys: true))
 
 proc write(lock: LockFile; lockFilePath: string) =
   writeFile lockFilePath, toJson(lock).pretty
@@ -48,8 +51,15 @@ proc genLockEntriesForDir(c: var AtlasContext; lf: var LockFile; dir: string) =
 const
   NimCfg = "nim.cfg"
 
+proc newLockFile(): LockFile =
+  result = LockFile(items: initOrderedTable[string, LockFileEntry](),
+    hostOS: system.hostOS, hostCPU: system.hostCPU,
+    nimVersion: detectNimVersion(),
+    gccVersion: detectGccVersion(),
+    clangVersion: detectClangVersion())
+
 proc pinWorkspace*(c: var AtlasContext; lockFilePath: string) =
-  var lf = LockFile(items: initOrderedTable[string, LockFileEntry]())
+  var lf = newLockFile()
   genLockEntriesForDir(c, lf, c.workspace)
   if c.workspace != c.depsDir and c.depsDir.len > 0:
     genLockEntriesForDir c, lf, c.depsDir
@@ -67,7 +77,7 @@ proc pinWorkspace*(c: var AtlasContext; lockFilePath: string) =
   write lf, lockFilePath
 
 proc pinProject*(c: var AtlasContext; lockFilePath: string) =
-  var lf = LockFile(items: initOrderedTable[string, LockFileEntry]())
+  var lf = newLockFile()
 
   let start = c.currentDir.lastPathComponent
   let url = getRemoteUrl()
@@ -109,14 +119,19 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string) =
 
     write lf, lockFilePath
 
+proc compareVersion(c: var AtlasContext; key, wanted, got: string) =
+  if wanted != got:
+    warn c, toName(key), "environment mismatch: " &
+      " versions differ: previously used: " & wanted & " but now at: " & got
+
 proc replay*(c: var AtlasContext; lockFilePath: string) =
-  let lockFile = readLockFile(lockFilePath)
+  let lf = readLockFile(lockFilePath)
   let base = splitPath(lockFilePath).head
-  if lockFile.nimcfg.len > 0:
-    writeFile(base / NimCfg, lockFile.nimcfg)
-  if lockFile.nimbleFile.filename.len > 0:
-    writeFile(base / lockFile.nimbleFile.filename, lockFile.nimbleFile.content)
-  for _, v in pairs(lockFile.items):
+  if lf.nimcfg.len > 0:
+    writeFile(base / NimCfg, lf.nimcfg)
+  if lf.nimbleFile.filename.len > 0:
+    writeFile(base / lf.nimbleFile.filename, lf.nimbleFile.content)
+  for _, v in pairs(lf.items):
     let dir = base / v.dir
     if not dirExists(dir):
       let err = osutils.cloneUrl(getUrl v.url, dir, false)
@@ -129,3 +144,8 @@ proc replay*(c: var AtlasContext; lockFilePath: string) =
         error c, toName(v.dir), "remote URL has been compromised: got: " &
             url & " but wanted: " & v.url
       checkoutGitCommit(c, toName(dir), v.commit)
+
+  if lf.hostOS == system.hostOS and lf.hostCPU == system.hostCPU:
+    compareVersion c, "nim", lf.nimVersion, detectNimVersion()
+    compareVersion c, "gcc", lf.gccVersion, detectGccVersion()
+    compareVersion c, "clang", lf.clangVersion, detectClangVersion()
