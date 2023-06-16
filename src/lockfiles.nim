@@ -17,8 +17,13 @@ type
     url*: string
     commit*: string
 
-  LockFile* = object # serialized as JSON so an object for extensibility
+  LockedNimbleFile* = object
+    filename*, content*: string
+
+  LockFile* = object # serialized as JSON
     items*: OrderedTable[string, LockFileEntry]
+    nimcfg*: string
+    nimbleFile*: LockedNimbleFile
 
 proc readLockFile(filename: string): LockFile =
   let jsonAsStr = readFile(filename)
@@ -40,11 +45,25 @@ proc genLockEntriesForDir(c: var AtlasContext; lf: var LockFile; dir: string) =
       withDir c, f:
         genLockEntry c, lf, f.relativePath(dir, '/')
 
+const
+  NimCfg = "nim.cfg"
+
 proc pinWorkspace*(c: var AtlasContext; lockFilePath: string) =
   var lf = LockFile(items: initOrderedTable[string, LockFileEntry]())
   genLockEntriesForDir(c, lf, c.workspace)
   if c.workspace != c.depsDir and c.depsDir.len > 0:
     genLockEntriesForDir c, lf, c.depsDir
+
+  let nimcfgPath = c.workspace / NimCfg
+  if fileExists(nimcfgPath):
+    lf.nimcfg = readFile(nimcfgPath)
+
+  let nimblePath = c.workspace / c.workspace.lastPathComponent & ".nimble"
+  if fileExists nimblePath:
+    lf.nimbleFile = LockedNimbleFile(
+      filename: c.workspace.lastPathComponent & ".nimble",
+      content: readFile(nimblePath))
+
   write lf, lockFilePath
 
 proc pinProject*(c: var AtlasContext; lockFilePath: string) =
@@ -77,11 +96,26 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string) =
         let dir = selectDir(c.workspace / destDir, c.depsDir / destDir)
         tryWithDir dir:
           genLockEntry c, lf, dir.relativePath(c.currentDir, '/')
+
+    let nimcfgPath = c.currentDir / NimCfg
+    if fileExists(nimcfgPath):
+      lf.nimcfg = readFile(nimcfgPath)
+
+    let nimblePath = c.currentDir / c.currentDir.lastPathComponent & ".nimble"
+    if fileExists nimblePath:
+      lf.nimbleFile = LockedNimbleFile(
+        filename: c.currentDir.lastPathComponent & ".nimble",
+        content: readFile(nimblePath))
+
     write lf, lockFilePath
 
 proc replay*(c: var AtlasContext; lockFilePath: string) =
   let lockFile = readLockFile(lockFilePath)
   let base = splitPath(lockFilePath).head
+  if lockFile.nimcfg.len > 0:
+    writeFile(base / NimCfg, lockFile.nimcfg)
+  if lockFile.nimbleFile.filename.len > 0:
+    writeFile(base / lockFile.nimbleFile.filename, lockFile.nimbleFile.content)
   for _, v in pairs(lockFile.items):
     let dir = base / v.dir
     if not dirExists(dir):
