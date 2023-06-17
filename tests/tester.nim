@@ -89,7 +89,7 @@ proc testSemVer() =
   withDir "myproject":
     exec atlasExe & " --showGraph use F"
 
-when false:
+when false: # do not forget to enable these!
   withDir "tests/ws_semver":
     testSemVer()
   if sameDirContents("tests/ws_semver/expected", "tests/ws_semver/myproject"):
@@ -149,7 +149,15 @@ proc testSemVer2() =
 
   createDir "myproject"
   withDir "myproject":
-    exec atlasExe & " --showGraph use proj_a"
+    exec atlasExe & " --list use proj_a"
+
+  removeDir "does_not_exist"
+  removeDir "myproject"
+  removeDir "source"
+  removeDir "proj_a"
+  removeDir "proj_b"
+  removeDir "proj_c"
+  removeDir "proj_d"
 
 
 withDir "tests/ws_semver2":

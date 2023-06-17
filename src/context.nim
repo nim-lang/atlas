@@ -34,8 +34,6 @@ export uri.`$`, uri.`/`, uri.UriParseError
 type
   PackageName* = distinct string
   CfgPath* = distinct string # put into a config `--path:"../x"`
-  DepRelation* = enum
-    normal, strictlyLess, strictlyGreater
 
   SemVerField* = enum
     major, minor, patch
@@ -71,6 +69,7 @@ type
     ShowGraph
     AutoEnv
     NoExec
+    ListVersions
 
   MsgKind = enum
     Info = "[Info] ",
