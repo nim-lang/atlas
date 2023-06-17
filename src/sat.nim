@@ -124,6 +124,9 @@ proc add*(b: var Builder; a: Atom) =
 proc closeOpr*(b: var Builder) =
   patch(b.f, b.toPatch.pop())
 
+proc deleteLastNode*(b: var Builder) =
+  b.f.setLen b.f.len - 1
+
 proc toForm*(b: var Builder): Formular =
   assert b.toPatch.len == 0, "missing `closeOpr` calls"
   result = move b.f

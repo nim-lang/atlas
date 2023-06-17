@@ -224,7 +224,7 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
   var mapping: seq[(string, string, Version)] = @[]
   # Version selection:
   for i in 0..<g.nodes.len:
-    let av {.cursor.} = g.availableVersions[g.nodes[i].name]
+    let av = g.availableVersions.getOrDefault(g.nodes[i].name)
     if g.nodes[i].active and av.len > 0:
       # A -> (exactly one of: A1, A2, A3)
       b.openOpr(OrForm)
@@ -233,6 +233,7 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
       b.closeOpr
       b.openOpr(ExactlyOneOfForm)
 
+      let oldIdgen = idgen
       var q = g.nodes[i].query
       if g.nodes[i].algo == SemVer: q = toSemVer(q)
       if g.nodes[i].algo == MinVer:
@@ -249,10 +250,13 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
             inc idgen
 
       b.closeOpr # ExactlyOneOfForm
+      if idgen == oldIdgen:
+        b.deleteLastNode()
       b.closeOpr # OrForm
-  b.closeOpr()
+  b.closeOpr
   let f = toForm(b)
   var s = newSeq[BindingKind](idgen)
+  #echo f
   if satisfiable(f, s):
     for i in g.nodes.len..<s.len:
       if s[i] == setToTrue:
@@ -262,13 +266,6 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
           checkoutGitCommit(c, toName(destDir), mapping[i - g.nodes.len][1])
     if NoExec notin c.flags:
       runBuildSteps(c, g)
-    if ListVersions in c.flags:
-      echo "selected:"
-      for i in g.nodes.len..<s.len:
-        if s[i] == setToTrue:
-          echo "[x] ", mapping[i - g.nodes.len]
-        else:
-          echo "[ ] ", mapping[i - g.nodes.len]
       #echo f
   else:
     error c, toName(c.workspace), "version conflict; for more information use --showGraph"
@@ -281,6 +278,13 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
         let counter = usedVersions.getOrDefault(mapping[i - g.nodes.len][0])
         if counter > 0:
           error c, toName(mapping[i - g.nodes.len][0]), $mapping[i - g.nodes.len][2] & " required"
+  if ListVersions in c.flags:
+    echo "selected:"
+    for i in g.nodes.len..<s.len:
+      if s[i] == setToTrue:
+        echo "[x] ", mapping[i - g.nodes.len]
+      else:
+        echo "[ ] ", mapping[i - g.nodes.len]
 
 proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[CfgPath] =
   result = @[]
@@ -683,6 +687,8 @@ proc main =
     main(c)
   finally:
     writePendingMessages(c)
+  if c.errors > 0:
+    quit 1
 
 when isMainModule:
   main()

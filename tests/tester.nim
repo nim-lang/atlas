@@ -1,6 +1,6 @@
 # Small program that runs the test cases
 
-import std / [strutils, os, sequtils, strformat]
+import std / [strutils, os, osproc, sequtils, strformat]
 from std/private/gitutils import diffFiles
 
 if execShellCmd("nim c -r tests/unittests.nim") != 0:
@@ -149,19 +149,22 @@ proc testSemVer2() =
 
   createDir "myproject"
   withDir "myproject":
-    exec atlasExe & " --list use proj_a"
-
-  removeDir "does_not_exist"
-  removeDir "myproject"
-  removeDir "source"
-  removeDir "proj_a"
-  removeDir "proj_b"
-  removeDir "proj_c"
-  removeDir "proj_d"
-
+    let (outp, status) = execCmdEx(atlasExe & " --list use proj_a")
+    if status == 0:
+      echo outp
+    else:
+      assert false, outp
 
 withDir "tests/ws_semver2":
-  testSemVer2()
-
+  try:
+    testSemVer2()
+  finally:
+    removeDir "does_not_exist"
+    removeDir "myproject"
+    removeDir "source"
+    removeDir "proj_a"
+    removeDir "proj_b"
+    removeDir "proj_c"
+    removeDir "proj_d"
 
 if failures > 0: quit($failures & " failures occurred.")
