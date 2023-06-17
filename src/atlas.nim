@@ -183,9 +183,11 @@ proc collectAvailableVersions(c: var AtlasContext; g: var DepGraph; w: Dependenc
   when MockupRun:
     # don't cache when doing the MockupRun:
     g.availableVersions[w.name] = collectTaggedVersions(c)
+    g.availableBranches[w.name] = collectRemoteBranches(c)
   else:
     if not g.availableVersions.hasKey(w.name):
       g.availableVersions[w.name] = collectTaggedVersions(c)
+      g.availableBranches[w.name] = collectRemoteBranches(c)
 
 
 proc resolve(c: var AtlasContext; g: var DepGraph) =
@@ -214,8 +216,24 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
   var mapping: seq[(string, string, Version)] = @[]
   # Version selection:
   for i in 0..<g.nodes.len:
-    let av {.cursor.} = g.availableVersions[g.nodes[i].name]
-    if g.nodes[i].active and av.len > 0:
+    let
+      ab {.cursor.} = g.availableBranches[g.nodes[i].name]
+      av {.cursor.} = g.availableVersions[g.nodes[i].name]
+
+    if not g.nodes[i].active:
+      continue
+
+    var q = g.nodes[i].query
+    if q.isBranch() and ab.len() > 0:
+      b.openOpr(ExactlyOneOfForm)
+
+      for j in 0 ..< ab.len():
+        if q.matches(("#" & ab[j].string).Version):
+          mapping.add (g.nodes[i].name.string, $ab[j], ab[j])
+          b.add newVar(VarId(idgen + g.nodes.len()))
+          inc idgen
+      b.closeOpr()
+    elif av.len > 0:
       # A -> (exactly one of: A1, A2, A3)
       b.openOpr(OrForm)
       b.openOpr(NotForm)
@@ -223,7 +241,6 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
       b.closeOpr
       b.openOpr(ExactlyOneOfForm)
 
-      var q = g.nodes[i].query
       if g.nodes[i].algo == SemVer: q = toSemVer(q)
       if g.nodes[i].algo == MinVer:
         for j in countup(0, av.len-1):
