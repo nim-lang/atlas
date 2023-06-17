@@ -50,6 +50,9 @@ proc isValidVersion*(v: string): bool {.inline.} =
 
 proc isHead(v: Version): bool {.inline.} = cmpIgnoreCase(v.string, "#head") == 0
 
+proc isBranch*(r: VersionInterval): bool {.inline.} =
+  result = not r.isInterval and r.a.v.isSpecial() and not r.a.v.isHead()
+
 template next(l, p, s: untyped) =
   if l > 0:
     inc p, l

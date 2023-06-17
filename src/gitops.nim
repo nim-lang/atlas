@@ -6,6 +6,7 @@ type
     GitDiff = "git diff",
     GitTag = "git tag",
     GitTags = "git show-ref --tags",
+    GitRemoteBranches = "git branch -r --format='%(refname:short)'"
     GitLastTaggedRef = "git rev-list --tags --max-count=1",
     GitDescribe = "git describe",
     GitRevParse = "git rev-parse",
@@ -84,6 +85,15 @@ proc collectTaggedVersions*(c: var AtlasContext): seq[(string, Version)] =
     result = parseTaggedVersions(outp)
   else:
     result = @[]
+
+proc collectRemoteBranches*(c: var AtlasContext): seq[Version] =
+  let (outp, status) = exec(c, GitRemoteBranches, [])
+  if status == 0:
+    for line in outp.splitLines():
+      let l = line.strip().split('/')
+      if l.len() != 2:
+        continue
+      result.add((l[1]).Version)
 
 proc versionToCommit*(c: var AtlasContext; d: Dependency): string =
   let allVersions = collectTaggedVersions(c)

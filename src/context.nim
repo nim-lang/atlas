@@ -59,6 +59,7 @@ type
     processed*: Table[string, int] # the key is (url / commit)
     byName*: Table[PackageName, seq[int]]
     availableVersions*: Table[PackageName, seq[(string, Version)]] # sorted, latest version comes first
+    availableBranches*: Table[PackageName, seq[Version]]
     bestNimVersion*: Version # Nim is a special snowflake
 
   Flag* = enum
