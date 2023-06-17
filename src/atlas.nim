@@ -572,7 +572,7 @@ proc main(c: var AtlasContext) =
   when MockupRun:
     c.depsDir = c.workspace
   else:
-    if not explicitDepsDirOverride and action != "init":
+    if not explicitDepsDirOverride and action != "init" and c.depsDir.len() == 0:
       c.depsDir = c.workspace
 
   case action
