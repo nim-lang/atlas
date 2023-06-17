@@ -210,6 +210,12 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
           b.closeOpr
           b.add newVar(VarId i)
           b.closeOpr
+    elif g.nodes[i].error.len > 0:
+      # dependency produced an error and so cannot be 'true':
+      b.openOpr(NotForm)
+      b.add newVar(VarId i)
+      b.closeOpr
+
   var idgen = 0
   var mapping: seq[(string, string, Version)] = @[]
   # Version selection:
@@ -286,13 +292,17 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
         if w.url.scheme == FileProtocol:
           copyFromDisk c, w
         else:
-          let err = cloneUrl(c, w.url, destDir, false)
-          if err != "":
+          let (status, err) = cloneUrl(c, w.url, destDir, false)
+          g.nodes[i].status = status
+          case status
+          of NotFound:
+            discard "setting the status is enough here"
+          of OtherError:
             error c, w.name, err
-          elif w.algo != MinVer:
+          else:
             withDir c, destDir:
               collectAvailableVersions c, g, w
-    elif w.algo != MinVer:
+    else:
       withDir c, dir:
         collectAvailableVersions c, g, w
 

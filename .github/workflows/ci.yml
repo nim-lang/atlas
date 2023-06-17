@@ -44,6 +44,7 @@ jobs:
     steps:
       - name: set `core.autocrlf` to false
         run: git config --global core.autocrlf false
+        run: git config --global init.defaultBranch master
 
       - name: Checkout atlas
         uses: actions/checkout@v3

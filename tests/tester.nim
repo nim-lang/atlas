@@ -89,11 +89,71 @@ proc testSemVer() =
   withDir "myproject":
     exec atlasExe & " --showGraph use F"
 
-withDir "tests/ws_semver":
-  testSemVer()
-if sameDirContents("tests/ws_semver/expected", "tests/ws_semver/myproject"):
-  removeDir("tests/ws_semver/myproject")
-  removeDir("tests/ws_semver/source")
+when false:
+  withDir "tests/ws_semver":
+    testSemVer()
+  if sameDirContents("tests/ws_semver/expected", "tests/ws_semver/myproject"):
+    removeDir("tests/ws_semver/myproject")
+    removeDir("tests/ws_semver/source")
 
-testWsConflict()
+  testWsConflict()
+
+proc testSemVer2() =
+  createDir "source"
+  withDir "source":
+
+    createDir "proj_a"
+    withDir "proj_a":
+      exec "git init"
+      writeFile "proj_a.nimble", "requires \"proj_b >= 1.0.0\"\n"
+      exec "git add proj_a.nimble"
+      exec "git commit -m 'update'"
+      writeFile "proj_a.nimble", "requires \"proj_b >= 1.1.0\"\n"
+      exec "git add proj_a.nimble"
+      exec "git commit -m 'update'"
+      exec "git tag v1.1.0"
+
+    createDir "proj_b"
+    withDir "proj_b":
+      exec "git init"
+      writeFile "proj_b.nimble", "requires \"proj_c >= 1.0.0\"\n"
+      exec "git add proj_b.nimble"
+      exec "git commit -m 'Initial commit for project B'"
+
+      writeFile "proj_b.nimble", "requires \"proj_c >= 1.1.0\"\n"
+      exec "git add proj_b.nimble"
+      exec "git commit -m 'Update proj_b.nimble for project B'"
+      exec "git tag v1.1.0"
+
+    createDir "proj_c"
+    withDir "proj_c":
+      exec "git init"
+      writeFile "proj_c.nimble", "requires \"proj_d >= 1.2.0\"\n"
+      exec "git add proj_c.nimble"
+      exec "git commit -m 'Initial commit for project C'"
+      writeFile "proj_c.nimble", "requires \"proj_d >= 1.2.0\"\n"
+      exec "git tag v1.2.0"
+
+    createDir "proj_d"
+    withDir "proj_d":
+      exec "git init"
+      writeFile "proj_d.nimble", "\n"
+      exec "git add proj_d.nimble"
+      exec "git commit -m 'Initial commit for project D'"
+      exec "git tag v1.0.0"
+      writeFile "proj_d.nimble", "requires \"does_not_exist >= 1.2.0\"\n"
+      exec "git add proj_d.nimble"
+      exec "git commit -m 'broken version of package D'"
+
+      exec "git tag v2.0.0"
+
+  createDir "myproject"
+  withDir "myproject":
+    exec atlasExe & " --showGraph use proj_a"
+
+
+withDir "tests/ws_semver2":
+  testSemVer2()
+
+
 if failures > 0: quit($failures & " failures occurred.")

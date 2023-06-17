@@ -53,6 +53,7 @@ type
     active*: bool
     hasInstallHooks*: bool
     algo*: ResolutionAlgorithm
+    status*: CloneStatus
 
   DepGraph* = object
     nodes*: seq[Dependency]

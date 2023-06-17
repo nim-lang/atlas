@@ -14,9 +14,9 @@ import context, osutils, packagesjson, gitops
 proc cloneUrl*(c: var AtlasContext;
                url: PackageUrl,
                dest: string;
-               cloneUsingHttps: bool): string =
+               cloneUsingHttps: bool): (CloneStatus, string) =
   when MockupRun:
-    result = ""
+    result = (Ok, "")
   else:
     result = osutils.cloneUrl(url, dest, cloneUsingHttps)
     when ProduceTest:
@@ -28,8 +28,8 @@ proc updatePackages*(c: var AtlasContext) =
       gitPull(c, PackageName PackagesDir)
   else:
     withDir c, c.workspace:
-      let err = cloneUrl(c, getUrl "https://github.com/nim-lang/packages", PackagesDir, false)
-      if err != "":
+      let (status, err) = cloneUrl(c, getUrl "https://github.com/nim-lang/packages", PackagesDir, false)
+      if status != Ok:
         error c, PackageName(PackagesDir), err
 
 proc fillPackageLookupTable(c: var AtlasContext) =
