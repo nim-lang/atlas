@@ -77,15 +77,14 @@ iterator sons(dest: var Formular; source: Formular; n: FormPos): FormPos =
 
 # String representation
 
-proc toString(dest: var string; f: Formular; n: FormPos) =
+proc toString(dest: var string; f: Formular; n: FormPos; varRepr: proc (dest: var string; i: int)) =
   assert n.int >= 0
   assert n.int < f.len
   case f[n.int].kind
   of FalseForm: dest.add 'F'
   of TrueForm: dest.add 'T'
   of VarForm:
-    dest.add 'v'
-    dest.addInt varId(f[n.int]).int
+    varRepr dest, varId(f[n.int]).int
   else:
     case f[n.int].kind
     of AndForm:
@@ -98,13 +97,20 @@ proc toString(dest: var string; f: Formular; n: FormPos) =
       dest.add "(~"
     else: assert false, "cannot happen"
     for child in sonsReadonly(f, n):
-      toString(dest, f, child)
+      toString(dest, f, child, varRepr)
       dest.add ' '
     dest[^1] = ')'
 
 proc `$`*(f: Formular): string =
   assert f.len > 0
-  toString(result, f, FormPos 0)
+  toString(result, f, FormPos 0, proc (dest: var string; x: int) =
+    dest.add 'v'
+    dest.addInt x
+  )
+
+proc `$`*(f: Formular; varRepr: proc (dest: var string; i: int)): string =
+  assert f.len > 0
+  toString(result, f, FormPos 0, varRepr)
 
 type
   Builder* = object
@@ -126,6 +132,12 @@ proc closeOpr*(b: var Builder) =
 
 proc deleteLastNode*(b: var Builder) =
   b.f.setLen b.f.len - 1
+
+type
+  BuilderPos* = distinct int
+
+proc rememberPos*(b: Builder): BuilderPos {.inline.} = BuilderPos b.f.len
+proc rewind*(b: var Builder; pos: BuilderPos) {.inline.} = setLen b.f, int(pos)
 
 proc toForm*(b: var Builder): Formular =
   assert b.toPatch.len == 0, "missing `closeOpr` calls"

@@ -89,7 +89,7 @@ proc testSemVer() =
   withDir "myproject":
     exec atlasExe & " --showGraph use F"
 
-when false: # do not forget to enable these!
+when false:
   withDir "tests/ws_semver":
     testSemVer()
   if sameDirContents("tests/ws_semver/expected", "tests/ws_semver/myproject"):
@@ -97,6 +97,13 @@ when false: # do not forget to enable these!
     removeDir("tests/ws_semver/source")
 
   testWsConflict()
+
+const
+  SemVer2ExpectedResult = """selected:
+[x] (proj_a, 1.1.0)
+[x] (proj_b, 1.1.0)
+[x] (proj_c, 1.2.0)
+"""
 
 proc testSemVer2() =
   createDir "source"
@@ -151,7 +158,11 @@ proc testSemVer2() =
   withDir "myproject":
     let (outp, status) = execCmdEx(atlasExe & " --list use proj_a")
     if status == 0:
-      echo outp
+      if outp.contains SemVer2ExpectedResult:
+        discard "fine"
+      else:
+        echo "expected ", SemVer2ExpectedResult, " but got ", outp
+        raise newException(AssertionError, "Test failed!")
     else:
       assert false, outp
 
