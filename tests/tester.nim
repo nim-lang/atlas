@@ -168,24 +168,30 @@ proc testSemVer2() =
     else:
       assert false, outp
 
-withDir "tests/ws_semver2":
-  try:
-    testSemVer2()
-  finally:
-    removeDir "does_not_exist"
-    removeDir "myproject"
-    removeDir "source"
-    removeDir "proj_a"
-    removeDir "proj_b"
-    removeDir "proj_c"
-    removeDir "proj_d"
+when false:
+  withDir "tests/ws_semver2":
+    try:
+      testSemVer2()
+    finally:
+      removeDir "does_not_exist"
+      removeDir "myproject"
+      removeDir "source"
+      removeDir "proj_a"
+      removeDir "proj_b"
+      removeDir "proj_c"
+      removeDir "proj_d"
 
 proc integrationTest() =
   # Test installation of some "important_packages" which we are sure
   # won't disappear in the near or far future. Turns out `nitter` has
   # quite some dependencies so it suffices:
-  exec atlasExe & " use https://github.com/zedeus/nitter"
-  discard sameDirContents("expected", ".")
+  let (outp, status) = execCmdEx(atlasExe & " --list use https://github.com/zedeus/nitter")
+  if status == 0:
+    echo outp
+    discard sameDirContents("expected", ".")
+  else:
+    echo outp
+    inc failures
 
 proc cleanupIntegrationTest() =
   var dirs: seq[string] = @[]

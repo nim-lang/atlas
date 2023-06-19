@@ -280,6 +280,11 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
       #echo f
     if ListVersions in c.flags:
       echo "selected:"
+      for i in 0..<g.nodes.len:
+        if s[i] == setToTrue and g.nodes[i].status != NotFound:
+          echo "[x] (", g.nodes[i].name.string, ", ", g.nodes[i].commit, ")"
+        else:
+          echo "[ ] (", g.nodes[i].name.string, ", ", g.nodes[i].commit, ")"
       for i in g.nodes.len..<s.len:
         if s[i] == setToTrue:
           echo "[x] ", toString mapping[i - g.nodes.len]
