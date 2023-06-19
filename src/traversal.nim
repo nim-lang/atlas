@@ -23,6 +23,8 @@ proc selectNode*(c: var AtlasContext; g: var DepGraph; w: Dependency) =
   # all other nodes of the same project name are not active
   for e in items g.byName[w.name]:
     g.nodes[e].active = e == w.self
+  if w.status != Ok:
+    g.nodes[w.self].active = false
 
 proc addUnique*[T](s: var seq[T]; elem: sink T) =
   if not s.contains(elem): s.add elem

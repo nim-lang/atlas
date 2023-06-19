@@ -28,10 +28,14 @@ proc isUrl*(x: string): bool =
   x.startsWith("http://") or
   x.startsWith("file://")
 
-proc cloneUrl*(url: PackageUrl, dest: string; cloneUsingHttps: bool): string =
+type
+  CloneStatus* = enum
+    Ok, NotFound, OtherError
+
+proc cloneUrl*(url: PackageUrl, dest: string; cloneUsingHttps: bool): (CloneStatus, string) =
   ## Returns an error message on error or else "".
   assert not dest.contains("://")
-  result = ""
+  result = (OtherError, "")
   var modUrl = url
   if url.scheme == "git" and cloneUsingHttps:
     modUrl.scheme = "https"
@@ -61,21 +65,21 @@ proc cloneUrl*(url: PackageUrl, dest: string; cloneUsingHttps: bool): string =
     # retry multiple times to avoid annoying github timeouts:
     let cmd = "git clone --recursive " & $modUrl & " " & dest
     for i in 0..4:
-      if execShellCmd(cmd) == 0: return ""
+      if execShellCmd(cmd) == 0: return (Ok, "")
       os.sleep(4000)
-    result = "exernal program failed: " & cmd
+    result = (OtherError, "exernal program failed: " & cmd)
   elif not isGithub:
     let (_, exitCode) = execCmdEx("hg identify " & $modUrl)
     if exitCode == QuitSuccess:
       let cmd = "hg clone " & $modUrl & " " & dest
       for i in 0..4:
-        if execShellCmd(cmd) == 0: return ""
+        if execShellCmd(cmd) == 0: return (Ok, "")
         os.sleep(4000)
-      result = "exernal program failed: " & cmd
+      result = (OtherError, "exernal program failed: " & cmd)
     else:
-      result = "Unable to identify url: " & $modUrl
+      result = (NotFound, "Unable to identify url: " & $modUrl)
   else:
-    result = "Unable to identify url: " & $modUrl
+    result = (NotFound, "Unable to identify url: " & $modUrl)
 
 proc readableFile*(s: string): string = relativePath(s, getCurrentDir())
 

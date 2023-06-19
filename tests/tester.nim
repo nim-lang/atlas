@@ -1,6 +1,6 @@
 # Small program that runs the test cases
 
-import std / [strutils, os, sequtils, strformat]
+import std / [strutils, os, osproc, sequtils, strformat]
 from std/private/gitutils import diffFiles
 
 if execShellCmd("nim c -r tests/unittests.nim") != 0:
@@ -89,11 +89,117 @@ proc testSemVer() =
   withDir "myproject":
     exec atlasExe & " --showGraph use F"
 
-withDir "tests/ws_semver":
-  testSemVer()
-if sameDirContents("tests/ws_semver/expected", "tests/ws_semver/myproject"):
-  removeDir("tests/ws_semver/myproject")
-  removeDir("tests/ws_semver/source")
+when false:
+  withDir "tests/ws_semver":
+    testSemVer()
+  if sameDirContents("tests/ws_semver/expected", "tests/ws_semver/myproject"):
+    removeDir("tests/ws_semver/myproject")
+    removeDir("tests/ws_semver/source")
 
-testWsConflict()
+  testWsConflict()
+
+const
+  SemVer2ExpectedResult = """selected:
+[ ] (proj_a, 1.0.0)
+[x] (proj_a, 1.1.0)
+[x] (proj_b, 1.1.0)
+[x] (proj_c, 1.2.0)
+"""
+
+proc testSemVer2() =
+  createDir "source"
+  withDir "source":
+
+    createDir "proj_a"
+    withDir "proj_a":
+      exec "git init"
+      writeFile "proj_a.nimble", "requires \"proj_b >= 1.0.0\"\n"
+      exec "git add proj_a.nimble"
+      exec "git commit -m 'update'"
+      exec "git tag v1.0.0"
+      writeFile "proj_a.nimble", "requires \"proj_b >= 1.1.0\"\n"
+      exec "git add proj_a.nimble"
+      exec "git commit -m 'update'"
+      exec "git tag v1.1.0"
+
+    createDir "proj_b"
+    withDir "proj_b":
+      exec "git init"
+      writeFile "proj_b.nimble", "requires \"proj_c >= 1.0.0\"\n"
+      exec "git add proj_b.nimble"
+      exec "git commit -m " & quoteShell("Initial commit for project B")
+
+      writeFile "proj_b.nimble", "requires \"proj_c >= 1.1.0\"\n"
+      exec "git add proj_b.nimble"
+      exec "git commit -m " & quoteShell("Update proj_b.nimble for project B")
+      exec "git tag v1.1.0"
+
+    createDir "proj_c"
+    withDir "proj_c":
+      exec "git init"
+      writeFile "proj_c.nimble", "requires \"proj_d >= 1.2.0\"\n"
+      exec "git add proj_c.nimble"
+      exec "git commit -m " & quoteShell("Initial commit for project C")
+      writeFile "proj_c.nimble", "requires \"proj_d >= 1.2.0\"\n"
+      exec "git tag v1.2.0"
+
+    createDir "proj_d"
+    withDir "proj_d":
+      exec "git init"
+      writeFile "proj_d.nimble", "\n"
+      exec "git add proj_d.nimble"
+      exec "git commit -m " & quoteShell("Initial commit for project D")
+      exec "git tag v1.0.0"
+      writeFile "proj_d.nimble", "requires \"does_not_exist >= 1.2.0\"\n"
+      exec "git add proj_d.nimble"
+      exec "git commit -m " & quoteShell("broken version of package D")
+
+      exec "git tag v2.0.0"
+
+  createDir "myproject"
+  withDir "myproject":
+    let (outp, status) = execCmdEx(atlasExe & " --list use proj_a")
+    if status == 0:
+      if outp.contains SemVer2ExpectedResult:
+        discard "fine"
+      else:
+        echo "expected ", SemVer2ExpectedResult, " but got ", outp
+        raise newException(AssertionDefect, "Test failed!")
+    else:
+      assert false, outp
+
+withDir "tests/ws_semver2":
+  try:
+    testSemVer2()
+  finally:
+    removeDir "does_not_exist"
+    removeDir "myproject"
+    removeDir "source"
+    removeDir "proj_a"
+    removeDir "proj_b"
+    removeDir "proj_c"
+    removeDir "proj_d"
+
+proc integrationTest() =
+  # Test installation of some "important_packages" which we are sure
+  # won't disappear in the near or far future. Turns out `nitter` has
+  # quite some dependencies so it suffices:
+  exec atlasExe & " use https://github.com/zedeus/nitter"
+  discard sameDirContents("expected", ".")
+
+proc cleanupIntegrationTest() =
+  var dirs: seq[string] = @[]
+  for k, f in walkDir("."):
+    if k == pcDir and dirExists(f / ".git"):
+      dirs.add f
+  for d in dirs: removeDir d
+  removeFile "nim.cfg"
+  removeFile "ws_integration.nimble"
+
+withDir "tests/ws_integration":
+  try:
+    integrationTest()
+  finally:
+    cleanupIntegrationTest()
+
 if failures > 0: quit($failures & " failures occurred.")

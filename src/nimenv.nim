@@ -9,7 +9,7 @@
 ## Implementation of the "Nim virtual environment" (`atlas env`) feature.
 
 import std / [os, strscans, strutils]
-import context, gitops, osutils
+import context, gitops
 
 when defined(windows):
   const

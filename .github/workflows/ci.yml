@@ -43,7 +43,11 @@ jobs:
       NIM_ARCH: ${{ matrix.target.cpu }}
     steps:
       - name: set `core.autocrlf` to false
-        run: git config --global core.autocrlf false
+        run: |
+          git config --global core.autocrlf false
+          git config --global init.defaultBranch master
+          git config --global user.email "atlasbot@nimlang.com"
+          git config --global user.name "atlasbot"
 
       - name: Checkout atlas
         uses: actions/checkout@v3

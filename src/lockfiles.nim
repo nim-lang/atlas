@@ -134,9 +134,9 @@ proc replay*(c: var AtlasContext; lockFilePath: string) =
   for _, v in pairs(lf.items):
     let dir = base / v.dir
     if not dirExists(dir):
-      let err = osutils.cloneUrl(getUrl v.url, dir, false)
-      if err.len > 0:
-        error c, toName(lockFilePath), "could not clone: " & v.url
+      let (status, err) = osutils.cloneUrl(getUrl v.url, dir, false)
+      if status != Ok:
+        error c, toName(lockFilePath), err
         continue
     withDir c, dir:
       let url = $getRemoteUrl()

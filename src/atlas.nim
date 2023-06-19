@@ -69,6 +69,7 @@ Options:
   --resolver=minver|semver|maxver
                         which resolution algorithm to use, default is minver
   --showGraph           show the dependency graph
+  --list                list all available and installed versions
   --version             show the version
   --help                show this help
 """
@@ -163,13 +164,16 @@ proc checkoutCommit(c: var AtlasContext; g: var DepGraph; w: Dependency) =
                 warn c, w.name, "do not know which commit is more recent:",
                   currentCommit, "(current) or", w.commit, " =", requiredCommit, "(required)"
 
-
-proc copyFromDisk(c: var AtlasContext; w: Dependency) =
-  let destDir = toDestDir(w.name)
+proc copyFromDisk(c: var AtlasContext; w: Dependency; destDir: string): (CloneStatus, string) =
   var u = w.url.getFilePath()
   if u.startsWith("./"): u = c.workspace / u.substr(2)
-  copyDir(selectDir(u & "@" & w.commit, u), destDir)
-  writeFile destDir / ThisVersion, w.commit
+  let dir = selectDir(u & "@" & w.commit, u)
+  if dirExists(dir):
+    copyDir(dir, destDir)
+    result = (Ok, "")
+  else:
+    result = (NotFound, dir)
+  #writeFile destDir / ThisVersion, w.commit
   #echo "WRITTEN ", destDir / ThisVersion
 
 proc isLaterCommit(destDir, version: string): bool =
@@ -187,6 +191,8 @@ proc collectAvailableVersions(c: var AtlasContext; g: var DepGraph; w: Dependenc
     if not g.availableVersions.hasKey(w.name):
       g.availableVersions[w.name] = collectTaggedVersions(c)
 
+proc toString(x: (string, string, Version)): string =
+  "(" & x[0] & ", " & $x[2] & ")"
 
 proc resolve(c: var AtlasContext; g: var DepGraph) =
   var b = sat.Builder()
@@ -210,12 +216,19 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
           b.closeOpr
           b.add newVar(VarId i)
           b.closeOpr
+    elif g.nodes[i].status == NotFound:
+      # dependency produced an error and so cannot be 'true':
+      b.openOpr(NotForm)
+      b.add newVar(VarId i)
+      b.closeOpr
+
   var idgen = 0
   var mapping: seq[(string, string, Version)] = @[]
   # Version selection:
   for i in 0..<g.nodes.len:
-    let av {.cursor.} = g.availableVersions[g.nodes[i].name]
+    let av = g.availableVersions.getOrDefault(g.nodes[i].name)
     if g.nodes[i].active and av.len > 0:
+      let bpos = rememberPos(b)
       # A -> (exactly one of: A1, A2, A3)
       b.openOpr(OrForm)
       b.openOpr(NotForm)
@@ -223,6 +236,7 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
       b.closeOpr
       b.openOpr(ExactlyOneOfForm)
 
+      let oldIdgen = idgen
       var q = g.nodes[i].query
       if g.nodes[i].algo == SemVer: q = toSemVer(q)
       if g.nodes[i].algo == MinVer:
@@ -240,9 +254,20 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
 
       b.closeOpr # ExactlyOneOfForm
       b.closeOpr # OrForm
-  b.closeOpr()
+      if idgen == oldIdgen:
+        b.rewind bpos
+  b.closeOpr
   let f = toForm(b)
   var s = newSeq[BindingKind](idgen)
+  when false:
+    let L = g.nodes.len
+    var nodes = newSeq[string]()
+    for i in 0..<L: nodes.add g.nodes[i].name.string
+    echo f$(proc (buf: var string; i: int) =
+      if i < L:
+        buf.add nodes[i]
+      else:
+        buf.add $mapping[i - L])
   if satisfiable(f, s):
     for i in g.nodes.len..<s.len:
       if s[i] == setToTrue:
@@ -252,14 +277,14 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
           checkoutGitCommit(c, toName(destDir), mapping[i - g.nodes.len][1])
     if NoExec notin c.flags:
       runBuildSteps(c, g)
-    when false:
-      echo "selecting: "
+      #echo f
+    if ListVersions in c.flags:
+      echo "selected:"
       for i in g.nodes.len..<s.len:
         if s[i] == setToTrue:
-          echo "[x] ", mapping[i - g.nodes.len]
+          echo "[x] ", toString mapping[i - g.nodes.len]
         else:
-          echo "[ ] ", mapping[i - g.nodes.len]
-      echo f
+          echo "[ ] ", toString mapping[i - g.nodes.len]
   else:
     error c, toName(c.workspace), "version conflict; for more information use --showGraph"
     var usedVersions = initCountTable[string]()
@@ -283,16 +308,21 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
     let dir = selectDir(c.workspace / destDir, c.depsDir / destDir)
     if not dirExists(dir):
       withDir c, (if i != 0 or startIsDep: c.depsDir else: c.workspace):
-        if w.url.scheme == FileProtocol:
-          copyFromDisk c, w
+        let (status, err) =
+          if w.url.scheme == FileProtocol:
+            copyFromDisk(c, w, destDir)
+          else:
+            cloneUrl(c, w.url, destDir, false)
+        g.nodes[i].status = status
+        case status
+        of NotFound:
+          discard "setting the status is enough here"
+        of OtherError:
+          error c, w.name, err
         else:
-          let err = cloneUrl(c, w.url, destDir, false)
-          if err != "":
-            error c, w.name, err
-          elif w.algo != MinVer:
-            withDir c, destDir:
-              collectAvailableVersions c, g, w
-    elif w.algo != MinVer:
+          withDir c, destDir:
+            collectAvailableVersions c, g, w
+    else:
       withDir c, dir:
         collectAvailableVersions c, g, w
 
@@ -300,13 +330,7 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
     selectNode c, g, w
     if oldErrors == c.errors:
       if KeepCommits notin c.flags and w.algo == MinVer:
-        if w.url.scheme != FileProtocol:
-          checkoutCommit(c, g, w)
-        else:
-          withDir c, (if i != 0 or startIsDep: c.depsDir else: c.workspace):
-            if isLaterCommit(destDir, w.commit):
-              copyFromDisk c, w
-              selectNode c, g, w
+        checkoutCommit(c, g, w)
       # even if the checkout fails, we can make use of the somewhat
       # outdated .nimble file to clone more of the most likely still relevant
       # dependencies:
@@ -540,6 +564,7 @@ proc main(c: var AtlasContext) =
       of "keep": c.flags.incl Keep
       of "autoenv": c.flags.incl AutoEnv
       of "noexec": c.flags.incl NoExec
+      of "list": c.flags.incl ListVersions
       of "colors":
         case val.normalize
         of "off": c.flags.incl NoColors
@@ -673,6 +698,8 @@ proc main =
     main(c)
   finally:
     writePendingMessages(c)
+  if c.errors > 0:
+    quit 1
 
 when isMainModule:
   main()
