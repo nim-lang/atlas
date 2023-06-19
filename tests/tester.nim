@@ -180,4 +180,26 @@ withDir "tests/ws_semver2":
     removeDir "proj_c"
     removeDir "proj_d"
 
+proc integrationTest() =
+  # Test installation of some "important_packages" which we are sure
+  # won't disappear in the near or far future. Turns out `nitter` has
+  # quite some dependencies so it suffices:
+  exec atlasExe & " use https://github.com/zedeus/nitter"
+  discard sameDirContents("expected", ".")
+
+proc cleanupIntegrationTest() =
+  var dirs: seq[string] = @[]
+  for k, f in walkDir("."):
+    if k == pcDir and dirExists(f / ".git"):
+      dirs.add f
+  for d in dirs: removeDir d
+  removeFile "nim.cfg"
+  removeFile "ws_integration.nimble"
+
+withDir "tests/ws_integration":
+  try:
+    integrationTest()
+  finally:
+    cleanupIntegrationTest()
+
 if failures > 0: quit($failures & " failures occurred.")
