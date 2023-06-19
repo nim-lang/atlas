@@ -100,6 +100,7 @@ when false:
 
 const
   SemVer2ExpectedResult = """selected:
+[ ] (proj_a, 1.0.0)
 [x] (proj_a, 1.1.0)
 [x] (proj_b, 1.1.0)
 [x] (proj_c, 1.2.0)
@@ -115,6 +116,7 @@ proc testSemVer2() =
       writeFile "proj_a.nimble", "requires \"proj_b >= 1.0.0\"\n"
       exec "git add proj_a.nimble"
       exec "git commit -m 'update'"
+      exec "git tag v1.0.0"
       writeFile "proj_a.nimble", "requires \"proj_b >= 1.1.0\"\n"
       exec "git add proj_a.nimble"
       exec "git commit -m 'update'"
