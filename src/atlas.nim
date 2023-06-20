@@ -130,6 +130,9 @@ const
 
 proc checkoutCommit(c: var AtlasContext; g: var DepGraph; w: Dependency) =
   let dir = dependencyDir(c, w)
+  if not dirExists(dir):
+    error c, w.name, "cannot find directory: " & dir
+    return
   withDir c, dir:
     if w.commit.len == 0 or cmpIgnoreCase(w.commit, "head") == 0:
       gitPull(c, w.name)
@@ -205,7 +208,12 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
   # project is listed multiple times in the .nimble file.
   # Implications:
   for i in 0..<g.nodes.len:
-    if g.nodes[i].active:
+    if g.nodes[i].status == NotFound:
+      # dependency produced an error and so cannot be 'true':
+      b.openOpr(NotForm)
+      b.add newVar(VarId i)
+      b.closeOpr
+    else:
       for j in g.nodes[i].parents:
         # "parent has a dependency on x" is translated to:
         # "parent implies x" which is "not parent or x"
@@ -216,18 +224,13 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
           b.closeOpr
           b.add newVar(VarId i)
           b.closeOpr
-    elif g.nodes[i].status == NotFound:
-      # dependency produced an error and so cannot be 'true':
-      b.openOpr(NotForm)
-      b.add newVar(VarId i)
-      b.closeOpr
 
   var idgen = 0
   var mapping: seq[(string, string, Version)] = @[]
   # Version selection:
   for i in 0..<g.nodes.len:
     let av = g.availableVersions.getOrDefault(g.nodes[i].name)
-    if g.nodes[i].active and av.len > 0:
+    if av.len > 0:
       let bpos = rememberPos(b)
       # A -> (exactly one of: A1, A2, A3)
       b.openOpr(OrForm)
@@ -255,6 +258,8 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
             mapping.add (g.nodes[i].name.string, av[j][0], av[j][1])
             b.add newVar(VarId(idgen + g.nodes.len))
             inc idgen
+          else:
+            echo "IGNORED VERSION ", (g.nodes[i].name.string, av[j][0], av[j][1]), " BECAUSE QUERY IS ", q
       else:
         for j in countdown(av.len-1, 0):
           if q.matches(av[j]):
@@ -290,11 +295,20 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
       #echo f
     if ListVersions in c.flags:
       echo "selected:"
+      let L = g.nodes.len
+      var nodes = newSeq[string]()
+      for i in 0..<L: nodes.add g.nodes[i].name.string
+      echo f$(proc (buf: var string; i: int) =
+        if i < L:
+          buf.add nodes[i]
+        else:
+          buf.add $mapping[i - L])
       for i in g.nodes.len..<s.len:
         if s[i] == setToTrue:
           echo "[x] ", toString mapping[i - g.nodes.len]
         else:
           echo "[ ] ", toString mapping[i - g.nodes.len]
+      echo "end of selection"
   else:
     error c, toName(c.workspace), "version conflict; for more information use --showGraph"
     var usedVersions = initCountTable[string]()
@@ -347,8 +361,7 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
       result.addUnique collectNewDeps(c, g, i, w)
     inc i
 
-  if g.availableVersions.len > 0:
-    resolve c, g
+  resolve c, g
 
 proc traverse(c: var AtlasContext; start: string; startIsDep: bool): seq[CfgPath] =
   # returns the list of paths for the nim.cfg file.
@@ -583,6 +596,7 @@ proc main(c: var AtlasContext) =
       of "resolver":
         try:
           c.defaultAlgo = parseEnum[ResolutionAlgorithm](val)
+          c.flags.incl OverideResolver
         except ValueError:
           quit "unknown resolver: " & val
       else: writeHelp()

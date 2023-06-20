@@ -99,14 +99,27 @@ when false:
   testWsConflict()
 
 const
-  SemVer2ExpectedResult = """selected:
+  SemVerExpectedResult = """selected:
 [ ] (proj_a, 1.0.0)
 [x] (proj_a, 1.1.0)
 [x] (proj_b, 1.1.0)
 [x] (proj_c, 1.2.0)
+[x] (proj_d, 1.0.0)
+end of selection
 """
 
-proc testSemVer2() =
+  MinVerExpectedResult = """selected:
+[ ] (proj_a, 1.1.0)
+[x] (proj_a, 1.0.0)
+[ ] (proj_b, 1.1.0)
+[x] (proj_b, 1.0.0)
+[x] (proj_c, 1.2.0)
+[ ] (proj_d, 2.0.0)
+[x] (proj_d, 1.0.0)
+end of selection
+"""
+
+proc buildGraph =
   createDir "source"
   withDir "source":
 
@@ -128,6 +141,7 @@ proc testSemVer2() =
       writeFile "proj_b.nimble", "requires \"proj_c >= 1.0.0\"\n"
       exec "git add proj_b.nimble"
       exec "git commit -m " & quoteShell("Initial commit for project B")
+      exec "git tag v1.0.0"
 
       writeFile "proj_b.nimble", "requires \"proj_c >= 1.1.0\"\n"
       exec "git add proj_b.nimble"
@@ -140,7 +154,7 @@ proc testSemVer2() =
       writeFile "proj_c.nimble", "requires \"proj_d >= 1.2.0\"\n"
       exec "git add proj_c.nimble"
       exec "git commit -m " & quoteShell("Initial commit for project C")
-      writeFile "proj_c.nimble", "requires \"proj_d >= 1.2.0\"\n"
+      writeFile "proj_c.nimble", "requires \"proj_d >= 1.0.0\"\n"
       exec "git tag v1.2.0"
 
     createDir "proj_d"
@@ -156,24 +170,55 @@ proc testSemVer2() =
 
       exec "git tag v2.0.0"
 
-  createDir "myproject"
-  withDir "myproject":
-    let (outp, status) = execCmdEx(atlasExe & " --list use proj_a")
+proc testSemVer2() =
+  buildGraph()
+  createDir "semproject"
+  withDir "semproject":
+    let (outp, status) = execCmdEx(atlasExe & " --resolver=SemVer --list use proj_a")
     if status == 0:
-      if outp.contains SemVer2ExpectedResult:
+      if outp.contains SemVerExpectedResult:
         discard "fine"
       else:
-        echo "expected ", SemVer2ExpectedResult, " but got ", outp
+        echo "expected ", SemVerExpectedResult, " but got ", outp
         raise newException(AssertionDefect, "Test failed!")
     else:
       assert false, outp
 
+proc testMinVer() =
+  buildGraph()
+  createDir "minproject"
+  withDir "minproject":
+    let (outp, status) = execCmdEx(atlasExe & " --resolver=MinVer --list use proj_a")
+    if status == 0:
+      if outp.contains MinVerExpectedResult:
+        discard "fine"
+      else:
+        echo "expected ", MinVerExpectedResult, " but got ", outp
+        raise newException(AssertionDefect, "Test failed!")
+    else:
+      assert false, outp
+
+when false:
+  withDir "tests/ws_semver2":
+    try:
+      testSemVer2()
+    finally:
+      removeDir "does_not_exist"
+      removeDir "semproject"
+      removeDir "minproject"
+      removeDir "source"
+      removeDir "proj_a"
+      removeDir "proj_b"
+      removeDir "proj_c"
+      removeDir "proj_d"
+
 withDir "tests/ws_semver2":
   try:
-    testSemVer2()
+    testMinVer()
   finally:
     removeDir "does_not_exist"
-    removeDir "myproject"
+    removeDir "semproject"
+    removeDir "minproject"
     removeDir "source"
     removeDir "proj_a"
     removeDir "proj_b"

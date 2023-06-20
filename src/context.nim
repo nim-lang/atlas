@@ -70,6 +70,7 @@ type
     AutoEnv
     NoExec
     ListVersions
+    OverideResolver
 
   MsgKind = enum
     Info = "[Info] ",
