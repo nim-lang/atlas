@@ -42,7 +42,7 @@ proc extractGeQuery*(i: VersionInterval): Version =
 
 proc `$`*(v: Version): string {.borrow.}
 
-proc isSpecial(v: Version): bool =
+proc isSpecial(v: Version): bool {.inline.} =
   result = v.string.len > 0 and v.string[0] == '#'
 
 proc isValidVersion*(v: string): bool {.inline.} =
@@ -235,6 +235,23 @@ proc matches*(pattern: VersionInterval; v: Version): bool =
     result = matches(pattern.a, v) and matches(pattern.b, v)
   else:
     result = matches(pattern.a, v)
+
+const
+  MinCommitLen = len("#baca3")
+
+proc extractSpecificCommit*(pattern: VersionInterval): string =
+  if not pattern.isInterval and pattern.a.r == verEq and pattern.a.v.isSpecial and pattern.a.v.string.len >= MinCommitLen:
+    result = pattern.a.v.string.substr(1)
+  else:
+    result = ""
+
+proc matches*(pattern: VersionInterval; x: (string, Version)): bool =
+  if pattern.isInterval:
+    result = matches(pattern.a, x[1]) and matches(pattern.b, x[1])
+  elif pattern.a.r == verEq and pattern.a.v.isSpecial and pattern.a.v.string.len >= MinCommitLen:
+    result = x[0].startsWith(pattern.a.v.string.substr(1))
+  else:
+    result = matches(pattern.a, x[1])
 
 proc selectBestCommitMinVer*(data: openArray[(string, Version)]; elem: VersionInterval): string =
   for i in countdown(data.len-1, 0):

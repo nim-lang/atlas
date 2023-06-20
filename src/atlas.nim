@@ -239,15 +239,25 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
       let oldIdgen = idgen
       var q = g.nodes[i].query
       if g.nodes[i].algo == SemVer: q = toSemVer(q)
-      if g.nodes[i].algo == MinVer:
+      let commit = extractSpecificCommit(q)
+      if commit.len > 0:
+        var v = Version("#" & commit)
         for j in countup(0, av.len-1):
-          if q.matches(av[j][1]):
+          if q.matches(av[j]):
+            v = av[j][1]
+            break
+        mapping.add (g.nodes[i].name.string, commit, v)
+        b.add newVar(VarId(idgen + g.nodes.len))
+        inc idgen
+      elif g.nodes[i].algo == MinVer:
+        for j in countup(0, av.len-1):
+          if q.matches(av[j]):
             mapping.add (g.nodes[i].name.string, av[j][0], av[j][1])
             b.add newVar(VarId(idgen + g.nodes.len))
             inc idgen
       else:
         for j in countdown(av.len-1, 0):
-          if q.matches(av[j][1]):
+          if q.matches(av[j]):
             mapping.add (g.nodes[i].name.string, av[j][0], av[j][1])
             b.add newVar(VarId(idgen + g.nodes.len))
             inc idgen
