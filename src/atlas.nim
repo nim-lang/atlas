@@ -124,6 +124,27 @@ proc afterGraphActions(c: var AtlasContext; g: DepGraph) =
   if AutoEnv in c.flags and g.bestNimVersion != Version"":
     setupNimEnv c, g.bestNimVersion.string
 
+iterator matchingCommits(c: var AtlasContext; g: DepGraph; w: Dependency): (string, string, Version) =
+  let av = g.availableVersions.getOrDefault(w.name)
+  var q = w.query
+  if w.algo == SemVer: q = toSemVer(q)
+  let commit = extractSpecificCommit(q)
+  if commit.len > 0:
+    var v = Version("#" & commit)
+    for j in countup(0, av.len-1):
+      if q.matches(av[j]):
+        v = av[j][1]
+        break
+    yield (w.name.string, commit, v)
+  elif w.algo == MinVer:
+    for j in countup(0, av.len-1):
+      if q.matches(av[j]):
+        yield (w.name.string, av[j][0], av[j][1])
+  else:
+    for j in countdown(av.len-1, 0):
+      if q.matches(av[j]):
+        yield (w.name.string, av[j][0], av[j][1])
+
 const
   FileProtocol = "file"
   ThisVersion = "current_version.atlas"
@@ -141,31 +162,37 @@ proc checkoutCommit(c: var AtlasContext; g: var DepGraph; w: Dependency) =
       if err != "":
         warn c, w.name, err
       else:
-        let requiredCommit = getRequiredCommit(c, w)
-        let (cc, status) = exec(c, GitCurrentCommit, [])
-        let currentCommit = strutils.strip(cc)
-        if requiredCommit == "" or status != 0:
-          if requiredCommit == "" and w.commit == InvalidCommit:
-            warn c, w.name, "package has no tagged releases"
+        for mx in matchingCommits(c, g, w):
+          checkoutGitCommit(c, w.name, mx[1])
+          selectNode c, g, w
+          break
+
+        when false:
+          let requiredCommit = getRequiredCommit(c, w)
+          let (cc, status) = exec(c, GitCurrentCommit, [])
+          let currentCommit = strutils.strip(cc)
+          if requiredCommit == "" or status != 0:
+            if requiredCommit == "" and w.commit == InvalidCommit:
+              warn c, w.name, "package has no tagged releases"
+            else:
+              warn c, w.name, "cannot find specified version/commit " & w.commit
           else:
-            warn c, w.name, "cannot find specified version/commit " & w.commit
-        else:
-          if currentCommit != requiredCommit:
-            # checkout the later commit:
-            # git merge-base --is-ancestor <commit> <commit>
-            let (cc, status) = exec(c, GitMergeBase, [currentCommit, requiredCommit])
-            let mergeBase = strutils.strip(cc)
-            if status == 0 and (mergeBase == currentCommit or mergeBase == requiredCommit):
-              # conflict resolution: pick the later commit:
-              if mergeBase == currentCommit:
+            if currentCommit != requiredCommit:
+              # checkout the later commit:
+              # git merge-base --is-ancestor <commit> <commit>
+              let (cc, status) = exec(c, GitMergeBase, [currentCommit, requiredCommit])
+              let mergeBase = strutils.strip(cc)
+              if status == 0 and (mergeBase == currentCommit or mergeBase == requiredCommit):
+                # conflict resolution: pick the later commit:
+                if mergeBase == currentCommit:
+                  checkoutGitCommit(c, w.name, requiredCommit)
+                  selectNode c, g, w
+              else:
                 checkoutGitCommit(c, w.name, requiredCommit)
                 selectNode c, g, w
-            else:
-              checkoutGitCommit(c, w.name, requiredCommit)
-              selectNode c, g, w
-              when false:
-                warn c, w.name, "do not know which commit is more recent:",
-                  currentCommit, "(current) or", w.commit, " =", requiredCommit, "(required)"
+                when false:
+                  warn c, w.name, "do not know which commit is more recent:",
+                    currentCommit, "(current) or", w.commit, " =", requiredCommit, "(required)"
 
 proc copyFromDisk(c: var AtlasContext; w: Dependency; destDir: string): (CloneStatus, string) =
   var u = w.url.getFilePath()
@@ -229,48 +256,22 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
   var mapping: seq[(string, string, Version)] = @[]
   # Version selection:
   for i in 0..<g.nodes.len:
-    let av = g.availableVersions.getOrDefault(g.nodes[i].name)
-    if av.len > 0:
-      let bpos = rememberPos(b)
-      # A -> (exactly one of: A1, A2, A3)
-      b.openOpr(OrForm)
-      b.openOpr(NotForm)
-      b.add newVar(VarId i)
-      b.closeOpr
-      b.openOpr(ExactlyOneOfForm)
-
-      let oldIdgen = idgen
-      var q = g.nodes[i].query
-      if g.nodes[i].algo == SemVer: q = toSemVer(q)
-      let commit = extractSpecificCommit(q)
-      if commit.len > 0:
-        var v = Version("#" & commit)
-        for j in countup(0, av.len-1):
-          if q.matches(av[j]):
-            v = av[j][1]
-            break
-        mapping.add (g.nodes[i].name.string, commit, v)
-        b.add newVar(VarId(idgen + g.nodes.len))
-        inc idgen
-      elif g.nodes[i].algo == MinVer:
-        for j in countup(0, av.len-1):
-          if q.matches(av[j]):
-            mapping.add (g.nodes[i].name.string, av[j][0], av[j][1])
-            b.add newVar(VarId(idgen + g.nodes.len))
-            inc idgen
-          else:
-            echo "IGNORED VERSION ", (g.nodes[i].name.string, av[j][0], av[j][1]), " BECAUSE QUERY IS ", q
-      else:
-        for j in countdown(av.len-1, 0):
-          if q.matches(av[j]):
-            mapping.add (g.nodes[i].name.string, av[j][0], av[j][1])
-            b.add newVar(VarId(idgen + g.nodes.len))
-            inc idgen
-
-      b.closeOpr # ExactlyOneOfForm
-      b.closeOpr # OrForm
-      if idgen == oldIdgen:
-        b.rewind bpos
+    let bpos = rememberPos(b)
+    # A -> (exactly one of: A1, A2, A3)
+    b.openOpr(OrForm)
+    b.openOpr(NotForm)
+    b.add newVar(VarId i)
+    b.closeOpr
+    b.openOpr(ExactlyOneOfForm)
+    let oldIdgen = idgen
+    for mx in matchingCommits(c, g, g.nodes[i]):
+      mapping.add mx
+      b.add newVar(VarId(idgen + g.nodes.len))
+      inc idgen
+    b.closeOpr # ExactlyOneOfForm
+    b.closeOpr # OrForm
+    if idgen == oldIdgen:
+      b.rewind bpos
   b.closeOpr
   let f = toForm(b)
   var s = newSeq[BindingKind](idgen)
@@ -330,6 +331,7 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
     let oldErrors = c.errors
 
     let dir = selectDir(c.workspace / destDir, c.depsDir / destDir)
+    var skipCheckout = false
     if not dirExists(dir):
       withDir c, (if i != 0 or startIsDep: c.depsDir else: c.workspace):
         let (status, err) =
@@ -340,7 +342,7 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
         g.nodes[i].status = status
         case status
         of NotFound:
-          discard "setting the status is enough here"
+          skipCheckout = true
         of OtherError:
           error c, w.name, err
         else:
@@ -353,7 +355,7 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
     # assume this is the selected version, it might get overwritten later:
     selectNode c, g, w
     if oldErrors == c.errors:
-      if KeepCommits notin c.flags and w.algo == MinVer:
+      if KeepCommits notin c.flags and not skipCheckout:
         checkoutCommit(c, g, w)
       # even if the checkout fails, we can make use of the somewhat
       # outdated .nimble file to clone more of the most likely still relevant

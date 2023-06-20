@@ -41,7 +41,6 @@ proc addUniqueDep(c: var AtlasContext; g: var DepGraph; parent: int;
     let key = url / commit
     if g.processed.hasKey($key):
       g.nodes[g.processed[$key]].parents.addUnique parent
-      echo "HANDLED it already: ", $key
     else:
       let self = g.nodes.len
       g.byName.mgetOrPut(name, @[]).add self
