@@ -322,6 +322,10 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
         if counter > 0:
           error c, toName(mapping[i - g.nodes.len][0]), $mapping[i - g.nodes.len][2] & " required"
 
+proc collectDepsHistory(c: var AtlasContext; g: var DepGraph; parent: int;
+                        dep: Dependency; nimbleFile: string): CfgPath =
+  result = collectDeps(c, g, parent, dep, nimbleFile)
+
 proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[CfgPath] =
   result = @[]
   var i = 0
@@ -355,12 +359,19 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
     # assume this is the selected version, it might get overwritten later:
     selectNode c, g, w
     if oldErrors == c.errors:
+
+      let nimbleFile = findNimbleFile(c, w)
+      if nimbleFile != "":
+        result.addUnique collectDepsHistory(c, g, i, w, nimbleFile)
+      else:
+        result.addUnique CfgPath destDir
+
       if KeepCommits notin c.flags and not skipCheckout:
         checkoutCommit(c, g, w)
       # even if the checkout fails, we can make use of the somewhat
       # outdated .nimble file to clone more of the most likely still relevant
       # dependencies:
-      result.addUnique collectNewDeps(c, g, i, w)
+      result collectNewDeps(c, g, i, w)
     inc i
 
   resolve c, g
