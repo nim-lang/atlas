@@ -371,7 +371,7 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
       # even if the checkout fails, we can make use of the somewhat
       # outdated .nimble file to clone more of the most likely still relevant
       # dependencies:
-      result collectNewDeps(c, g, i, w)
+      #result collectNewDeps(c, g, i, w)
     inc i
 
   resolve c, g
@@ -453,7 +453,7 @@ proc installDependencies(c: var AtlasContext; nimbleFile: string; startIsDep: bo
 proc updateDir(c: var AtlasContext; dir, filter: string) =
   ## update the package's VCS
   for kind, file in walkDir(dir):
-    if kind == pcDir and isGitDir(file):
+    if kind == pcDir and hasGitDir(file):
       gitops.updateDir(c, file, filter)
 
 proc patchNimbleFile(c: var AtlasContext; dep: string): string =
@@ -521,7 +521,7 @@ proc createWorkspaceIn(workspace, depsDir: string) =
 proc listOutdated(c: var AtlasContext; dir: string) =
   var updateable = 0
   for k, f in walkDir(dir, relative=true):
-    if k in {pcDir, pcLinkToDir} and isGitDir(dir / f):
+    if k in {pcDir, pcLinkToDir} and hasGitDir(dir / f):
       withDir c, dir / f:
         if gitops.isOutdated(c, f):
           inc updateable
@@ -533,6 +533,73 @@ proc listOutdated(c: var AtlasContext) =
   if c.depsDir.len > 0 and c.depsDir != c.workspace:
     listOutdated c, c.depsDir
   listOutdated c, c.workspace
+
+proc nimbleFileVersions(c: var AtlasContext; nimbleFile: string): seq[(string, Version)] =
+  result = @[]
+  let (outp, exitCode) = silentExec("git log --format=%H", [nimbleFile])
+  if exitCode == 0:
+    for commit in splitLines(outp):
+      let (tag, exitCode) = silentExec("git describe --tags ", [commit])
+      if exitCode == 0:
+        let v = parseVersion(tag, 0)
+        if v != Version(""):
+          if result.len > 0 and result[^1][1].string == v.string:
+            # Ensure we use the earlier commit for when the tags look like
+            # 1.3.0, 1.2.2-6-g0af2c85, 1.2.2
+            # The Karax project uses tags like these, don't ask me why.
+            result[^1][0] = commit
+          else:
+            result.add (commit, v)
+  else:
+    error c, projectFromCurrentDir(), outp
+
+type
+  SingleDep* = object
+    nameOrUrl: string
+    query: VersionInterval
+
+  DepsPerVersion = object
+    v: Version
+    deps: seq[SingleDep]
+    nimVersion: VersionInterval
+    errors: seq[string]
+    hasInstallHooks: bool
+    srcDir: string
+
+proc parseNimbleFile(c: var AtlasContext; nimbleFile: string; v: Version): DepsPerVersion =
+  result = DepsPerVersion(v: v)
+  let nimbleInfo = extractRequiresInfo(c, nimbleFile)
+  result.hasInstallHooks = nimbleInfo.hasInstallHooks
+  for r in nimbleInfo.requires:
+    var i = 0
+    while i < r.len and r[i] notin {'#', '<', '=', '>'} + Whitespace: inc i
+    let pkgName = r.substr(0, i-1)
+    var err = pkgName.len == 0
+    let query = parseVersionInterval(r, i, err)
+    if err:
+      result.errors.add "invalid 'requires' syntax: " & r
+    else:
+      if cmpIgnoreCase(pkgName, "nim") != 0:
+        result.deps.add SingleDep(nameOrUrl: pkgName, query: query)
+      else:
+        result.nimVersion = query
+  result.srcDir = nimbleInfo.srcDir
+
+proc allDeps(c: var AtlasContext; nimbleFile: string): seq[DepsPerVersion] =
+  let cv = nimbleFileVersions(c, nimbleFile)
+  result = @[]
+  try:
+    for commit, v in items cv:
+      let (err, exitCode) = osproc.execCmdEx("git checkout " & commit & " -- " & quoteShell(nimbleFile))
+      if exitCode == 0:
+        result.add parseNimbleFile(c, nimbleFile, v)
+      else:
+        error c, projectFromCurrentDir(), err
+  finally:
+    discard osproc.execCmdEx("git checkout HEAD " & quoteShell(nimbleFile))
+
+proc explore(c: var AtlasContext; nimbleFile: string) =
+  echo allDeps(c, nimbleFile)
 
 proc main(c: var AtlasContext) =
   var action = ""
@@ -672,13 +739,29 @@ proc main(c: var AtlasContext) =
     if args.len == 1:
       nimbleFile = args[0]
     else:
-      for x in walkPattern("*.nimble"):
+      for x in walkPattern(c.currentDir / "*.nimble"):
         nimbleFile = x
         break
     if nimbleFile.len == 0:
       fatal "could not find a .nimble file"
     else:
       installDependencies(c, nimbleFile, startIsDep = true)
+  of "explore":
+    projectCmd()
+    if args.len > 1:
+      fatal "install command takes a single argument"
+    withDir c, c.currentDir:
+      var nimbleFile = ""
+      if args.len == 1:
+        nimbleFile = args[0]
+      else:
+        for x in walkPattern("*.nimble"):
+          nimbleFile = x
+          break
+      if nimbleFile.len == 0:
+        fatal "could not find a .nimble file"
+      else:
+        explore(c, nimbleFile)
   of "refresh":
     noArgs()
     updatePackages(c)
