@@ -29,27 +29,22 @@ proc selectNode*(c: var AtlasContext; g: var DepGraph; w: Dependency) =
 proc addUnique*[T](s: var seq[T]; elem: sink T) =
   if not s.contains(elem): s.add elem
 
-proc addUniqueDep(c: var AtlasContext; g: var DepGraph; parent: int;
-                  pkg: PackageUrl; query: VersionInterval) =
+proc addUniqueDep*(c: var AtlasContext; g: var DepGraph; parent: int;
+                  url: PackageUrl; query: VersionInterval) =
   let commit = versionKey(query)
-  let oldErrors = c.errors
-  let url = pkg
-  let name = pkg.toName
-  if oldErrors != c.errors:
-    warn c, toName(pkg), "cannot resolve package name"
+  let key = url / commit
+  if g.processed.hasKey($key):
+    g.nodes[g.processed[$key]].parents.addUnique parent
   else:
-    let key = url / commit
-    if g.processed.hasKey($key):
-      g.nodes[g.processed[$key]].parents.addUnique parent
-    else:
-      let self = g.nodes.len
-      g.byName.mgetOrPut(name, @[]).add self
-      g.processed[$key] = self
-      g.nodes.add Dependency(name: name, url: url, commit: commit,
-                             self: self,
-                             query: query,
-                             parents: @[parent],
-                             algo: c.defaultAlgo)
+    let name = url.toName
+    let self = g.nodes.len
+    g.byName.mgetOrPut(name, @[]).add self
+    g.processed[$key] = self
+    g.nodes.add Dependency(name: name, url: url, commit: commit,
+                            self: self,
+                            query: query,
+                            parents: @[parent],
+                            algo: c.defaultAlgo)
 
 proc rememberNimVersion(g: var DepGraph; q: VersionInterval) =
   let v = extractGeQuery(q)

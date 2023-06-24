@@ -119,6 +119,8 @@ proc generateDepGraph(c: var AtlasContext; g: DepGraph) =
     discard execShellCmd("dot -Tpng -odeps.png " & quoteShell(dotFile))
 
 proc afterGraphActions(c: var AtlasContext; g: DepGraph) =
+  patchNimCfg(c, paths, if CfgHere in c.flags: c.currentDir else: findSrcDir(c))
+
   if ShowGraph in c.flags:
     generateDepGraph c, g
   if AutoEnv in c.flags and g.bestNimVersion != Version"":
@@ -322,12 +324,80 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
         if counter > 0:
           error c, toName(mapping[i - g.nodes.len][0]), $mapping[i - g.nodes.len][2] & " required"
 
-proc collectDepsHistory(c: var AtlasContext; g: var DepGraph; parent: int;
-                        dep: Dependency; nimbleFile: string): CfgPath =
-  result = collectDeps(c, g, parent, dep, nimbleFile)
+type
+  SingleDep* = object
+    nameOrUrl: string
+    query: VersionInterval
 
-proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[CfgPath] =
+  DepsPerVersion = object
+    v: Version
+    deps: seq[SingleDep]
+    nimVersion: VersionInterval
+    errors: seq[string]
+    hasInstallHooks: bool
+    srcDir: string
+
+proc parseNimbleFile(c: var AtlasContext; nimbleFile: string; v: Version): DepsPerVersion =
+  result = DepsPerVersion(v: v)
+  let nimbleInfo = extractRequiresInfo(c, nimbleFile)
+  result.hasInstallHooks = nimbleInfo.hasInstallHooks
+  for r in nimbleInfo.requires:
+    var i = 0
+    while i < r.len and r[i] notin {'#', '<', '=', '>'} + Whitespace: inc i
+    let pkgName = r.substr(0, i-1)
+    var err = pkgName.len == 0
+    let query = parseVersionInterval(r, i, err)
+    if err:
+      result.errors.add "invalid 'requires' syntax: " & r
+    else:
+      if cmpIgnoreCase(pkgName, "nim") != 0:
+        result.deps.add SingleDep(nameOrUrl: pkgName, query: query)
+      else:
+        result.nimVersion = query
+  result.srcDir = nimbleInfo.srcDir
+
+proc nimbleFileVersions(c: var AtlasContext; nimbleFile: string): seq[(string, Version)] =
   result = @[]
+  let (outp, exitCode) = silentExec("git log --format=%H", [nimbleFile])
+  if exitCode == 0:
+    for commit in splitLines(outp):
+      let (tag, exitCode) = silentExec("git describe --tags ", [commit])
+      if exitCode == 0:
+        let v = parseVersion(tag, 0)
+        if v != Version(""):
+          if result.len > 0 and result[^1][1].string == v.string:
+            # Ensure we use the earlier commit for when the tags look like
+            # 1.3.0, 1.2.2-6-g0af2c85, 1.2.2
+            # The Karax project uses tags like these, don't ask me why.
+            result[^1][0] = commit
+          else:
+            result.add (commit, v)
+  else:
+    error c, projectFromCurrentDir(), outp
+
+proc allDeps(c: var AtlasContext; nimbleFile: string): seq[DepsPerVersion] =
+  let cv = nimbleFileVersions(c, nimbleFile)
+  result = @[]
+  try:
+    for commit, v in items cv:
+      let (err, exitCode) = osproc.execCmdEx("git checkout " & commit & " -- " & quoteShell(nimbleFile))
+      if exitCode == 0:
+        result.add parseNimbleFile(c, nimbleFile, v)
+      else:
+        error c, projectFromCurrentDir(), err
+  finally:
+    discard osproc.execCmdEx("git checkout HEAD " & quoteShell(nimbleFile))
+
+proc expandGraph(c: var AtlasContext; g: var DepGraph; currentNode: int; deps: seq[DepsPerVersion]) =
+  for dep in deps:
+    for d in dep.deps:
+      let url = resolveUrl(c, d.nameOrUrl)
+      if $url == "":
+        error c, toName(d.nameOrUrl), "cannot resolve package name"
+      else:
+        addUniqueDep(c, g, currentNode, url, d.query)
+
+proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool) =
   var i = 0
   while i < g.nodes.len:
     let w = g.nodes[i]
@@ -359,24 +429,15 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
     # assume this is the selected version, it might get overwritten later:
     selectNode c, g, w
     if oldErrors == c.errors:
-
       let nimbleFile = findNimbleFile(c, w)
       if nimbleFile != "":
-        result.addUnique collectDepsHistory(c, g, i, w, nimbleFile)
-      else:
-        result.addUnique CfgPath destDir
+        expandGraph c, g, i, allDeps(c, nimbleFile)
 
-      if KeepCommits notin c.flags and not skipCheckout:
-        checkoutCommit(c, g, w)
-      # even if the checkout fails, we can make use of the somewhat
-      # outdated .nimble file to clone more of the most likely still relevant
-      # dependencies:
-      #result collectNewDeps(c, g, i, w)
     inc i
 
   resolve c, g
 
-proc traverse(c: var AtlasContext; start: string; startIsDep: bool): seq[CfgPath] =
+proc traverse(c: var AtlasContext; start: string; startIsDep: bool) =
   # returns the list of paths for the nim.cfg file.
   let url = resolveUrl(c, start)
   var g = createGraph(c, start, url)
@@ -387,7 +448,7 @@ proc traverse(c: var AtlasContext; start: string; startIsDep: bool): seq[CfgPath
 
   c.projectDir = c.workspace / toDestDir(g.nodes[0].name)
 
-  result = traverseLoop(c, g, startIsDep)
+  traverseLoop(c, g, startIsDep)
   afterGraphActions c, g
 
 const
@@ -446,8 +507,7 @@ proc installDependencies(c: var AtlasContext; nimbleFile: string; startIsDep: bo
                        algo: c.defaultAlgo)
   g.byName.mgetOrPut(toName(pkgname), @[]).add 0
   discard collectDeps(c, g, -1, dep, nimbleFile)
-  let paths = traverseLoop(c, g, startIsDep)
-  patchNimCfg(c, paths, if CfgHere in c.flags: c.currentDir else: findSrcDir(c))
+  traverseLoop(c, g, startIsDep)
   afterGraphActions c, g
 
 proc updateDir(c: var AtlasContext; dir, filter: string) =
@@ -533,70 +593,6 @@ proc listOutdated(c: var AtlasContext) =
   if c.depsDir.len > 0 and c.depsDir != c.workspace:
     listOutdated c, c.depsDir
   listOutdated c, c.workspace
-
-proc nimbleFileVersions(c: var AtlasContext; nimbleFile: string): seq[(string, Version)] =
-  result = @[]
-  let (outp, exitCode) = silentExec("git log --format=%H", [nimbleFile])
-  if exitCode == 0:
-    for commit in splitLines(outp):
-      let (tag, exitCode) = silentExec("git describe --tags ", [commit])
-      if exitCode == 0:
-        let v = parseVersion(tag, 0)
-        if v != Version(""):
-          if result.len > 0 and result[^1][1].string == v.string:
-            # Ensure we use the earlier commit for when the tags look like
-            # 1.3.0, 1.2.2-6-g0af2c85, 1.2.2
-            # The Karax project uses tags like these, don't ask me why.
-            result[^1][0] = commit
-          else:
-            result.add (commit, v)
-  else:
-    error c, projectFromCurrentDir(), outp
-
-type
-  SingleDep* = object
-    nameOrUrl: string
-    query: VersionInterval
-
-  DepsPerVersion = object
-    v: Version
-    deps: seq[SingleDep]
-    nimVersion: VersionInterval
-    errors: seq[string]
-    hasInstallHooks: bool
-    srcDir: string
-
-proc parseNimbleFile(c: var AtlasContext; nimbleFile: string; v: Version): DepsPerVersion =
-  result = DepsPerVersion(v: v)
-  let nimbleInfo = extractRequiresInfo(c, nimbleFile)
-  result.hasInstallHooks = nimbleInfo.hasInstallHooks
-  for r in nimbleInfo.requires:
-    var i = 0
-    while i < r.len and r[i] notin {'#', '<', '=', '>'} + Whitespace: inc i
-    let pkgName = r.substr(0, i-1)
-    var err = pkgName.len == 0
-    let query = parseVersionInterval(r, i, err)
-    if err:
-      result.errors.add "invalid 'requires' syntax: " & r
-    else:
-      if cmpIgnoreCase(pkgName, "nim") != 0:
-        result.deps.add SingleDep(nameOrUrl: pkgName, query: query)
-      else:
-        result.nimVersion = query
-  result.srcDir = nimbleInfo.srcDir
-
-proc allDeps(c: var AtlasContext; nimbleFile: string): seq[DepsPerVersion] =
-  let cv = nimbleFileVersions(c, nimbleFile)
-  result = @[]
-  try:
-    for commit, v in items cv:
-      let (err, exitCode) = osproc.execCmdEx("git checkout " & commit & " -- " & quoteShell(nimbleFile))
-      if exitCode == 0:
-        result.add parseNimbleFile(c, nimbleFile, v)
-      else:
-        error c, projectFromCurrentDir(), err
-  finally:
-    discard osproc.execCmdEx("git checkout HEAD " & quoteShell(nimbleFile))
 
 proc explore(c: var AtlasContext; nimbleFile: string) =
   echo allDeps(c, nimbleFile)
