@@ -41,24 +41,34 @@ type
   ResolutionAlgorithm* = enum
     MinVer, SemVer, MaxVer
 
-  Dependency* = object
+  SingleDep* = object
+    nameOrUrl*: string
+    query*: VersionQuery
+
+  DepSubnode* = object
+    commit*: Commit
+    deps*: seq[SingleDep]
+    nimVersion*: VersionQuery
+    errors*: seq[string]
+    hasInstallHooks*: bool
+    srcDir*: string
+
+  DepNode* = object
     name*: PackageName
     url*: PackageUrl
-    commit*: string
-    query*: VersionInterval
-    self*: int # position in the graph
-    parents*: seq[int] # why we need this dependency
-    active*: bool
-    hasInstallHooks*: bool
+    dir*: string
+    subs*: seq[DepSubnode]
+    versions*: seq[Commit] # sorted, latest version comes first
+    selected*: int # index to `availableVersions`
     algo*: ResolutionAlgorithm
     status*: CloneStatus
 
   DepGraph* = object
-    nodes*: seq[Dependency]
-    processed*: Table[string, int] # the key is (url / commit)
-    byName*: Table[PackageName, seq[int]]
-    availableVersions*: Table[PackageName, seq[(string, Version)]] # sorted, latest version comes first
-    bestNimVersion*: Version # Nim is a special snowflake
+    nodes*: seq[DepNode]
+    #processed*: Table[string, int]
+    byName*: Table[PackageName, int] #seq[int]]
+    #availableVersions*: Table[PackageName, seq[(string, Version)]] # sorted, latest version comes first
+    #bestNimVersion*: Version # Nim is a special snowflake
 
   Flag* = enum
     KeepCommits
@@ -156,12 +166,12 @@ template projectFromCurrentDir*(): PackageName =
 
 template toDestDir*(p: PackageName): string = p.string
 
-proc dependencyDir*(c: AtlasContext; w: Dependency): string =
+proc dependencyDir*(c: AtlasContext; w: DepNode): string =
   result = c.workspace / w.name.string
   if not dirExists(result):
     result = c.depsDir / w.name.string
 
-proc findNimbleFile*(c: AtlasContext; dep: Dependency): string =
+proc findNimbleFile*(c: AtlasContext; dep: DepNode): string =
   when MockupRun:
     result = TestsDir / dep.name.string & ".nimble"
     doAssert fileExists(result), "file does not exist " & result

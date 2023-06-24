@@ -24,17 +24,17 @@ type
     r: VersionRelation
     v: Version
 
-  VersionInterval* = object
+  VersionQuery* = object
     a: VersionReq
     b: VersionReq
     isInterval: bool
 
-template versionKey*(i: VersionInterval): string = i.a.v.string
+template versionKey*(i: VersionQuery): string = i.a.v.string
 
-proc createQueryEq*(v: Version): VersionInterval =
-  VersionInterval(a: VersionReq(r: verEq, v: v))
+proc createQueryEq*(v: Version): VersionQuery =
+  VersionQuery(a: VersionReq(r: verEq, v: v))
 
-proc extractGeQuery*(i: VersionInterval): Version =
+proc extractGeQuery*(i: VersionQuery): Version =
   if i.a.r in {verGe, verGt, verEq}:
     result = i.a.v
   else:
@@ -135,7 +135,7 @@ proc parseVersion*(s: string; start: int): Version =
   var i = start
   result = parseVer(s, i)
 
-proc parseSuffix(s: string; start: int; result: var VersionInterval; err: var bool) =
+proc parseSuffix(s: string; start: int; result: var VersionQuery; err: var bool) =
   # >= 1.5 & <= 1.8
   #        ^ we are here
   var i = start
@@ -158,22 +158,22 @@ proc parseSuffix(s: string; start: int; result: var VersionInterval; err: var bo
       if i < s.len:
         err = true
 
-proc parseVersionInterval*(s: string; start: int; err: var bool): VersionInterval =
+proc parseVersionInterval*(s: string; start: int; err: var bool): VersionQuery =
   var i = start
   while i < s.len and s[i] in Whitespace: inc i
-  result = VersionInterval(a: VersionReq(r: verAny, v: Version""))
+  result = VersionQuery(a: VersionReq(r: verAny, v: Version""))
   if i < s.len:
     case s[i]
-    of '*': result = VersionInterval(a: VersionReq(r: verAny, v: Version""))
+    of '*': result = VersionQuery(a: VersionReq(r: verAny, v: Version""))
     of '#', '0'..'9':
-      result = VersionInterval(a: VersionReq(r: verEq, v: parseVer(s, i)))
+      result = VersionQuery(a: VersionReq(r: verEq, v: parseVer(s, i)))
       if result.a.v.isHead: result.a.r = verAny
       err = i < s.len
     of '=':
       inc i
       if i < s.len and s[i] == '=': inc i
       while i < s.len and s[i] in Whitespace: inc i
-      result = VersionInterval(a: VersionReq(r: verEq, v: parseVer(s, i)))
+      result = VersionQuery(a: VersionReq(r: verEq, v: parseVer(s, i)))
       err = i < s.len
     of '<':
       inc i
@@ -182,7 +182,7 @@ proc parseVersionInterval*(s: string; start: int; err: var bool): VersionInterva
         r = verLe
         inc i
       while i < s.len and s[i] in Whitespace: inc i
-      result = VersionInterval(a: VersionReq(r: r, v: parseVer(s, i)))
+      result = VersionQuery(a: VersionReq(r: r, v: parseVer(s, i)))
       parseSuffix(s, i, result, err)
     of '>':
       inc i
@@ -191,14 +191,19 @@ proc parseVersionInterval*(s: string; start: int; err: var bool): VersionInterva
         r = verGe
         inc i
       while i < s.len and s[i] in Whitespace: inc i
-      result = VersionInterval(a: VersionReq(r: r, v: parseVer(s, i)))
+      result = VersionQuery(a: VersionReq(r: r, v: parseVer(s, i)))
       parseSuffix(s, i, result, err)
     else:
       err = true
   else:
-    result = VersionInterval(a: VersionReq(r: verAny, v: Version"#head"))
+    result = VersionQuery(a: VersionReq(r: verAny, v: Version"#head"))
 
-proc parseTaggedVersions*(outp: string): seq[(string, Version)] =
+type
+  Commit* = object
+    h*: string
+    v*: Version
+
+proc parseTaggedVersions*(outp: string): seq[Commit] =
   result = @[]
   for line in splitLines(outp):
     if not line.endsWith("^{}"):
@@ -209,10 +214,10 @@ proc parseTaggedVersions*(outp: string): seq[(string, Version)] =
       while i < line.len and line[i] notin Digits: inc i
       let v = parseVersion(line, i)
       if v != Version(""):
-        result.add (line.substr(0, commitEnd-1), v)
-  result.sort proc (a, b: (string, Version)): int =
-    (if a[1] < b[1]: 1
-    elif a[1] == b[1]: 0
+        result.add Commit(h: line.substr(0, commitEnd-1), v: v)
+  result.sort proc (a, b: Commit): int =
+    (if a.v < b.v: 1
+    elif a.v == b.v: 0
     else: -1)
 
 proc matches(pattern: VersionReq; v: Version): bool =
@@ -230,7 +235,7 @@ proc matches(pattern: VersionReq; v: Version): bool =
   of verAny:
     result = true
 
-proc matches*(pattern: VersionInterval; v: Version): bool =
+proc matches*(pattern: VersionQuery; v: Version): bool =
   if pattern.isInterval:
     result = matches(pattern.a, v) and matches(pattern.b, v)
   else:
@@ -239,32 +244,32 @@ proc matches*(pattern: VersionInterval; v: Version): bool =
 const
   MinCommitLen = len("#baca3")
 
-proc extractSpecificCommit*(pattern: VersionInterval): string =
+proc extractSpecificCommit*(pattern: VersionQuery): string =
   if not pattern.isInterval and pattern.a.r == verEq and pattern.a.v.isSpecial and pattern.a.v.string.len >= MinCommitLen:
     result = pattern.a.v.string.substr(1)
   else:
     result = ""
 
-proc matches*(pattern: VersionInterval; x: (string, Version)): bool =
+proc matches*(pattern: VersionQuery; x: Commit): bool =
   if pattern.isInterval:
-    result = matches(pattern.a, x[1]) and matches(pattern.b, x[1])
+    result = matches(pattern.a, x.v) and matches(pattern.b, x.v)
   elif pattern.a.r == verEq and pattern.a.v.isSpecial and pattern.a.v.string.len >= MinCommitLen:
-    result = x[0].startsWith(pattern.a.v.string.substr(1))
+    result = x.h.startsWith(pattern.a.v.string.substr(1))
   else:
-    result = matches(pattern.a, x[1])
+    result = matches(pattern.a, x.v)
 
-proc selectBestCommitMinVer*(data: openArray[(string, Version)]; elem: VersionInterval): string =
+proc selectBestCommitMinVer*(data: openArray[Commit]; elem: VersionQuery): string =
   for i in countdown(data.len-1, 0):
-    if elem.matches(data[i][1]):
-      return data[i][0]
+    if elem.matches(data[i].v):
+      return data[i].h
   return ""
 
-proc selectBestCommitMaxVer*(data: openArray[(string, Version)]; elem: VersionInterval): string =
+proc selectBestCommitMaxVer*(data: openArray[Commit]; elem: VersionQuery): string =
   for i in countup(0, data.len-1):
-    if elem.matches(data[i][1]): return data[i][0]
+    if elem.matches(data[i].v): return data[i].h
   return ""
 
-proc toSemVer*(i: VersionInterval): VersionInterval =
+proc toSemVer*(i: VersionQuery): VersionQuery =
   result = i
   if not result.isInterval and result.a.r in {verGe, verGt}:
     var major = 0
@@ -273,5 +278,5 @@ proc toSemVer*(i: VersionInterval): VersionInterval =
       result.isInterval = true
       result.b = VersionReq(r: verLt, v: Version($(major+1)))
 
-proc selectBestCommitSemVer*(data: openArray[(string, Version)]; elem: VersionInterval): string =
+proc selectBestCommitSemVer*(data: openArray[Commit]; elem: VersionQuery): string =
   result = selectBestCommitMaxVer(data, elem.toSemVer)

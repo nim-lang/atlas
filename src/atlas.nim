@@ -11,8 +11,8 @@
 
 import std / [parseopt, strutils, os, osproc, tables, sets, json, jsonutils,
   hashes, options]
-import context, runners, osutils, packagesjson, sat, gitops, nimenv, lockfiles,
-  traversal, confighandler, nameresolver
+import context, runners, osutils, packagesjson, sat, gitops, nimenv, # lockfiles,
+  traversal, confighandler, nameresolver, patchcfg
 
 export osutils, context
 
@@ -97,131 +97,117 @@ proc tag(c: var AtlasContext; field: Natural) =
   if c.errors == oldErrors:
     tag(c, newTag)
 
-proc generateDepGraph(c: var AtlasContext; g: DepGraph) =
-  proc repr(w: Dependency): string =
-    $(w.url / w.commit)
+when false:
+  proc generateDepGraph(c: var AtlasContext; g: DepGraph) =
+    proc repr(w: Dependency): string =
+      $(w.url / w.commit)
 
-  var dotGraph = ""
+    var dotGraph = ""
+    for i in 0 ..< g.nodes.len:
+      dotGraph.addf("\"$1\" [label=\"$2\"];\n", [g.nodes[i].repr, if g.nodes[i].selected >= 0: "" else: "unused"])
+    for i in 0 ..< g.nodes.len:
+      for p in items g.nodes[i].parents:
+        if p >= 0:
+          dotGraph.addf("\"$1\" -> \"$2\";\n", [g.nodes[p].repr, g.nodes[i].repr])
+    let dotFile = c.currentDir / "deps.dot"
+    writeFile(dotFile, "digraph deps {\n$1}\n" % dotGraph)
+    let graphvizDotPath = findExe("dot")
+    if graphvizDotPath.len == 0:
+      #echo("gendepend: Graphviz's tool dot is required, " &
+      #  "see https://graphviz.org/download for downloading")
+      discard
+    else:
+      discard execShellCmd("dot -Tpng -odeps.png " & quoteShell(dotFile))
+
+proc findSrcDir(c: var AtlasContext): string =
+  for nimbleFile in walkPattern(c.currentDir / "*.nimble"):
+    let nimbleInfo = extractRequiresInfo(c, nimbleFile)
+    return c.currentDir / nimbleInfo.srcDir
+  return c.currentDir
+
+proc activePaths(c: var AtlasContext; g: DepGraph): seq[CfgPath] =
+  result = @[]
   for i in 0 ..< g.nodes.len:
-    dotGraph.addf("\"$1\" [label=\"$2\"];\n", [g.nodes[i].repr, if g.nodes[i].active: "" else: "unused"])
+    let s = g.nodes[i].selected
+    if s >= 0:
+      let x = CfgPath(g.nodes[i].dir / g.nodes[i].subs[s].srcDir)
+      result.add x
+
+proc findBestNimVersion(g: DepGraph): Version =
+  result = Version""
   for i in 0 ..< g.nodes.len:
-    for p in items g.nodes[i].parents:
-      if p >= 0:
-        dotGraph.addf("\"$1\" -> \"$2\";\n", [g.nodes[p].repr, g.nodes[i].repr])
-  let dotFile = c.currentDir / "deps.dot"
-  writeFile(dotFile, "digraph deps {\n$1}\n" % dotGraph)
-  let graphvizDotPath = findExe("dot")
-  if graphvizDotPath.len == 0:
-    #echo("gendepend: Graphviz's tool dot is required, " &
-    #  "see https://graphviz.org/download for downloading")
-    discard
-  else:
-    discard execShellCmd("dot -Tpng -odeps.png " & quoteShell(dotFile))
+    let s = g.nodes[i].selected
+    if s >= 0:
+      let v = extractGeQuery(g.nodes[i].subs[s].nimVersion)
+      if v != Version"" and v > result: result = v
 
 proc afterGraphActions(c: var AtlasContext; g: DepGraph) =
+  let paths = activePaths(c, g)
   patchNimCfg(c, paths, if CfgHere in c.flags: c.currentDir else: findSrcDir(c))
 
-  if ShowGraph in c.flags:
-    generateDepGraph c, g
-  if AutoEnv in c.flags and g.bestNimVersion != Version"":
-    setupNimEnv c, g.bestNimVersion.string
+  when false:
+    if ShowGraph in c.flags:
+      generateDepGraph c, g
+  if AutoEnv in c.flags:
+    let bestNimVersion = findBestNimVersion(g).string
+    if bestNimVersion != "":
+      setupNimEnv c, bestNimVersion
 
-iterator matchingCommits(c: var AtlasContext; g: DepGraph; w: Dependency): (string, string, Version) =
-  let av = g.availableVersions.getOrDefault(w.name)
-  var q = w.query
+iterator matchingCommits(c: var AtlasContext; g: DepGraph; w: DepNode; q: VersionQuery): Commit =
+  var q = q
   if w.algo == SemVer: q = toSemVer(q)
   let commit = extractSpecificCommit(q)
   if commit.len > 0:
     var v = Version("#" & commit)
-    for j in countup(0, av.len-1):
-      if q.matches(av[j]):
-        v = av[j][1]
+    for j in countup(0, w.subs.len-1):
+      if q.matches(w.subs[j].commit):
+        v = w.subs[j].commit.v
         break
-    yield (w.name.string, commit, v)
+    yield Commit(h: commit, v: v)
   elif w.algo == MinVer:
-    for j in countup(0, av.len-1):
-      if q.matches(av[j]):
-        yield (w.name.string, av[j][0], av[j][1])
+    for j in countup(0, w.subs.len-1):
+      if q.matches(w.subs[j].commit):
+        yield w.subs[j].commit
   else:
-    for j in countdown(av.len-1, 0):
-      if q.matches(av[j]):
-        yield (w.name.string, av[j][0], av[j][1])
+    for j in countdown(w.subs.len-1, 0):
+      if q.matches(w.subs[j].commit):
+        yield w.subs[j].commit
 
 const
   FileProtocol = "file"
-  ThisVersion = "current_version.atlas"
 
-proc checkoutCommit(c: var AtlasContext; g: var DepGraph; w: Dependency) =
-  let dir = dependencyDir(c, w)
-  if not dirExists(dir):
-    error c, w.name, "cannot find directory: " & dir
-    return
-  withDir c, dir:
-    if w.commit.len == 0 or cmpIgnoreCase(w.commit, "head") == 0:
-      gitPull(c, w.name)
-    else:
-      let err = isCleanGit(c)
-      if err != "":
-        warn c, w.name, err
+when false:
+  proc checkoutCommit(c: var AtlasContext; g: var DepGraph; w: DepNode) =
+    if not dirExists(w.dir):
+      error c, w.name, "cannot find directory: " & w.dir
+      return
+    if w.selected < 0: return
+    withDir c, w.dir:
+      if w.subs[w.selected].commit.h.len == 0 or cmpIgnoreCase(w.subs[w.selected].commit.h, "head") == 0:
+        gitPull(c, w.name)
       else:
-        for mx in matchingCommits(c, g, w):
-          checkoutGitCommit(c, w.name, mx[1])
-          selectNode c, g, w
-          break
+        let err = isCleanGit(c)
+        if err != "":
+          warn c, w.name, err
+        else:
+          for mx in matchingCommits(c, g, w):
+            checkoutGitCommit(c, w.name, mx.h)
+            break
 
-        when false:
-          let requiredCommit = getRequiredCommit(c, w)
-          let (cc, status) = exec(c, GitCurrentCommit, [])
-          let currentCommit = strutils.strip(cc)
-          if requiredCommit == "" or status != 0:
-            if requiredCommit == "" and w.commit == InvalidCommit:
-              warn c, w.name, "package has no tagged releases"
-            else:
-              warn c, w.name, "cannot find specified version/commit " & w.commit
-          else:
-            if currentCommit != requiredCommit:
-              # checkout the later commit:
-              # git merge-base --is-ancestor <commit> <commit>
-              let (cc, status) = exec(c, GitMergeBase, [currentCommit, requiredCommit])
-              let mergeBase = strutils.strip(cc)
-              if status == 0 and (mergeBase == currentCommit or mergeBase == requiredCommit):
-                # conflict resolution: pick the later commit:
-                if mergeBase == currentCommit:
-                  checkoutGitCommit(c, w.name, requiredCommit)
-                  selectNode c, g, w
-              else:
-                checkoutGitCommit(c, w.name, requiredCommit)
-                selectNode c, g, w
-                when false:
-                  warn c, w.name, "do not know which commit is more recent:",
-                    currentCommit, "(current) or", w.commit, " =", requiredCommit, "(required)"
-
-proc copyFromDisk(c: var AtlasContext; w: Dependency; destDir: string): (CloneStatus, string) =
+proc copyFromDisk(c: var AtlasContext; w: DepNode; destDir: string): (CloneStatus, string) =
   var u = w.url.getFilePath()
   if u.startsWith("./"): u = c.workspace / u.substr(2)
-  let dir = selectDir(u & "@" & w.commit, u)
-  if dirExists(dir):
-    copyDir(dir, destDir)
+  if dirExists(u):
+    copyDir(u, destDir)
     result = (Ok, "")
   else:
-    result = (NotFound, dir)
-  #writeFile destDir / ThisVersion, w.commit
-  #echo "WRITTEN ", destDir / ThisVersion
+    result = (NotFound, u)
 
-proc isLaterCommit(destDir, version: string): bool =
-  let oldVersion = try: readFile(destDir / ThisVersion).strip except: "0.0"
-  if isValidVersion(oldVersion) and isValidVersion(version):
-    result = Version(oldVersion) < Version(version)
-  else:
-    result = true
-
-proc collectAvailableVersions(c: var AtlasContext; g: var DepGraph; w: Dependency) =
-  when MockupRun:
-    # don't cache when doing the MockupRun:
-    g.availableVersions[w.name] = collectTaggedVersions(c)
-  else:
-    if not g.availableVersions.hasKey(w.name):
-      g.availableVersions[w.name] = collectTaggedVersions(c)
+proc computeNodeInfo(c: var AtlasContext; g: var DepGraph; i: int) =
+  let nimbleFile = findNimbleFile(c, g.nodes[i])
+  if nimbleFile.len > 0:
+    g.nodes[i].subs = allDeps(c, nimbleFile)
+  g.nodes[i].versions = collectTaggedVersions(c)
 
 proc toString(x: (string, string, Version)): string =
   "(" & x[0] & ", " & $x[2] & ")"
@@ -233,8 +219,6 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
   b.add newVar(VarId 0)
 
   assert g.nodes.len > 0
-  #assert g.nodes[0].active # this does not have to be true if some
-  # project is listed multiple times in the .nimble file.
   # Implications:
   for i in 0..<g.nodes.len:
     if g.nodes[i].status == NotFound:
@@ -324,79 +308,6 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
         if counter > 0:
           error c, toName(mapping[i - g.nodes.len][0]), $mapping[i - g.nodes.len][2] & " required"
 
-type
-  SingleDep* = object
-    nameOrUrl: string
-    query: VersionInterval
-
-  DepsPerVersion = object
-    v: Version
-    deps: seq[SingleDep]
-    nimVersion: VersionInterval
-    errors: seq[string]
-    hasInstallHooks: bool
-    srcDir: string
-
-proc parseNimbleFile(c: var AtlasContext; nimbleFile: string; v: Version): DepsPerVersion =
-  result = DepsPerVersion(v: v)
-  let nimbleInfo = extractRequiresInfo(c, nimbleFile)
-  result.hasInstallHooks = nimbleInfo.hasInstallHooks
-  for r in nimbleInfo.requires:
-    var i = 0
-    while i < r.len and r[i] notin {'#', '<', '=', '>'} + Whitespace: inc i
-    let pkgName = r.substr(0, i-1)
-    var err = pkgName.len == 0
-    let query = parseVersionInterval(r, i, err)
-    if err:
-      result.errors.add "invalid 'requires' syntax: " & r
-    else:
-      if cmpIgnoreCase(pkgName, "nim") != 0:
-        result.deps.add SingleDep(nameOrUrl: pkgName, query: query)
-      else:
-        result.nimVersion = query
-  result.srcDir = nimbleInfo.srcDir
-
-proc nimbleFileVersions(c: var AtlasContext; nimbleFile: string): seq[(string, Version)] =
-  result = @[]
-  let (outp, exitCode) = silentExec("git log --format=%H", [nimbleFile])
-  if exitCode == 0:
-    for commit in splitLines(outp):
-      let (tag, exitCode) = silentExec("git describe --tags ", [commit])
-      if exitCode == 0:
-        let v = parseVersion(tag, 0)
-        if v != Version(""):
-          if result.len > 0 and result[^1][1].string == v.string:
-            # Ensure we use the earlier commit for when the tags look like
-            # 1.3.0, 1.2.2-6-g0af2c85, 1.2.2
-            # The Karax project uses tags like these, don't ask me why.
-            result[^1][0] = commit
-          else:
-            result.add (commit, v)
-  else:
-    error c, projectFromCurrentDir(), outp
-
-proc allDeps(c: var AtlasContext; nimbleFile: string): seq[DepsPerVersion] =
-  let cv = nimbleFileVersions(c, nimbleFile)
-  result = @[]
-  try:
-    for commit, v in items cv:
-      let (err, exitCode) = osproc.execCmdEx("git checkout " & commit & " -- " & quoteShell(nimbleFile))
-      if exitCode == 0:
-        result.add parseNimbleFile(c, nimbleFile, v)
-      else:
-        error c, projectFromCurrentDir(), err
-  finally:
-    discard osproc.execCmdEx("git checkout HEAD " & quoteShell(nimbleFile))
-
-proc expandGraph(c: var AtlasContext; g: var DepGraph; currentNode: int; deps: seq[DepsPerVersion]) =
-  for dep in deps:
-    for d in dep.deps:
-      let url = resolveUrl(c, d.nameOrUrl)
-      if $url == "":
-        error c, toName(d.nameOrUrl), "cannot resolve package name"
-      else:
-        addUniqueDep(c, g, currentNode, url, d.query)
-
 proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool) =
   var i = 0
   while i < g.nodes.len:
@@ -421,13 +332,11 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool) =
           error c, w.name, err
         else:
           withDir c, destDir:
-            collectAvailableVersions c, g, w
+            computeNodeInfo c, g, i
     else:
       withDir c, dir:
-        collectAvailableVersions c, g, w
+        computeNodeInfo c, g, i
 
-    # assume this is the selected version, it might get overwritten later:
-    selectNode c, g, w
     if oldErrors == c.errors:
       let nimbleFile = findNimbleFile(c, w)
       if nimbleFile != "":
@@ -451,52 +360,6 @@ proc traverse(c: var AtlasContext; start: string; startIsDep: bool) =
   traverseLoop(c, g, startIsDep)
   afterGraphActions c, g
 
-const
-  configPatternBegin = "############# begin Atlas config section ##########\n"
-  configPatternEnd =   "############# end Atlas config section   ##########\n"
-
-proc patchNimCfg(c: var AtlasContext; deps: seq[CfgPath]; cfgPath: string) =
-  var paths = "--noNimblePath\n"
-  for d in deps:
-    let pkgname = toDestDir d.string.PackageName
-    let pkgdir = if dirExists(c.workspace / pkgname): c.workspace / pkgname
-                 else: c.depsDir / pkgName
-    let x = relativePath(pkgdir, cfgPath, '/')
-    paths.add "--path:\"" & x & "\"\n"
-  var cfgContent = configPatternBegin & paths & configPatternEnd
-
-  when MockupRun:
-    assert readFile(TestsDir / "nim.cfg") == cfgContent
-    c.mockupSuccess = true
-  else:
-    let cfg = cfgPath / "nim.cfg"
-    assert cfgPath.len > 0
-    if cfgPath.len > 0 and not dirExists(cfgPath):
-      error(c, c.projectDir.PackageName, "could not write the nim.cfg")
-    elif not fileExists(cfg):
-      writeFile(cfg, cfgContent)
-      info(c, projectFromCurrentDir(), "created: " & cfg.readableFile)
-    else:
-      let content = readFile(cfg)
-      let start = content.find(configPatternBegin)
-      if start >= 0:
-        cfgContent = content.substr(0, start-1) & cfgContent
-        let theEnd = content.find(configPatternEnd, start)
-        if theEnd >= 0:
-          cfgContent.add content.substr(theEnd+len(configPatternEnd))
-      else:
-        cfgContent = content & "\n" & cfgContent
-      if cfgContent != content:
-        # do not touch the file if nothing changed
-        # (preserves the file date information):
-        writeFile(cfg, cfgContent)
-        info(c, projectFromCurrentDir(), "updated: " & cfg.readableFile)
-
-proc findSrcDir(c: var AtlasContext): string =
-  for nimbleFile in walkPattern(c.currentDir / "*.nimble"):
-    let nimbleInfo = extractRequiresInfo(c, nimbleFile)
-    return c.currentDir / nimbleInfo.srcDir
-  return c.currentDir
 
 proc installDependencies(c: var AtlasContext; nimbleFile: string; startIsDep: bool) =
   # 1. find .nimble file in CWD

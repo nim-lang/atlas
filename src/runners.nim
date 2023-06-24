@@ -87,11 +87,12 @@ proc runNimScriptBuilder*(c: var AtlasContext; p: (string, string); name: Packag
 proc runBuildSteps*(c: var AtlasContext; g: var DepGraph) =
   # `countdown` suffices to give us some kind of topological sort:
   for i in countdown(g.nodes.len-1, 0):
-    if g.nodes[i].active:
+    let sel = g.nodes[i].selected
+    if sel >= 0:
       let destDir = toDestDir(g.nodes[i].name)
       let dir = selectDir(c.workspace / destDir, c.depsDir / destDir)
       tryWithDir dir:
-        if g.nodes[i].hasInstallHooks:
+        if g.nodes[i].subs[sel].hasInstallHooks:
           let nf = findNimbleFile(c, g.nodes[i])
           if nf.len > 0:
             runNimScriptInstallHook c, nf, g.nodes[i].name

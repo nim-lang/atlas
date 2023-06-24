@@ -78,28 +78,30 @@ proc getLastTaggedCommit*(c: var AtlasContext): string =
     if lastTag.len != 0:
       result = lastTag
 
-proc collectTaggedVersions*(c: var AtlasContext): seq[(string, Version)] =
+proc collectTaggedVersions*(c: var AtlasContext): seq[Commit] =
   let (outp, status) = exec(c, GitTags, [])
   if status == 0:
     result = parseTaggedVersions(outp)
   else:
     result = @[]
 
-proc versionToCommit*(c: var AtlasContext; d: Dependency): string =
-  let allVersions = collectTaggedVersions(c)
-  case d.algo
-  of MinVer:
-    result = selectBestCommitMinVer(allVersions, d.query)
-  of SemVer:
-    result = selectBestCommitSemVer(allVersions, d.query)
-  of MaxVer:
-    result = selectBestCommitMaxVer(allVersions, d.query)
+when false:
+  proc versionToCommit*(c: var AtlasContext; d: DepNode): string =
+    let allVersions = collectTaggedVersions(c)
+    case d.algo
+    of MinVer:
+      result = selectBestCommitMinVer(allVersions, d.query)
+    of SemVer:
+      result = selectBestCommitSemVer(allVersions, d.query)
+    of MaxVer:
+      result = selectBestCommitMaxVer(allVersions, d.query)
 
 proc shortToCommit*(c: var AtlasContext; short: string): string =
   let (cc, status) = exec(c, GitRevParse, [short])
   result = if status == 0: strutils.strip(cc) else: ""
 
 proc checkoutGitCommit*(c: var AtlasContext; p: PackageName; commit: string) =
+  let commit = if commit.startsWith('#'): commit else: ("#" & commit)
   let (_, status) = exec(c, GitCheckout, [commit])
   if status != 0:
     error(c, p, "could not checkout commit " & commit)
@@ -161,10 +163,11 @@ proc needsCommitLookup*(commit: string): bool {.inline.} =
 proc isShortCommitHash*(commit: string): bool {.inline.} =
   commit.len >= 4 and commit.len < 40
 
-proc getRequiredCommit*(c: var AtlasContext; w: Dependency): string =
-  if needsCommitLookup(w.commit): versionToCommit(c, w)
-  elif isShortCommitHash(w.commit): shortToCommit(c, w.commit)
-  else: w.commit
+when false:
+  proc getRequiredCommit*(c: var AtlasContext; w: Dependency): string =
+    if needsCommitLookup(w.commit): versionToCommit(c, w)
+    elif isShortCommitHash(w.commit): shortToCommit(c, w.commit)
+    else: w.commit
 
 proc getRemoteUrl*(): PackageUrl =
   execProcess("git config --get remote.origin.url").strip().getUrl()
