@@ -124,6 +124,29 @@ proc compareVersion(c: var AtlasContext; key, wanted, got: string) =
     warn c, toName(key), "environment mismatch: " &
       " versions differ: previously used: " & wanted & " but now at: " & got
 
+proc convertNimbleLock*(c: var AtlasContext; nimblePath, lockFilePath: string) =
+  let jsonAsStr = readFile(nimblePath)
+  let jsonTree = parseJson(jsonAsStr)
+
+  if jsonTree.getOrDefault("version") == nil or
+      "packages" notin jsonTree:
+    error c, toName(nimblePath), "invalid nimble lockfile"
+    return
+
+  var lf = newLockFile()
+
+  for (name, pkg) in jsonTree["packages"].pairs:
+    echo "name: ", name, " pkg: ", pkg
+    let dir = c.depsDir / name
+    lf.items[name] = LockFileEntry(
+      dir: dir,
+      url: pkg["url"].getStr,
+      commit: pkg["vcsRevision"].getStr,
+    )
+
+  write lf, lockFilePath
+
+
 proc replay*(c: var AtlasContext; lockFilePath: string) =
   let lf = readLockFile(lockFilePath)
   let base = splitPath(lockFilePath).head

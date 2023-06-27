@@ -19,6 +19,7 @@ export osutils, context
 const
   AtlasVersion = "0.6.0"
   LockFileName = "atlas.lock"
+  NimbleLockFileName = "nimble.lock"
   Usage = "atlas - Nim Package Cloner Version " & AtlasVersion & """
 
   (c) 2021 Andreas Rumpf
@@ -627,6 +628,11 @@ proc main(c: var AtlasContext) =
   of "rep":
     optSingleArg(LockFileName)
     replay c, args[0]
+  of "convert":
+    if args.len < 1:
+      fatal "convert command takes a nimble lockfile argument"
+    let lfn = if args.len == 1: LockFileName else: args[1]
+    convertNimbleLock c, args[0], lfn
   of "install":
     projectCmd()
     if args.len > 1:
