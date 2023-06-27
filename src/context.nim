@@ -121,7 +121,7 @@ proc writeMessage(c: var AtlasContext; k: MsgKind; p: PackageName; arg: string) 
     message(c, $k, p, arg)
   else:
     var pn = p.string
-    if pn.isRelativeTo(c.workspace) and pn != p.string:
+    if pn != p.string:
       pn = pn.readableFile()
     let color = case k
                 of Info: fgGreen
