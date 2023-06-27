@@ -601,7 +601,7 @@ proc main(c: var AtlasContext) =
       elif autoinit:
         c.workspace = autoWorkspace(c.currentDir)
         createWorkspaceIn c.workspace, c.depsDir
-      elif action notin ["search", "list"]:
+      elif action notin ["search", "list", "tag"]:
         fatal "No workspace found. Run `atlas init` if you want this current directory to be your workspace."
 
   when MockupRun:
