@@ -49,7 +49,9 @@ Command:
                         ['major'|'minor'|'patch'] or a SemVer tag like ['1.0.3']
                         or a letter ['a'..'z']: a.b.c.d.e.f.g
   pin [atlas.lock]      pin the current checkouts and store them in the lock
-  rep [atlas.lock]      replay the state of the projects according to the lock
+  replay [atlas.lock]   replay the state of the projects according to the lock
+  convert <nimble.lock> [atlas.lock]
+                        convert Nimble lockfile into an Atlas one
   outdated              list the packages that are outdated
   build|test|doc|tasks  currently delegates to `nimble build|test|doc`
   task <taskname>       currently delegates to `nimble <taskname>`
