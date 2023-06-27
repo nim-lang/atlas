@@ -17,7 +17,7 @@ import context, runners, osutils, packagesjson, sat, gitops, nimenv, lockfiles,
 export osutils, context
 
 const
-  AtlasVersion = "0.6.0"
+  AtlasVersion = "0.6.2"
   LockFileName = "atlas.lock"
   Usage = "atlas - Nim Package Cloner Version " & AtlasVersion & """
 
