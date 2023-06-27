@@ -632,7 +632,7 @@ proc main(c: var AtlasContext) =
     if args.len < 1:
       fatal "convert command takes a nimble lockfile argument"
     let lfn = if args.len == 1: LockFileName else: args[1]
-    convertNimbleLock c, args[0], lfn
+    convertAndSaveNimbleLock c, args[0], lfn
   of "install":
     projectCmd()
     if args.len > 1:
