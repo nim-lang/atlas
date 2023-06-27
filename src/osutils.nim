@@ -81,7 +81,11 @@ proc cloneUrl*(url: PackageUrl, dest: string; cloneUsingHttps: bool): (CloneStat
   else:
     result = (NotFound, "Unable to identify url: " & $modUrl)
 
-proc readableFile*(s: string): string = relativePath(s, getCurrentDir())
+proc readableFile*(s: string): string =
+  if s.isRelativeTo(getCurrentDir()):
+    relativePath(s, getCurrentDir())
+  else:
+    s
 
 proc selectDir*(a, b: string): string = (if dirExists(a): a else: b)
 

@@ -75,6 +75,7 @@ Options:
   --list                list all available and installed versions
   --version             show the version
   --help                show this help
+  --global              show this help
 """
 
 proc writeHelp() =
@@ -488,10 +489,12 @@ proc autoWorkspace(currentDir: string): string =
   while result.len > 0 and dirExists(result / ".git"):
     result = result.parentDir()
 
-proc createWorkspaceIn(workspace, depsDir: string) =
-  if not fileExists(workspace / AtlasWorkspace):
-    writeFile workspace / AtlasWorkspace, "deps=\"$#\"\nresolver=\"MaxVer\"\n" % escape(depsDir, "", "")
-  createDir absoluteDepsDir(workspace, depsDir)
+proc createWorkspaceIn(c: var AtlasContext) =
+  if not fileExists(c.workspace / AtlasWorkspace):
+    writeFile c.workspace / AtlasWorkspace, "deps=\"$#\"\nresolver=\"MaxVer\"\n" % escape(c.depsDir, "", "")
+    info c, toName(c.workspace), "created workspace file"
+  createDir absoluteDepsDir(c.workspace, c.depsDir)
+  info c, toName(c.workspace), "created deps dir"
 
 proc listOutdated(c: var AtlasContext; dir: string) =
   var updateable = 0
@@ -548,13 +551,13 @@ proc main(c: var AtlasContext) =
       of "workspace":
         if val == ".":
           c.workspace = getCurrentDir()
-          createWorkspaceIn c.workspace, c.depsDir
+          createWorkspaceIn c
         elif val.len > 0:
           c.workspace = val
           if not explicitProjectOverride:
             c.currentDir = val
           createDir(val)
-          createWorkspaceIn c.workspace, c.depsDir
+          createWorkspaceIn c
         else:
           writeHelp()
       of "project":
@@ -576,6 +579,7 @@ proc main(c: var AtlasContext) =
       of "autoenv": c.flags.incl AutoEnv
       of "noexec": c.flags.incl NoExec
       of "list": c.flags.incl ListVersions
+      of "global", "g": c.flags.incl GlobalWorkspace
       of "colors":
         case val.normalize
         of "off": c.flags.incl NoColors
@@ -595,13 +599,16 @@ proc main(c: var AtlasContext) =
     when MockupRun:
       c.workspace = autoWorkspace(c.currentDir)
     else:
-      c.workspace = detectWorkspace(c.currentDir)
+      if GlobalWorkspace in c.flags:
+        c.workspace = detectWorkspace(getHomeDir() / ".atlas")
+      else:
+        c.workspace = detectWorkspace(c.currentDir)
       if c.workspace.len > 0:
         readConfig c
         infoNow c, toName(c.workspace.readableFile), "is the current workspace"
       elif autoinit:
         c.workspace = autoWorkspace(c.currentDir)
-        createWorkspaceIn c.workspace, c.depsDir
+        createWorkspaceIn c
       elif action notin ["search", "list"]:
         fatal "No workspace found. Run `atlas init` if you want this current directory to be your workspace."
 
@@ -615,8 +622,13 @@ proc main(c: var AtlasContext) =
   of "":
     fatal "No action."
   of "init":
-    c.workspace = getCurrentDir()
-    createWorkspaceIn c.workspace, c.depsDir
+    if GlobalWorkspace in c.flags:
+      c.workspace = getHomeDir() / ".atlas"
+      echo "GlobalWorkspace:dir: ", c.workspace
+      createDir(c.workspace)
+    else:
+      c.workspace = getCurrentDir()
+    createWorkspaceIn c
   of "clone", "update":
     singleArg()
     let deps = traverse(c, args[0], startIsDep = false)

@@ -70,6 +70,7 @@ type
     AutoEnv
     NoExec
     ListVersions
+    GlobalWorkspace
 
   MsgKind = enum
     Info = "[Info] ",
@@ -119,7 +120,9 @@ proc writeMessage(c: var AtlasContext; k: MsgKind; p: PackageName; arg: string) 
   if NoColors in c.flags:
     message(c, $k, p, arg)
   else:
-    let pn = p.string.relativePath(c.workspace)
+    var pn = p.string
+    if pn.isRelativeTo(c.workspace) and pn != p.string:
+      pn = pn.readableFile()
     let color = case k
                 of Info: fgGreen
                 of Warning: fgYellow
