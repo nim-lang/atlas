@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import context, sat, gitops, osutils
+import context, sat, gitops, osutils, nameresolver
 
 iterator matchingCommits(c: var AtlasContext; g: DepGraph; w: DepNode; q: VersionQuery): Commit =
   var q = q
@@ -31,6 +31,11 @@ iterator matchingCommits(c: var AtlasContext; g: DepGraph; w: DepNode; q: Versio
 proc toString(x: (string, string, Version)): string =
   "(" & x[0] & ", " & $x[2] & ")"
 
+proc findDeps(n: DepNode; v: Version): int =
+  for j in 0 ..< n.subs.len:
+    if n.subs[j].commit.v == v: return j
+  return -1
+
 proc toGraph(c: var AtlasContext; g: DepGraph; b: var sat.Builder) =
   var urlToIndex = initTable[string, int]()
   for i in 0 ..< g.nodes.len:
@@ -39,35 +44,41 @@ proc toGraph(c: var AtlasContext; g: DepGraph; b: var sat.Builder) =
       let key = $g.nodes[i].url & "/" & g.nodes[i].versions[j].h
       urlToIndex[key] = thisNode
 
-  for i in 0 ..< g.nodes.len:
-    for j in 0 ..< g.nodes[i].subs.len:
-      let thisNode = i * g.nodes.len + j
-      for d in 0 ..< g.nodes[i].subs[j].deps.len:
-        let dep {.cursor.} = g.nodes[i].subs[j].deps[j]
-        let url = resolveUrl(c, dep.nameOrUrl)
+    urlToIndex[$g.nodes[i].url] = i+1
 
-        if $url == "":
-          discard "no error, instead avoid this dependency"
-          #error c, toName(dep.nameOrUrl), "cannot resolve package name"
-        else:
-          let bpos = rememberPos(b)
-          # A -> (exactly one of: A1, A2, A3)
-          b.openOpr(OrForm)
-          b.openOpr(NotForm)
-          b.add newVar(VarId thisNode)
-          b.closeOpr
-          b.openOpr(ExactlyOneOfForm)
-          var counter = 0
-          for mx in matchingCommits(c, g, g.nodes[depIdx], dep.query):
-            let key = $url & "/" & mx.h
-            let val = urlToIndex.getOrDefault(key)
-            if val > 0:
-              b.add newVar(VarId(val - 1))
-              inc counter
-          b.closeOpr # ExactlyOneOfForm
-          b.closeOpr # OrForm
-          if counter == 0:
-            b.rewind bpos
+  for i in 0 ..< g.nodes.len:
+    for j in 0 ..< g.nodes[i].versions.len:
+      let thisNode = (i * g.nodes.len + j) + 1
+      let jj = findDeps(g.nodes[i], g.nodes[i].versions[j].v)
+      if jj >= 0:
+        for d in 0 ..< g.nodes[i].subs[jj].deps.len:
+          let dep {.cursor.} = g.nodes[i].subs[j].deps[d]
+          let url = resolveUrl(c, dep.nameOrUrl)
+
+          if $url == "":
+            discard "no error, instead avoid this dependency"
+            #error c, toName(dep.nameOrUrl), "cannot resolve package name"
+          else:
+            let bpos = rememberPos(b)
+            # A -> (exactly one of: A1, A2, A3)
+            b.openOpr(OrForm)
+            b.openOpr(NotForm)
+            b.add newVar(VarId thisNode)
+            b.closeOpr
+            b.openOpr(ExactlyOneOfForm)
+            var counter = 0
+            let depIdx = urlToIndex.getOrDefault($dep.url)
+            assert depIdx > 0
+            for mx in matchingCommits(c, g, g.nodes[depIdx-1], dep.query):
+              let key = $url & "/" & mx.h
+              let val = urlToIndex.getOrDefault(key)
+              if val > 0:
+                b.add newVar(VarId(val - 1))
+                inc counter
+            b.closeOpr # ExactlyOneOfForm
+            b.closeOpr # OrForm
+            if counter == 0:
+              b.rewind bpos
 
 proc toFormular(c: var AtlasContext; g: var DepGraph): Formular =
   var b = sat.Builder()
@@ -77,7 +88,7 @@ proc toFormular(c: var AtlasContext; g: var DepGraph): Formular =
   result = toForm(b)
 
 proc resolve*(c: var AtlasContext; g: var DepGraph) =
-  let f = toForm(b)
+  let f = toFormular(b)
   var s = newSeq[BindingKind](idgen)
   when false:
     let L = g.nodes.len
