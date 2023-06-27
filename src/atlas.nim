@@ -469,11 +469,19 @@ proc patchNimbleFile(c: var AtlasContext; dep: string): string =
       info(c, toName(thisProject), "up to date: " & result.readableFile)
 
 proc detectWorkspace(currentDir: string): string =
+  ## find workspace by checking `currentDir` and its parents
+  ## 
+  ## failing that it will subdirs of the `currentDir`
+  ## 
   result = currentDir
   while result.len > 0:
     if fileExists(result / AtlasWorkspace):
       return result
     result = result.parentDir()
+  # alternatively check for "sub-directory" workspace
+  for kind, file in walkDir(currentDir):
+    if kind == pcDir and fileExists(file / AtlasWorkspace):
+      result = file
 
 proc autoWorkspace(currentDir: string): string =
   result = currentDir
@@ -630,13 +638,15 @@ proc main(c: var AtlasContext) =
   of "rep", "replay":
     optSingleArg(LockFileName)
     replay c, args[0]
+    # if CfgHere in c.flags:
+    #   patchNimCfg(c, paths, c.currentDir)
   of "convert":
     if args.len < 1:
       fatal "convert command takes a nimble lockfile argument"
     let lfn = if args.len == 1: LockFileName else: args[1]
     convertAndSaveNimbleLock c, args[0], lfn
   of "install":
-    projectCmd()
+    # projectCmd()
     if args.len > 1:
       fatal "install command takes a single argument"
     var nimbleFile = ""
