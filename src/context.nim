@@ -120,9 +120,7 @@ proc writeMessage(c: var AtlasContext; k: MsgKind; p: PackageName; arg: string) 
   if NoColors in c.flags:
     message(c, $k, p, arg)
   else:
-    var pn = p.string
-    if pn != p.string:
-      pn = pn.readableFile()
+    var pn = p.string.relativePath(c.workspace)
     let color = case k
                 of Info: fgGreen
                 of Warning: fgYellow
