@@ -11,8 +11,8 @@
 
 import std / [parseopt, strutils, os, osproc, tables, sets, json, jsonutils,
   hashes, options]
-import context, runners, osutils, packagesjson, sat, gitops, nimenv, # lockfiles,
-  traversal, confighandler, nameresolver, patchcfg
+import context, runners, osutils, packagesjson, gitops, nimenv, # lockfiles,
+  traversal, confighandler, nameresolver, patchcfg, resolver
 
 export osutils, context
 
@@ -153,26 +153,6 @@ proc afterGraphActions(c: var AtlasContext; g: DepGraph) =
     if bestNimVersion != "":
       setupNimEnv c, bestNimVersion
 
-iterator matchingCommits(c: var AtlasContext; g: DepGraph; w: DepNode; q: VersionQuery): Commit =
-  var q = q
-  if w.algo == SemVer: q = toSemVer(q)
-  let commit = extractSpecificCommit(q)
-  if commit.len > 0:
-    var v = Version("#" & commit)
-    for j in countup(0, w.subs.len-1):
-      if q.matches(w.subs[j].commit):
-        v = w.subs[j].commit.v
-        break
-    yield Commit(h: commit, v: v)
-  elif w.algo == MinVer:
-    for j in countup(0, w.subs.len-1):
-      if q.matches(w.subs[j].commit):
-        yield w.subs[j].commit
-  else:
-    for j in countdown(w.subs.len-1, 0):
-      if q.matches(w.subs[j].commit):
-        yield w.subs[j].commit
-
 const
   FileProtocol = "file"
 
@@ -208,105 +188,6 @@ proc computeNodeInfo(c: var AtlasContext; g: var DepGraph; i: int) =
   if nimbleFile.len > 0:
     g.nodes[i].subs = allDeps(c, nimbleFile)
   g.nodes[i].versions = collectTaggedVersions(c)
-
-proc toString(x: (string, string, Version)): string =
-  "(" & x[0] & ", " & $x[2] & ")"
-
-proc resolve(c: var AtlasContext; g: var DepGraph) =
-  var b = sat.Builder()
-  b.openOpr(AndForm)
-  # Root must true:
-  b.add newVar(VarId 0)
-
-  assert g.nodes.len > 0
-  # Implications:
-  for i in 0..<g.nodes.len:
-    if g.nodes[i].status == NotFound:
-      # dependency produced an error and so cannot be 'true':
-      b.openOpr(NotForm)
-      b.add newVar(VarId i)
-      b.closeOpr
-    else:
-      for j in g.nodes[i].parents:
-        # "parent has a dependency on x" is translated to:
-        # "parent implies x" which is "not parent or x"
-        if j >= 0:
-          b.openOpr(OrForm)
-          b.openOpr(NotForm)
-          b.add newVar(VarId j)
-          b.closeOpr
-          b.add newVar(VarId i)
-          b.closeOpr
-
-  var idgen = 0
-  var mapping: seq[(string, string, Version)] = @[]
-  # Version selection:
-  for i in 0..<g.nodes.len:
-    let bpos = rememberPos(b)
-    # A -> (exactly one of: A1, A2, A3)
-    b.openOpr(OrForm)
-    b.openOpr(NotForm)
-    b.add newVar(VarId i)
-    b.closeOpr
-    b.openOpr(ExactlyOneOfForm)
-    let oldIdgen = idgen
-    for mx in matchingCommits(c, g, g.nodes[i]):
-      mapping.add mx
-      b.add newVar(VarId(idgen + g.nodes.len))
-      inc idgen
-    b.closeOpr # ExactlyOneOfForm
-    b.closeOpr # OrForm
-    if idgen == oldIdgen:
-      b.rewind bpos
-  b.closeOpr
-  let f = toForm(b)
-  var s = newSeq[BindingKind](idgen)
-  when false:
-    let L = g.nodes.len
-    var nodes = newSeq[string]()
-    for i in 0..<L: nodes.add g.nodes[i].name.string
-    echo f$(proc (buf: var string; i: int) =
-      if i < L:
-        buf.add nodes[i]
-      else:
-        buf.add $mapping[i - L])
-  if satisfiable(f, s):
-    for i in g.nodes.len..<s.len:
-      if s[i] == setToTrue:
-        let destDir = mapping[i - g.nodes.len][0]
-        let dir = selectDir(c.workspace / destDir, c.depsDir / destDir)
-        withDir c, dir:
-          checkoutGitCommit(c, toName(destDir), mapping[i - g.nodes.len][1])
-    if NoExec notin c.flags:
-      runBuildSteps(c, g)
-      #echo f
-    if ListVersions in c.flags:
-      echo "selected:"
-      let L = g.nodes.len
-      var nodes = newSeq[string]()
-      for i in 0..<L: nodes.add g.nodes[i].name.string
-      echo f$(proc (buf: var string; i: int) =
-        if i < L:
-          buf.add nodes[i]
-        else:
-          buf.add $mapping[i - L])
-      for i in g.nodes.len..<s.len:
-        if s[i] == setToTrue:
-          echo "[x] ", toString mapping[i - g.nodes.len]
-        else:
-          echo "[ ] ", toString mapping[i - g.nodes.len]
-      echo "end of selection"
-  else:
-    error c, toName(c.workspace), "version conflict; for more information use --showGraph"
-    var usedVersions = initCountTable[string]()
-    for i in g.nodes.len..<s.len:
-      if s[i] == setToTrue:
-        usedVersions.inc mapping[i - g.nodes.len][0]
-    for i in g.nodes.len..<s.len:
-      if s[i] == setToTrue:
-        let counter = usedVersions.getOrDefault(mapping[i - g.nodes.len][0])
-        if counter > 0:
-          error c, toName(mapping[i - g.nodes.len][0]), $mapping[i - g.nodes.len][2] & " required"
 
 proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool) =
   var i = 0
