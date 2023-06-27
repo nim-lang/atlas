@@ -137,7 +137,7 @@ proc convertNimbleLock*(c: var AtlasContext; nimblePath: string): LockFile =
 
   result = newLockFile()
   for (name, pkg) in jsonTree["packages"].pairs:
-    echo "name: ", name, " pkg: ", pkg
+    info c, toName(name), " imported "
     let dir = c.depsDir / name
     result.items[name] = LockFileEntry(
       dir: dir,
