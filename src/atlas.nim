@@ -628,6 +628,9 @@ proc main(c: var AtlasContext) =
   of "rep":
     optSingleArg(LockFileName)
     replay c, args[0]
+  of "replay":
+    optSingleArg(LockFileName)
+    replay c, args[0]
   of "convert":
     if args.len < 1:
       fatal "convert command takes a nimble lockfile argument"
