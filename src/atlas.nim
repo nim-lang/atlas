@@ -625,10 +625,7 @@ proc main(c: var AtlasContext) =
       pinWorkspace c, args[0]
     else:
       pinProject c, args[0]
-  of "rep":
-    optSingleArg(LockFileName)
-    replay c, args[0]
-  of "replay":
+  of "rep", "replay":
     optSingleArg(LockFileName)
     replay c, args[0]
   of "convert":
