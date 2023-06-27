@@ -151,12 +151,22 @@ proc convertAndSaveNimbleLock*(c: var AtlasContext; nimblePath, lockFilePath: st
   write lf, lockFilePath
 
 proc replay*(c: var AtlasContext; lockFilePath: string) =
-  let lf = readLockFile(lockFilePath)
+  ## replays the given lockfile by cloning and updating all the deps
+  ## 
+  ## this also includes updating the nim.cfg and nimble file as well
+  ## if they're included in the lockfile
+  ## 
+  let lf = if lockFilePath == "nimble.lock": convertNimbleLock(c, lockFilePath)
+           else: readLockFile(lockFilePath)
+
   let base = splitPath(lockFilePath).head
+  # update the nim.cfg file
   if lf.nimcfg.len > 0:
     writeFile(base / NimCfg, lf.nimcfg)
+  # update the nimble file
   if lf.nimbleFile.filename.len > 0:
     writeFile(base / lf.nimbleFile.filename, lf.nimbleFile.content)
+  # update the the dependencies
   for _, v in pairs(lf.items):
     let dir = base / v.dir
     if not dirExists(dir):

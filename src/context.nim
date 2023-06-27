@@ -119,11 +119,12 @@ proc writeMessage(c: var AtlasContext; k: MsgKind; p: PackageName; arg: string) 
   if NoColors in c.flags:
     message(c, $k, p, arg)
   else:
+    let pn = p.string.relativePath(c.workspace)
     let color = case k
                 of Info: fgGreen
                 of Warning: fgYellow
                 of Error: fgRed
-    stdout.styledWriteLine(color, styleBright, $k, resetStyle, fgCyan, "(", p.string, ")", resetStyle, " ", arg)
+    stdout.styledWriteLine(color, styleBright, $k, resetStyle, fgCyan, "(", pn, ")", resetStyle, " ", arg)
 
 proc writePendingMessages*(c: var AtlasContext) =
   for i in 0..<c.messages.len:

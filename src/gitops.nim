@@ -104,7 +104,7 @@ proc checkoutGitCommit*(c: var AtlasContext; p: PackageName; commit: string) =
   if status != 0:
     error(c, p, "could not checkout commit " & commit)
   else:
-    info(c, p, "updated package " & commit)
+    info(c, p, "updated package to " & commit)
 
 proc gitPull*(c: var AtlasContext; p: PackageName) =
   let (_, status) = exec(c, GitPull, [])
