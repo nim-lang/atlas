@@ -18,6 +18,7 @@ proc cloneUrl*(c: var AtlasContext;
   when MockupRun:
     result = (Ok, "")
   else:
+    echo "CLONE TO: ", dest, " <= ", url
     result = osutils.cloneUrl(url, dest, cloneUsingHttps)
     when ProduceTest:
       echo "cloned ", url, " into ", dest

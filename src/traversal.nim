@@ -30,13 +30,14 @@ proc addUnique*[T](s: var seq[T]; elem: sink T) =
   if not s.contains(elem): s.add elem
 
 proc addUniqueDep(c: var AtlasContext; g: var DepGraph; parent: int;
-                  pkg: PackageUrl; query: VersionInterval) =
+                  pkgName: PackageName, pkgUrl: PackageUrl;
+                  query: VersionInterval) =
   let commit = versionKey(query)
   let oldErrors = c.errors
-  let url = pkg
-  let name = pkg.toName
+  let url = pkgUrl
+  let name = pkgName
   if oldErrors != c.errors:
-    warn c, toName(pkg), "cannot resolve package name"
+    warn c, pkgName, "cannot resolve package name"
   else:
     let key = url / commit
     if g.processed.hasKey($key):
@@ -71,15 +72,17 @@ proc collectDeps*(c: var AtlasContext; g: var DepGraph; parent: int;
   for r in nimbleInfo.requires:
     var i = 0
     while i < r.len and r[i] notin {'#', '<', '=', '>'} + Whitespace: inc i
-    let pkgName = r.substr(0, i-1)
-    var err = pkgName.len == 0
-    let pkgUrl = c.resolveUrl(pkgName)
+    let name = r.substr(0, i-1)
+    let pkgName = if name.isUrl(): name.toName() else: PackageName(name)
+    echo "collectDeps:pkgName: ", pkgName.string
+    var err = pkgName.string.len == 0
+    let pkgUrl = c.resolveUrl(pkgName.string)
     let query = parseVersionInterval(r, i, err)
     if err:
       error c, toName(nimbleFile), "invalid 'requires' syntax: " & r
     else:
-      if cmpIgnoreCase(pkgName, "nim") != 0:
-        c.addUniqueDep g, parent, pkgUrl, query
+      if cmpIgnoreCase(pkgName.string, "nim") != 0:
+        c.addUniqueDep g, parent, pkgName, pkgUrl, query
       else:
         rememberNimVersion g, query
   result = CfgPath(toDestDir(dep.name) / nimbleInfo.srcDir)

@@ -422,6 +422,7 @@ proc installDependencies(c: var AtlasContext; nimbleFile: string; startIsDep: bo
   let (_, pkgname, _) = splitFile(nimbleFile)
   let dep = Dependency(name: toName(pkgname), url: getUrl "", commit: "", self: 0,
                        algo: c.defaultAlgo)
+  echo "DEPS:pkgname: ", pkgname
   g.byName.mgetOrPut(toName(pkgname), @[]).add 0
   discard collectDeps(c, g, -1, dep, nimbleFile)
   let paths = traverseLoop(c, g, startIsDep)
