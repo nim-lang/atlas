@@ -81,7 +81,7 @@ type
     projectDir*, workspace*, depsDir*, currentDir*: string
     hasPackageList*: bool
     flags*: set[Flag]
-    p*: Table[string, string] # name -> url mapping
+    urlMapping*: Table[string, string] # name -> url mapping
     errors*, warnings*: int
     messages: seq[(MsgKind, PackageName, string)] # delayed output
     overrides*: Patterns

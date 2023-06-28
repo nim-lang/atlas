@@ -41,10 +41,12 @@ proc fillPackageLookupTable(c: var AtlasContext) =
         updatePackages(c)
     let plist = getPackages(when MockupRun: TestsDir else: c.workspace)
     for entry in plist:
-      c.p[unicode.toLower entry.name] = entry.url
+      c.urlMapping[unicode.toLower entry.name] = entry.url
 
 proc resolveUrl*(c: var AtlasContext; p: string): PackageUrl =
   proc lookup(c: var AtlasContext; p: string): string =
+    fillPackageLookupTable(c)
+
     if p.isUrl:
       if UsesOverrides in c.flags:
         result = c.overrides.substitute(p)
@@ -56,8 +58,7 @@ proc resolveUrl*(c: var AtlasContext; p: string): PackageUrl =
         result = c.overrides.substitute(p)
         if result.len > 0: return result
 
-      fillPackageLookupTable(c)
-      result = c.p.getOrDefault(unicode.toLower p)
+      result = c.urlMapping.getOrDefault(unicode.toLower p)
 
       if result.len == 0:
         result = getUrlFromGithub(p)
