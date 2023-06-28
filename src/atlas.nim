@@ -661,8 +661,6 @@ proc main(c: var AtlasContext) =
   of "rep", "replay":
     optSingleArg(LockFileName)
     replay c, args[0]
-    if CfgHere in c.flags:
-      patchNimCfg(c, paths, c.currentDir)
   of "convert":
     if args.len < 1:
       fatal "convert command takes a nimble lockfile argument"
