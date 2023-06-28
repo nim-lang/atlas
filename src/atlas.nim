@@ -356,11 +356,11 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
 
 proc traverse(c: var AtlasContext; start: string; startIsDep: bool): seq[CfgPath] =
   # returns the list of paths for the nim.cfg file.
-  let url = resolveUrl(c, start)
+  let (start, url) = resolveUrl(c, start)
   var g = createGraph(c, start, url)
 
   if $url == "":
-    error c, toName(start), "cannot resolve package name"
+    error c, start, "cannot resolve package name"
     return
 
   c.projectDir = c.workspace / toDestDir(g.nodes[0].name)

@@ -11,13 +11,13 @@
 import std / [strutils, os]
 import context, osutils, gitops, nameresolver
 
-proc createGraph*(c: var AtlasContext; start: string, url: PackageUrl): DepGraph =
-  result = DepGraph(nodes: @[Dependency(name: toName(start),
+proc createGraph*(c: var AtlasContext; start: PackageName, url: PackageUrl): DepGraph =
+  result = DepGraph(nodes: @[Dependency(name: start,
                                         url: url,
                                         commit: "",
                                         self: 0,
                                         algo: c.defaultAlgo)])
-  result.byName.mgetOrPut(toName(start), @[]).add 0
+  result.byName.mgetOrPut(start, @[]).add 0
 
 proc selectNode*(c: var AtlasContext; g: var DepGraph; w: Dependency) =
   # all other nodes of the same project name are not active
@@ -73,9 +73,9 @@ proc collectDeps*(c: var AtlasContext; g: var DepGraph; parent: int;
     var i = 0
     while i < r.len and r[i] notin {'#', '<', '=', '>'} + Whitespace: inc i
     let name = r.substr(0, i-1)
-    let pkgName = if name.isUrl(): name.toName() else: PackageName(name)
+    echo "collectDeps: ", name
+    let (pkgName, pkgUrl) = c.resolveUrl(name) # don't use pkgName in case it's a URL
     var err = pkgName.string.len == 0
-    let pkgUrl = c.resolveUrl(pkgName.string)
     assert len($pkgUrl) != 0
     let query = parseVersionInterval(r, i, err)
     if err:

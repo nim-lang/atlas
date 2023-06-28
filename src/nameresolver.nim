@@ -42,34 +42,41 @@ proc fillPackageLookupTable(c: var AtlasContext) =
     for entry in plist:
       c.urlMapping[unicode.toLower entry.name] = entry.url
 
-proc resolveUrl*(c: var AtlasContext; p: string): PackageUrl =
-  proc lookup(c: var AtlasContext; p: string): string =
+proc resolveUrl*(c: var AtlasContext; p: string): (PackageName, PackageUrl) =
+  proc lookup(c: var AtlasContext; p: string): tuple[name: string, url: string] =
     fillPackageLookupTable(c)
 
     if p.isUrl:
+      echo "IS URL: ", p
       if UsesOverrides in c.flags:
-        result = c.overrides.substitute(p)
-        if result.len > 0: return result
-      let name = p.toName().string
+        result.url = c.overrides.substitute(p)
+        if result.url.len > 0: return result
+      let name = unicode.toLower p.toName().string
       if not c.urlMapping.hasKey(name):
-        c.urlMapping[unicode.toLower name] = p
-      result = p
+        c.urlMapping[name] = p
+      else:
+        assert c.urlMapping[name] == p
+        echo "RESOLV URL: already found! ", c.urlMapping[name]
+      result = (name, p)
     else:
       # either the project name or the URL can be overwritten!
+      result.name = p
       if UsesOverrides in c.flags:
-        result = c.overrides.substitute(p)
-        if result.len > 0: return result
+        result.url = c.overrides.substitute(p)
+        if result.url.len > 0: return result
 
-      result = c.urlMapping.getOrDefault(unicode.toLower p)
+      result.url = c.urlMapping.getOrDefault(unicode.toLower p)
 
-      if result.len == 0:
-        result = getUrlFromGithub(p)
-        if result.len == 0:
+      if result.url.len == 0:
+        result.url = getUrlFromGithub(p)
+        if result.url.len == 0:
           inc c.errors
 
       if UsesOverrides in c.flags:
-        let newUrl = c.overrides.substitute(result)
-        if newUrl.len > 0: return newUrl
+        let newUrl = c.overrides.substitute(result.url)
+        if newUrl.len > 0:
+          result.url = newUrl
 
-  let urlstr = lookup(c, p)
-  result = urlstr.getUrl()
+  let (name, urlstr) = lookup(c, p)
+  echo "RESOLVE URL: ", p, " to: ", urlstr
+  result = (name.toName(), urlstr.getUrl())

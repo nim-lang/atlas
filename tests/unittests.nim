@@ -36,11 +36,11 @@ suite "urls and naming":
     var c = AtlasContext.initBasicWorkspace()
 
     for name, url in basicExamples.items:
-      let ures = resolveUrl(c, url.input)
+      let (_, ures) = resolveUrl(c, url.input)
       check ures.hostname == "github.com"
       check $ures == url.output
 
-      let nres = resolveUrl(c, name)
+      let (_, nres) = resolveUrl(c, name)
       check nres.hostname == "github.com"
       check $nres == url.output
 
