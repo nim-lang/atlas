@@ -356,7 +356,7 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
 
 proc traverse(c: var AtlasContext; start: string; startIsDep: bool): seq[CfgPath] =
   # returns the list of paths for the nim.cfg file.
-  let (start, url) = resolveUrl(c, start)
+  let (start, url) = resolvePackage(c, start)
   var g = createGraph(c, start, url)
 
   if $url == "":
@@ -437,7 +437,7 @@ proc updateDir(c: var AtlasContext; dir, filter: string) =
 proc patchNimbleFile(c: var AtlasContext; dep: string): string =
   let thisProject = c.currentDir.lastPathComponent
   let oldErrors = c.errors
-  let url = resolveUrl(c, dep)
+  let url = resolvePackage(c, dep)
   result = ""
   if oldErrors != c.errors:
     warn c, toName(dep), "cannot resolve package name"
@@ -459,7 +459,7 @@ proc patchNimbleFile(c: var AtlasContext; dep: string): string =
           tokens.add token
         if tokens.len > 0:
           let oldErrors = c.errors
-          let urlB = resolveUrl(c, tokens[0])
+          let urlB = resolvePackage(c, tokens[0])
           if oldErrors != c.errors:
             warn c, toName(tokens[0]), "cannot resolve package name; found in: " & result
           if url == urlB:

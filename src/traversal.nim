@@ -73,7 +73,7 @@ proc collectDeps*(c: var AtlasContext; g: var DepGraph; parent: int;
     var i = 0
     while i < r.len and r[i] notin {'#', '<', '=', '>'} + Whitespace: inc i
     let name = r.substr(0, i-1)
-    let (pkgName, pkgUrl) = c.resolveUrl(name) # don't use pkgName in case it's a URL
+    let (pkgName, pkgUrl) = c.resolvePackage(name) # don't use pkgName in case it's a URL
     var err = pkgName.string.len == 0
     assert len($pkgUrl) != 0
     let query = parseVersionInterval(r, i, err)

@@ -97,7 +97,7 @@ proc fillPackageLookupTable(c: var AtlasContext) =
     for entry in plist:
       c.urlMapping[unicode.toLower entry.name] = entry.url
 
-proc resolveUrl*(c: var AtlasContext; p: string): (PackageName, PackageUrl) =
+proc resolvePackage*(c: var AtlasContext; p: string): (PackageName, PackageUrl) =
   proc lookup(c: var AtlasContext; p: string): tuple[name: string, url: string] =
     fillPackageLookupTable(c)
 
