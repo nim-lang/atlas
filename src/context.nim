@@ -106,6 +106,8 @@ proc `==`*(a, b: CfgPath): bool {.borrow.}
 proc `==`*(a, b: PackageName): bool {.borrow.}
 proc hash*(a: PackageName): Hash {.borrow.}
 
+proc `$`*(a: PackageName): string {.borrow.}
+
 const
   InvalidCommit* = "#head" #"<invalid commit>"
   ProduceTest* = false

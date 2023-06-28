@@ -28,8 +28,8 @@ iterator matchingCommits(c: var AtlasContext; g: DepGraph; w: DepNode; q: Versio
       if q.matches(w.versions[j]):
         yield w.versions[j]
 
-proc toString(x: (string, string, Version)): string =
-  "(" & x[0] & ", " & $x[2] & ")"
+proc toString(name: PackageName; v: Version): string =
+  "(" & $name & ", " & $v & ")"
 
 proc findDeps(n: DepNode; commit: Commit): int =
   for j in 0 ..< n.subs.len:
@@ -118,28 +118,28 @@ proc resolve*(c: var AtlasContext; g: var DepGraph) =
       #echo f
     if ListVersions in c.flags:
       echo "selected:"
-      let L = g.nodes.len
-      var nodes = newSeq[string]()
-      for i in 0..<L: nodes.add g.nodes[i].name.string
-      echo f$(proc (buf: var string; i: int) =
-        if i < L:
-          buf.add nodes[i]
-        else:
-          buf.add $mapping[i - L])
-      for i in g.nodes.len..<s.len:
-        if s[i] == setToTrue:
-          echo "[x] ", toString mapping[i - g.nodes.len]
-        else:
-          echo "[ ] ", toString mapping[i - g.nodes.len]
+      for i in 0 ..< g.nodes.len:
+        for j in 0 ..< g.nodes[i].versions.len:
+          let thisNode = i * g.nodes.len + j
+          let nodeRepr = toString(g.nodes[i].name, g.nodes[i].versions[j].v)
+          if s[thisNode] == setToTrue:
+            echo "[x] ", nodeRepr
+          else:
+            echo "[ ] ", nodeRepr
       echo "end of selection"
   else:
     error c, toName(c.workspace), "version conflict; for more information use --showGraph"
     var usedVersions = initCountTable[string]()
-    for i in g.nodes.len..<s.len:
-      if s[i] == setToTrue:
-        usedVersions.inc mapping[i - g.nodes.len][0]
-    for i in g.nodes.len..<s.len:
-      if s[i] == setToTrue:
-        let counter = usedVersions.getOrDefault(mapping[i - g.nodes.len][0])
-        if counter > 0:
-          error c, toName(mapping[i - g.nodes.len][0]), $mapping[i - g.nodes.len][2] & " required"
+    for i in 0 ..< g.nodes.len:
+      for j in 0 ..< g.nodes[i].versions.len:
+        let thisNode = i * g.nodes.len + j
+        if s[thisNode] == setToTrue:
+          usedVersions.inc $g.nodes[i].name
+
+    for i in 0 ..< g.nodes.len:
+      let counter = usedVersions.getOrDefault($g.nodes[i].name)
+      if counter > 1:
+        for j in 0 ..< g.nodes[i].versions.len:
+          let thisNode = i * g.nodes.len + j
+          if s[thisNode] == setToTrue:
+            error c, g.nodes[i].name, $g.nodes[i].versions[j] & " required"
