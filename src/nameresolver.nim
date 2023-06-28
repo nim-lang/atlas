@@ -51,6 +51,9 @@ proc resolveUrl*(c: var AtlasContext; p: string): PackageUrl =
       if UsesOverrides in c.flags:
         result = c.overrides.substitute(p)
         if result.len > 0: return result
+      let name = p.toName().string
+      if not c.urlMapping.hasKey(name):
+        c.urlMapping[unicode.toLower name] = p
       result = p
     else:
       # either the project name or the URL can be overwritten!
