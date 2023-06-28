@@ -422,7 +422,6 @@ proc installDependencies(c: var AtlasContext; nimbleFile: string; startIsDep: bo
   let (_, pkgname, _) = splitFile(nimbleFile)
   let dep = Dependency(name: toName(pkgname), url: getUrl "", commit: "", self: 0,
                        algo: c.defaultAlgo)
-  echo "DEPS:pkgname: ", pkgname
   g.byName.mgetOrPut(toName(pkgname), @[]).add 0
   discard collectDeps(c, g, -1, dep, nimbleFile)
   let paths = traverseLoop(c, g, startIsDep)
@@ -637,7 +636,6 @@ proc main(c: var AtlasContext) =
   of "init":
     if GlobalWorkspace in c.flags:
       c.workspace = getHomeDir() / ".atlas"
-      echo "GlobalWorkspace:dir: ", c.workspace
       createDir(c.workspace)
     else:
       c.workspace = getCurrentDir()

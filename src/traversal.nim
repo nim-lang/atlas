@@ -74,7 +74,6 @@ proc collectDeps*(c: var AtlasContext; g: var DepGraph; parent: int;
     while i < r.len and r[i] notin {'#', '<', '=', '>'} + Whitespace: inc i
     let name = r.substr(0, i-1)
     let pkgName = if name.isUrl(): name.toName() else: PackageName(name)
-    echo "collectDeps:pkgName: ", pkgName.string
     var err = pkgName.string.len == 0
     let pkgUrl = c.resolveUrl(pkgName.string)
     assert len($pkgUrl) != 0
