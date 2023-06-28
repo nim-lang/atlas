@@ -49,7 +49,7 @@ Command:
                         ['major'|'minor'|'patch'] or a SemVer tag like ['1.0.3']
                         or a letter ['a'..'z']: a.b.c.d.e.f.g
   pin [atlas.lock]      pin the current checkouts and store them in the lock
-  replay [atlas.lock]   replay the state of the projects according to the lock
+  rep [atlas.lock]      replay the state of the projects according to the lock
   convert <nimble.lock> [atlas.lock]
                         convert Nimble lockfile into an Atlas one
   outdated              list the packages that are outdated
@@ -661,8 +661,8 @@ proc main(c: var AtlasContext) =
   of "rep", "replay":
     optSingleArg(LockFileName)
     replay c, args[0]
-    # if CfgHere in c.flags:
-    #   patchNimCfg(c, paths, c.currentDir)
+    if CfgHere in c.flags:
+      patchNimCfg(c, paths, c.currentDir)
   of "convert":
     if args.len < 1:
       fatal "convert command takes a nimble lockfile argument"
