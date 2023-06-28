@@ -112,6 +112,7 @@ proc resolvePackage*(c: var AtlasContext; p: string): (PackageName, PackageUrl) 
         c.urlMapping[result.name] = p
       else:
         if c.urlMapping[result.name] != result.url:
+          # change package name to `org.packageName`
           let purl = result.url.getUrl()
           let org = purl.path.parentDir.lastPathPart
           let pname = org & "." & result.name
