@@ -8,7 +8,7 @@
 
 ## Resolves package names and turn them to URLs.
 
-import std / [os, unicode, strutils, osproc]
+import std / [os, unicode, strutils, osproc, sequtils]
 import context, osutils, packagesjson, gitops
 
 proc cloneUrlImpl(c: var AtlasContext,
@@ -113,9 +113,8 @@ proc resolvePackage*(c: var AtlasContext; p: string): (PackageName, PackageUrl) 
       else:
         if c.urlMapping[result.name] != result.url:
           let purl = result.url.getUrl()
-          var pname = purl.path
-          pname.removePrefix("/")
-          pname = pname.replace("/", ".").replace("\\", ".")
+          let org = purl.path.parentDir.lastPathPart
+          let pname = org & "." & result.name
           warn c, toName(result.name),
                   "conflicting url's for package; renaming package: " &
                     result.name & " to " & pname
