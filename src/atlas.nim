@@ -628,6 +628,7 @@ proc main(c: var AtlasContext) =
   else:
     if not explicitDepsDirOverride and action != "init" and c.depsDir.len() == 0:
       c.depsDir = c.workspace
+    createDir(c.depsDir)
 
   case action
   of "":
