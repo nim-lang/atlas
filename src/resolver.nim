@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import context, sat, gitops, osutils, nameresolver
+import context, sat, gitops, osutils, nameresolver, runners
 
 iterator matchingCommits(c: var AtlasContext; g: DepGraph; w: DepNode; q: VersionQuery): Commit =
   var q = q
@@ -40,15 +40,15 @@ proc toGraph(c: var AtlasContext; g: DepGraph; b: var sat.Builder) =
   var urlToIndex = initTable[string, int]()
   for i in 0 ..< g.nodes.len:
     for j in 0 ..< g.nodes[i].versions.len:
-      let thisNode = (i * g.nodes.len + j) + 1
+      let thisNode = i * g.nodes.len + j
       let key = $g.nodes[i].url & "/" & g.nodes[i].versions[j].h
-      urlToIndex[key] = thisNode
+      urlToIndex[key] = thisNode + 1
 
     urlToIndex[$g.nodes[i].url] = i+1
 
   for i in 0 ..< g.nodes.len:
     for j in 0 ..< g.nodes[i].versions.len:
-      let thisNode = (i * g.nodes.len + j) + 1
+      let thisNode = i * g.nodes.len + j
       let jj = findDeps(g.nodes[i], g.nodes[i].versions[j].v)
       if jj >= 0:
         for d in 0 ..< g.nodes[i].subs[jj].deps.len:
@@ -67,7 +67,7 @@ proc toGraph(c: var AtlasContext; g: DepGraph; b: var sat.Builder) =
             b.closeOpr
             b.openOpr(ExactlyOneOfForm)
             var counter = 0
-            let depIdx = urlToIndex.getOrDefault($dep.url)
+            let depIdx = urlToIndex.getOrDefault($url)
             assert depIdx > 0
             for mx in matchingCommits(c, g, g.nodes[depIdx-1], dep.query):
               let key = $url & "/" & mx.h
@@ -88,8 +88,13 @@ proc toFormular(c: var AtlasContext; g: var DepGraph): Formular =
   result = toForm(b)
 
 proc resolve*(c: var AtlasContext; g: var DepGraph) =
-  let f = toFormular(b)
-  var s = newSeq[BindingKind](idgen)
+  let f = toFormular(c, g)
+
+  var varCounter = 0
+  for i in 0 ..< g.nodes.len:
+    inc varCounter, g.nodes[i].versions.len
+
+  var s = newSeq[BindingKind](varCounter)
   when false:
     let L = g.nodes.len
     var nodes = newSeq[string]()
@@ -100,12 +105,13 @@ proc resolve*(c: var AtlasContext; g: var DepGraph) =
       else:
         buf.add $mapping[i - L])
   if satisfiable(f, s):
-    for i in g.nodes.len..<s.len:
-      if s[i] == setToTrue:
-        let destDir = mapping[i - g.nodes.len][0]
-        let dir = selectDir(c.workspace / destDir, c.depsDir / destDir)
-        withDir c, dir:
-          checkoutGitCommit(c, toName(destDir), mapping[i - g.nodes.len][1])
+    for i in 0 ..< g.nodes.len:
+      for j in 0 ..< g.nodes[i].versions.len:
+        let thisNode = i * g.nodes.len + j
+        if s[thisNode] == setToTrue:
+          g.nodes[i].selected = j
+          withDir c, g.nodes[i].dir:
+            checkoutGitCommit(c, toName(g.nodes[i].dir), g.nodes[i].versions[j].h)
     if NoExec notin c.flags:
       runBuildSteps(c, g)
       #echo f

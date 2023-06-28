@@ -89,14 +89,12 @@ proc runBuildSteps*(c: var AtlasContext; g: var DepGraph) =
   for i in countdown(g.nodes.len-1, 0):
     let sel = g.nodes[i].selected
     if sel >= 0:
-      let destDir = toDestDir(g.nodes[i].name)
-      let dir = selectDir(c.workspace / destDir, c.depsDir / destDir)
-      tryWithDir dir:
+      tryWithDir g.nodes[i].dir:
         if g.nodes[i].subs[sel].hasInstallHooks:
           let nf = findNimbleFile(c, g.nodes[i])
           if nf.len > 0:
             runNimScriptInstallHook c, nf, g.nodes[i].name
         for p in mitems c.plugins.builderPatterns:
-          let f = p[0] % dir.lastPathComponent
+          let f = p[0] % g.nodes[i].dir.lastPathComponent
           if fileExists(f):
             runNimScriptBuilder c, p, g.nodes[i].name
