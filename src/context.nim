@@ -41,6 +41,9 @@ type
   ResolutionAlgorithm* = enum
     MinVer, SemVer, MaxVer
 
+  CloneStatus* = enum
+    Ok, NotFound, OtherError
+
   Dependency* = object
     name*: PackageName
     url*: PackageUrl

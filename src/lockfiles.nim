@@ -9,7 +9,7 @@
 ## Lockfile implementation.
 
 import std / [strutils, tables, os, json, jsonutils]
-import context, gitops, osutils, traversal, compilerversions
+import context, gitops, osutils, traversal, compilerversions, nameresolver
 
 type
   LockFileEntry* = object
@@ -170,7 +170,7 @@ proc replay*(c: var AtlasContext; lockFilePath: string) =
   for _, v in pairs(lf.items):
     let dir = base / v.dir
     if not dirExists(dir):
-      let (status, err) = osutils.cloneUrl(getUrl v.url, dir, false)
+      let (status, err) = c.cloneUrl(getUrl v.url, dir, false)
       if status != Ok:
         error c, toName(lockFilePath), err
         continue
