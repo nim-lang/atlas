@@ -65,8 +65,9 @@ type
 
   DepGraph* = object
     nodes*: seq[DepNode]
+    urlToIdx*: Table[PackageUrl, int]
     #processed*: Table[string, int]
-    byName*: Table[PackageName, int] #seq[int]]
+    #byName*: Table[PackageName, int] #seq[int]]
     #availableVersions*: Table[PackageName, seq[(string, Version)]] # sorted, latest version comes first
     #bestNimVersion*: Version # Nim is a special snowflake
 

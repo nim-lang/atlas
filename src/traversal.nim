@@ -16,7 +16,8 @@ proc createGraph*(c: var AtlasContext; start: string, url: PackageUrl): DepGraph
                                      url: url,
                                      algo: c.defaultAlgo)])
   #result.byName.mgetOrPut(toName(start), @[]).add 0
-  result.byName[result.nodes[0].name] = 0
+  #result.byName[result.nodes[0].name] = 0
+  result.urlToIdx[url] = 0
 
 proc addUnique*[T](s: var seq[T]; elem: sink T) =
   if not s.contains(elem): s.add elem
@@ -131,12 +132,14 @@ proc allDeps*(c: var AtlasContext; nimbleFile: string): seq[DepSubnode] =
   finally:
     discard osproc.execCmdEx("git checkout HEAD " & quoteShell(nimbleFile))
 
-when false:
-  proc expandGraph(c: var AtlasContext; g: var DepGraph; currentNode: int; deps: seq[DepSubnode]) =
-    for dep in deps:
-      for d in dep.deps:
-        let url = resolveUrl(c, d.nameOrUrl)
-        if $url == "":
-          error c, toName(d.nameOrUrl), "cannot resolve package name"
-        else:
-          addUniqueDep(c, g, currentNode, url, d.query)
+proc expandGraph*(c: var AtlasContext; g: var DepGraph; currentNode: int; deps: seq[DepSubnode]) =
+  for dep in deps:
+    for d in dep.deps:
+      let url = resolveUrl(c, d.nameOrUrl)
+      if $url == "":
+        error c, toName(d.nameOrUrl), "cannot resolve package name"
+      else:
+        if not g.urlToIdx.contains(url):
+          g.urlToIdx[url] = g.nodes.len
+          g.nodes.add DepNode(name: toName(url), url: url, dir: "", subs: deps,
+                              selected: -1, algo: c.defaultAlgo, status: Ok)
