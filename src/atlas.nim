@@ -504,7 +504,7 @@ proc createWorkspaceIn(c: var AtlasContext) =
     writeFile c.workspace / AtlasWorkspace, "deps=\"$#\"\nresolver=\"MaxVer\"\n" % escape(c.depsDir, "", "")
     info c, toName(c.workspace), "created workspace file"
   createDir absoluteDepsDir(c.workspace, c.depsDir)
-  info c, toName(c.workspace), "created deps dir"
+  info c, toName(c.depsDir), "created deps dir"
 
 proc listOutdated(c: var AtlasContext; dir: string) =
   var updateable = 0
@@ -611,6 +611,7 @@ proc main(c: var AtlasContext) =
     else:
       if GlobalWorkspace in c.flags:
         c.workspace = detectWorkspace(getHomeDir() / ".atlas")
+        warn c, toName(c.workspace), "using global workspace"
       else:
         c.workspace = detectWorkspace(c.currentDir)
       if c.workspace.len > 0:
