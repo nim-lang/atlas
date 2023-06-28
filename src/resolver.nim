@@ -31,9 +31,10 @@ iterator matchingCommits(c: var AtlasContext; g: DepGraph; w: DepNode; q: Versio
 proc toString(x: (string, string, Version)): string =
   "(" & x[0] & ", " & $x[2] & ")"
 
-proc findDeps(n: DepNode; v: Version): int =
+proc findDeps(n: DepNode; commit: Commit): int =
   for j in 0 ..< n.subs.len:
-    if n.subs[j].commit.v == v: return j
+    if n.subs[j].commit.v == commit.v or n.subs[j].commit.h == commit.h:
+      return j
   return -1
 
 proc toGraph(c: var AtlasContext; g: DepGraph; b: var sat.Builder) =
@@ -49,7 +50,7 @@ proc toGraph(c: var AtlasContext; g: DepGraph; b: var sat.Builder) =
   for i in 0 ..< g.nodes.len:
     for j in 0 ..< g.nodes[i].versions.len:
       let thisNode = i * g.nodes.len + j
-      let jj = findDeps(g.nodes[i], g.nodes[i].versions[j].v)
+      let jj = findDeps(g.nodes[i], g.nodes[i].versions[j])
       if jj >= 0:
         for d in 0 ..< g.nodes[i].subs[jj].deps.len:
           let dep {.cursor.} = g.nodes[i].subs[j].deps[d]
