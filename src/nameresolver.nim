@@ -8,7 +8,7 @@
 
 ## Resolves package names and turn them to URLs.
 
-import std / [os, unicode]
+import std / [os, unicode, strutils]
 import context, osutils, packagesjson, gitops
 
 proc cloneUrl*(c: var AtlasContext;
@@ -46,18 +46,25 @@ proc resolveUrl*(c: var AtlasContext; p: string): (PackageName, PackageUrl) =
   proc lookup(c: var AtlasContext; p: string): tuple[name: string, url: string] =
     fillPackageLookupTable(c)
 
+    result.name = unicode.toLower p.toName().string
+    result.url = p
+
     if p.isUrl:
-      echo "IS URL: ", p
       if UsesOverrides in c.flags:
         result.url = c.overrides.substitute(p)
         if result.url.len > 0: return result
-      let name = unicode.toLower p.toName().string
-      if not c.urlMapping.hasKey(name):
-        c.urlMapping[name] = p
+      if not c.urlMapping.hasKey(result.name):
+        c.urlMapping[result.name] = p
       else:
-        assert c.urlMapping[name] == p
-        echo "RESOLV URL: already found! ", c.urlMapping[name]
-      result = (name, p)
+        if c.urlMapping[result.name] != result.url:
+          let purl = result.url.getUrl()
+          var pname = purl.path
+          pname.removePrefix("/")
+          pname = pname.replace("/", ".").replace("\\", ".")
+          warn c, toName(result.name),
+                  "conflicting url's for package; renaming package: " &
+                    result.name & " to " & pname
+          result.name = pname
     else:
       # either the project name or the URL can be overwritten!
       result.name = p
@@ -78,5 +85,6 @@ proc resolveUrl*(c: var AtlasContext; p: string): (PackageName, PackageUrl) =
           result.url = newUrl
 
   let (name, urlstr) = lookup(c, p)
-  echo "RESOLVE URL: ", p, " to: ", urlstr
+  when ProduceTest:
+    echo "resolve url: ", p, " to: ", urlstr
   result = (name.toName(), urlstr.getUrl())
