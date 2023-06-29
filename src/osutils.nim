@@ -34,7 +34,10 @@ proc readableFile*(s: string): string =
   else:
     s
 
-proc selectDir*(a, b: string): string = (if dirExists(a): a else: b)
+proc selectDir*(a, b: string): string =
+  ## selects the first dir that exists
+  ## 
+  if dirExists(a): a else: b
 
 proc absoluteDepsDir*(workspace, value: string): string =
   if value == ".":
