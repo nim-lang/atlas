@@ -48,6 +48,7 @@ type
     name*: PackageName
     url*: PackageUrl
     commit*: string
+    path*: string
     query*: VersionInterval
     self*: int # position in the graph
     parents*: seq[int] # why we need this dependency
@@ -161,6 +162,8 @@ template projectFromCurrentDir*(): PackageName =
 template toDestDir*(p: PackageName): string = p.string
 
 proc dependencyDir*(c: AtlasContext; w: Dependency): string =
+  if w.path.len() >= 0:
+    return w.path
   result = c.workspace / w.name.string
   if not dirExists(result):
     result = c.depsDir / w.name.string

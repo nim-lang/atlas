@@ -655,8 +655,10 @@ proc main(c: var AtlasContext) =
   of "pin":
     optSingleArg(LockFileName)
     if c.projectDir == c.workspace or c.projectDir == c.depsDir:
+      echo "pin workspace"
       pinWorkspace c, args[0]
     else:
+      echo "pin project: ", args[0]
       pinProject c, args[0]
   of "rep", "replay":
     optSingleArg(LockFileName)

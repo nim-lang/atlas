@@ -81,16 +81,21 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string) =
 
   let start = c.currentDir.lastPathComponent.toName()
   let url = getRemoteUrl()
-  var g = createGraph(c, start, url)
+  var g = createGraph(c, start, url, path=c.currentDir)
+
+  info c, start, "pinning lockfile: " & lockFilePath
 
   var i = 0
   while i < g.nodes.len:
     let w = g.nodes[i]
     let destDir = toDestDir(w.name)
 
-    let dir = selectDir(c.workspace / destDir, c.depsDir / destDir)
+    info c, w.name, "pinning..."
+    let dir =
+      if destDir == start.string: c.currentDir
+      else: selectDir(c.workspace / destDir, c.depsDir / destDir)
     if not dirExists(dir):
-      error c, w.name, "dependency does not exist"
+      error c, w.name, "dependency does not exist: " & dir
     else:
       # assume this is the selected version, it might get overwritten later:
       selectNode c, g, w
