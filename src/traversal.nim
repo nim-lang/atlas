@@ -92,6 +92,7 @@ proc collectDeps*(c: var AtlasContext; g: var DepGraph; parent: int;
 proc collectNewDeps*(c: var AtlasContext; g: var DepGraph; parent: int;
                     dep: Dependency): CfgPath =
   let nimbleFile = findNimbleFile(c, dep)
+  info c, dep.name, "collecting deps; nimble file: '" & nimbleFile & "'"
   if nimbleFile != "":
     result = collectDeps(c, g, parent, dep, nimbleFile)
   else:
