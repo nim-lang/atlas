@@ -75,7 +75,9 @@ proc collectDeps*(c: var AtlasContext; g: var DepGraph; parent: int;
     let name = r.substr(0, i-1)
     let (pkgName, pkgUrl) = c.resolvePackage(name) # don't use pkgName in case it's a URL
     var err = pkgName.string.len == 0
-    assert len($pkgUrl) != 0
+    if len($pkgUrl) == 0:
+      error c, toName(nimbleFile), "invalid pkgUrl: " & name
+      err = true
     let query = parseVersionInterval(r, i, err)
     if err:
       error c, toName(nimbleFile), "invalid 'requires' syntax: " & r
