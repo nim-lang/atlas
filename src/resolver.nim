@@ -84,6 +84,8 @@ proc toGraph(c: var AtlasContext; g: DepGraph; b: var sat.Builder) =
 proc toFormular(c: var AtlasContext; g: var DepGraph): Formular =
   var b = sat.Builder()
   b.openOpr(AndForm)
+  b.add newVar(VarId 0) # root node must be true.
+  # XXX Find a better solution here.
   toGraph(c, g, b)
   b.closeOpr
   result = toForm(b)
