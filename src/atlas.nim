@@ -75,7 +75,6 @@ Options:
   --list                list all available and installed versions
   --version             show the version
   --help                show this help
-  --global              show this help
 """
 
 proc writeHelp() =
@@ -589,7 +588,6 @@ proc main(c: var AtlasContext) =
       of "autoenv": c.flags.incl AutoEnv
       of "noexec": c.flags.incl NoExec
       of "list": c.flags.incl ListVersions
-      of "global", "g": c.flags.incl GlobalWorkspace
       of "colors":
         case val.normalize
         of "off": c.flags.incl NoColors
@@ -609,11 +607,7 @@ proc main(c: var AtlasContext) =
     when MockupRun:
       c.workspace = autoWorkspace(c.currentDir)
     else:
-      if GlobalWorkspace in c.flags:
-        c.workspace = detectWorkspace(getHomeDir() / ".atlas")
-        warn c, toName(c.workspace), "using global workspace"
-      else:
-        c.workspace = detectWorkspace(c.currentDir)
+      c.workspace = detectWorkspace(c.currentDir)
       if c.workspace.len > 0:
         readConfig c
         infoNow c, toName(c.workspace.readableFile), "is the current workspace"
@@ -634,11 +628,7 @@ proc main(c: var AtlasContext) =
   of "":
     fatal "No action."
   of "init":
-    if GlobalWorkspace in c.flags:
-      c.workspace = getHomeDir() / ".atlas"
-      createDir(c.workspace)
-    else:
-      c.workspace = getCurrentDir()
+    c.workspace = getCurrentDir()
     createWorkspaceIn c
   of "clone", "update":
     singleArg()

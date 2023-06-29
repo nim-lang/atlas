@@ -74,7 +74,6 @@ type
     AutoEnv
     NoExec
     ListVersions
-    GlobalWorkspace
 
   MsgKind = enum
     Info = "[Info] ",
