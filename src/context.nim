@@ -165,7 +165,7 @@ proc dependencyDir*(c: AtlasContext; w: Dependency): string =
   if not dirExists(result):
     result = c.depsDir / w.name.string
 
-proc findNimbleFile*(c: AtlasContext; dep: Dependency): string =
+proc findNimbleFile*(c: var AtlasContext; dep: Dependency): string =
   when MockupRun:
     result = TestsDir / dep.name.string & ".nimble"
     doAssert fileExists(result), "file does not exist " & result
@@ -178,7 +178,7 @@ proc findNimbleFile*(c: AtlasContext; dep: Dependency): string =
         if result.len == 0:
           result = x
         else:
-          # ambiguous .nimble file
+          warn c, dep.name, "ambiguous .nimble file " & result
           return ""
 
 template withDir*(c: var AtlasContext; dir: string; body: untyped) =
