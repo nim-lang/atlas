@@ -132,7 +132,7 @@ proc allDeps*(c: var AtlasContext; nimbleFile: string): seq[DepSubnode] =
   finally:
     discard osproc.execCmdEx("git checkout HEAD " & quoteShell(nimbleFile))
 
-proc expandGraph*(c: var AtlasContext; g: var DepGraph; currentNode: int; deps: seq[DepSubnode]) =
+proc addDeps(c: var AtlasContext; g: var DepGraph; deps: seq[DepSubnode]) =
   for dep in deps:
     for d in dep.deps:
       let url = resolveUrl(c, d.nameOrUrl)
@@ -143,3 +143,10 @@ proc expandGraph*(c: var AtlasContext; g: var DepGraph; currentNode: int; deps: 
           g.urlToIdx[url] = g.nodes.len
           g.nodes.add DepNode(name: toName(url), url: url, dir: "", subs: deps,
                               selected: -1, algo: c.defaultAlgo, status: Ok)
+
+proc expandGraph*(c: var AtlasContext; g: var DepGraph; i: int) =
+  let nimbleFile = findNimbleFile(c, g.nodes[i])
+  if nimbleFile.len > 0:
+    g.nodes[i].subs = allDeps(c, nimbleFile)
+  g.nodes[i].versions = collectTaggedVersions(c)
+  addDeps c, g, g.nodes[i].subs

@@ -11,7 +11,7 @@
 
 import std / [parseopt, strutils, os, osproc, tables, sets, json, jsonutils,
   hashes, options]
-import context, runners, osutils, packagesjson, gitops, nimenv, # lockfiles,
+import context, runners, osutils, packagesjson, gitops, nimenv, lockfiles,
   traversal, confighandler, nameresolver, patchcfg, resolver
 
 export osutils, context
@@ -183,21 +183,13 @@ proc copyFromDisk(c: var AtlasContext; w: DepNode; destDir: string): (CloneStatu
   else:
     result = (NotFound, u)
 
-proc computeNodeInfo(c: var AtlasContext; g: var DepGraph; i: int) =
-  let nimbleFile = findNimbleFile(c, g.nodes[i])
-  if nimbleFile.len > 0:
-    g.nodes[i].subs = allDeps(c, nimbleFile)
-  g.nodes[i].versions = collectTaggedVersions(c)
-
 proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool) =
   var i = 0
   while i < g.nodes.len:
     let w = g.nodes[i]
     let destDir = toDestDir(w.name)
-    let oldErrors = c.errors
 
     let dir = selectDir(c.workspace / destDir, c.depsDir / destDir)
-    var skipCheckout = false
     if not dirExists(dir):
       withDir c, (if i != 0 or startIsDep: c.depsDir else: c.workspace):
         let (status, err) =
@@ -208,21 +200,15 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool) =
         g.nodes[i].status = status
         case status
         of NotFound:
-          skipCheckout = true
+          discard "nothing to do"
         of OtherError:
           error c, w.name, err
         else:
           withDir c, destDir:
-            computeNodeInfo c, g, i
+            expandGraph c, g, i
     else:
       withDir c, dir:
-        computeNodeInfo c, g, i
-
-    if oldErrors == c.errors:
-      let nimbleFile = findNimbleFile(c, w)
-      if nimbleFile != "":
-        expandGraph c, g, i, allDeps(c, nimbleFile)
-
+        expandGraph c, g, i
     inc i
 
   resolve c, g
@@ -245,12 +231,9 @@ proc traverse(c: var AtlasContext; start: string; startIsDep: bool) =
 proc installDependencies(c: var AtlasContext; nimbleFile: string; startIsDep: bool) =
   # 1. find .nimble file in CWD
   # 2. install deps from .nimble
-  var g = DepGraph(nodes: @[])
   let (_, pkgname, _) = splitFile(nimbleFile)
-  let dep = Dependency(name: toName(pkgname), url: getUrl "", commit: "", self: 0,
-                       algo: c.defaultAlgo)
-  g.byName.mgetOrPut(toName(pkgname), @[]).add 0
-  discard collectDeps(c, g, -1, dep, nimbleFile)
+
+  var g = createGraph(c, pkgname, getUrl "")
   traverseLoop(c, g, startIsDep)
   afterGraphActions c, g
 
@@ -452,8 +435,7 @@ proc main(c: var AtlasContext) =
     createWorkspaceIn c.workspace, c.depsDir
   of "clone", "update":
     singleArg()
-    let deps = traverse(c, args[0], startIsDep = false)
-    patchNimCfg c, deps, if CfgHere in c.flags: c.currentDir else: findSrcDir(c)
+    traverse(c, args[0], startIsDep = false)
     when MockupRun:
       if not c.mockupSuccess:
         fatal "There were problems."

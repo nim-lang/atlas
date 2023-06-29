@@ -92,20 +92,17 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string) =
     if not dirExists(dir):
       error c, w.name, "dependency does not exist"
     else:
-      # assume this is the selected version, it might get overwritten later:
-      selectNode c, g, w
-      discard collectNewDeps(c, g, i, w)
+      expandGraph c, g, i
     inc i
 
   if c.errors == 0:
     # topo-sort:
     for i in countdown(g.nodes.len-1, 1):
-      if g.nodes[i].active:
-        let w = g.nodes[i]
-        let destDir = toDestDir(w.name)
-        let dir = selectDir(c.workspace / destDir, c.depsDir / destDir)
-        tryWithDir dir:
-          genLockEntry c, lf, dir.relativePath(c.currentDir, '/')
+      let w = g.nodes[i]
+      let destDir = toDestDir(w.name)
+      let dir = selectDir(c.workspace / destDir, c.depsDir / destDir)
+      tryWithDir dir:
+        genLockEntry c, lf, dir.relativePath(c.currentDir, '/')
 
     let nimcfgPath = c.currentDir / NimCfg
     if fileExists(nimcfgPath):
