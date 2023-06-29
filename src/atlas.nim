@@ -74,6 +74,7 @@ Options:
   --showGraph           show the dependency graph
   --list                list all available and installed versions
   --version             show the version
+  --verbose             print extra debugging information
   --help                show this help
 """
 
@@ -593,6 +594,7 @@ proc main(c: var AtlasContext) =
         of "off": c.flags.incl NoColors
         of "on": c.flags.excl NoColors
         else: writeHelp()
+      of "verbose": c.flags.incl DebugPrint
       of "resolver":
         try:
           c.defaultAlgo = parseEnum[ResolutionAlgorithm](val)
@@ -645,10 +647,8 @@ proc main(c: var AtlasContext) =
   of "pin":
     optSingleArg(LockFileName)
     if c.projectDir == c.workspace or c.projectDir == c.depsDir:
-      echo "pin workspace"
       pinWorkspace c, args[0]
     else:
-      echo "pin project: ", args[0]
       pinProject c, args[0]
   of "rep", "replay":
     optSingleArg(LockFileName)

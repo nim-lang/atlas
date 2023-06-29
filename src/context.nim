@@ -74,11 +74,13 @@ type
     AutoEnv
     NoExec
     ListVersions
+    DebugPrint
 
   MsgKind = enum
     Info = "[Info] ",
     Warning = "[Warning] ",
     Error = "[Error] "
+    Debug = "[Debug] "
 
   AtlasContext* = object
     projectDir*, workspace*, depsDir*, currentDir*: string
@@ -119,12 +121,18 @@ proc error*(c: var AtlasContext; p: PackageName; arg: string) =
 proc info*(c: var AtlasContext; p: PackageName; arg: string) =
   c.messages.add (Info, p, arg)
 
+proc debug*(c: var AtlasContext; p: PackageName; arg: string) =
+  c.messages.add (Debug, p, arg)
+
 proc writeMessage(c: var AtlasContext; k: MsgKind; p: PackageName; arg: string) =
+  if k == Debug and DebugPrint notin c.flags:
+    return
   if NoColors in c.flags:
     message(c, $k, p, arg)
   else:
     let pn = p.string.relativePath(c.workspace)
     let color = case k
+                of Debug: fgWhite
                 of Info: fgGreen
                 of Warning: fgYellow
                 of Error: fgRed
