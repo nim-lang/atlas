@@ -3,6 +3,7 @@ import context, osutils
 
 type
   Command* = enum
+    GitClone = "git clone",
     GitDiff = "git diff",
     GitTag = "git tag",
     GitTags = "git show-ref --tags",
@@ -10,6 +11,7 @@ type
     GitDescribe = "git describe",
     GitRevParse = "git rev-parse",
     GitCheckout = "git checkout",
+    GitSubModUpdate = "git submodule update --init",
     GitPush = "git push origin",
     GitPull = "git pull",
     GitCurrentCommit = "git log -n 1 --format=%H"
@@ -66,6 +68,20 @@ proc isCleanGit*(c: var AtlasContext): string =
   elif status != 0:
     result = "'git diff' returned non-zero"
 
+proc clone*(c: var AtlasContext, url: PackageUrl, dest: string, retries = 5): bool =
+  ## clone git repo.
+  ##
+  ## note clones don't use `--recursive` but rely in the `checkoutCommit`
+  ## stage to setup submodules as this is less fragile on broken submodules.
+  ##
+  
+  # retry multiple times to avoid annoying github timeouts:
+  for i in 1..retries:
+    let cmd = $GitClone & " " & quoteShell($url) & " " & dest
+    if execShellCmd(cmd) == 0:
+      return true
+    os.sleep(i*2_000)
+
 proc gitDescribeRefTag*(c: var AtlasContext; commit: string): string =
   let (lt, status) = exec(c, GitDescribe, ["--tags", commit])
   result = if status == 0: strutils.strip(lt) else: ""
@@ -105,6 +121,12 @@ proc checkoutGitCommit*(c: var AtlasContext; p: PackageName; commit: string) =
     error(c, p, "could not checkout commit " & commit)
   else:
     info(c, p, "updated package to " & commit)
+
+  let (_, subModStatus) = exec(c, GitSubModUpdate, [])
+  if subModStatus != 0:
+    error(c, p, "could not update submodules")
+  else:
+    info(c, p, "updated submodules ")
 
 proc gitPull*(c: var AtlasContext; p: PackageName) =
   let (_, status) = exec(c, GitPull, [])

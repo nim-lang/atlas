@@ -47,19 +47,17 @@ proc cloneUrlImpl(c: var AtlasContext,
       if xcode == QuitSuccess: break
 
   if xcode == QuitSuccess:
-    # retry multiple times to avoid annoying github timeouts:
-    let cmd = "git clone --recursive " & $modUrl & " " & dest
-    for i in 0..4:
-      if execShellCmd(cmd) == 0: return (Ok, "")
-      os.sleep(4000)
-    result = (OtherError, "exernal program failed: " & cmd)
+    if gitops.clone(c, modUrl, dest):
+      return (Ok, "")
+    else:
+      result = (OtherError, "exernal program failed: " & $GitClone)
   elif not isGithub:
     let (_, exitCode) = execCmdEx("hg identify " & $modUrl)
     if exitCode == QuitSuccess:
       let cmd = "hg clone " & $modUrl & " " & dest
       for i in 0..4:
         if execShellCmd(cmd) == 0: return (Ok, "")
-        os.sleep(4000)
+        os.sleep(i*1_000+2_000)
       result = (OtherError, "exernal program failed: " & cmd)
     else:
       result = (NotFound, "Unable to identify url: " & $modUrl)
