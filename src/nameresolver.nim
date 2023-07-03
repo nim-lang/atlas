@@ -26,7 +26,7 @@ proc cloneUrlImpl(c: var AtlasContext,
   if url.scheme == "git":
     modUrl.scheme = "" # git doesn't recognize git://
 
-  infoNow c, toName($modUrl), "Cloning URL: " & $modUrl
+  infoNow c, toRepo($modUrl), "Cloning URL: " & $modUrl
 
   var isGithub = false
   if modUrl.hostname == "github.com":
@@ -42,7 +42,7 @@ proc cloneUrlImpl(c: var AtlasContext,
     # retry multiple times to avoid annoying github timeouts:
     for i in 0..4:
       os.sleep(4000)
-      infoNow c, toName($modUrl), "Cloning URL: " & $modUrl
+      infoNow c, toRepo($modUrl), "Cloning URL: " & $modUrl
       xcode = execCmdEx("git ls-remote --quiet --tags " & $modUrl)[1]
       if xcode == QuitSuccess: break
 

@@ -218,10 +218,10 @@ proc isOutdated*(c: var AtlasContext; f: string): bool =
           if status == 0 and mergeBase == currentCommit:
             let v = extractVersion gitDescribeRefTag(c, latestVersion)
             if v.len > 0:
-              info c, toName(f), "new version available: " & v
+              info c, toRepo(f), "new version available: " & v
               result = true
   else:
-    warn c, toName(f), "`git fetch` failed: " & outp
+    warn c, toRepo(f), "`git fetch` failed: " & outp
 
 proc updateDir*(c: var AtlasContext; file, filter: string) =
   withDir c, file:

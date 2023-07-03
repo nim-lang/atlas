@@ -180,11 +180,11 @@ proc toRepo*(p: PackageUrl): PackageRepo =
   if result.string.endsWith(".git"):
     result.string.setLen result.string.len - ".git".len
 
-# proc toName*(p: string): PackageRepo =
-#   if p.contains("://"):
-#     result = toName getUrl(p)
-#   else:
-#     result = PackageRepo p
+proc toRepo*(p: string): PackageRepo =
+  if p.contains("://"):
+    result = toRepo getUrl(p)
+  else:
+    result = PackageRepo p
 
 template projectFromCurrentDir*(): PackageRepo =
   PackageRepo(c.currentDir.lastPathComponent())
