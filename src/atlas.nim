@@ -355,9 +355,9 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
   if g.availableVersions.len > 0:
     resolve c, g
 
-proc traverse(c: var AtlasContext; start: Package; startIsDep: bool): seq[CfgPath] =
+proc traverse(c: var AtlasContext; start: string; startIsDep: bool): seq[CfgPath] =
   # returns the list of paths for the nim.cfg file.
-  let (start, url) = resolvePackage(c, start)
+  let pkg = resolvePackage(c, start)
   var g = createGraph(c, start, url)
 
   if $url == "":

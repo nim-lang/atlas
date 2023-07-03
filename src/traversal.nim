@@ -11,18 +11,11 @@
 import std / [strutils, os]
 import context, osutils, gitops, nameresolver
 
-proc createGraph*(c: var AtlasContext;
-                  start: PackageRepo,
-                  url: PackageUrl,
-                  path = ""): DepGraph =
-  let pkg = Package(name: PackageName "",
-                    repo: start,
-                    url: url,
-                    dir: PackageDir path)
-  let dep = Dependency(pkg: pkg, commit: "", path: path,
+proc createGraph*(c: var AtlasContext; start: Package): DepGraph =
+  let dep = Dependency(pkg: start, commit: "", path: path,
                        self: 0, algo: c.defaultAlgo)
   result = DepGraph(nodes: @[dep])
-  result.byName.mgetOrPut(start, @[]).add(0)
+  result.byName.mgetOrPut(start.name, @[]).add(0)
 
 proc selectNode*(c: var AtlasContext; g: var DepGraph; w: Dependency) =
   # all other nodes of the same project name are not active
