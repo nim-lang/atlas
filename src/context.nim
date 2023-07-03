@@ -75,6 +75,7 @@ type
     NoExec
     ListVersions
     DebugPrint
+    GlobalWorkspace
 
   MsgKind = enum
     Info = "[Info] ",
