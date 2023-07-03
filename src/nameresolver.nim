@@ -76,70 +76,89 @@ proc cloneUrl*(c: var AtlasContext;
       echo "cloned ", url, " into ", dest
 
 proc updatePackages*(c: var AtlasContext) =
-  if dirExists(c.workspace / PackagesDir):
-    withDir(c, c.workspace / PackagesDir):
-      gitPull(c, PackageName PackagesDir)
+  if dirExists(c.workspace / DefaultPackagesDir):
+    withDir(c, c.workspace / DefaultPackagesDir):
+      gitPull(c, PackageRepo DefaultPackagesDir)
   else:
     withDir c, c.workspace:
-      let (status, err) = cloneUrl(c, getUrl "https://github.com/nim-lang/packages", PackagesDir, false)
+      let (status, err) = cloneUrl(c, getUrl "https://github.com/nim-lang/packages", DefaultPackagesDir, false)
       if status != Ok:
-        error c, PackageName(PackagesDir), err
+        error c, PackageRepo(DefaultPackagesDir), err
 
 proc fillPackageLookupTable(c: var AtlasContext) =
   if not c.hasPackageList:
     c.hasPackageList = true
     when not MockupRun:
-      if not fileExists(c.workspace / PackagesDir / "packages.json"):
+      if not fileExists(c.workspace / DefaultPackagesDir / "packages.json"):
         updatePackages(c)
-    let plist = getPackages(when MockupRun: TestsDir else: c.workspace)
+    let plist = getPackageInfos(when MockupRun: TestsDir else: c.workspace)
     for entry in plist:
-      c.urlMapping[unicode.toLower entry.name] = entry.url
+      let url = getUrl(entry.url)
+      let pkg = Package(name: PackageName unicode.toLower entry.name,
+                        repo: url.toRepo(),
+                        url: url)
+      c.urlMapping[pkg.name] = pkg
 
-proc resolvePackage*(c: var AtlasContext; p: string): (PackageName, PackageUrl) =
-  proc lookup(c: var AtlasContext; p: string): tuple[name: string, url: string] =
-    fillPackageLookupTable(c)
+proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
+  result.new()
 
-    result.name = unicode.toLower p.toName().string
-    result.url = p
+  fillPackageLookupTable(c)
 
-    if p.isUrl:
-      if UsesOverrides in c.flags:
-        result.url = c.overrides.substitute(p)
-        if result.url.len > 0: return result
-      if not c.urlMapping.hasKey(result.name):
-        c.urlMapping[result.name] = p
-      else:
-        if c.urlMapping[result.name] != result.url:
-          # change package name to `org.packageName`
-          let purl = result.url.getUrl()
-          let host = purl.hostname
-          let org = purl.path.parentDir.lastPathPart
-          let rname = purl.path.lastPathPart
-          let pname = [rname, org, host].join(".") 
-          warn c, toName(result.name),
-                  "conflicting url's for package; renaming package: " &
-                    result.name & " to " & pname
-          result.name = pname
+  result.name = PackageName unicode.toLower(rawHandle)
+
+  if rawHandle.isUrl():
+    result.url = getUrl(rawHandle)
+    result.name = PackageName result.url.toRepo().string
+    result.repo = result.url.toRepo()
+
+    if UsesOverrides in c.flags:
+      let url = c.overrides.substitute(rawHandle)
+      if url.len > 0:
+        result.url = url.getUrl()
+
+    if not c.urlMapping.hasKey(result.name):
+      # package doesn't exit and doesn't conflict
+      c.urlMapping[result.name] = result
+    elif c.urlMapping[result.name].url != result.url:
+      # package conflicts
+      # change package repo to `repo.user.host`
+      let purl = result.url
+      let host = purl.hostname
+      let org = purl.path.parentDir.lastPathPart
+      let rname = purl.path.lastPathPart
+      let pname = [rname, org, host].join(".") 
+      warn c, result,
+              "conflicting url's for package; renaming package: " &
+                result.name.string & " to " & pname
+      result.repo = PackageRepo pname
+    return
+
+  else:
+    # the project name can be overwritten too!
+    if UsesOverrides in c.flags:
+      let name = c.overrides.substitute(rawHandle)
+      if name.len > 0:
+        result.name = PackageName name
+
+    if not c.urlMapping.hasKey(result.name):
+      # great, found package!
+      result = c.urlMapping[result.name]
     else:
-      # either the project name or the URL can be overwritten!
-      result.name = p
-      if UsesOverrides in c.flags:
-        result.url = c.overrides.substitute(p)
-        if result.url.len > 0: return result
+      # check if rawHandle is a package repo name
+      var found = false
+      for pkg in c.urlMapping.values:
+        if pkg.repo.string == rawHandle:
+          found = true
+          break
 
-      result.url = c.urlMapping.getOrDefault(unicode.toLower p)
-
-      if result.url.len == 0:
-        result.url = getUrlFromGithub(p)
-        if result.url.len == 0:
+      if not found:
+        let url = getUrlFromGithub(rawHandle)
+        if url.len == 0:
           inc c.errors
+        else:
+          result.url = getUrl url
 
-      if UsesOverrides in c.flags:
-        let newUrl = c.overrides.substitute(result.url)
-        if newUrl.len > 0:
-          result.url = newUrl
-
-  let (name, urlstr) = lookup(c, p)
-  when ProduceTest:
-    echo "resolve url: ", p, " to: ", urlstr
-  result = (name.toName(), urlstr.getUrl())
+    if UsesOverrides in c.flags:
+      let newUrl = c.overrides.substitute($result.url)
+      if newUrl.len > 0:
+        result.url = getUrl newUrl

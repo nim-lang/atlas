@@ -53,13 +53,13 @@ proc fromJson*(obj: JSonNode): PackageInfo =
   result.description = obj.requiredField("description")
   result.web = obj.optionalField("web")
 
-const PackagesDir* = "packages"
+const DefaultPackagesDir* = "packages"
 
-proc getPackages*(workspaceDir: string): seq[PackageInfo] =
+proc getPackageInfos*(workspaceDir: string): seq[PackageInfo] =
   result = @[]
   var uniqueNames = initHashSet[string]()
   var jsonFiles = 0
-  for kind, path in walkDir(workspaceDir / PackagesDir):
+  for kind, path in walkDir(workspaceDir / DefaultPackagesDir):
     if kind == pcFile and path.endsWith(".json"):
       inc jsonFiles
       let packages = json.parseFile(path)

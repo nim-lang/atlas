@@ -32,7 +32,6 @@ proc getUrl*(x: string): PackageUrl =
 export uri.`$`, uri.`/`, uri.UriParseError
 
 type
-  PackageName* = distinct string
   CfgPath* = distinct string # put into a config `--path:"../x"`
 
   SemVerField* = enum
@@ -44,9 +43,18 @@ type
   CloneStatus* = enum
     Ok, NotFound, OtherError
 
-  Dependency* = object
+  PackageName* = distinct string
+  PackageDir* = distinct string
+  PackageRepo* = distinct string
+
+  Package* = ref object
     name*: PackageName
+    repo*: PackageRepo
+    dir*: PackageDir
     url*: PackageUrl
+
+  Dependency* = object
+    pkg*: Package
     commit*: string
     path*: string
     query*: VersionInterval
@@ -87,9 +95,9 @@ type
     projectDir*, workspace*, depsDir*, currentDir*: string
     hasPackageList*: bool
     flags*: set[Flag]
-    urlMapping*: Table[string, string] # name -> url mapping
+    urlMapping*: Table[PackageName, Package] # name -> url mapping
     errors*, warnings*: int
-    messages: seq[(MsgKind, PackageName, string)] # delayed output
+    messages: seq[(MsgKind, PackageRepo, string)] # delayed output
     overrides*: Patterns
     defaultAlgo*: ResolutionAlgorithm
     when MockupRun:
@@ -101,31 +109,45 @@ proc `==`*(a, b: CfgPath): bool {.borrow.}
 
 proc `==`*(a, b: PackageName): bool {.borrow.}
 proc hash*(a: PackageName): Hash {.borrow.}
+proc `==`*(a, b: PackageRepo): bool {.borrow.}
+proc hash*(a: PackageRepo): Hash {.borrow.}
 
 const
   InvalidCommit* = "#head" #"<invalid commit>"
   ProduceTest* = false
 
 
-proc message(c: var AtlasContext; category: string; p: PackageName; arg: string) =
+proc message(c: var AtlasContext; category: string; p: PackageRepo; arg: string) =
   var msg = category & "(" & p.string & ") " & arg
   stdout.writeLine msg
 
-proc warn*(c: var AtlasContext; p: PackageName; arg: string) =
+proc warn*(c: var AtlasContext; p: PackageRepo; arg: string) =
   c.messages.add (Warning, p, arg)
   inc c.warnings
 
-proc error*(c: var AtlasContext; p: PackageName; arg: string) =
+proc error*(c: var AtlasContext; p: PackageRepo; arg: string) =
   c.messages.add (Error, p, arg)
   inc c.errors
 
-proc info*(c: var AtlasContext; p: PackageName; arg: string) =
+proc info*(c: var AtlasContext; p: PackageRepo; arg: string) =
   c.messages.add (Info, p, arg)
 
-proc debug*(c: var AtlasContext; p: PackageName; arg: string) =
+proc debug*(c: var AtlasContext; p: PackageRepo; arg: string) =
   c.messages.add (Debug, p, arg)
 
-proc writeMessage(c: var AtlasContext; k: MsgKind; p: PackageName; arg: string) =
+proc warn*(c: var AtlasContext; p: Package; arg: string) =
+  c.warn(p.repo, arg)
+
+proc error*(c: var AtlasContext; p: Package; arg: string) =
+  c.error(p.repo, arg)
+
+proc info*(c: var AtlasContext; p: Package; arg: string) =
+  c.info(p.repo, arg)
+
+proc debug*(c: var AtlasContext; p: Package; arg: string) =
+  c.debug(p.repo, arg)
+
+proc writeMessage(c: var AtlasContext; k: MsgKind; p: PackageRepo; arg: string) =
   if k == Debug and DebugPrint notin c.flags:
     return
   if NoColors in c.flags:
@@ -145,7 +167,7 @@ proc writePendingMessages*(c: var AtlasContext) =
     writeMessage c, k, p, arg
   c.messages.setLen 0
 
-proc infoNow*(c: var AtlasContext; p: PackageName; arg: string) =
+proc infoNow*(c: var AtlasContext; p: PackageRepo; arg: string) =
   writeMessage c, Info, p, arg
 
 proc fatal*(msg: string) =
@@ -153,28 +175,29 @@ proc fatal*(msg: string) =
     writeStackTrace()
   quit "[Error] " & msg
 
-proc toName*(p: PackageUrl): PackageName =
-  result = PackageName p.path.lastPathComponent
+proc toRepo*(p: PackageUrl): PackageRepo =
+  result = PackageRepo p.path.lastPathComponent
   if result.string.endsWith(".git"):
     result.string.setLen result.string.len - ".git".len
 
-proc toName*(p: string): PackageName =
-  if p.contains("://"):
-    result = toName getUrl(p)
-  else:
-    result = PackageName p
+# proc toName*(p: string): PackageRepo =
+#   if p.contains("://"):
+#     result = toName getUrl(p)
+#   else:
+#     result = PackageRepo p
 
-template projectFromCurrentDir*(): PackageName =
-  PackageName(c.currentDir.lastPathComponent)
+template projectFromCurrentDir*(): PackageRepo =
+  PackageRepo(c.currentDir.lastPathComponent())
 
-template toDestDir*(p: PackageName): string = p.string
+template toDestDir*(pkg: Package): PackageDir =
+  pkg.dir
 
 proc dependencyDir*(c: AtlasContext; w: Dependency): string =
   if w.path.len() != 0:
     return w.path
-  result = c.workspace / w.name.string
+  result = c.workspace / w.pkg.repo.string
   if not dirExists(result):
-    result = c.depsDir / w.name.string
+    result = c.depsDir / w.pkg.repo.string
 
 proc findNimbleFile*(c: var AtlasContext; dep: Dependency): string =
   when MockupRun:
@@ -182,14 +205,14 @@ proc findNimbleFile*(c: var AtlasContext; dep: Dependency): string =
     doAssert fileExists(result), "file does not exist " & result
   else:
     let dir = dependencyDir(c, dep)
-    result = dir / (dep.name.string & ".nimble")
+    result = dir / (dep.pkg.name.string & ".nimble")
     if not fileExists(result):
       result = ""
       for x in walkFiles(dir / "*.nimble"):
         if result.len == 0:
           result = x
         else:
-          warn c, dep.name, "ambiguous .nimble file " & result
+          warn c, dep.pkg, "ambiguous .nimble file " & result
           return ""
 
 template withDir*(c: var AtlasContext; dir: string; body: untyped) =

@@ -115,7 +115,7 @@ proc shortToCommit*(c: var AtlasContext; short: string): string =
   let (cc, status) = exec(c, GitRevParse, [short])
   result = if status == 0: strutils.strip(cc) else: ""
 
-proc checkoutGitCommit*(c: var AtlasContext; p: PackageName; commit: string) =
+proc checkoutGitCommit*(c: var AtlasContext; p: PackageRepo; commit: string) =
   let (_, status) = exec(c, GitCheckout, [commit])
   if status != 0:
     error(c, p, "could not checkout commit " & commit)
@@ -128,7 +128,7 @@ proc checkoutGitCommit*(c: var AtlasContext; p: PackageName; commit: string) =
   else:
     info(c, p, "updated submodules ")
 
-proc gitPull*(c: var AtlasContext; p: PackageName) =
+proc gitPull*(c: var AtlasContext; p: PackageRepo) =
   let (_, status) = exec(c, GitPull, [])
   if status != 0:
     error(c, p, "could not 'git pull'")
@@ -136,16 +136,16 @@ proc gitPull*(c: var AtlasContext; p: PackageName) =
 proc gitTag*(c: var AtlasContext; tag: string) =
   let (_, status) = exec(c, GitTag, [tag])
   if status != 0:
-    error(c, c.projectDir.PackageName, "could not 'git tag " & tag & "'")
+    error(c, c.projectDir.PackageRepo, "could not 'git tag " & tag & "'")
 
 proc pushTag*(c: var AtlasContext; tag: string) =
   let (outp, status) = exec(c, GitPush, [tag])
   if status != 0:
-    error(c, c.projectDir.PackageName, "could not 'git push " & tag & "'")
+    error(c, c.projectDir.PackageRepo, "could not 'git push " & tag & "'")
   elif outp.strip() == "Everything up-to-date":
-    info(c, c.projectDir.PackageName, "is up-to-date")
+    info(c, c.projectDir.PackageRepo, "is up-to-date")
   else:
-    info(c, c.projectDir.PackageName, "successfully pushed tag: " & tag)
+    info(c, c.projectDir.PackageRepo, "successfully pushed tag: " & tag)
 
 proc incrementTag*(c: var AtlasContext; lastTag: string; field: Natural): string =
   var startPos =
@@ -173,7 +173,7 @@ proc incrementLastTag*(c: var AtlasContext; field: Natural): string =
       currentCommit = exec(c, GitCurrentCommit, [])[0].strip()
 
     if lastTaggedRef == currentCommit:
-      info c, c.projectDir.PackageName, "the current commit '" & currentCommit & "' is already tagged '" & lastTag & "'"
+      info c, c.projectDir.PackageRepo, "the current commit '" & currentCommit & "' is already tagged '" & lastTag & "'"
       lastTag
     else:
       incrementTag(c, lastTag, field)
@@ -225,7 +225,7 @@ proc isOutdated*(c: var AtlasContext; f: string): bool =
 
 proc updateDir*(c: var AtlasContext; file, filter: string) =
   withDir c, file:
-    let pkg = PackageName(file)
+    let pkg = PackageRepo(file)
     let (remote, _) = osproc.execCmdEx("git remote -v")
     if filter.len == 0 or filter in remote:
       let diff = isCleanGit(c)

@@ -60,7 +60,7 @@ include $1
 
 """
 
-proc runNimScript*(c: var AtlasContext; scriptContent: string; name: PackageName) =
+proc runNimScript*(c: var AtlasContext; scriptContent: string; name: Package) =
   var buildNims = "atlas_build_0.nims"
   var i = 1
   while fileExists(buildNims):
@@ -78,24 +78,24 @@ proc runNimScript*(c: var AtlasContext; scriptContent: string; name: PackageName
   else:
     removeFile buildNims
 
-proc runNimScriptInstallHook*(c: var AtlasContext; nimbleFile: string; name: PackageName) =
+proc runNimScriptInstallHook*(c: var AtlasContext; nimbleFile: string; name: Package) =
   runNimScript c, InstallHookTemplate % [nimbleFile.escape], name
 
-proc runNimScriptBuilder*(c: var AtlasContext; p: (string, string); name: PackageName) =
+proc runNimScriptBuilder*(c: var AtlasContext; p: (string, string); name: Package) =
   runNimScript c, BuilderScriptTemplate % [p[0].escape, p[1].escape], name
 
 proc runBuildSteps*(c: var AtlasContext; g: var DepGraph) =
   # `countdown` suffices to give us some kind of topological sort:
   for i in countdown(g.nodes.len-1, 0):
     if g.nodes[i].active:
-      let destDir = toDestDir(g.nodes[i].name)
+      let destDir = g.nodes[i].pkg.dir.string
       let dir = selectDir(c.workspace / destDir, c.depsDir / destDir)
       tryWithDir dir:
         if g.nodes[i].hasInstallHooks:
           let nf = findNimbleFile(c, g.nodes[i])
           if nf.len > 0:
-            runNimScriptInstallHook c, nf, g.nodes[i].name
+            runNimScriptInstallHook c, nf, g.nodes[i].pkg
         for p in mitems c.plugins.builderPatterns:
           let f = p[0] % dir.lastPathComponent
           if fileExists(f):
-            runNimScriptBuilder c, p, g.nodes[i].name
+            runNimScriptBuilder c, p, g.nodes[i].pkg

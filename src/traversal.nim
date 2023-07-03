@@ -12,10 +12,14 @@ import std / [strutils, os]
 import context, osutils, gitops, nameresolver
 
 proc createGraph*(c: var AtlasContext;
-                  start: PackageName,
+                  start: PackageRepo,
                   url: PackageUrl,
                   path = ""): DepGraph =
-  let dep = Dependency(name: start, url: url, commit: "", path: path,
+  let pkg = Package(name: PackageName "",
+                    repo: start,
+                    url: url,
+                    dir: PackageDir path)
+  let dep = Dependency(pkg: pkg, commit: "", path: path,
                        self: 0, algo: c.defaultAlgo)
   result = DepGraph(nodes: @[dep])
   result.byName.mgetOrPut(start, @[]).add 0
