@@ -114,7 +114,8 @@ proc resolvePackage*(c: var AtlasContext; p: string): (PackageName, PackageUrl) 
           let purl = result.url.getUrl()
           let host = purl.hostname
           let org = purl.path.parentDir.lastPathPart
-          let pname = [result.name, org, host].join(".") 
+          let rname = purl.path.parentDir.lastPathPart
+          let pname = [rname, org, host].join(".") 
           warn c, toName(result.name),
                   "conflicting url's for package; renaming package: " &
                     result.name & " to " & pname
