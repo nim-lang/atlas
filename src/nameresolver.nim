@@ -113,7 +113,7 @@ proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
 
   if rawHandle.isUrl():
     result.url = getUrl(rawHandle)
-    result.name = PackageName result.url.toRepo().string
+    result.name = result.url.toRepo().PackageName 
     result.repo = result.url.toRepo()
     echo "resolvePackage: ", "IS URL: ", $result.url
 
