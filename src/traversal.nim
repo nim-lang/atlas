@@ -14,7 +14,8 @@ import context, osutils, gitops, nameresolver
 proc createGraph*(c: var AtlasContext; start: string, url: PackageUrl): DepGraph =
   result = DepGraph(nodes: @[DepNode(name: toName(start),
                                      url: url,
-                                     algo: c.defaultAlgo)])
+                                     algo: c.defaultAlgo,
+                                     selected: -1)])
   #result.byName.mgetOrPut(toName(start), @[]).add 0
   #result.byName[result.nodes[0].name] = 0
   result.urlToIdx[url] = 0

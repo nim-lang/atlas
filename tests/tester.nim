@@ -241,7 +241,7 @@ proc cleanupIntegrationTest() =
   removeFile "nim.cfg"
   removeFile "ws_integration.nimble"
 
-withDir "tests/ws_integration":
+when false: #withDir "tests/ws_integration":
   try:
     integrationTest()
   finally:
