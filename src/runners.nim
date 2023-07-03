@@ -88,7 +88,7 @@ proc runBuildSteps*(c: var AtlasContext; g: var DepGraph) =
   # `countdown` suffices to give us some kind of topological sort:
   for i in countdown(g.nodes.len-1, 0):
     if g.nodes[i].active:
-      let destDir = g.nodes[i].pkg.dir.string
+      let destDir = g.nodes[i].pkg.path.string
       let dir = selectDir(c.workspace / destDir, c.depsDir / destDir)
       tryWithDir dir:
         if g.nodes[i].hasInstallHooks:

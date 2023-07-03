@@ -50,13 +50,12 @@ type
   Package* = ref object
     name*: PackageName
     repo*: PackageRepo
-    dir*: PackageDir
+    path*: PackageDir
     url*: PackageUrl
 
   Dependency* = object
     pkg*: Package
     commit*: string
-    path*: string
     query*: VersionInterval
     self*: int # position in the graph
     parents*: seq[int] # why we need this dependency
@@ -189,22 +188,22 @@ proc toRepo*(p: string): PackageRepo =
 template projectFromCurrentDir*(): PackageRepo =
   PackageRepo(c.currentDir.lastPathComponent())
 
-template toDestDir*(pkg: Package): PackageDir =
-  pkg.dir
+proc toDestDir*(pkg: Package): PackageDir =
+  pkg.path
 
-proc dependencyDir*(c: AtlasContext; w: Dependency): string =
-  if w.path.len() != 0:
-    return w.path
-  result = c.workspace / w.pkg.repo.string
-  if not dirExists(result):
-    result = c.depsDir / w.pkg.repo.string
+proc dependencyDir*(c: AtlasContext; w: Dependency): PackageDir =
+  if w.pkg.path.string.len() != 0:
+    return w.pkg.path
+  result = PackageDir c.workspace / w.pkg.repo.string
+  if not dirExists(result.string):
+    result = PackageDir c.depsDir / w.pkg.repo.string
 
 proc findNimbleFile*(c: var AtlasContext; dep: Dependency): string =
   when MockupRun:
     result = TestsDir / dep.name.string & ".nimble"
     doAssert fileExists(result), "file does not exist " & result
   else:
-    let dir = dependencyDir(c, dep)
+    let dir = dependencyDir(c, dep).string
     result = dir / (dep.pkg.name.string & ".nimble")
     if not fileExists(result):
       result = ""

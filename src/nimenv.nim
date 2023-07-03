@@ -80,7 +80,7 @@ proc setupNimEnv*(c: var AtlasContext; nimVersion: string) =
     let pkg = Package(name: PackageName "nim",
                       repo: toRepo(nimDest),
                       url: getUrl "https://github.com/nim-lang/nim",
-                      dir: PackageDir nimDest)
+                      path: PackageDir nimDest)
     let dep = Dependency(pkg: pkg, commit: nimVersion, self: 0,
                          algo: c.defaultAlgo,
                          query: createQueryEq(if nimVersion.isDevel: Version"#head" else: Version(nimVersion)))
