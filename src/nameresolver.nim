@@ -112,8 +112,9 @@ proc resolvePackage*(c: var AtlasContext; p: string): (PackageName, PackageUrl) 
         if c.urlMapping[result.name] != result.url:
           # change package name to `org.packageName`
           let purl = result.url.getUrl()
+          let host = purl.hostname
           let org = purl.path.parentDir.lastPathPart
-          let pname = org & "." & result.name
+          let pname = [result.name, org, host].join(".") 
           warn c, toName(result.name),
                   "conflicting url's for package; renaming package: " &
                     result.name & " to " & pname
