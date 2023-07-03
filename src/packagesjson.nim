@@ -85,6 +85,7 @@ proc toTags(j: JsonNode): seq[string] =
 
 proc singleGithubSearch(term: string): JsonNode =
   when UnitTests:
+    echo "SEARCH: ", term
     let filename = "query_github_" & term & ".json"
     let path = findAtlasDir() / "tests" / "test_data" / filename
     result = json.parseFile(path)
