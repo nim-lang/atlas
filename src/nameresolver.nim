@@ -92,12 +92,15 @@ proc fillPackageLookupTable(c: var AtlasContext) =
       if not fileExists(c.workspace / DefaultPackagesDir / "packages.json"):
         updatePackages(c)
     let plist = getPackageInfos(when MockupRun: TestsDir else: c.workspace)
+    echo "fillPackageLookupTable"
     for entry in plist:
       let url = getUrl(entry.url)
       let pkg = Package(name: PackageName unicode.toLower entry.name,
                         repo: url.toRepo(),
                         url: url)
-      c.urlMapping[pkg.name] = pkg
+      c.urlMapping["name:" & pkg.name.string] = pkg
+
+import sequtils
 
 proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
   result.new()
@@ -106,7 +109,7 @@ proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
 
   result.name = PackageName unicode.toLower(rawHandle)
 
-  echo "resolvePackage: ", rawHandle
+  echo "\nresolvePackage: ", rawHandle
 
   if rawHandle.isUrl():
     result.url = getUrl(rawHandle)
@@ -119,21 +122,31 @@ proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
       if url.len > 0:
         result.url = url.getUrl()
 
-    if not c.urlMapping.hasKey(result.name):
+    let namePkg = c.urlMapping.getOrDefault("name:" & result.name.string, nil)
+    let repoPkg = c.urlMapping.getOrDefault("repo:" & result.name.string, nil)
+
+    if not namePkg.isNil:
+      if namePkg.url != result.url:
+        # package conflicts
+        # change package repo to `repo.user.host`
+        let purl = result.url
+        let host = purl.hostname
+        let org = purl.path.parentDir.lastPathPart
+        let rname = purl.path.lastPathPart
+        let pname = [rname, org, host].join(".") 
+        warn c, result,
+                "conflicting url's for package; renaming package: " &
+                  result.name.string & " to " & pname
+        result.repo = PackageRepo pname
+        c.urlMapping["name:" & result.name.string] = result
+
+    elif not repoPkg.isNil:
+      discard
+    else:
       # package doesn't exit and doesn't conflict
-      c.urlMapping[result.name] = result
-    elif c.urlMapping[result.name].url != result.url:
-      # package conflicts
-      # change package repo to `repo.user.host`
-      let purl = result.url
-      let host = purl.hostname
-      let org = purl.path.parentDir.lastPathPart
-      let rname = purl.path.lastPathPart
-      let pname = [rname, org, host].join(".") 
-      warn c, result,
-              "conflicting url's for package; renaming package: " &
-                result.name.string & " to " & pname
-      result.repo = PackageRepo pname
+      # set the url with package name as url name
+      c.urlMapping["repo:" & result.name.string] = result
+
     
     return
 
@@ -145,10 +158,12 @@ proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
       if name.len > 0:
         result.name = PackageName name
 
-    if not c.urlMapping.hasKey(result.name):
+    echo "URL MAP: ", repr c.urlMapping.keys().toSeq()
+    let namePkg = c.urlMapping.getOrDefault("name:" & result.name.string, nil)
+    if not namePkg.isNil:
       # great, found package!
       echo "resolvePackage: not url: found!"
-      result = c.urlMapping[result.name]
+      result = namePkg
     else:
       echo "resolvePackage: not url: not found"
       # check if rawHandle is a package repo name
@@ -157,7 +172,7 @@ proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
         if pkg.repo.string == rawHandle:
           found = true
           result = pkg
-          echo "resolvePackage: not url: found!"
+          echo "resolvePackage: not url: found by repo!"
           break
 
       if not found:

@@ -95,7 +95,7 @@ type
     projectDir*, workspace*, depsDir*, currentDir*: string
     hasPackageList*: bool
     flags*: set[Flag]
-    urlMapping*: Table[PackageName, Package] # name -> url mapping
+    urlMapping*: Table[string, Package] # name -> url mapping
     errors*, warnings*: int
     messages: seq[(MsgKind, PackageRepo, string)] # delayed output
     overrides*: Patterns

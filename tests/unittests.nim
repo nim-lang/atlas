@@ -26,6 +26,8 @@ let
     )
   }
 
+import sequtils, tables
+
 proc initBasicWorkspace(typ: type AtlasContext): AtlasContext =
   result.workspace = currentSourcePath().parentDir / "ws_basic"
 
