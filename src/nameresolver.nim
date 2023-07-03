@@ -100,8 +100,6 @@ proc fillPackageLookupTable(c: var AtlasContext) =
                         url: url)
       c.urlMapping["name:" & pkg.name.string] = pkg
 
-import sequtils
-
 proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
   result.new()
 
