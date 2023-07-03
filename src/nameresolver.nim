@@ -106,10 +106,13 @@ proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
 
   result.name = PackageName unicode.toLower(rawHandle)
 
+  echo "resolvePackage: ", rawHandle
+
   if rawHandle.isUrl():
     result.url = getUrl(rawHandle)
     result.name = PackageName result.url.toRepo().string
     result.repo = result.url.toRepo()
+    echo "resolvePackage: ", "IS URL: ", $result.url
 
     if UsesOverrides in c.flags:
       let url = c.overrides.substitute(rawHandle)
@@ -131,9 +134,11 @@ proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
               "conflicting url's for package; renaming package: " &
                 result.name.string & " to " & pname
       result.repo = PackageRepo pname
+    
     return
 
   else:
+    echo "resolvePackage: not url"
     # the project name can be overwritten too!
     if UsesOverrides in c.flags:
       let name = c.overrides.substitute(rawHandle)
@@ -142,13 +147,17 @@ proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
 
     if not c.urlMapping.hasKey(result.name):
       # great, found package!
+      echo "resolvePackage: not url: found!"
       result = c.urlMapping[result.name]
     else:
+      echo "resolvePackage: not url: not found"
       # check if rawHandle is a package repo name
       var found = false
       for pkg in c.urlMapping.values:
         if pkg.repo.string == rawHandle:
           found = true
+          result = pkg
+          echo "resolvePackage: not url: found!"
           break
 
       if not found:
@@ -161,4 +170,5 @@ proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
     if UsesOverrides in c.flags:
       let newUrl = c.overrides.substitute($result.url)
       if newUrl.len > 0:
+        echo "resolvePackage: not url: UsesOverrides: ", newUrl
         result.url = getUrl newUrl
