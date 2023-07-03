@@ -22,7 +22,7 @@ proc createGraph*(c: var AtlasContext;
   let dep = Dependency(pkg: pkg, commit: "", path: path,
                        self: 0, algo: c.defaultAlgo)
   result = DepGraph(nodes: @[dep])
-  result.byName.mgetOrPut(start, @[]).add 0
+  result.byName.mgetOrPut(start, @[]).add(0)
 
 proc selectNode*(c: var AtlasContext; g: var DepGraph; w: Dependency) =
   # all other nodes of the same project name are not active
