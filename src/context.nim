@@ -59,7 +59,8 @@ type
     dir*: string
     subs*: seq[DepSubnode]
     versions*: seq[Commit] # sorted, latest version comes first
-    selected*: int # index to `availableVersions`
+    vindex*: int # index to `versions`
+    sindex*: int # index to `subs`
     algo*: ResolutionAlgorithm
     status*: CloneStatus
 
@@ -194,10 +195,11 @@ template withDir*(c: var AtlasContext; dir: string; body: untyped) =
   when MockupRun:
     body
   else:
+    assert dir != ""
     let oldDir = getCurrentDir()
     try:
       when ProduceTest:
-        echo "Current directory is now ", dir
+        echo "Current directory is now ##", dir, "##"
       setCurrentDir(dir)
       body
     finally:

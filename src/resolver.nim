@@ -112,7 +112,8 @@ proc resolve*(c: var AtlasContext; g: var DepGraph) =
       for j in 0 ..< g.nodes[i].versions.len:
         let thisNode = i * g.nodes.len + j
         if s[thisNode] == setToTrue:
-          g.nodes[i].selected = j
+          g.nodes[i].vindex = j
+          g.nodes[i].sindex = findDeps(g.nodes[i], g.nodes[i].versions[j])
           withDir c, g.nodes[i].dir:
             checkoutGitCommit(c, toName(g.nodes[i].dir), g.nodes[i].versions[j].h)
     if NoExec notin c.flags:

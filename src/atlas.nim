@@ -128,7 +128,7 @@ proc findSrcDir(c: var AtlasContext): string =
 proc activePaths(c: var AtlasContext; g: DepGraph): seq[CfgPath] =
   result = @[]
   for i in 0 ..< g.nodes.len:
-    let s = g.nodes[i].selected
+    let s = g.nodes[i].sindex
     if s >= 0:
       let x = CfgPath(g.nodes[i].dir / g.nodes[i].subs[s].srcDir)
       result.add x
@@ -136,7 +136,7 @@ proc activePaths(c: var AtlasContext; g: DepGraph): seq[CfgPath] =
 proc findBestNimVersion(g: DepGraph): Version =
   result = Version""
   for i in 0 ..< g.nodes.len:
-    let s = g.nodes[i].selected
+    let s = g.nodes[i].sindex
     if s >= 0:
       let v = extractGeQuery(g.nodes[i].subs[s].nimVersion)
       if v != Version"" and v > result: result = v
@@ -189,9 +189,12 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool) =
     let w = g.nodes[i]
     let destDir = toDestDir(w.name)
 
-    let dir = selectDir(c.workspace / destDir, c.depsDir / destDir)
-    if not dirExists(dir):
-      withDir c, (if i != 0 or startIsDep: c.depsDir else: c.workspace):
+    let cloneTarget = selectDir(c.workspace / destDir, c.depsDir / destDir)
+    if not dirExists(cloneTarget):
+      let targetDir = if i != 0 or startIsDep: c.depsDir else: c.workspace
+      assert targetDir != ""
+      g.nodes[i].dir = targetDir
+      withDir c, targetDir:
         let (status, err) =
           if w.url.scheme == FileProtocol:
             copyFromDisk(c, w, destDir)
@@ -207,7 +210,8 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool) =
           withDir c, destDir:
             expandGraph c, g, i
     else:
-      withDir c, dir:
+      g.nodes[i].dir = cloneTarget
+      withDir c, cloneTarget:
         expandGraph c, g, i
     inc i
 

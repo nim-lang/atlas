@@ -15,7 +15,7 @@ proc createGraph*(c: var AtlasContext; start: string, url: PackageUrl): DepGraph
   result = DepGraph(nodes: @[DepNode(name: toName(start),
                                      url: url,
                                      algo: c.defaultAlgo,
-                                     selected: -1)])
+                                     sindex: -1, vindex: -1)])
   #result.byName.mgetOrPut(toName(start), @[]).add 0
   #result.byName[result.nodes[0].name] = 0
   result.urlToIdx[url] = 0
@@ -143,7 +143,7 @@ proc addDeps(c: var AtlasContext; g: var DepGraph; deps: seq[DepSubnode]) =
         if not g.urlToIdx.contains(url):
           g.urlToIdx[url] = g.nodes.len
           g.nodes.add DepNode(name: toName(url), url: url, dir: "", subs: deps,
-                              selected: -1, algo: c.defaultAlgo, status: Ok)
+                              sindex: -1, vindex: -1, algo: c.defaultAlgo, status: Ok)
 
 proc expandGraph*(c: var AtlasContext; g: var DepGraph; i: int) =
   let nimbleFile = findNimbleFile(c, g.nodes[i])
