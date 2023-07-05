@@ -54,7 +54,10 @@ proc exec*(c: var AtlasContext; cmd: Command; args: openArray[string]): (string,
       result[1] = TestLog[c.step].exitCode
     inc c.step
   else:
-    result = silentExec($cmd, args)
+    if dirExists(".git"):
+      result = silentExec($cmd, args)
+    else:
+      result = ("not a git repository", 1)
     when ProduceTest:
       echo "cmd ", cmd, " args ", args, " --> ", result
 
