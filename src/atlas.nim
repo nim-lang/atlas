@@ -193,7 +193,7 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool) =
     if not dirExists(cloneTarget):
       let targetDir = if i != 0 or startIsDep: c.depsDir else: c.workspace
       assert targetDir != ""
-      g.nodes[i].dir = targetDir
+      g.nodes[i].dir = targetDir / destDir
       withDir c, targetDir:
         let (status, err) =
           if w.url.scheme == FileProtocol:
