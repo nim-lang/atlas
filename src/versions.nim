@@ -203,6 +203,9 @@ type
     h*: string
     v*: Version
 
+const
+  HeadCommit* = Commit(h: "", v: Version"#head")
+
 proc parseTaggedVersions*(outp: string): seq[Commit] =
   result = @[]
   for line in splitLines(outp):

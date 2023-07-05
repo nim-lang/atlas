@@ -33,7 +33,8 @@ proc toString(name: PackageName; v: Version): string =
 
 proc findDeps(n: DepNode; commit: Commit): int =
   for j in 0 ..< n.subs.len:
-    if n.subs[j].commit.v == commit.v or n.subs[j].commit.h == commit.h:
+    if (commit.v != Version"" and n.subs[j].commit.v == commit.v) or
+       (commit.h != "" and n.subs[j].commit.h == commit.h):
       return j
   return -1
 

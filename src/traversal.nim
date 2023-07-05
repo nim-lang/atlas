@@ -122,7 +122,7 @@ proc nimbleFileVersions(c: var AtlasContext; nimbleFile: string): seq[Commit] =
 
 proc allDeps*(c: var AtlasContext; nimbleFile: string): seq[DepSubnode] =
   let cv = nimbleFileVersions(c, nimbleFile)
-  result = @[]
+  result = @[parseNimbleFile(c, nimbleFile, HeadCommit)]
   try:
     for commit in items cv:
       let (err, exitCode) = osproc.execCmdEx("git checkout " & commit.h & " -- " & quoteShell(nimbleFile))
