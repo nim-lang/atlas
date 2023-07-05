@@ -40,17 +40,18 @@ proc findDeps(n: DepNode; commit: Commit): int =
 
 proc toGraph(c: var AtlasContext; g: DepGraph; b: var sat.Builder) =
   var urlToIndex = initTable[string, int]()
+  var thisNode = 0
   for i in 0 ..< g.nodes.len:
     for j in 0 ..< g.nodes[i].versions.len:
-      let thisNode = i * g.nodes.len + j
       let key = $g.nodes[i].url & "/" & g.nodes[i].versions[j].h
       urlToIndex[key] = thisNode + 1
+      inc thisNode
 
     urlToIndex[$g.nodes[i].url] = i+1
 
+  thisNode = 0
   for i in 0 ..< g.nodes.len:
     for j in 0 ..< g.nodes[i].versions.len:
-      let thisNode = i * g.nodes.len + j
       let jj = findDeps(g.nodes[i], g.nodes[i].versions[j])
       if jj >= 0:
         for d in 0 ..< g.nodes[i].subs[jj].deps.len:
@@ -81,6 +82,7 @@ proc toGraph(c: var AtlasContext; g: DepGraph; b: var sat.Builder) =
             b.closeOpr # OrForm
             if counter == 0:
               b.rewind bpos
+      inc thisNode
 
 proc toFormular(c: var AtlasContext; g: var DepGraph): Formular =
   var b = sat.Builder()
@@ -109,41 +111,46 @@ proc resolve*(c: var AtlasContext; g: var DepGraph) =
       else:
         buf.add $mapping[i - L])
   if satisfiable(f, s):
+    var thisNode = 0
     for i in 0 ..< g.nodes.len:
       for j in 0 ..< g.nodes[i].versions.len:
-        let thisNode = i * g.nodes.len + j
         if s[thisNode] == setToTrue:
           g.nodes[i].vindex = j
           g.nodes[i].sindex = findDeps(g.nodes[i], g.nodes[i].versions[j])
           withDir c, g.nodes[i].dir:
             checkoutGitCommit(c, toName(g.nodes[i].dir), g.nodes[i].versions[j].h)
+        inc thisNode
+
     if NoExec notin c.flags:
       runBuildSteps(c, g)
       #echo f
     if ListVersions in c.flags:
       echo "selected:"
+      var thisNode = 0
       for i in 0 ..< g.nodes.len:
         for j in 0 ..< g.nodes[i].versions.len:
-          let thisNode = i * g.nodes.len + j
           let nodeRepr = toString(g.nodes[i].name, g.nodes[i].versions[j].v)
           if s[thisNode] == setToTrue:
             echo "[x] ", nodeRepr
           else:
             echo "[ ] ", nodeRepr
+          inc thisNode
       echo "end of selection"
   else:
     error c, toName(c.workspace), "version conflict; for more information use --showGraph"
     var usedVersions = initCountTable[string]()
+    var thisNode = 0
     for i in 0 ..< g.nodes.len:
       for j in 0 ..< g.nodes[i].versions.len:
-        let thisNode = i * g.nodes.len + j
         if s[thisNode] == setToTrue:
           usedVersions.inc $g.nodes[i].name
+        inc thisNode
 
+    thisNode = 0
     for i in 0 ..< g.nodes.len:
       let counter = usedVersions.getOrDefault($g.nodes[i].name)
-      if counter > 1:
-        for j in 0 ..< g.nodes[i].versions.len:
-          let thisNode = i * g.nodes.len + j
+      for j in 0 ..< g.nodes[i].versions.len:
+        if counter > 1:
           if s[thisNode] == setToTrue:
             error c, g.nodes[i].name, $g.nodes[i].versions[j] & " required"
+        inc thisNode
