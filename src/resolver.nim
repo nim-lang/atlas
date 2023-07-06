@@ -36,7 +36,7 @@ proc findDeps(n: DepNode; commit: Commit): int =
     if (commit.v != Version"" and n.subs[j].commit.v == commit.v) or
        (commit.h != "" and n.subs[j].commit.h == commit.h):
       return j
-  return -1
+  return if n.subs.len > 0: 0 else: -1
 
 proc toGraph(c: var AtlasContext; g: DepGraph; b: var sat.Builder) =
   var urlToIndex = initTable[string, int]()
@@ -55,7 +55,7 @@ proc toGraph(c: var AtlasContext; g: DepGraph; b: var sat.Builder) =
       let jj = findDeps(g.nodes[i], g.nodes[i].versions[j])
       if jj >= 0:
         for d in 0 ..< g.nodes[i].subs[jj].deps.len:
-          let dep {.cursor.} = g.nodes[i].subs[j].deps[d]
+          let dep {.cursor.} = g.nodes[i].subs[jj].deps[d]
           let url = resolveUrl(c, dep.nameOrUrl)
 
           if $url == "":

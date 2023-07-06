@@ -105,7 +105,7 @@ proc shortToCommit*(c: var AtlasContext; short: string): string =
 
 proc checkoutGitCommit*(c: var AtlasContext; p: PackageName; commit: string) =
   let commit = if commit.startsWith('#'): commit else: ("#" & commit)
-  let (_, status) = exec(c, GitCheckout, [commit])
+  let (_, status) = exec(c, GitCheckout, [commit.substr(1)])
   if status != 0:
     error(c, p, "could not checkout commit " & commit)
 
