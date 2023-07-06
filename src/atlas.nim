@@ -17,8 +17,9 @@ import context, runners, osutils, packagesjson, gitops, nimenv, lockfiles,
 export osutils, context
 
 const
-  AtlasVersion = "0.6.0"
+  AtlasVersion = "0.6.2"
   LockFileName = "atlas.lock"
+  NimbleLockFileName = "nimble.lock"
   Usage = "atlas - Nim Package Cloner Version " & AtlasVersion & """
 
   (c) 2021 Andreas Rumpf
@@ -49,6 +50,8 @@ Command:
                         or a letter ['a'..'z']: a.b.c.d.e.f.g
   pin [atlas.lock]      pin the current checkouts and store them in the lock
   rep [atlas.lock]      replay the state of the projects according to the lock
+  convert <nimble.lock> [atlas.lock]
+                        convert Nimble lockfile into an Atlas one
   outdated              list the packages that are outdated
   build|test|doc|tasks  currently delegates to `nimble build|test|doc`
   task <taskname>       currently delegates to `nimble <taskname>`
@@ -422,7 +425,7 @@ proc main(c: var AtlasContext) =
       elif autoinit:
         c.workspace = autoWorkspace(c.currentDir)
         createWorkspaceIn c.workspace, c.depsDir
-      elif action notin ["search", "list"]:
+      elif action notin ["search", "list", "tag"]:
         fatal "No workspace found. Run `atlas init` if you want this current directory to be your workspace."
 
   when MockupRun:
@@ -454,9 +457,14 @@ proc main(c: var AtlasContext) =
       pinWorkspace c, args[0]
     else:
       pinProject c, args[0]
-  of "rep":
+  of "rep", "replay", "reproduce":
     optSingleArg(LockFileName)
     replay c, args[0]
+  of "convert":
+    if args.len < 1:
+      fatal "convert command takes a nimble lockfile argument"
+    let lfn = if args.len == 1: LockFileName else: args[1]
+    convertAndSaveNimbleLock c, args[0], lfn
   of "install":
     projectCmd()
     if args.len > 1:

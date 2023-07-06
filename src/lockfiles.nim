@@ -121,13 +121,49 @@ proc compareVersion(c: var AtlasContext; key, wanted, got: string) =
     warn c, toName(key), "environment mismatch: " &
       " versions differ: previously used: " & wanted & " but now at: " & got
 
+proc convertNimbleLock*(c: var AtlasContext; nimblePath: string): LockFile =
+  ## converts nimble lock file into a Atlas lockfile
+  ## 
+  let jsonAsStr = readFile(nimblePath)
+  let jsonTree = parseJson(jsonAsStr)
+
+  if jsonTree.getOrDefault("version") == nil or
+      "packages" notin jsonTree:
+    error c, toName(nimblePath), "invalid nimble lockfile"
+    return
+
+  result = newLockFile()
+  for (name, pkg) in jsonTree["packages"].pairs:
+    info c, toName(name), " imported "
+    let dir = c.depsDir / name
+    result.items[name] = LockFileEntry(
+      dir: dir,
+      url: pkg["url"].getStr,
+      commit: pkg["vcsRevision"].getStr,
+    )
+
+proc convertAndSaveNimbleLock*(c: var AtlasContext; nimblePath, lockFilePath: string) =
+  ## convert and save a nimble.lock into an Atlast lockfile
+  let lf = convertNimbleLock(c, nimblePath)
+  write lf, lockFilePath
+
 proc replay*(c: var AtlasContext; lockFilePath: string) =
-  let lf = readLockFile(lockFilePath)
+  ## replays the given lockfile by cloning and updating all the deps
+  ## 
+  ## this also includes updating the nim.cfg and nimble file as well
+  ## if they're included in the lockfile
+  ## 
+  let lf = if lockFilePath == "nimble.lock": convertNimbleLock(c, lockFilePath)
+           else: readLockFile(lockFilePath)
+
   let base = splitPath(lockFilePath).head
+  # update the nim.cfg file
   if lf.nimcfg.len > 0:
     writeFile(base / NimCfg, lf.nimcfg)
+  # update the nimble file
   if lf.nimbleFile.filename.len > 0:
     writeFile(base / lf.nimbleFile.filename, lf.nimbleFile.content)
+  # update the the dependencies
   for _, v in pairs(lf.items):
     let dir = base / v.dir
     if not dirExists(dir):
