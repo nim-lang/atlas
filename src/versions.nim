@@ -133,6 +133,8 @@ proc parseVer(s: string; start: var int): Version =
 
 proc parseVersion*(s: string; start: int): Version =
   var i = start
+  while i < s.len and s[i] in Whitespace: inc i
+  if i < s.len and s[i] == 'v': inc i
   result = parseVer(s, i)
 
 proc parseSuffix(s: string; start: int; result: var VersionQuery; err: var bool) =
