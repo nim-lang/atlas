@@ -189,7 +189,7 @@ proc copyFromDisk(c: var AtlasContext; w: DepNode; destDir: string): (CloneStatu
 proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool) =
   var i = 0
   while i < g.nodes.len:
-    let w = g.nodes[i]
+    template w(): untyped = g.nodes[i]
     let destDir = toDestDir(w.name)
 
     let cloneTarget = selectDir(c.workspace / destDir, c.depsDir / destDir)

@@ -38,12 +38,15 @@ proc findDeps(n: DepNode; commit: Commit): int =
       return j
   return if n.subs.len > 0: 0 else: -1
 
+proc toKey(c: Commit): string =
+  if c.h.len > 0: c.h else: c.v.string
+
 proc toGraph(c: var AtlasContext; g: DepGraph; b: var sat.Builder) =
   var urlToIndex = initTable[string, int]()
   var thisNode = 0
   for i in 0 ..< g.nodes.len:
     for j in 0 ..< g.nodes[i].versions.len:
-      let key = $g.nodes[i].url & "/" & g.nodes[i].versions[j].h
+      let key = $g.nodes[i].url & "/" & toKey g.nodes[i].versions[j]
       urlToIndex[key] = thisNode + 1
       inc thisNode
 
