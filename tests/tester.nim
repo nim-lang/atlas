@@ -100,12 +100,13 @@ when false:
   testWsConflict()
 
 const
-  SemVer2ExpectedResult = """selected:
-[ ] (proj_a, 1.0.0)
-[x] (proj_a, 1.1.0)
-[x] (proj_b, 1.1.0)
-[x] (proj_c, 1.2.0)
-"""
+  SemVer2ExpectedResult = dedent"""
+    [Info] (../resolve) selected:
+    [Info] (proj_a) [ ] (proj_a, 1.0.0)
+    [Info] (proj_a) [x] (proj_a, 1.1.0)
+    [Info] (proj_b) [x] (proj_b, 1.1.0)
+    [Info] (proj_c) [x] (proj_c, 1.2.0)
+    """
 
 proc testSemVer2() =
   createDir "source"
@@ -159,7 +160,7 @@ proc testSemVer2() =
 
   createDir "myproject"
   withDir "myproject":
-    let (outp, status) = execCmdEx(atlasExe & " --list use proj_a", {poStdErrToStdOut})
+    let (outp, status) = execCmdEx(atlasExe & " --colors=off --list use proj_a", {poStdErrToStdOut})
     if status == 0:
       if outp.contains SemVer2ExpectedResult:
         discard "fine"
