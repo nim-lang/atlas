@@ -31,17 +31,6 @@ proc sameDirContents(expected, given: string): bool =
       inc failures
       result = false
 
-proc testWsConflict() =
-  const myproject = "tests/ws_conflict/myproject"
-  createDir(myproject)
-  exec atlasExe & " --project=" & myproject & " --showGraph use https://github.com/apkg"
-  if sameDirContents("tests/ws_conflict/expected", myproject):
-    removeDir("tests/ws_conflict/apkg")
-    removeDir("tests/ws_conflict/bpkg")
-    removeDir("tests/ws_conflict/cpkg")
-    removeDir("tests/ws_conflict/dpkg")
-    removeDir(myproject)
-
 type
   Node = object
     name: string
@@ -59,51 +48,14 @@ template withDir(dir: string; body: untyped) =
   finally:
     setCurrentDir(old)
 
-proc createNimblePackage(node: Node) =
-  for v in node.versions:
-    let packagePath = if v != "1.0.0": node.name & "@" & v else: node.name
-    createDir(packagePath)
-    withDir packagePath:
-      var nimbleContent = ""
-      for d in node.deps:
-        nimbleContent.add &"requires \"{d}\""
-      writeFile(node.name & ".nimble", nimbleContent)
-
-proc testSemVer() =
-  # Example graph data
-  let graph = @[
-    createNode("A", @["1.0.0", "1.1.0", "2.0.0"], @[]),
-    createNode("B", @["2.1.0", "3.0.0", "3.1.0"], @["A >= 1.0.0"]),
-    createNode("C", @["1.2.0", "1.2.1"], @["B >= 2.0.0"]),
-    createNode("D", @["1.0.0", "1.1.0", "1.1.1"], @["C >= 1.0"]),
-    createNode("E", @["2.0.0", "2.0.1", "2.1.0"], @["D >= 1.0.0"]),
-    createNode("F", @["1.0.0", "1.0.1", "1.1.0"], @["E >= 2.0.0"])
-  ]
-
-  createDir "source"
-  withDir "source":
-    for i in 0..<graph.len:
-      createNimblePackage graph[i]
-
-  createDir "myproject"
-  withDir "myproject":
-    exec atlasExe & " --showGraph use F"
-
-when false:
-  withDir "tests/ws_semver":
-    testSemVer()
-  if sameDirContents("tests/ws_semver/expected", "tests/ws_semver/myproject"):
-    removeDir("tests/ws_semver/myproject")
-    removeDir("tests/ws_semver/source")
-
-  testWsConflict()
-
 const
   SemVerExpectedResult = """selected:
-[ ] (proj_a, 1.0.0)
 [x] (proj_a, 1.1.0)
+[ ] (proj_a, 1.0.0)
 [x] (proj_b, 1.1.0)
+[ ] (proj_b, 1.0.0)
 [x] (proj_c, 1.2.0)
+[ ] (proj_d, 2.0.0)
 [x] (proj_d, 1.0.0)
 end of selection
 """
@@ -199,19 +151,18 @@ proc testMinVer() =
     else:
       assert false, outp
 
-when false:
-  withDir "tests/ws_semver2":
-    try:
-      testSemVer2()
-    finally:
-      removeDir "does_not_exist"
-      removeDir "semproject"
-      removeDir "minproject"
-      removeDir "source"
-      removeDir "proj_a"
-      removeDir "proj_b"
-      removeDir "proj_c"
-      removeDir "proj_d"
+withDir "tests/ws_semver2":
+  try:
+    testSemVer2()
+  finally:
+    removeDir "does_not_exist"
+    removeDir "semproject"
+    removeDir "minproject"
+    removeDir "source"
+    removeDir "proj_a"
+    removeDir "proj_b"
+    removeDir "proj_c"
+    removeDir "proj_d"
 
 withDir "tests/ws_semver2":
   try:
