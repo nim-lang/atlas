@@ -289,9 +289,10 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
     for i in g.nodes.len..<s.len:
       if s[i] == setToTrue:
         let pkg = mapping[i - g.nodes.len][0]
-        print pkg
         let destDir = pkg.name.string
-        let dir = selectDir(c.workspace / destDir, c.depsDir / destDir)
+        debug c, pkg, "satisfiable"
+        let dir = pkg.path.string
+        # let dir = selectDir(c.workspace / destDir, c.depsDir / destDir)
         # withDir c, dir:
         let oldDir = getCurrentDir()
         try:
@@ -304,12 +305,13 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
       runBuildSteps(c, g)
       #echo f
     if ListVersions in c.flags:
-      info c, toRepo("resolve"), "selected:"
+      info c, toRepo("../resolve"), "selected:"
       for i in g.nodes.len..<s.len:
+        let item = mapping[i - g.nodes.len]
         if s[i] == setToTrue:
-          info c, toRepo("resolve"), "[x] " & toString mapping[i - g.nodes.len]
+          info c, item[0], "[x] " & toString item
         else:
-          info c, toRepo("resolve"), "[ ] " & toString mapping[i - g.nodes.len]
+          info c, item[0], "[ ] " & toString item
   else:
     error c, toRepo(c.workspace), "version conflict; for more information use --showGraph"
     var usedVersions = initCountTable[Package]()
