@@ -9,7 +9,7 @@ if execShellCmd("nim c -r tests/unittests.nim") != 0:
 var failures = 0
 
 let atlasExe = absolutePath("bin" / "atlas".addFileExt(ExeExt))
-if execShellCmd("nim c -o:$# src/atlas.nim" % [atlasExe]) != 0:
+if execShellCmd("nim c -d:debug -o:$# src/atlas.nim" % [atlasExe]) != 0:
   quit("FAILURE: compilation of atlas failed")
 
 proc exec(cmd: string) =
@@ -158,7 +158,7 @@ proc testSemVer2() =
 
   createDir "myproject"
   withDir "myproject":
-    let (outp, status) = execCmdEx(atlasExe & " --list use proj_a")
+    let (outp, status) = execCmdEx(atlasExe & " --list use proj_a", {poStdErrToStdOut})
     if status == 0:
       if outp.contains SemVer2ExpectedResult:
         discard "fine"
@@ -166,7 +166,10 @@ proc testSemVer2() =
         echo "expected ", SemVer2ExpectedResult, " but got ", outp
         raise newException(AssertionDefect, "Test failed!")
     else:
-      assert false, outp
+      echo "atlas error:\n"
+      for line in outp.splitLines:
+        echo "> " & line
+      raise newException(Exception, "myproject: atlas exec error: " & $status)
 
 withDir "tests/ws_semver2":
   try:

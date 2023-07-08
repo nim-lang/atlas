@@ -172,7 +172,7 @@ proc resolvePackageName(c: var AtlasContext; name: string): Package =
     if name.len > 0:
       result.name = PackageName name
 
-  echo "URL MAP: ", repr c.urlMapping.keys().toSeq()
+  # echo "URL MAP: ", repr c.urlMapping.keys().toSeq()
   let namePkg = c.urlMapping.getOrDefault("name:" & result.name.string, nil)
   let repoPkg = c.urlMapping.getOrDefault("repo:" & result.name.string, nil)
 
