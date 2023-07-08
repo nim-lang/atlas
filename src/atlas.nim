@@ -597,6 +597,7 @@ proc main(c: var AtlasContext) =
         of "on": c.flags.excl NoColors
         else: writeHelp()
       of "verbose": c.flags.incl DebugPrint
+      of "assertonerror": c.flags.incl AssertOnError
       of "resolver":
         try:
           c.defaultAlgo = parseEnum[ResolutionAlgorithm](val)

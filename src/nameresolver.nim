@@ -94,7 +94,7 @@ proc fillPackageLookupTable(c: var AtlasContext) =
       if not fileExists(c.workspace / DefaultPackagesDir / "packages.json"):
         updatePackages(c)
     let plist = getPackageInfos(when MockupRun: TestsDir else: c.workspace)
-    echo "fillPackageLookupTable"
+    debug c, toRepo("fillPackageLookupTable"), "initializing..."
     for entry in plist:
       let url = getUrl(entry.url)
       let pkg = Package(name: PackageName unicode.toLower entry.name,
@@ -163,9 +163,10 @@ proc resolvePackageUrl(c: var AtlasContext; url: string): Package =
     c.urlMapping["repo:" & result.name.string] = result
 
 proc resolvePackageName(c: var AtlasContext; name: string): Package =
-  result = Package(name: PackageName name)
+  result = Package(name: PackageName name,
+                   repo: PackageRepo name)
 
-  echo "resolvePackageName: not url"
+  debug c, result, "resolvePackageName: searching for package name"
   # the project name can be overwritten too!
   if UsesOverrides in c.flags:
     let name = c.overrides.substitute(name)
@@ -178,33 +179,30 @@ proc resolvePackageName(c: var AtlasContext; name: string): Package =
 
   if not namePkg.isNil:
     # great, found package!
-    echo "resolvePackageName: found!"
+    debug c, result, "resolvePackageName: found!"
     result = namePkg
   elif not repoPkg.isNil:
     # check if rawHandle is a package repo name
-    echo "resolvePackageName: found by repo!"
+    debug c, result, "resolvePackageName: found by repo!"
     result = repoPkg
   else:
-    echo "resolvePackageName: not found by name or repo"
+    debug c, result, "resolvePackageName: not found by name or repo"
     let url = getUrlFromGithub(name)
     if url.len == 0:
-      echo "resolvePackageName: not found by github search"
-      inc c.errors
+      error c, result, "resolvePackageName: package not found by github search"
     else:
       result.url = getUrl url
 
   if UsesOverrides in c.flags:
     let newUrl = c.overrides.substitute($result.url)
     if newUrl.len > 0:
-      echo "resolvePackage: not url: UsesOverrides: ", newUrl
+      debug c, result, "resolvePackageName: not url: UsesOverrides: " & $newUrl
       result.url = getUrl newUrl
 
 proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
   result.new()
 
   fillPackageLookupTable(c)
-
-  echo "\nresolvePackage: ", rawHandle
 
   if rawHandle.isUrl():
     result = c.resolvePackageUrl(rawHandle)

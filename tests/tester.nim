@@ -54,6 +54,7 @@ proc createNode(name: string, versions: seq[string], deps: seq[string]): Node =
 template withDir(dir: string; body: untyped) =
   let old = getCurrentDir()
   try:
+    echo "setting dir: ", dir
     setCurrentDir(dir)
     body
   finally:
@@ -172,9 +173,7 @@ proc testSemVer2() =
       raise newException(Exception, "myproject: atlas exec error: " & $status)
 
 withDir "tests/ws_semver2":
-  try:
-    testSemVer2()
-  finally:
+  proc cleanupDirs() =
     removeDir "does_not_exist"
     removeDir "myproject"
     removeDir "source"
@@ -182,6 +181,14 @@ withDir "tests/ws_semver2":
     removeDir "proj_b"
     removeDir "proj_c"
     removeDir "proj_d"
+  
+  try:
+    cleanupDirs()
+    testSemVer2()
+  finally:
+    if getEnv("KEEP_TEST_DIRS") == "":
+      echo "cleaning up directory"
+      cleanupDirs()
 
 proc integrationTest() =
   # Test installation of some "important_packages" which we are sure

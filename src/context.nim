@@ -89,6 +89,7 @@ type
     ListVersions
     DebugPrint
     GlobalWorkspace
+    AssertOnError
 
   MsgKind = enum
     Info = "[Info] ",
@@ -101,7 +102,8 @@ type
     hasPackageList*: bool
     flags*: set[Flag]
     urlMapping*: Table[string, Package] # name -> url mapping
-    errors*, warnings*: int
+    errors*: int
+    warnings*: int
     messages: seq[(MsgKind, PackageRepo, string)] # delayed output
     overrides*: Patterns
     defaultAlgo*: ResolutionAlgorithm
@@ -131,6 +133,8 @@ proc warn*(c: var AtlasContext; p: PackageRepo; arg: string) =
   inc c.warnings
 
 proc error*(c: var AtlasContext; p: PackageRepo; arg: string) =
+  if AssertOnError in c.flags:
+    raise newException(AssertionDefect, p.string & ": " & arg)
   c.messages.add (Error, p, arg)
   inc c.errors
 
