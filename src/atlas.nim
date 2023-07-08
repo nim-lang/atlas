@@ -16,8 +16,6 @@ import context, runners, osutils, packagesjson, sat, gitops, nimenv, lockfiles,
 
 export osutils, context
 
-import pretty # REMOVE!
-
 const
   AtlasVersion = "0.6.2"
   LockFileName = "atlas.lock"
@@ -434,7 +432,6 @@ proc installDependencies(c: var AtlasContext; nimbleFile: string; startIsDep: bo
   echo "installDependencies:repo: ", dir.lastPathComponent
   let pkg = c.resolvePackage("file://" & dir.lastPathComponent)
   let dep = Dependency(pkg: pkg, commit: "", self: 0, algo: c.defaultAlgo)
-  print dep
   g.byName.mgetOrPut(pkg.name, @[]).add(0)
   discard collectDeps(c, g, -1, dep)
   let paths = traverseLoop(c, g, startIsDep)

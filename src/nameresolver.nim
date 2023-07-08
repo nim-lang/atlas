@@ -102,8 +102,6 @@ proc fillPackageLookupTable(c: var AtlasContext) =
                         url: url)
       c.urlMapping["name:" & pkg.name.string] = pkg
 
-import pretty
-
 proc dependencyDir*(c: var AtlasContext; pkg: Package): PackageDir =
   template checkDir(dir: string) =
     if dir.len() > 0 and dirExists(dir):
@@ -182,7 +180,6 @@ proc resolvePackageUrl(c: var AtlasContext; url: string, checkOverrides = true):
   
   if result.url.scheme == "file":
     result.path = PackageDir result.url.hostname & result.url.path
-  print result
 
 proc resolvePackageName(c: var AtlasContext; name: string): Package =
   result = Package(name: PackageName name,
