@@ -103,7 +103,7 @@ proc fillPackageLookupTable(c: var AtlasContext) =
       c.urlMapping["name:" & pkg.name.string] = pkg
 
 proc dependencyDir*(c: AtlasContext; pkg: Package): PackageDir =
-  if pkg.path.string.len() != 0:
+  if pkg.exists:
     return pkg.path
   result = PackageDir c.workspace / pkg.repo.string
   if not dirExists(result.string):
@@ -127,8 +127,8 @@ proc findNimbleFile*(c: var AtlasContext; pkg: Package): Option[string] =
 
 proc resolvePackageUrl(c: var AtlasContext; url: string): Package =
   result = Package(url: getUrl(url),
-                   name: result.url.toRepo().PackageName,
-                   repo: result.url.toRepo())
+                   name: url.toRepo().PackageName,
+                   repo: url.toRepo())
   
   echo "resolvePackage: ", "IS URL: ", $result.url
 
@@ -213,9 +213,9 @@ proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
   
   let res = c.findNimbleFile(result)
   if res.isSome:
+    result.exists = true
     result.nimble = PackageNimble res.get()
     result.path = PackageDir res.get().parentDir()
-    result.exists = true
 
 proc resolvePackage*(c: var AtlasContext; dir: PackageDir): Package =
 
