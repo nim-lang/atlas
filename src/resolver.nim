@@ -92,8 +92,13 @@ proc toGraph(c: var AtlasContext; g: DepGraph; b: var sat.Builder) =
 proc toFormular(c: var AtlasContext; g: var DepGraph): Formular =
   var b = sat.Builder()
   b.openOpr(AndForm)
-  b.add newVar(VarId 0) # root node must be true.
-  # XXX Find a better solution here.
+  if g.nodes.len > 0 and g.nodes[0].versions.len > 1:
+    b.openOpr(ExactlyOneOfForm)
+    for j in 0 ..< g.nodes[0].versions.len:
+      b.add newVar(VarId(j))
+    b.closeOpr # ExactlyOneOfForm
+  else:
+    b.add newVar(VarId 0) # root node must be true.
   toGraph(c, g, b)
   b.closeOpr
   result = toForm(b)
@@ -106,7 +111,7 @@ proc resolve*(c: var AtlasContext; g: var DepGraph) =
     inc varCounter, g.nodes[i].versions.len
 
   var s = newSeq[BindingKind](varCounter)
-  when defined(showForm):
+  when true: #defined(showForm):
     var nodeNames = newSeq[string]()
     for i in 0 ..< g.nodes.len:
       for j in 0 ..< g.nodes[i].versions.len:
