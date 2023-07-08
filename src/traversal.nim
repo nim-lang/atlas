@@ -103,4 +103,4 @@ proc collectNewDeps*(
     debug c, dep.pkg, "collecting deps; nimble file: '" & nimble.string & "'"
     result = collectDeps(c, g, parent, dep)
   else:
-    result = CfgPath toDestDir(dep.pkg)
+    result = CfgPath dep.pkg.path.string

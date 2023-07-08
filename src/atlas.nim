@@ -373,13 +373,10 @@ const
   configPatternBegin = "############# begin Atlas config section ##########\n"
   configPatternEnd =   "############# end Atlas config section   ##########\n"
 
-proc patchNimCfg(c: var AtlasContext; deps: seq[CfgPath]; cfgPath: string) =
+proc patchNimCfg(c: var AtlasContext; deps: seq[CfgPath]; cfgPath: CfgPath) =
   var paths = "--noNimblePath\n"
   for d in deps:
-    let pkgname = toDestDir d.string.PackageName
-    let pkgdir = if dirExists(c.workspace / pkgname): c.workspace / pkgname
-                 else: c.depsDir / pkgName
-    let x = relativePath(pkgdir, cfgPath, '/')
+    let x = relativePath(d.string, cfgPath.string, '/')
     paths.add "--path:\"" & x & "\"\n"
   var cfgContent = configPatternBegin & paths & configPatternEnd
 
@@ -387,10 +384,10 @@ proc patchNimCfg(c: var AtlasContext; deps: seq[CfgPath]; cfgPath: string) =
     assert readFile(TestsDir / "nim.cfg") == cfgContent
     c.mockupSuccess = true
   else:
-    let cfg = cfgPath / "nim.cfg"
-    assert cfgPath.len > 0
-    if cfgPath.len > 0 and not dirExists(cfgPath):
-      error(c, c.projectDir.PackageName, "could not write the nim.cfg")
+    let cfg = cfgPath.string / "nim.cfg"
+    assert cfgPath.string.len > 0
+    if cfgPath.string.len > 0 and not dirExists(cfgPath.string):
+      error(c, c.projectDir.toRepo, "could not write the nim.cfg")
     elif not fileExists(cfg):
       writeFile(cfg, cfgContent)
       info(c, projectFromCurrentDir(), "created: " & cfg.readableFile)
@@ -410,11 +407,11 @@ proc patchNimCfg(c: var AtlasContext; deps: seq[CfgPath]; cfgPath: string) =
         writeFile(cfg, cfgContent)
         info(c, projectFromCurrentDir(), "updated: " & cfg.readableFile)
 
-proc findSrcDir(c: var AtlasContext): string =
+proc findCfgDir(c: var AtlasContext): CfgPath =
   for nimbleFile in walkPattern(c.currentDir / "*.nimble"):
-    let nimbleInfo = extractRequiresInfo(c, nimbleFile)
-    return c.currentDir / nimbleInfo.srcDir
-  return c.currentDir
+    let nimbleInfo = extractRequiresInfo(c, PackageNimble nimbleFile)
+    return CfgPath c.currentDir / nimbleInfo.srcDir
+  return CfgPath c.currentDir
 
 proc installDependencies(c: var AtlasContext; nimbleFile: string; startIsDep: bool) =
   # 1. find .nimble file in CWD
@@ -426,9 +423,10 @@ proc installDependencies(c: var AtlasContext; nimbleFile: string; startIsDep: bo
                     url: getUrl "")
   let dep = Dependency(pkg: pkg, commit: "", self: 0, algo: c.defaultAlgo)
   g.byName.mgetOrPut(pkg.name, @[]).add(0)
-  discard collectDeps(c, g, -1, dep, nimbleFile)
+  discard collectDeps(c, g, -1, dep)
   let paths = traverseLoop(c, g, startIsDep)
-  patchNimCfg(c, paths, if CfgHere in c.flags: c.currentDir else: findSrcDir(c))
+  let cfgPath = if CfgHere in c.flags: CfgPath c.currentDir else: findCfgDir(c)
+  patchNimCfg(c, paths, cfgPath)
   afterGraphActions c, g
 
 proc updateDir(c: var AtlasContext; dir, filter: string) =
@@ -455,7 +453,7 @@ proc patchNimbleFile(c: var AtlasContext; dep: string): string =
     # see if we have this requirement already listed. If so, do nothing:
     var found = false
     if result.len > 0:
-      let nimbleInfo = extractRequiresInfo(c, result)
+      let nimbleInfo = extractRequiresInfo(c, PackageNimble result)
       for r in nimbleInfo.requires:
         var tokens: seq[string] = @[]
         for token in tokenizeRequires(r):
@@ -647,7 +645,8 @@ proc main(c: var AtlasContext) =
   of "clone", "update":
     singleArg()
     let deps = traverse(c, args[0], startIsDep = false)
-    patchNimCfg c, deps, if CfgHere in c.flags: c.currentDir else: findSrcDir(c)
+    let cfgPath = if CfgHere in c.flags: CfgPath c.currentDir else: findCfgDir(c)
+    patchNimCfg c, deps, cfgPath
     when MockupRun:
       if not c.mockupSuccess:
         fatal "There were problems."
@@ -691,7 +690,8 @@ proc main(c: var AtlasContext) =
   of "search", "list":
     if c.workspace.len != 0:
       updatePackages(c)
-      search getPackages(c.workspace), args
+      let pkgInfos = getPackageInfos(c.workspace)
+      search pkgInfos, args
     else:
       search @[], args
   of "updateprojects":
