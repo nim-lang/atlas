@@ -102,36 +102,50 @@ proc fillPackageLookupTable(c: var AtlasContext) =
                         url: url)
       c.urlMapping["name:" & pkg.name.string] = pkg
 
-proc dependencyDir*(c: AtlasContext; pkg: Package): PackageDir =
+proc dependencyDir*(c: var AtlasContext; pkg: Package): PackageDir =
+  template checkDir(dir: string) =
+    debug c, pkg, "dependencyDir: find: " & dir
+    if dir.len() > 0 and dirExists(dir):
+      debug c, pkg, "dependencyDir: found: " & dir
+      return PackageDir dir
+  
   if pkg.exists:
     return pkg.path
-  result = PackageDir c.workspace / pkg.repo.string
-  if not dirExists(result.string):
-    result = PackageDir c.depsDir / pkg.repo.string
+  checkDir pkg.path.string
+  checkDir c.workspace / pkg.path.string
+  checkDir c.depsDir / pkg.path.string
+  checkDir c.workspace / pkg.repo.string
+  checkDir c.depsDir / pkg.repo.string
 
 proc findNimbleFile*(c: var AtlasContext; pkg: Package): Option[string] =
   when MockupRun:
     result = TestsDir / pkg.name.string & ".nimble"
     doAssert fileExists(result), "file does not exist " & result
   else:
+    debug c, pkg, "findNimbleFile: find: " & pkg.path.string
     let dir = dependencyDir(c, pkg).string
+    debug c, pkg, "findNimbleFile: depDir: " & dir
     result = some dir / (pkg.name.string & ".nimble")
+    debug c, pkg, "findNimbleFile: depDir: " & result.get()
     if not fileExists(result.get()):
+      debug c, pkg, "findNimbleFile: not found: " & result.get()
       result = none[string]()
       for x in walkFiles(dir / "*.nimble"):
         if result.isNone:
+          debug c, pkg, "findNimbleFile: found: " & result.get()
           result = some x
         else:
-          warn c, pkg, "ambiguous .nimble file " & result.get()
+          error c, pkg, "ambiguous .nimble file " & result.get()
           return none[string]()
+    else:
+      debug c, pkg, "findNimbleFile: found: " & result.get()
 
 import pretty
 
 proc resolvePackageUrl(c: var AtlasContext; url: string, checkOverrides = true): Package =
   result = Package(url: getUrl(url),
                    name: url.toRepo().PackageName,
-                   repo: url.toRepo(),
-                   exists: true)
+                   repo: url.toRepo())
   
   echo "resolvePackage: ", "IS URL: ", $result.url
 
@@ -167,11 +181,12 @@ proc resolvePackageUrl(c: var AtlasContext; url: string, checkOverrides = true):
   
   if result.url.scheme == "file":
     result.path = PackageDir result.url.hostname & result.url.path
+    debug c, result, "resolvePackageName: set path: " & result.path.string
 
 proc resolvePackageName(c: var AtlasContext; name: string): Package =
   result = Package(name: PackageName name,
-                   repo: PackageRepo name,
-                   exists: true)
+                   repo: PackageRepo name)
+                   
 
   debug c, result, "resolvePackageName: searching for package name: " & result.name.string
   # the project name can be overwritten too!
@@ -219,12 +234,19 @@ proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
   else:
     result = c.resolvePackageName(unicode.toLower(rawHandle))
   
+  print result
+
   let res = c.findNimbleFile(result)
+  debug c, result, "resolvePackageName: find nimble: " & repr res
   if res.isSome:
-    debug c, result, "resolvePackageName: find nimble: " & $res.get()
-    result.exists = true
-    result.nimble = PackageNimble res.get()
-    result.path = PackageDir res.get().parentDir()
+    let nimble = PackageNimble res.get()
+    let path = PackageDir res.get().parentDir()
+    result = Package(url: result.url,
+                     name: result.name,
+                     repo: result.repo,
+                     path: path,
+                     exists: true,
+                     nimble: nimble)
 
 proc resolvePackage*(c: var AtlasContext; dir: PackageDir): Package =
 
