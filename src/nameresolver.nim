@@ -126,10 +126,10 @@ proc findNimbleFile*(c: var AtlasContext; pkg: Package): Option[string] =
           return none[string]()
 
 proc resolvePackageUrl(c: var AtlasContext; url: string): Package =
-  result.name = PackageName unicode.toLower(url)
-  result.url = getUrl(url)
-  result.name = result.url.toRepo().PackageName 
-  result.repo = result.url.toRepo()
+  result = Package(url: getUrl(url),
+                   name: result.url.toRepo().PackageName,
+                   repo: result.url.toRepo())
+  
   echo "resolvePackage: ", "IS URL: ", $result.url
 
   if UsesOverrides in c.flags:
@@ -163,7 +163,7 @@ proc resolvePackageUrl(c: var AtlasContext; url: string): Package =
     c.urlMapping["repo:" & result.name.string] = result
 
 proc resolvePackageName(c: var AtlasContext; name: string): Package =
-  result.name = PackageName name
+  result = Package(name: PackageName name)
 
   echo "resolvePackageName: not url"
   # the project name can be overwritten too!
