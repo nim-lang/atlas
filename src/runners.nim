@@ -78,8 +78,8 @@ proc runNimScript*(c: var AtlasContext; scriptContent: string; name: Package) =
   else:
     removeFile buildNims
 
-proc runNimScriptInstallHook*(c: var AtlasContext; nimbleFile: string; name: Package) =
-  runNimScript c, InstallHookTemplate % [nimbleFile.escape], name
+proc runNimScriptInstallHook*(c: var AtlasContext; nimble: PackageNimble; name: Package) =
+  runNimScript c, InstallHookTemplate % [nimble.string.escape], name
 
 proc runNimScriptBuilder*(c: var AtlasContext; p: (string, string); name: Package) =
   runNimScript c, BuilderScriptTemplate % [p[0].escape, p[1].escape], name
@@ -92,9 +92,8 @@ proc runBuildSteps*(c: var AtlasContext; g: var DepGraph) =
       let dir = selectDir(c.workspace / destDir, c.depsDir / destDir)
       tryWithDir dir:
         if g.nodes[i].hasInstallHooks:
-          let nf = findNimbleFile(c, g.nodes[i].pkg)
-          if nf.len > 0:
-            runNimScriptInstallHook c, nf, g.nodes[i].pkg
+          let nf = g.nodes[i].pkg.nimble
+          runNimScriptInstallHook c, nf, g.nodes[i].pkg
         for p in mitems c.plugins.builderPatterns:
           let f = p[0] % dir.lastPathComponent
           if fileExists(f):

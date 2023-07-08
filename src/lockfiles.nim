@@ -79,7 +79,8 @@ proc pinWorkspace*(c: var AtlasContext; lockFilePath: string) =
 proc pinProject*(c: var AtlasContext; lockFilePath: string) =
   var lf = newLockFile()
 
-  let start = resolvePackage(c, )
+  let start = resolvePackage(c, PackageDir c.currentDir)
+  let url = getRemoteUrl()
   var g = createGraph(c, start)
 
   info c, start, "pinning lockfile: " & lockFilePath
@@ -87,14 +88,11 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string) =
   var i = 0
   while i < g.nodes.len:
     let w = g.nodes[i]
-    let destDir = toDestDir(w.name)
 
-    info c, w.name, "pinning..."
-    let dir =
-      if destDir == start.string: c.currentDir
-      else: selectDir(c.workspace / destDir, c.depsDir / destDir)
-    if not dirExists(dir):
-      error c, w.name, "dependency does not exist: " & dir
+    info c, w.pkg, "pinning..."
+
+    if not w.pkg.exists:
+      error c, w.pkg, "dependency does not exist"
     else:
       # assume this is the selected version, it might get overwritten later:
       selectNode c, g, w
@@ -106,8 +104,7 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string) =
     for i in countdown(g.nodes.len-1, 1):
       if g.nodes[i].active:
         let w = g.nodes[i]
-        let destDir = toDestDir(w.name)
-        let dir = selectDir(c.workspace / destDir, c.depsDir / destDir)
+        let dir = w.pkg.path.string
         tryWithDir dir:
           genLockEntry c, lf, dir.relativePath(c.currentDir, '/')
 
@@ -125,7 +122,7 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string) =
 
 proc compareVersion(c: var AtlasContext; key, wanted, got: string) =
   if wanted != got:
-    warn c, toName(key), "environment mismatch: " &
+    warn c, toRepo(key), "environment mismatch: " &
       " versions differ: previously used: " & wanted & " but now at: " & got
 
 proc convertNimbleLock*(c: var AtlasContext; nimblePath: string): LockFile =
@@ -136,12 +133,12 @@ proc convertNimbleLock*(c: var AtlasContext; nimblePath: string): LockFile =
 
   if jsonTree.getOrDefault("version") == nil or
       "packages" notin jsonTree:
-    error c, toName(nimblePath), "invalid nimble lockfile"
+    error c, toRepo(nimblePath), "invalid nimble lockfile"
     return
 
   result = newLockFile()
   for (name, pkg) in jsonTree["packages"].pairs:
-    info c, toName(name), " imported "
+    info c, toRepo(name), " imported "
     let dir = c.depsDir / name
     result.items[name] = LockFileEntry(
       dir: dir,
@@ -176,14 +173,14 @@ proc replay*(c: var AtlasContext; lockFilePath: string) =
     if not dirExists(dir):
       let (status, err) = c.cloneUrl(getUrl v.url, dir, false)
       if status != Ok:
-        error c, toName(lockFilePath), err
+        error c, toRepo(lockFilePath), err
         continue
     withDir c, dir:
       let url = $getRemoteUrl()
       if v.url != url:
-        error c, toName(v.dir), "remote URL has been compromised: got: " &
+        error c, toRepo(v.dir), "remote URL has been compromised: got: " &
             url & " but wanted: " & v.url
-      checkoutGitCommit(c, toName(dir), v.commit)
+      checkoutGitCommit(c, toRepo(dir), v.commit)
 
   if lf.hostOS == system.hostOS and lf.hostCPU == system.hostCPU:
     compareVersion c, "nim", lf.nimVersion, detectNimVersion()

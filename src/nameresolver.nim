@@ -216,9 +216,15 @@ proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
   
   let res = c.findNimbleFile(result)
   if res.isSome:
-    result.nimblePath = res.get()
+    result.nimble = PackageNimble res.get()
     result.path = PackageDir res.get().parentDir()
     result.exists = true
 
-proc resolvePackage*(c: var AtlasContext; dir: string): Package =
+proc resolvePackage*(c: var AtlasContext; dir: PackageDir): Package =
+
+  # let destDir = toDestDir(w.pkg.name)
+  # let dir =
+  #   if destDir == start.string: c.currentDir
+  #   else: selectDir(c.workspace / destDir, c.depsDir / destDir)
   
+  discard

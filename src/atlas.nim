@@ -134,7 +134,7 @@ const
   ThisVersion = "current_version.atlas"
 
 proc checkoutCommit(c: var AtlasContext; g: var DepGraph; w: Dependency) =
-  let dir = dependencyDir(c, w)
+  let dir = w.pkg.path.string
   withDir c, dir:
     if w.commit.len == 0 or cmpIgnoreCase(w.commit, "head") == 0:
       gitPull(c, w.pkg.repo)
@@ -358,13 +358,13 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
 proc traverse(c: var AtlasContext; start: string; startIsDep: bool): seq[CfgPath] =
   # returns the list of paths for the nim.cfg file.
   let pkg = resolvePackage(c, start)
-  var g = createGraph(c, start, url)
+  var g = c.createGraph(pkg)
 
-  if $url == "":
-    error c, start, "cannot resolve package name"
+  if $pkg.url == "":
+    error c, pkg, "cannot resolve package name"
     return
 
-  c.projectDir = c.workspace / toDestDir(g.nodes[0].name)
+  c.projectDir = pkg.path.string
 
   result = traverseLoop(c, g, startIsDep)
   afterGraphActions c, g

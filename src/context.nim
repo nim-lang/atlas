@@ -45,15 +45,19 @@ type
 
   PackageName* = distinct string
   PackageDir* = distinct string
+  PackageNimble* = distinct string
   PackageRepo* = distinct string
 
   Package* = ref object
     name*: PackageName
     repo*: PackageRepo
-    path*: PackageDir
-    nimblePath*: string
     url*: PackageUrl
-    exists*: bool
+    case exists*: bool
+    of true:
+      path*: PackageDir
+      nimble*: PackageNimble
+    of false:
+      discard
 
   Dependency* = object
     pkg*: Package

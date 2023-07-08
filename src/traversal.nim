@@ -52,19 +52,23 @@ proc rememberNimVersion(g: var DepGraph; q: VersionInterval) =
   let v = extractGeQuery(q)
   if v != Version"" and v > g.bestNimVersion: g.bestNimVersion = v
 
-proc extractRequiresInfo*(c: var AtlasContext; nimbleFile: string): NimbleFileInfo =
-  result = extractRequiresInfo(nimbleFile)
+proc extractRequiresInfo*(c: var AtlasContext; nimble: PackageNimble): NimbleFileInfo =
+  result = extractRequiresInfo(nimble.string)
   when ProduceTest:
     echo "nimble ", nimbleFile, " info ", result
 
-proc collectDeps*(c: var AtlasContext; g: var DepGraph; parent: int;
-                 dep: Dependency; nimbleFile: string): CfgPath =
+proc collectDeps*(
+    c: var AtlasContext;
+    g: var DepGraph,
+    parent: int;
+    dep: Dependency
+): CfgPath =
   # If there is a .nimble file, return the dependency path & srcDir
   # else return "".
-  assert nimbleFile != ""
-  let nimbleInfo = extractRequiresInfo(c, nimbleFile)
+  let nimbleInfo = extractRequiresInfo(c, dep.pkg.nimble)
   if dep.self >= 0 and dep.self < g.nodes.len:
     g.nodes[dep.self].hasInstallHooks = nimbleInfo.hasInstallHooks
+
   for r in nimbleInfo.requires:
     var i = 0
     while i < r.len and r[i] notin {'#', '<', '=', '>'} + Whitespace: inc i
@@ -84,11 +88,16 @@ proc collectDeps*(c: var AtlasContext; g: var DepGraph; parent: int;
         rememberNimVersion g, query
   result = CfgPath(toDestDir(dep.pkg).string / nimbleInfo.srcDir)
 
-proc collectNewDeps*(c: var AtlasContext; g: var DepGraph; parent: int;
-                    dep: Dependency): CfgPath =
-  let nimbleFile = findNimbleFile(c, dep)
-  debug c, dep.pkg, "collecting deps; nimble file: '" & nimbleFile & "'"
-  if nimbleFile != "":
-    result = collectDeps(c, g, parent, dep, nimbleFile)
+proc collectNewDeps*(
+    c: var AtlasContext;
+    g: var DepGraph;
+    parent: int;
+    dep: Dependency
+): CfgPath =
+  # let nimbleFile = findNimbleFile(c, dep)
+  if dep.pkg.exists:
+    let nimble = dep.pkg.nimble
+    debug c, dep.pkg, "collecting deps; nimble file: '" & nimble.string & "'"
+    result = collectDeps(c, g, parent, dep)
   else:
     result = CfgPath toDestDir(dep.pkg)
