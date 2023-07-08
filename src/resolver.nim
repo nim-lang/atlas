@@ -57,8 +57,10 @@ proc toGraph(c: var AtlasContext; g: DepGraph; b: var sat.Builder) =
     for j in 0 ..< g.nodes[i].versions.len:
       let jj = findDeps(g.nodes[i], g.nodes[i].versions[j])
       if jj >= 0:
+        #echo $g.nodes[i].url & "/" & $g.nodes[i].versions[j].v, " ", g.nodes[i].subs[jj].deps.len
         for d in 0 ..< g.nodes[i].subs[jj].deps.len:
           let dep {.cursor.} = g.nodes[i].subs[jj].deps[d]
+          #echo dep.nameOrUrl, " ", dep.query
           let url = resolveUrl(c, dep.nameOrUrl)
 
           if $url == "":
@@ -76,7 +78,7 @@ proc toGraph(c: var AtlasContext; g: DepGraph; b: var sat.Builder) =
             let depIdx = urlToIndex.getOrDefault($url)
             assert depIdx > 0
             for mx in matchingCommits(c, g, g.nodes[depIdx-1], dep.query):
-              let key = $url & "/" & mx.h
+              let key = $url & "/" & toKey mx
               let val = urlToIndex.getOrDefault(key)
               if val > 0:
                 b.add newVar(VarId(val - 1))
@@ -104,15 +106,13 @@ proc resolve*(c: var AtlasContext; g: var DepGraph) =
     inc varCounter, g.nodes[i].versions.len
 
   var s = newSeq[BindingKind](varCounter)
-  when false:
-    let L = g.nodes.len
-    var nodes = newSeq[string]()
-    for i in 0..<L: nodes.add g.nodes[i].name.string
+  when defined(showForm):
+    var nodeNames = newSeq[string]()
+    for i in 0 ..< g.nodes.len:
+      for j in 0 ..< g.nodes[i].versions.len:
+        nodeNames.add $g.nodes[i].url & "/" & $g.nodes[i].versions[j].v
     echo f$(proc (buf: var string; i: int) =
-      if i < L:
-        buf.add nodes[i]
-      else:
-        buf.add $mapping[i - L])
+      buf.add nodeNames[i])
   if satisfiable(f, s):
     var thisNode = 0
     for i in 0 ..< g.nodes.len:

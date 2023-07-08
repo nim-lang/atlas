@@ -155,6 +155,7 @@ proc buildGraph =
       exec "git add proj_c.nimble"
       exec "git commit -m " & quoteShell("Initial commit for project C")
       writeFile "proj_c.nimble", "requires \"proj_d >= 1.0.0\"\n"
+      exec "git commit -am " & quoteShell("Update proj_c.nimble for project C")
       exec "git tag v1.2.0"
 
     createDir "proj_d"
