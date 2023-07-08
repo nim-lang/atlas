@@ -200,9 +200,8 @@ proc fatal*(msg: string) =
   quit "[Error] " & msg
 
 proc toRepo*(p: PackageUrl): PackageRepo =
-  result = PackageRepo p.path.lastPathComponent
-  if result.string.endsWith(".git"):
-    result.string.setLen result.string.len - ".git".len
+  result = PackageRepo lastPathComponent($p)
+  result.string.removeSuffix(".git")
 
 proc toRepo*(p: string): PackageRepo =
   if p.contains("://"):

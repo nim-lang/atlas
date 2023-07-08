@@ -295,7 +295,7 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
         # withDir c, dir:
         let oldDir = getCurrentDir()
         try:
-          echo "Current directory is now ", dir
+          debug c, pkg, "setting directory: " & dir
           setCurrentDir(dir)
           checkoutGitCommit(c, toRepo(destDir), mapping[i - g.nodes.len][1])
         finally:
@@ -304,12 +304,12 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
       runBuildSteps(c, g)
       #echo f
     if ListVersions in c.flags:
-      echo "selected:"
+      info c, toRepo("resolve"), "selected:"
       for i in g.nodes.len..<s.len:
         if s[i] == setToTrue:
-          echo "[x] ", toString mapping[i - g.nodes.len]
+          info c, toRepo("resolve"), "[x] " & toString mapping[i - g.nodes.len]
         else:
-          echo "[ ] ", toString mapping[i - g.nodes.len]
+          info c, toRepo("resolve"), "[ ] " & toString mapping[i - g.nodes.len]
   else:
     error c, toRepo(c.workspace), "version conflict; for more information use --showGraph"
     var usedVersions = initCountTable[Package]()
@@ -432,6 +432,7 @@ proc installDependencies(c: var AtlasContext; nimbleFile: string; startIsDep: bo
   echo "installDependencies:repo: ", dir.lastPathComponent
   let pkg = c.resolvePackage("file://" & dir.lastPathComponent)
   let dep = Dependency(pkg: pkg, commit: "", self: 0, algo: c.defaultAlgo)
+  print dep
   g.byName.mgetOrPut(pkg.name, @[]).add(0)
   discard collectDeps(c, g, -1, dep)
   let paths = traverseLoop(c, g, startIsDep)

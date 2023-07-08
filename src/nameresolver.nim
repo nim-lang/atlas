@@ -150,7 +150,7 @@ proc resolvePackageUrl(c: var AtlasContext; url: string, checkOverrides = true):
     if url.len > 0:
       result.url = url.getUrl()
 
-  debug c, result, "resolvePackageUrl: search: " & $result.name.string
+  debug c, result, "resolvePackageUrl: search: " & url
 
   let namePkg = c.urlMapping.getOrDefault("name:" & result.name.string, nil)
   let repoPkg = c.urlMapping.getOrDefault("repo:" & result.repo.string, nil)
@@ -178,9 +178,11 @@ proc resolvePackageUrl(c: var AtlasContext; url: string, checkOverrides = true):
     # package doesn't exit and doesn't conflict
     # set the url with package name as url name
     c.urlMapping["repo:" & result.name.string] = result
+    debug c, result, "resolvePackageUrl: not found; set pkg: " & $result.repo.string
   
   if result.url.scheme == "file":
     result.path = PackageDir result.url.hostname & result.url.path
+  print result
 
 proc resolvePackageName(c: var AtlasContext; name: string): Package =
   result = Package(name: PackageName name,
@@ -248,7 +250,7 @@ proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
   else:
     debug c, result, "resolvePackageName: nimble not found"
   
-  print result
+  # print result
 
 # proc resolvePackage*(c: var AtlasContext; dir: PackageDir): Package =
 
