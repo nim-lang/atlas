@@ -125,14 +125,17 @@ proc findNimbleFile*(c: var AtlasContext; pkg: Package): Option[string] =
           warn c, pkg, "ambiguous .nimble file " & result.get()
           return none[string]()
 
-proc resolvePackageUrl(c: var AtlasContext; url: string): Package =
+import pretty
+
+proc resolvePackageUrl(c: var AtlasContext; url: string, checkOverrides = true): Package =
   result = Package(url: getUrl(url),
                    name: url.toRepo().PackageName,
-                   repo: url.toRepo())
+                   repo: url.toRepo(),
+                   exists: true)
   
   echo "resolvePackage: ", "IS URL: ", $result.url
 
-  if UsesOverrides in c.flags:
+  if checkOverrides and UsesOverrides in c.flags:
     let url = c.overrides.substitute(url)
     if url.len > 0:
       result.url = url.getUrl()
@@ -161,22 +164,29 @@ proc resolvePackageUrl(c: var AtlasContext; url: string): Package =
     # package doesn't exit and doesn't conflict
     # set the url with package name as url name
     c.urlMapping["repo:" & result.name.string] = result
+  
+  if result.url.scheme == "file":
+    result.path = PackageDir result.url.hostname & result.url.path
 
 proc resolvePackageName(c: var AtlasContext; name: string): Package =
   result = Package(name: PackageName name,
-                   repo: PackageRepo name)
+                   repo: PackageRepo name,
+                   exists: true)
 
-  debug c, result, "resolvePackageName: searching for package name"
+  debug c, result, "resolvePackageName: searching for package name: " & result.name.string
   # the project name can be overwritten too!
   if UsesOverrides in c.flags:
+    print c.overrides
     let name = c.overrides.substitute(name)
     if name.len > 0:
-      result.name = PackageName name
+      if name.isUrl():
+        return c.resolvePackageUrl(name, checkOverrides=false)
 
   # echo "URL MAP: ", repr c.urlMapping.keys().toSeq()
   let namePkg = c.urlMapping.getOrDefault("name:" & result.name.string, nil)
   let repoPkg = c.urlMapping.getOrDefault("repo:" & result.name.string, nil)
 
+  debug c, result, "resolvePackageName: searching for package name: " & result.name.string
   if not namePkg.isNil:
     # great, found package!
     debug c, result, "resolvePackageName: found!"
@@ -186,7 +196,7 @@ proc resolvePackageName(c: var AtlasContext; name: string): Package =
     debug c, result, "resolvePackageName: found by repo!"
     result = repoPkg
   else:
-    debug c, result, "resolvePackageName: not found by name or repo"
+    debug c, result, "resolvePackageName: not found by name or repo: " & result.name.string
     let url = getUrlFromGithub(name)
     if url.len == 0:
       error c, result, "resolvePackageName: package not found by github search"
@@ -211,6 +221,7 @@ proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
   
   let res = c.findNimbleFile(result)
   if res.isSome:
+    debug c, result, "resolvePackageName: find nimble: " & $res.get()
     result.exists = true
     result.nimble = PackageNimble res.get()
     result.path = PackageDir res.get().parentDir()

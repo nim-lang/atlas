@@ -52,9 +52,9 @@ type
     name*: PackageName
     repo*: PackageRepo
     url*: PackageUrl
+    path*: PackageDir
     case exists*: bool
     of true:
-      path*: PackageDir
       nimble*: PackageNimble
     of false:
       discard
