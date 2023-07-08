@@ -115,9 +115,24 @@ type
 proc `==`*(a, b: CfgPath): bool {.borrow.}
 
 proc `==`*(a, b: PackageName): bool {.borrow.}
-proc hash*(a: PackageName): Hash {.borrow.}
 proc `==`*(a, b: PackageRepo): bool {.borrow.}
+proc `==`*(a, b: PackageDir): bool {.borrow.}
+proc `==`*(a, b: PackageNimble): bool {.borrow.}
+
+proc hash*(a: PackageName): Hash {.borrow.}
 proc hash*(a: PackageRepo): Hash {.borrow.}
+proc hash*(a: PackageDir): Hash {.borrow.}
+proc hash*(a: PackageNimble): Hash {.borrow.}
+
+proc hash*(a: Package): Hash =
+  result = 0
+  result = result !& hash a.name
+  # result = result !& hash a.repo
+  # result = result !& hash a.url
+  # result = result !& hash a.path
+  # result = result !& hash a.exists
+  # if a.exists:
+  #   result = result !& hash a.nimble
 
 const
   InvalidCommit* = "#head" #"<invalid commit>"
@@ -206,6 +221,7 @@ template withDir*(c: var AtlasContext; dir: string; body: untyped) =
     body
   else:
     let oldDir = getCurrentDir()
+    echo "Current directory is now ", dir
     try:
       when ProduceTest:
         echo "Current directory is now ", dir

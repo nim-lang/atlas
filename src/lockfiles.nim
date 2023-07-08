@@ -79,7 +79,7 @@ proc pinWorkspace*(c: var AtlasContext; lockFilePath: string) =
 proc pinProject*(c: var AtlasContext; lockFilePath: string) =
   var lf = newLockFile()
 
-  let start = resolvePackage(c, PackageDir c.currentDir)
+  let start = resolvePackage(c, "file://" & c.currentDir)
   let url = getRemoteUrl()
   var g = createGraph(c, start)
 

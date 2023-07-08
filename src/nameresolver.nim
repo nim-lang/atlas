@@ -102,6 +102,8 @@ proc fillPackageLookupTable(c: var AtlasContext) =
                         url: url)
       c.urlMapping["name:" & pkg.name.string] = pkg
 
+import pretty
+
 proc dependencyDir*(c: var AtlasContext; pkg: Package): PackageDir =
   template checkDir(dir: string) =
     if dir.len() > 0 and dirExists(dir):
@@ -142,13 +144,16 @@ proc resolvePackageUrl(c: var AtlasContext; url: string, checkOverrides = true):
                    name: url.toRepo().PackageName,
                    repo: url.toRepo())
   
-  if checkOverrides and UsesOverrides in c.flags:
+  let isFile = result.url.scheme == "file"
+  if not isFile and checkOverrides and UsesOverrides in c.flags:
     let url = c.overrides.substitute(url)
     if url.len > 0:
       result.url = url.getUrl()
 
+  debug c, result, "resolvePackageUrl: search: " & $result.name.string
+
   let namePkg = c.urlMapping.getOrDefault("name:" & result.name.string, nil)
-  let repoPkg = c.urlMapping.getOrDefault("repo:" & result.name.string, nil)
+  let repoPkg = c.urlMapping.getOrDefault("repo:" & result.repo.string, nil)
 
   if not namePkg.isNil:
     if namePkg.url != result.url:
@@ -164,9 +169,11 @@ proc resolvePackageUrl(c: var AtlasContext; url: string, checkOverrides = true):
                 result.name.string & " to " & pname
       result.repo = PackageRepo pname
       c.urlMapping["name:" & result.name.string] = result
+    debug c, result, "resolvePackageUrl: found name: " & $result.name.string
 
   elif not repoPkg.isNil:
-    discard
+    debug c, result, "resolvePackageUrl: found repo: " & $result.repo.string
+    result = repoPkg
   else:
     # package doesn't exit and doesn't conflict
     # set the url with package name as url name
@@ -221,6 +228,8 @@ proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
 
   fillPackageLookupTable(c)
 
+  debug c, result, "resolvePackage: search: " & rawHandle
+
   if rawHandle.isUrl():
     result = c.resolvePackageUrl(rawHandle)
   else:
@@ -238,12 +247,14 @@ proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
                      nimble: nimble)
   else:
     debug c, result, "resolvePackageName: nimble not found"
-
-proc resolvePackage*(c: var AtlasContext; dir: PackageDir): Package =
-
-  # let destDir = toDestDir(w.pkg.name)
-  # let dir =
-  #   if destDir == start.string: c.currentDir
-  #   else: selectDir(c.workspace / destDir, c.depsDir / destDir)
   
-  discard
+  print result
+
+# proc resolvePackage*(c: var AtlasContext; dir: PackageDir): Package =
+
+#   # let destDir = toDestDir(w.pkg.name)
+#   # let dir =
+#   #   if destDir == start.string: c.currentDir
+#   #   else: selectDir(c.workspace / destDir, c.depsDir / destDir)
+  
+#   discard

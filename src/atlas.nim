@@ -16,6 +16,8 @@ import context, runners, osutils, packagesjson, sat, gitops, nimenv, lockfiles,
 
 export osutils, context
 
+import pretty # REMOVE!
+
 const
   AtlasVersion = "0.6.2"
   LockFileName = "atlas.lock"
@@ -196,8 +198,8 @@ proc collectAvailableVersions(c: var AtlasContext; g: var DepGraph; w: Dependenc
     if not g.availableVersions.hasKey(w.pkg.name):
       g.availableVersions[w.pkg.name] = collectTaggedVersions(c)
 
-proc toString(x: (string, string, Version)): string =
-  "(" & x[0] & ", " & $x[2] & ")"
+proc toString(x: (Package, string, Version)): string =
+  "(" & x[0].repo.string & ", " & $x[2] & ")"
 
 proc resolve(c: var AtlasContext; g: var DepGraph) =
   var b = sat.Builder()
@@ -228,7 +230,7 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
       b.closeOpr
 
   var idgen = 0
-  var mapping: seq[(string, string, Version)] = @[]
+  var mapping: seq[(Package, string, Version)] = @[]
   # Version selection:
   for i in 0..<g.nodes.len:
     let av = g.availableVersions.getOrDefault(g.nodes[i].pkg.name)
@@ -251,19 +253,19 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
           if q.matches(av[j]):
             v = av[j][1]
             break
-        mapping.add (g.nodes[i].pkg.name.string, commit, v)
+        mapping.add (g.nodes[i].pkg, commit, v)
         b.add newVar(VarId(idgen + g.nodes.len))
         inc idgen
       elif g.nodes[i].algo == MinVer:
         for j in countup(0, av.len-1):
           if q.matches(av[j]):
-            mapping.add (g.nodes[i].pkg.name.string, av[j][0], av[j][1])
+            mapping.add (g.nodes[i].pkg, av[j][0], av[j][1])
             b.add newVar(VarId(idgen + g.nodes.len))
             inc idgen
       else:
         for j in countdown(av.len-1, 0):
           if q.matches(av[j]):
-            mapping.add (g.nodes[i].pkg.name.string, av[j][0], av[j][1])
+            mapping.add (g.nodes[i].pkg, av[j][0], av[j][1])
             b.add newVar(VarId(idgen + g.nodes.len))
             inc idgen
 
@@ -286,10 +288,18 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
   if satisfiable(f, s):
     for i in g.nodes.len..<s.len:
       if s[i] == setToTrue:
-        let destDir = mapping[i - g.nodes.len][0]
+        let pkg = mapping[i - g.nodes.len][0]
+        print pkg
+        let destDir = pkg.name.string
         let dir = selectDir(c.workspace / destDir, c.depsDir / destDir)
-        withDir c, dir:
+        # withDir c, dir:
+        let oldDir = getCurrentDir()
+        try:
+          echo "Current directory is now ", dir
+          setCurrentDir(dir)
           checkoutGitCommit(c, toRepo(destDir), mapping[i - g.nodes.len][1])
+        finally:
+          setCurrentDir(oldDir)
     if NoExec notin c.flags:
       runBuildSteps(c, g)
       #echo f
@@ -302,7 +312,7 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
           echo "[ ] ", toString mapping[i - g.nodes.len]
   else:
     error c, toRepo(c.workspace), "version conflict; for more information use --showGraph"
-    var usedVersions = initCountTable[string]()
+    var usedVersions = initCountTable[Package]()
     for i in g.nodes.len..<s.len:
       if s[i] == setToTrue:
         usedVersions.inc mapping[i - g.nodes.len][0]
@@ -310,7 +320,7 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
       if s[i] == setToTrue:
         let counter = usedVersions.getOrDefault(mapping[i - g.nodes.len][0])
         if counter > 0:
-          error c, toRepo(mapping[i - g.nodes.len][0]), $mapping[i - g.nodes.len][2] & " required"
+          error c, mapping[i - g.nodes.len][0], $mapping[i - g.nodes.len][2] & " required"
 
 proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[CfgPath] =
   result = @[]
@@ -418,9 +428,9 @@ proc installDependencies(c: var AtlasContext; nimbleFile: string; startIsDep: bo
   # 2. install deps from .nimble
   var g = DepGraph(nodes: @[])
   let (dir, pkgname, _) = splitFile(nimbleFile)
-  let pkg = Package(name: PackageName pkgname,
-                    repo: PackageRepo dir.lastPathComponent,
-                    url: getUrl "")
+  echo "installDependencies:pkgname: ", pkgname
+  echo "installDependencies:repo: ", dir.lastPathComponent
+  let pkg = c.resolvePackage("file://" & dir.lastPathComponent)
   let dep = Dependency(pkg: pkg, commit: "", self: 0, algo: c.defaultAlgo)
   g.byName.mgetOrPut(pkg.name, @[]).add(0)
   discard collectDeps(c, g, -1, dep)
