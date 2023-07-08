@@ -165,7 +165,7 @@ proc resolvePackageUrl(c: var AtlasContext; url: string): Package =
 proc resolvePackageName(c: var AtlasContext; name: string): Package =
   result.name = PackageName name
 
-  echo "resolvePackage: not url"
+  echo "resolvePackageName: not url"
   # the project name can be overwritten too!
   if UsesOverrides in c.flags:
     let name = c.overrides.substitute(name)
@@ -174,27 +174,24 @@ proc resolvePackageName(c: var AtlasContext; name: string): Package =
 
   echo "URL MAP: ", repr c.urlMapping.keys().toSeq()
   let namePkg = c.urlMapping.getOrDefault("name:" & result.name.string, nil)
+  let repoPkg = c.urlMapping.getOrDefault("repo:" & result.name.string, nil)
+
   if not namePkg.isNil:
     # great, found package!
-    echo "resolvePackage: not url: found!"
+    echo "resolvePackageName: found!"
     result = namePkg
-  else:
-    echo "resolvePackage: not url: not found"
+  elif not repoPkg.isNil:
     # check if rawHandle is a package repo name
-    var found = false
-    for pkg in c.urlMapping.values:
-      if pkg.repo.string == name:
-        found = true
-        result = pkg
-        echo "resolvePackage: not url: found by repo!"
-        break
-
-    if not found:
-      let url = getUrlFromGithub(name)
-      if url.len == 0:
-        inc c.errors
-      else:
-        result.url = getUrl url
+    echo "resolvePackageName: found by repo!"
+    result = repoPkg
+  else:
+    echo "resolvePackageName: not found by name or repo"
+    let url = getUrlFromGithub(name)
+    if url.len == 0:
+      echo "resolvePackageName: not found by github search"
+      inc c.errors
+    else:
+      result.url = getUrl url
 
   if UsesOverrides in c.flags:
     let newUrl = c.overrides.substitute($result.url)

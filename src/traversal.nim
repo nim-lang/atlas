@@ -73,12 +73,15 @@ proc collectDeps*(
     var i = 0
     while i < r.len and r[i] notin {'#', '<', '=', '>'} + Whitespace: inc i
     let name = r.substr(0, i-1)
-    let pkg = c.resolvePackage(name) # don't use pkgName in case it's a URL
+    let pkg = c.resolvePackage(name)
+
     var err = pkg.name.string.len == 0
     if len($pkg.url) == 0:
       error c, pkg, "invalid pkgUrl in nimble file: " & name
       err = true
-    let query = parseVersionInterval(r, i, err)
+    
+    let query = parseVersionInterval(r, i, err) # update err
+
     if err:
       error c, pkg, "invalid 'requires' syntax in nimble file: " & r
     else:
