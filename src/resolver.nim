@@ -92,13 +92,7 @@ proc toGraph(c: var AtlasContext; g: DepGraph; b: var sat.Builder) =
 proc toFormular(c: var AtlasContext; g: var DepGraph): Formular =
   var b = sat.Builder()
   b.openOpr(AndForm)
-  if g.nodes.len > 0 and g.nodes[0].versions.len > 1:
-    b.openOpr(ExactlyOneOfForm)
-    for j in 0 ..< g.nodes[0].versions.len:
-      b.add newVar(VarId(j))
-    b.closeOpr # ExactlyOneOfForm
-  else:
-    b.add newVar(VarId 0) # root node must be true.
+  b.add newVar(VarId 0) # root node must be true.
   toGraph(c, g, b)
   b.closeOpr
   result = toForm(b)
@@ -125,8 +119,9 @@ proc resolve*(c: var AtlasContext; g: var DepGraph) =
         if s[thisNode] == setToTrue:
           g.nodes[i].vindex = j
           g.nodes[i].sindex = findDeps(g.nodes[i], g.nodes[i].versions[j])
-          withDir c, g.nodes[i].dir:
-            checkoutGitCommit(c, toName(g.nodes[i].dir), g.nodes[i].versions[j].h)
+          if thisNode != 0:
+            withDir c, g.nodes[i].dir:
+              checkoutGitCommit(c, toName(g.nodes[i].dir), g.nodes[i].versions[j].h)
         inc thisNode
 
     if NoExec notin c.flags:
@@ -138,10 +133,11 @@ proc resolve*(c: var AtlasContext; g: var DepGraph) =
       for i in 0 ..< g.nodes.len:
         for j in 0 ..< g.nodes[i].versions.len:
           let nodeRepr = toString(g.nodes[i].name, g.nodes[i].versions[j].v)
-          if s[thisNode] == setToTrue:
-            echo "[x] ", nodeRepr
-          else:
-            echo "[ ] ", nodeRepr
+          if thisNode != 0:
+            if s[thisNode] == setToTrue:
+              echo "[x] ", nodeRepr
+            else:
+              echo "[ ] ", nodeRepr
           inc thisNode
       echo "end of selection"
   else:

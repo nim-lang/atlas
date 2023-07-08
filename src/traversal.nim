@@ -15,7 +15,8 @@ proc createGraph*(c: var AtlasContext; start: string, url: PackageUrl): DepGraph
   result = DepGraph(nodes: @[DepNode(name: toName(start),
                                      url: url,
                                      algo: c.defaultAlgo,
-                                     sindex: -1, vindex: -1)])
+                                     sindex: -1, vindex: -1,
+                                     versions: @[HeadCommit])])
   #result.byName.mgetOrPut(toName(start), @[]).add 0
   #result.byName[result.nodes[0].name] = 0
   result.urlToIdx[url] = 0
@@ -150,4 +151,6 @@ proc expandGraph*(c: var AtlasContext; g: var DepGraph; i: int) =
   if nimbleFile.len > 0:
     g.nodes[i].subs = allDeps(c, nimbleFile)
   g.nodes[i].versions = collectTaggedVersions(c)
+  if i == 0 and g.nodes[i].versions.len == 0:
+    g.nodes[i].versions.add HeadCommit
   addDeps c, g, g.nodes[i].subs
