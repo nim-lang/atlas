@@ -51,7 +51,9 @@ type
     name*: PackageName
     repo*: PackageRepo
     path*: PackageDir
+    nimblePath*: string
     url*: PackageUrl
+    exists*: bool
 
   Dependency* = object
     pkg*: Package
@@ -190,29 +192,6 @@ template projectFromCurrentDir*(): PackageRepo =
 
 proc toDestDir*(pkg: Package): PackageDir =
   pkg.path
-
-proc dependencyDir*(c: AtlasContext; w: Dependency): PackageDir =
-  if w.pkg.path.string.len() != 0:
-    return w.pkg.path
-  result = PackageDir c.workspace / w.pkg.repo.string
-  if not dirExists(result.string):
-    result = PackageDir c.depsDir / w.pkg.repo.string
-
-proc findNimbleFile*(c: var AtlasContext; dep: Dependency): string =
-  when MockupRun:
-    result = TestsDir / dep.name.string & ".nimble"
-    doAssert fileExists(result), "file does not exist " & result
-  else:
-    let dir = dependencyDir(c, dep).string
-    result = dir / (dep.pkg.name.string & ".nimble")
-    if not fileExists(result):
-      result = ""
-      for x in walkFiles(dir / "*.nimble"):
-        if result.len == 0:
-          result = x
-        else:
-          warn c, dep.pkg, "ambiguous .nimble file " & result
-          return ""
 
 template withDir*(c: var AtlasContext; dir: string; body: untyped) =
   when MockupRun:

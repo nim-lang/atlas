@@ -8,8 +8,10 @@
 
 ## Resolves package names and turn them to URLs.
 
-import std / [os, unicode, strutils, osproc, sequtils]
+import std / [os, unicode, strutils, osproc, sequtils, options]
 import context, osutils, packagesjson, gitops
+
+export options
 
 proc cloneUrlImpl(c: var AtlasContext,
                   url: PackageUrl,
@@ -100,88 +102,123 @@ proc fillPackageLookupTable(c: var AtlasContext) =
                         url: url)
       c.urlMapping["name:" & pkg.name.string] = pkg
 
+proc dependencyDir*(c: AtlasContext; pkg: Package): PackageDir =
+  if pkg.path.string.len() != 0:
+    return pkg.path
+  result = PackageDir c.workspace / pkg.repo.string
+  if not dirExists(result.string):
+    result = PackageDir c.depsDir / pkg.repo.string
+
+proc findNimbleFile*(c: var AtlasContext; pkg: Package): Option[string] =
+  when MockupRun:
+    result = TestsDir / pkg.name.string & ".nimble"
+    doAssert fileExists(result), "file does not exist " & result
+  else:
+    let dir = dependencyDir(c, pkg).string
+    result = some dir / (pkg.name.string & ".nimble")
+    if not fileExists(result.get()):
+      result = none[string]()
+      for x in walkFiles(dir / "*.nimble"):
+        if result.isNone:
+          result = some x
+        else:
+          warn c, pkg, "ambiguous .nimble file " & result.get()
+          return none[string]()
+
+proc resolvePackageUrl(c: var AtlasContext; url: string): Package =
+  result.name = PackageName unicode.toLower(url)
+  result.url = getUrl(url)
+  result.name = result.url.toRepo().PackageName 
+  result.repo = result.url.toRepo()
+  echo "resolvePackage: ", "IS URL: ", $result.url
+
+  if UsesOverrides in c.flags:
+    let url = c.overrides.substitute(url)
+    if url.len > 0:
+      result.url = url.getUrl()
+
+  let namePkg = c.urlMapping.getOrDefault("name:" & result.name.string, nil)
+  let repoPkg = c.urlMapping.getOrDefault("repo:" & result.name.string, nil)
+
+  if not namePkg.isNil:
+    if namePkg.url != result.url:
+      # package conflicts
+      # change package repo to `repo.user.host`
+      let purl = result.url
+      let host = purl.hostname
+      let org = purl.path.parentDir.lastPathPart
+      let rname = purl.path.lastPathPart
+      let pname = [rname, org, host].join(".") 
+      warn c, result,
+              "conflicting url's for package; renaming package: " &
+                result.name.string & " to " & pname
+      result.repo = PackageRepo pname
+      c.urlMapping["name:" & result.name.string] = result
+
+  elif not repoPkg.isNil:
+    discard
+  else:
+    # package doesn't exit and doesn't conflict
+    # set the url with package name as url name
+    c.urlMapping["repo:" & result.name.string] = result
+
+proc resolvePackageName(c: var AtlasContext; name: string): Package =
+  result.name = PackageName name
+
+  echo "resolvePackage: not url"
+  # the project name can be overwritten too!
+  if UsesOverrides in c.flags:
+    let name = c.overrides.substitute(name)
+    if name.len > 0:
+      result.name = PackageName name
+
+  echo "URL MAP: ", repr c.urlMapping.keys().toSeq()
+  let namePkg = c.urlMapping.getOrDefault("name:" & result.name.string, nil)
+  if not namePkg.isNil:
+    # great, found package!
+    echo "resolvePackage: not url: found!"
+    result = namePkg
+  else:
+    echo "resolvePackage: not url: not found"
+    # check if rawHandle is a package repo name
+    var found = false
+    for pkg in c.urlMapping.values:
+      if pkg.repo.string == name:
+        found = true
+        result = pkg
+        echo "resolvePackage: not url: found by repo!"
+        break
+
+    if not found:
+      let url = getUrlFromGithub(name)
+      if url.len == 0:
+        inc c.errors
+      else:
+        result.url = getUrl url
+
+  if UsesOverrides in c.flags:
+    let newUrl = c.overrides.substitute($result.url)
+    if newUrl.len > 0:
+      echo "resolvePackage: not url: UsesOverrides: ", newUrl
+      result.url = getUrl newUrl
+
 proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
   result.new()
 
   fillPackageLookupTable(c)
 
-  result.name = PackageName unicode.toLower(rawHandle)
-
   echo "\nresolvePackage: ", rawHandle
 
   if rawHandle.isUrl():
-    result.url = getUrl(rawHandle)
-    result.name = result.url.toRepo().PackageName 
-    result.repo = result.url.toRepo()
-    echo "resolvePackage: ", "IS URL: ", $result.url
-
-    if UsesOverrides in c.flags:
-      let url = c.overrides.substitute(rawHandle)
-      if url.len > 0:
-        result.url = url.getUrl()
-
-    let namePkg = c.urlMapping.getOrDefault("name:" & result.name.string, nil)
-    let repoPkg = c.urlMapping.getOrDefault("repo:" & result.name.string, nil)
-
-    if not namePkg.isNil:
-      if namePkg.url != result.url:
-        # package conflicts
-        # change package repo to `repo.user.host`
-        let purl = result.url
-        let host = purl.hostname
-        let org = purl.path.parentDir.lastPathPart
-        let rname = purl.path.lastPathPart
-        let pname = [rname, org, host].join(".") 
-        warn c, result,
-                "conflicting url's for package; renaming package: " &
-                  result.name.string & " to " & pname
-        result.repo = PackageRepo pname
-        c.urlMapping["name:" & result.name.string] = result
-
-    elif not repoPkg.isNil:
-      discard
-    else:
-      # package doesn't exit and doesn't conflict
-      # set the url with package name as url name
-      c.urlMapping["repo:" & result.name.string] = result
-
-    
-    return
-
+    result = c.resolvePackageUrl(rawHandle)
   else:
-    echo "resolvePackage: not url"
-    # the project name can be overwritten too!
-    if UsesOverrides in c.flags:
-      let name = c.overrides.substitute(rawHandle)
-      if name.len > 0:
-        result.name = PackageName name
+    result = c.resolvePackageName(unicode.toLower(rawHandle))
+  
+  let res = c.findNimbleFile(result)
+  if res.isSome:
+    result.nimblePath = res.get()
+    result.path = PackageDir res.get().parentDir()
+    result.exists = true
 
-    echo "URL MAP: ", repr c.urlMapping.keys().toSeq()
-    let namePkg = c.urlMapping.getOrDefault("name:" & result.name.string, nil)
-    if not namePkg.isNil:
-      # great, found package!
-      echo "resolvePackage: not url: found!"
-      result = namePkg
-    else:
-      echo "resolvePackage: not url: not found"
-      # check if rawHandle is a package repo name
-      var found = false
-      for pkg in c.urlMapping.values:
-        if pkg.repo.string == rawHandle:
-          found = true
-          result = pkg
-          echo "resolvePackage: not url: found by repo!"
-          break
-
-      if not found:
-        let url = getUrlFromGithub(rawHandle)
-        if url.len == 0:
-          inc c.errors
-        else:
-          result.url = getUrl url
-
-    if UsesOverrides in c.flags:
-      let newUrl = c.overrides.substitute($result.url)
-      if newUrl.len > 0:
-        echo "resolvePackage: not url: UsesOverrides: ", newUrl
-        result.url = getUrl newUrl
+proc resolvePackage*(c: var AtlasContext; dir: string): Package =
+  
