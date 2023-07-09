@@ -197,7 +197,7 @@ proc integrationTest() =
   # won't disappear in the near or far future. Turns out `nitter` has
   # quite some dependencies so it suffices:
   echo "\n## Integration Test: Nitter\n"
-  exec atlasExe & " use https://github.com/zedeus/nitter"
+  exec atlasExe & " --verbose use https://github.com/zedeus/nitter"
   discard sameDirContents("expected", ".")
 
 proc cleanupIntegrationTest() =

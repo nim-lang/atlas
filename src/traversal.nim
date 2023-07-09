@@ -77,6 +77,7 @@ proc collectDeps*(
     let name = r.substr(0, i-1)
     # print name
     let pkg = c.resolvePackage(name)
+    debug c, dep.pkg, "collect deps: " & name & " pkg: " & $dep.pkg
     # print "collectDeps: ", pkg
 
     var err = pkg.name.string.len == 0
@@ -101,10 +102,10 @@ proc collectNewDeps*(
     parent: int;
     dep: Dependency
 ): CfgPath =
-  info c, dep.pkg, "collecting deps: pkg: " & $dep.pkg
+  debug c, dep.pkg, "collecting deps: pkg: " & $dep.pkg
   if dep.pkg.exists:
     let nimble = dep.pkg.nimble
-    info c, dep.pkg, "collecting deps: nimble file: '" & nimble.string & "'"
+    debug c, dep.pkg, "collecting deps: nimble file: '" & nimble.string & "'"
     result = collectDeps(c, g, parent, dep)
   else:
     warn c, dep.pkg, "collecting deps: no nimble skipping deps'"

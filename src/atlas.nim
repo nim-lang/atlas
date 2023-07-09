@@ -341,12 +341,13 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
         of OtherError:
           error c, w.pkg, err
         else:
-          c.resolveNimble(w.pkg)
           withDir c, w.pkg.path.string:
             collectAvailableVersions c, g, w
     else:
         withDir c, w.pkg.path.string:
           collectAvailableVersions c, g, w
+
+    c.resolveNimble(w.pkg)
 
     # assume this is the selected version, it might get overwritten later:
     selectNode c, g, w
