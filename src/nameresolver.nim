@@ -253,13 +253,15 @@ proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
   let res = c.findNimbleFile(result)
   if res.isSome:
     let nimble = PackageNimble res.get()
-    let path = PackageDir res.get().parentDir()
-    result = Package(url: result.url,
-                     name: result.name,
-                     repo: result.repo,
-                     path: path,
-                     exists: true,
-                     nimble: nimble)
+    # let path = PackageDir res.get().parentDir()
+    result.exists = true
+    result.nimble = nimble
+    # result = Package(url: result.url,
+    #                  name: result.name,
+    #                  repo: result.repo,
+    #                  path: path,
+    #                  exists: true,
+    #                  nimble: nimble)
     debug c, result, "resolvePackageName: nimble: found: " & $result
   else:
     debug c, result, "resolvePackageName: nimble: not found: " & $result

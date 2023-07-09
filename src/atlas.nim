@@ -322,30 +322,30 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
   var i = 0
   while i < g.nodes.len:
     let w = g.nodes[i]
-    let destDir = toDestDir(w.pkg).string
     let oldErrors = c.errors
     info c, w.pkg, "traverseLoop: " & $w.pkg & " depsDir: " & c.depsDir
 
-    if not w.pkg.exists:
+    if not dirExists(w.pkg.path.string):
       withDir c, (if i != 0 or startIsDep: c.depsDir else: c.workspace):
         let (status, err) =
           if w.pkg.url.scheme == FileProtocol:
-            copyFromDisk(c, w, destDir)
+            copyFromDisk(c, w, w.pkg.path.string)
           else:
             info(c, w.pkg, "cloning: " & $w.pkg)
-            cloneUrl(c, w.pkg.url, destDir, false)
+            cloneUrl(c, w.pkg.url, w.pkg.path.string, false)
         g.nodes[i].status = status
+        discard c.resolvePackage($w.pkg.url)
+        info c, w.pkg, "traverseLoop: status: " & $status & " pkg: " & $w.pkg
         case status
         of NotFound:
           discard "setting the status is enough here"
         of OtherError:
           error c, w.pkg, err
         else:
-          discard c.resolvePackage($w.pkg.url)
-          withDir c, destDir:
+          withDir c, w.pkg.path.string:
             collectAvailableVersions c, g, w
     else:
-        withDir c, destDir:
+        withDir c, w.pkg.path.string:
           collectAvailableVersions c, g, w
 
     # assume this is the selected version, it might get overwritten later:
@@ -357,6 +357,8 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
       # outdated .nimble file to clone more of the most likely still relevant
       # dependencies:
       result.addUnique collectNewDeps(c, g, i, w)
+    else:
+      warn(c, w.pkg, "traverseLoop: errors found, skipping collect deps")
     inc i
 
   if g.availableVersions.len > 0:
@@ -425,10 +427,8 @@ proc installDependencies(c: var AtlasContext; nimbleFile: string; startIsDep: bo
   # 2. install deps from .nimble
   var g = DepGraph(nodes: @[])
   let (dir, pkgname, _) = splitFile(nimbleFile)
-  echo "installDependencies:pkgname: ", pkgname
-  echo "installDependencies:repo: ", dir.lastPathComponent
   let pkg = c.resolvePackage("file://" & dir.lastPathComponent)
-  info c, pkg, "install: " & $pkg
+  info c, pkg, "installing dependencies for " & pkgname & ".nimble"
   let dep = Dependency(pkg: pkg, commit: "", self: 0, algo: c.defaultAlgo)
   g.byName.mgetOrPut(pkg.name, @[]).add(0)
   discard collectDeps(c, g, -1, dep)
@@ -662,6 +662,7 @@ proc main(c: var AtlasContext) =
   of "use":
     singleArg()
     let nimbleFile = patchNimbleFile(c, args[0])
+    echo "USE: ", nimbleFile
     if nimbleFile.len > 0:
       installDependencies(c, nimbleFile, startIsDep = false)
   of "pin":

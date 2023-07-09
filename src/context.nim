@@ -53,11 +53,8 @@ type
     repo*: PackageRepo
     url*: PackageUrl
     path*: PackageDir
-    case exists*: bool
-    of true:
-      nimble*: PackageNimble
-    of false:
-      discard
+    exists*: bool
+    nimble*: PackageNimble
 
   Dependency* = object
     pkg*: Package
@@ -111,6 +108,11 @@ type
       step*: int
       mockupSuccess*: bool
     plugins*: PluginInfo
+
+proc nimble*(a: Package): PackageNimble =
+  assert a.exists == true
+  a.nimble
+
 
 proc `==`*(a, b: CfgPath): bool {.borrow.}
 
