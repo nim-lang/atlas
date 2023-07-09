@@ -195,6 +195,7 @@ proc integrationTest() =
   # Test installation of some "important_packages" which we are sure
   # won't disappear in the near or far future. Turns out `nitter` has
   # quite some dependencies so it suffices:
+  echo "\n## Integration Test: Nitter\n"
   exec atlasExe & " use https://github.com/zedeus/nitter"
   discard sameDirContents("expected", ".")
 
@@ -209,8 +210,10 @@ proc cleanupIntegrationTest() =
 
 withDir "tests/ws_integration":
   try:
+    cleanupIntegrationTest()
     integrationTest()
   finally:
-    cleanupIntegrationTest()
+    if getEnv("KEEP_TEST_DIRS") == "":
+      cleanupIntegrationTest()
 
 if failures > 0: quit($failures & " failures occurred.")
