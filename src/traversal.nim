@@ -101,9 +101,10 @@ proc collectNewDeps*(
     parent: int;
     dep: Dependency
 ): CfgPath =
+  info c, dep.pkg, "collecting deps: pkg: " & $dep.pkg
   if dep.pkg.exists:
     let nimble = dep.pkg.nimble
-    infoNow c, dep.pkg, "collecting deps: nimble file: '" & nimble.string & "'"
+    info c, dep.pkg, "collecting deps: nimble file: '" & nimble.string & "'"
     result = collectDeps(c, g, parent, dep)
   else:
     warn c, dep.pkg, "collecting deps: no nimble skipping deps'"

@@ -256,22 +256,21 @@ proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
     # let path = PackageDir res.get().parentDir()
     result.exists = true
     result.nimble = nimble
-    # result = Package(url: result.url,
-    #                  name: result.name,
-    #                  repo: result.repo,
-    #                  path: path,
-    #                  exists: true,
-    #                  nimble: nimble)
     debug c, result, "resolvePackageName: nimble: found: " & $result
   else:
     debug c, result, "resolvePackageName: nimble: not found: " & $result
   
 
-# proc resolvePackage*(c: var AtlasContext; dir: PackageDir): Package =
+proc resolveNimble*(c: var AtlasContext; pkg: Package) =
 
-#   # let destDir = toDestDir(w.pkg.name)
-#   # let dir =
-#   #   if destDir == start.string: c.currentDir
-#   #   else: selectDir(c.workspace / destDir, c.depsDir / destDir)
-  
-#   discard
+  pkg.path = dependencyDir(c, pkg)
+  let res = c.findNimbleFile(pkg)
+  if res.isSome:
+    let nimble = PackageNimble res.get()
+    # let path = PackageDir res.get().parentDir()
+    pkg.exists = true
+    pkg.nimble = nimble
+    info c, pkg, "resolvePackageName: nimble: found: " & $pkg
+  else:
+    info c, pkg, "resolvePackageName: nimble: not found: " & $pkg
+

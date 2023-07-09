@@ -334,7 +334,6 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
             info(c, w.pkg, "cloning: " & $w.pkg)
             cloneUrl(c, w.pkg.url, w.pkg.path.string, false)
         g.nodes[i].status = status
-        discard c.resolvePackage($w.pkg.url)
         info c, w.pkg, "traverseLoop: status: " & $status & " pkg: " & $w.pkg
         case status
         of NotFound:
@@ -342,6 +341,7 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
         of OtherError:
           error c, w.pkg, err
         else:
+          c.resolveNimble(w.pkg)
           withDir c, w.pkg.path.string:
             collectAvailableVersions c, g, w
     else:
