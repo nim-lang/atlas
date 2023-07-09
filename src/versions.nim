@@ -255,6 +255,9 @@ proc extractSpecificCommit*(pattern: VersionQuery): string =
   else:
     result = ""
 
+proc patchCommit*(q: var VersionQuery; commit: string) =
+  q.a.v = Version(commit)
+
 proc matches*(pattern: VersionQuery; x: Commit): bool =
   if pattern.isInterval:
     result = matches(pattern.a, x.v) and matches(pattern.b, x.v)

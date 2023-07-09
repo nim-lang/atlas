@@ -161,6 +161,13 @@ proc getRemoteUrl*(): PackageUrl =
 proc getCurrentCommit*(): string =
   result = execProcess("git log -1 --pretty=format:%H").strip()
 
+proc isShortCommitHash*(commit: string): bool {.inline.} =
+  commit.len >= 4 and commit.len < 40
+
+proc shortToCommit*(c: var AtlasContext; short: string): string =
+  let (cc, status) = exec(c, GitRevParse, [short])
+  result = if status == 0: strutils.strip(cc) else: ""
+
 proc isOutdated*(c: var AtlasContext; f: string): bool =
   ## determine if the given git repo `f` is updateable
   ##

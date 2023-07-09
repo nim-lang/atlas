@@ -38,11 +38,18 @@ proc parseNimbleFile(c: var AtlasContext; nimbleFile: string; commit: Commit): D
     while i < r.len and r[i] notin {'#', '<', '=', '>'} + Whitespace: inc i
     let pkgName = r.substr(0, i-1)
     var err = pkgName.len == 0
-    let query = parseVersionInterval(r, i, err)
+    var query = parseVersionInterval(r, i, err)
     if err:
       result.errors.add "invalid 'requires' syntax: " & r
     else:
       if cmpIgnoreCase(pkgName, "nim") != 0:
+        let commit = extractSpecificCommit(query)
+        if isShortCommitHash(commit):
+          let fullCommit = c.shortToCommit(commit)
+          if fullCommit.len > 0:
+            query.patchCommit("#" & fullCommit)
+          else:
+            assert false, commit & " " & getCurrentDir()
         result.deps.add SingleDep(nameOrUrl: pkgName, query: query)
       else:
         result.nimVersion = query
@@ -97,6 +104,6 @@ proc expandGraph*(c: var AtlasContext; g: var DepGraph; i: int) =
   if nimbleFile.len > 0:
     g.nodes[i].subs = allDeps(c, nimbleFile)
   g.nodes[i].versions = collectTaggedVersions(c)
-  if i == 0 and g.nodes[i].versions.len == 0:
+  if g.nodes[i].versions.len == 0:
     g.nodes[i].versions.add HeadCommit
   addDeps c, g, g.nodes[i].subs

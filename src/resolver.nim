@@ -69,6 +69,8 @@ proc toGraph(c: var AtlasContext; g: DepGraph; b: var sat.Builder) =
           else:
             let bpos = rememberPos(b)
             # A -> (exactly one of: A1, A2, A3)
+            if thisNode == 1:
+              echo "Came here!!! ", url, " ", dep.query
             b.openOpr(OrForm)
             b.openOpr(NotForm)
             b.add newVar(VarId thisNode)
@@ -83,9 +85,12 @@ proc toGraph(c: var AtlasContext; g: DepGraph; b: var sat.Builder) =
               if val > 0:
                 b.add newVar(VarId(val - 1))
                 inc counter
+              else:
+                echo "not found: ", key
             b.closeOpr # ExactlyOneOfForm
             b.closeOpr # OrForm
             if counter == 0:
+              echo "bah it's empty for ", thisNode
               b.rewind bpos
       inc thisNode
 
@@ -97,6 +102,11 @@ proc toFormular(c: var AtlasContext; g: var DepGraph): Formular =
   b.closeOpr
   result = toForm(b)
 
+proc checkoutGitCommitMaybe(c: var AtlasContext; n: DepNode) =
+  if n.versions[n.vindex].h != "":
+    withDir c, n.dir:
+      checkoutGitCommit(c, n.name, n.versions[n.vindex].h)
+
 proc resolve*(c: var AtlasContext; g: var DepGraph) =
   let f = toFormular(c, g)
 
@@ -105,14 +115,16 @@ proc resolve*(c: var AtlasContext; g: var DepGraph) =
     inc varCounter, g.nodes[i].versions.len
 
   var s = newSeq[BindingKind](varCounter)
-  when defined(showForm):
+  when true: # defined(showForm):
     var nodeNames = newSeq[string]()
     for i in 0 ..< g.nodes.len:
       for j in 0 ..< g.nodes[i].versions.len:
-        nodeNames.add $g.nodes[i].url & "/" & $g.nodes[i].versions[j].v
+        nodeNames.add $g.nodes[i].name & "@" & $g.nodes[i].versions[j].v
     echo f$(proc (buf: var string; i: int) =
       buf.add nodeNames[i])
+  echo "before"
   if satisfiable(f, s):
+    echo "after"
     var thisNode = 0
     for i in 0 ..< g.nodes.len:
       for j in 0 ..< g.nodes[i].versions.len:
@@ -120,8 +132,7 @@ proc resolve*(c: var AtlasContext; g: var DepGraph) =
           g.nodes[i].vindex = j
           g.nodes[i].sindex = findDeps(g.nodes[i], g.nodes[i].versions[j])
           if thisNode != 0:
-            withDir c, g.nodes[i].dir:
-              checkoutGitCommit(c, toName(g.nodes[i].dir), g.nodes[i].versions[j].h)
+            checkoutGitCommitMaybe(c, g.nodes[i])
         inc thisNode
 
     if NoExec notin c.flags:
