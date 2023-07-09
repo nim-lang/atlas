@@ -91,7 +91,7 @@ type
     Info = "[Info] ",
     Warning = "[Warning] ",
     Error = "[Error] "
-    Debug = "[Debug] "
+    Trace = "[Trace] "
     ExtraDebug = "[ExtraDebug] "
 
   AtlasContext* = object
@@ -159,7 +159,7 @@ proc writeMessage(c: var AtlasContext; category: string; p: PackageRepo; arg: st
   stdout.writeLine msg
 
 proc writeMessage(c: var AtlasContext; k: MsgKind; p: PackageRepo; arg: string) =
-  if k == Debug and c.verbosity < 1: return
+  if k == Trace and c.verbosity < 1: return
   elif k == ExtraDebug and c.verbosity < 2: return
 
   if NoColors in c.flags:
@@ -168,7 +168,7 @@ proc writeMessage(c: var AtlasContext; k: MsgKind; p: PackageRepo; arg: string) 
     let pn = p.string.relativePath(c.workspace)
     let color = case k
                 of ExtraDebug: fgDefault
-                of Debug: fgWhite
+                of Trace: fgWhite
                 of Info: fgGreen
                 of Warning: fgYellow
                 of Error: fgRed
@@ -193,8 +193,8 @@ proc error*(c: var AtlasContext; p: PackageRepo; arg: string) =
 proc info*(c: var AtlasContext; p: PackageRepo; arg: string) =
   c.message(Info, p, arg)
 
-proc debug*(c: var AtlasContext; p: PackageRepo; arg: string) =
-  c.message(Debug, p, arg)
+proc trace*(c: var AtlasContext; p: PackageRepo; arg: string) =
+  c.message(Trace, p, arg)
 
 proc debugExtra*(c: var AtlasContext; p: PackageRepo; arg: string) =
   c.message(ExtraDebug, p, arg)
@@ -208,8 +208,8 @@ proc error*(c: var AtlasContext; p: Package; arg: string) =
 proc info*(c: var AtlasContext; p: Package; arg: string) =
   c.info(p.repo, arg)
 
-proc debug*(c: var AtlasContext; p: Package; arg: string) =
-  c.debug(p.repo, arg)
+proc trace*(c: var AtlasContext; p: Package; arg: string) =
+  c.trace(p.repo, arg)
 
 proc debugExtra*(c: var AtlasContext; p: Package; arg: string) =
   c.debugExtra(p.repo, arg)

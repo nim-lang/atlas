@@ -144,12 +144,12 @@ proc findNimbleFile*(c: var AtlasContext; pkg: Package): Option[string] =
       for x in walkFiles(dir / "*.nimble"):
         if result.isNone:
           result = some x
-          debug  c, pkg, "nimble file found " & result.get()
+          trace c, pkg, "nimble file found " & result.get()
         else:
           error c, pkg, "ambiguous .nimble file " & result.get()
           return none[string]()
     else:
-      debug  c, pkg, "nimble file found " & result.get()
+      trace c, pkg, "nimble file found " & result.get()
       discard
 
 proc resolvePackageUrl(c: var AtlasContext; url: string, checkOverrides = true): Package =
@@ -190,11 +190,11 @@ proc resolvePackageUrl(c: var AtlasContext; url: string, checkOverrides = true):
     # package doesn't exit and doesn't conflict
     # set the url with package name as url name
     c.urlMapping["repo:" & result.name.string] = result
-    debug c, result, "resolvePackageUrl: not found; set pkg: " & $result.repo.string
+    trace c, result, "resolvePackageUrl: not found; set pkg: " & $result.repo.string
   
   if result.url.scheme == "file":
     result.path = PackageDir result.url.hostname & result.url.path
-    debug c, result, "resolvePackageUrl: setting manual path: " & $result.path.string
+    trace c, result, "resolvePackageUrl: setting manual path: " & $result.path.string
 
 proc resolvePackageName(c: var AtlasContext; name: string): Package =
   result = Package(name: PackageName name,
@@ -231,7 +231,7 @@ proc resolvePackageName(c: var AtlasContext; name: string): Package =
   if UsesOverrides in c.flags:
     let newUrl = c.overrides.substitute($result.url)
     if newUrl.len > 0:
-      debug c, result, "resolvePackageName: not url: UsesOverrides: " & $newUrl
+      trace c, result, "resolvePackageName: not url: UsesOverrides: " & $newUrl
       result.url = getUrl newUrl
 
 proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
@@ -239,7 +239,7 @@ proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
 
   fillPackageLookupTable(c)
 
-  debug c, result, "resolvePackage: search: " & rawHandle
+  trace c, result, "resolvePackage: search: " & rawHandle
 
   if rawHandle.isUrl():
     result = c.resolvePackageUrl(rawHandle)
