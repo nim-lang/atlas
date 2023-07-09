@@ -331,10 +331,9 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
     let w = g.nodes[i]
     let destDir = toDestDir(w.pkg).string
     let oldErrors = c.errors
-    info c, w.pkg, "traverseLoop: " & $w.pkg
+    info c, w.pkg, "traverseLoop: " & $w.pkg & " depsDir: " & c.depsDir
 
-    let dir = selectDir(c.workspace / destDir, c.depsDir / destDir)
-    if not dirExists(dir):
+    if not w.pkg.exists:
       withDir c, (if i != 0 or startIsDep: c.depsDir else: c.workspace):
         let (status, err) =
           if w.pkg.url.scheme == FileProtocol:
@@ -349,11 +348,12 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
         of OtherError:
           error c, w.pkg, err
         else:
+          discard c.resolvePackage($w.pkg.url)
           withDir c, destDir:
             collectAvailableVersions c, g, w
     else:
-      withDir c, dir:
-        collectAvailableVersions c, g, w
+        withDir c, destDir:
+          collectAvailableVersions c, g, w
 
     # assume this is the selected version, it might get overwritten later:
     selectNode c, g, w

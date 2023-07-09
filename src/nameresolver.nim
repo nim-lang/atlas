@@ -44,7 +44,7 @@ proc cloneUrlImpl(c: var AtlasContext,
     # retry multiple times to avoid annoying github timeouts:
     for i in 0..4:
       os.sleep(4000)
-      infoNow c, toRepo($modUrl), "Cloning URL: " & $modUrl
+      infoNow c, toRepo($modUrl), "Check remote URL: " & $modUrl
       xcode = execCmdEx("git ls-remote --quiet --tags " & $modUrl)[1]
       if xcode == QuitSuccess: break
 
@@ -106,10 +106,10 @@ proc dependencyDir*(c: var AtlasContext; pkg: Package): PackageDir =
   template checkDir(dir: string) =
     info c, pkg, "dependencyDir: test: " & dir
     if dir.len() > 0 and dirExists(dir):
-      info c, pkg, "dependencyDir: " & dir 
+      info c, pkg, "dependencyDir: found: " & dir 
       return PackageDir dir
   
-  info c, pkg, "dependencyDir: check: " & pkg.path.string & " cd: " & getCurrentDir() & " ws: " & c.workspace
+  info c, pkg, "dependencyDir: check: pth: " & pkg.path.string & " cd: " & getCurrentDir() & " ws: " & c.workspace
   if pkg.exists:
     info c, pkg, "dependencyDir: exists: " & pkg.path.string
     return pkg.path
@@ -119,14 +119,15 @@ proc dependencyDir*(c: var AtlasContext; pkg: Package): PackageDir =
 
   if pkg.path.string.len() > 0:
     checkDir pkg.path.string
-  checkDir c.workspace / pkg.path.string
-  checkDir c.depsDir / pkg.path.string
+    checkDir c.workspace / pkg.path.string
+    checkDir c.depsDir / pkg.path.string
+  
   checkDir c.workspace / pkg.repo.string
   checkDir c.depsDir / pkg.repo.string
   checkDir c.workspace / pkg.name.string
   checkDir c.depsDir / pkg.name.string
-  info c, pkg, "dependencyDir: failed: defaulting: " & c.workspace
   result = PackageDir c.depsDir / pkg.repo.string
+  info c, pkg, "dependencyDir: failed: defaulting: " & result.string 
 
 proc findNimbleFile*(c: var AtlasContext; pkg: Package): Option[string] =
   when MockupRun:
@@ -135,7 +136,7 @@ proc findNimbleFile*(c: var AtlasContext; pkg: Package): Option[string] =
   else:
     let dir = dependencyDir(c, pkg).string
     result = some dir / (pkg.name.string & ".nimble")
-    info c, pkg, "findNimbleFile: find: " & pkg.repo.string & " path: " & pkg.path.string & " dir: " & dir
+    info c, pkg, "findNimbleFile: find: " & pkg.repo.string & " path: " & pkg.path.string & " dir: " & dir & " curr: " & result.get()
     if not fileExists(result.get()):
       info c, pkg, "findNimbleFile: not found: " & result.get()
       result = none[string]()
