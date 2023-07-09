@@ -174,6 +174,7 @@ proc testSemVer2() =
       raise newException(Exception, "myproject: atlas exec error: " & $status)
 
 withDir "tests/ws_semver2":
+  echo "\n## Integration Test: SemVer2\n"
   proc cleanupDirs() =
     removeDir "does_not_exist"
     removeDir "myproject"
