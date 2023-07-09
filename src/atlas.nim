@@ -292,15 +292,8 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
         let destDir = pkg.name.string
         info c, pkg, "satisfiable: " & $pkg
         let dir = pkg.path.string
-        # let dir = selectDir(c.workspace / destDir, c.depsDir / destDir)
-        # withDir c, dir:
-        let oldDir = getCurrentDir()
-        try:
-          info c, pkg, "setting directory: " & dir
-          setCurrentDir(dir)
+        withDir c, dir:
           checkoutGitCommit(c, toRepo(destDir), mapping[i - g.nodes.len][1])
-        finally:
-          setCurrentDir(oldDir)
     if NoExec notin c.flags:
       runBuildSteps(c, g)
       #echo f
