@@ -112,7 +112,7 @@ proc dependencyDir*(c: var AtlasContext; pkg: Package): PackageDir =
   debug c, pkg, "dependencyDir: check: pth: " & pkg.path.string & " cd: " & getCurrentDir() & " ws: " & c.workspace
   if pkg.exists:
     debug c, pkg, "dependencyDir: exists: " & pkg.path.string
-    return pkg.path
+    return PackageDir pkg.path.string.absolutePath
   if c.workspace.lastPathComponent == pkg.repo.string:
     debug c, pkg, "dependencyDir: workspace: " & c.workspace
     return PackageDir getCurrentDir()

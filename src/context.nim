@@ -157,26 +157,45 @@ const
   InvalidCommit* = "#head" #"<invalid commit>"
   ProduceTest* = false
 
-
-proc message(c: var AtlasContext; category: string; p: PackageRepo; arg: string) =
+proc writeMessage(c: var AtlasContext; category: string; p: PackageRepo; arg: string) =
   var msg = category & "(" & p.string & ") " & arg
   stdout.writeLine msg
 
+proc writeMessage(c: var AtlasContext; k: MsgKind; p: PackageRepo; arg: string) =
+  if k == Debug and DebugPrint notin c.flags:
+    return
+  if NoColors in c.flags:
+    writeMessage(c, $k, p, arg)
+  else:
+    let pn = p.string.relativePath(c.workspace)
+    let color = case k
+                of Debug: fgWhite
+                of Info: fgGreen
+                of Warning: fgYellow
+                of Error: fgRed
+    stdout.styledWriteLine(color, styleBright, $k, resetStyle, fgCyan, "(", pn, ")", resetStyle, " ", arg)
+
+proc message(c: var AtlasContext; k: MsgKind; p: PackageRepo; arg: string) =
+  # c.messages.add (k, p, arg)
+  writeMessage c, k, p, arg
+
+
 proc warn*(c: var AtlasContext; p: PackageRepo; arg: string) =
-  c.messages.add (Warning, p, arg)
+  c.message(Warning, p, arg)
+  writeMessage c, Warning, p, arg
   inc c.warnings
 
 proc error*(c: var AtlasContext; p: PackageRepo; arg: string) =
   if AssertOnError in c.flags:
     raise newException(AssertionDefect, p.string & ": " & arg)
-  c.messages.add (Error, p, arg)
+  c.message(Error, p, arg)
   inc c.errors
 
 proc info*(c: var AtlasContext; p: PackageRepo; arg: string) =
-  c.messages.add (Info, p, arg)
+  c.message(Info, p, arg)
 
 proc debug*(c: var AtlasContext; p: PackageRepo; arg: string) =
-  c.messages.add (Debug, p, arg)
+  c.message(Debug, p, arg)
 
 proc warn*(c: var AtlasContext; p: Package; arg: string) =
   c.warn(p.repo, arg)
@@ -189,20 +208,6 @@ proc info*(c: var AtlasContext; p: Package; arg: string) =
 
 proc debug*(c: var AtlasContext; p: Package; arg: string) =
   c.debug(p.repo, arg)
-
-proc writeMessage(c: var AtlasContext; k: MsgKind; p: PackageRepo; arg: string) =
-  if k == Debug and DebugPrint notin c.flags:
-    return
-  if NoColors in c.flags:
-    message(c, $k, p, arg)
-  else:
-    let pn = p.string.relativePath(c.workspace)
-    let color = case k
-                of Debug: fgWhite
-                of Info: fgGreen
-                of Warning: fgYellow
-                of Error: fgRed
-    stdout.styledWriteLine(color, styleBright, $k, resetStyle, fgCyan, "(", pn, ")", resetStyle, " ", arg)
 
 proc writePendingMessages*(c: var AtlasContext) =
   for i in 0..<c.messages.len:
