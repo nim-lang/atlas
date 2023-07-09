@@ -134,6 +134,23 @@ proc hash*(a: Package): Hash =
   # if a.exists:
   #   result = result !& hash a.nimble
 
+proc `$`*(a: Package): string =
+  result = "Package("
+  result &= "name:" 
+  result &= a.name.string
+  result &= ", repo:" 
+  result &= a.repo.string
+  result &= ", url:" 
+  result &= $(a.url)
+  result &= ", p:" 
+  result &= a.path.string
+  result &= ", x:" 
+  result &= $(a.exists)
+  result &= ", nbl:" 
+  if a.exists:
+    result &= $(a.nimble.string)
+  result &= ")"
+
 const
   InvalidCommit* = "#head" #"<invalid commit>"
   ProduceTest* = false
@@ -193,6 +210,8 @@ proc writePendingMessages*(c: var AtlasContext) =
 
 proc infoNow*(c: var AtlasContext; p: PackageRepo; arg: string) =
   writeMessage c, Info, p, arg
+proc infoNow*(c: var AtlasContext; p: Package; arg: string) =
+  infoNow c, p.repo, arg
 
 proc fatal*(msg: string) =
   when defined(debug):

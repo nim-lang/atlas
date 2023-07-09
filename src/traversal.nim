@@ -8,6 +8,8 @@
 
 ## Helpers for the graph traversal.
 
+import pretty
+
 import std / [strutils, os]
 import context, osutils, gitops, nameresolver
 
@@ -73,7 +75,9 @@ proc collectDeps*(
     var i = 0
     while i < r.len and r[i] notin {'#', '<', '=', '>'} + Whitespace: inc i
     let name = r.substr(0, i-1)
+    # print name
     let pkg = c.resolvePackage(name)
+    # print "collectDeps: ", pkg
 
     var err = pkg.name.string.len == 0
     if len($pkg.url) == 0:

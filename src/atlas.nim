@@ -16,6 +16,8 @@ import context, runners, osutils, packagesjson, sat, gitops, nimenv, lockfiles,
 
 export osutils, context
 
+import pretty # REMOVE!
+
 const
   AtlasVersion = "0.6.2"
   LockFileName = "atlas.lock"
@@ -288,13 +290,13 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
       if s[i] == setToTrue:
         let pkg = mapping[i - g.nodes.len][0]
         let destDir = pkg.name.string
-        debug c, pkg, "satisfiable"
+        info c, pkg, "satisfiable: " & $pkg
         let dir = pkg.path.string
         # let dir = selectDir(c.workspace / destDir, c.depsDir / destDir)
         # withDir c, dir:
         let oldDir = getCurrentDir()
         try:
-          debug c, pkg, "setting directory: " & dir
+          info c, pkg, "setting directory: " & dir
           setCurrentDir(dir)
           checkoutGitCommit(c, toRepo(destDir), mapping[i - g.nodes.len][1])
         finally:
@@ -329,6 +331,7 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
     let w = g.nodes[i]
     let destDir = toDestDir(w.pkg).string
     let oldErrors = c.errors
+    info c, w.pkg, "traverseLoop: " & $w.pkg
 
     let dir = selectDir(c.workspace / destDir, c.depsDir / destDir)
     if not dirExists(dir):
@@ -337,6 +340,7 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
           if w.pkg.url.scheme == FileProtocol:
             copyFromDisk(c, w, destDir)
           else:
+            info(c, w.pkg, "cloning: " & $w.pkg)
             cloneUrl(c, w.pkg.url, destDir, false)
         g.nodes[i].status = status
         case status
@@ -431,6 +435,7 @@ proc installDependencies(c: var AtlasContext; nimbleFile: string; startIsDep: bo
   echo "installDependencies:pkgname: ", pkgname
   echo "installDependencies:repo: ", dir.lastPathComponent
   let pkg = c.resolvePackage("file://" & dir.lastPathComponent)
+  info c, pkg, "install: " & $pkg
   let dep = Dependency(pkg: pkg, commit: "", self: 0, algo: c.defaultAlgo)
   g.byName.mgetOrPut(pkg.name, @[]).add(0)
   discard collectDeps(c, g, -1, dep)
@@ -629,7 +634,7 @@ proc main(c: var AtlasContext) =
         c.workspace = detectWorkspace(c.currentDir)
       if c.workspace.len > 0:
         readConfig c
-        infoNow c, toRepo(c.workspace.readableFile), "is the current workspace"
+        info c, toRepo(c.workspace.readableFile), "is the current workspace"
       elif autoinit:
         c.workspace = autoWorkspace(c.currentDir)
         createWorkspaceIn c
