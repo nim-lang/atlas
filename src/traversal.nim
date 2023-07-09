@@ -75,10 +75,8 @@ proc collectDeps*(
     var i = 0
     while i < r.len and r[i] notin {'#', '<', '=', '>'} + Whitespace: inc i
     let name = r.substr(0, i-1)
-    # print name
     let pkg = c.resolvePackage(name)
-    debug c, dep.pkg, "collect deps: " & name & " pkg: " & $dep.pkg
-    # print "collectDeps: ", pkg
+    debugExtra c, dep.pkg, "collect deps: " & name & " pkg: " & $dep.pkg
 
     var err = pkg.name.string.len == 0
     if len($pkg.url) == 0:
@@ -105,7 +103,7 @@ proc collectNewDeps*(
   debug c, dep.pkg, "collecting deps: pkg: " & $dep.pkg
   if dep.pkg.exists:
     let nimble = dep.pkg.nimble
-    debug c, dep.pkg, "collecting deps: nimble file: '" & nimble.string & "'"
+    debugExtra c, dep.pkg, "collecting deps: using nimble file: '" & nimble.string & "'"
     result = collectDeps(c, g, parent, dep)
   else:
     warn c, dep.pkg, "collecting deps: no nimble skipping deps'"

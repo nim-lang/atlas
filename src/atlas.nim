@@ -605,7 +605,12 @@ proc main(c: var AtlasContext) =
         of "off": c.flags.incl NoColors
         of "on": c.flags.excl NoColors
         else: writeHelp()
-      of "verbose": c.flags.incl DebugPrint
+      of "verbosity":
+        case val.normalize
+        of "0": c.verbosity = 0
+        of "1": c.verbosity = 1
+        of "2": c.verbosity = 2
+        else: writeHelp()
       of "assertonerror": c.flags.incl AssertOnError
       of "resolver":
         try:
@@ -663,7 +668,6 @@ proc main(c: var AtlasContext) =
   of "use":
     singleArg()
     let nimbleFile = patchNimbleFile(c, args[0])
-    echo "USE: ", nimbleFile
     if nimbleFile.len > 0:
       installDependencies(c, nimbleFile, startIsDep = false)
   of "pin":

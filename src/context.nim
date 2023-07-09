@@ -84,7 +84,6 @@ type
     AutoEnv
     NoExec
     ListVersions
-    DebugPrint
     GlobalWorkspace
     AssertOnError
 
@@ -93,10 +92,12 @@ type
     Warning = "[Warning] ",
     Error = "[Error] "
     Debug = "[Debug] "
+    ExtraDebug = "[ExtraDebug] "
 
   AtlasContext* = object
     projectDir*, workspace*, depsDir*, currentDir*: string
     hasPackageList*: bool
+    verbosity*: int
     flags*: set[Flag]
     urlMapping*: Table[string, Package] # name -> url mapping
     errors*: int
@@ -129,12 +130,8 @@ proc hash*(a: PackageNimble): Hash {.borrow.}
 proc hash*(a: Package): Hash =
   result = 0
   result = result !& hash a.name
-  # result = result !& hash a.repo
-  # result = result !& hash a.url
-  # result = result !& hash a.path
-  # result = result !& hash a.exists
-  # if a.exists:
-  #   result = result !& hash a.nimble
+  result = result !& hash a.repo
+  result = result !& hash a.url
 
 proc `$`*(a: Package): string =
   result = "Package("
@@ -162,13 +159,15 @@ proc writeMessage(c: var AtlasContext; category: string; p: PackageRepo; arg: st
   stdout.writeLine msg
 
 proc writeMessage(c: var AtlasContext; k: MsgKind; p: PackageRepo; arg: string) =
-  if k == Debug and DebugPrint notin c.flags:
-    return
+  if k == Debug and c.verbosity < 1: return
+  elif k == ExtraDebug and c.verbosity < 2: return
+
   if NoColors in c.flags:
     writeMessage(c, $k, p, arg)
   else:
     let pn = p.string.relativePath(c.workspace)
     let color = case k
+                of ExtraDebug: fgDefault
                 of Debug: fgWhite
                 of Info: fgGreen
                 of Warning: fgYellow
@@ -197,6 +196,9 @@ proc info*(c: var AtlasContext; p: PackageRepo; arg: string) =
 proc debug*(c: var AtlasContext; p: PackageRepo; arg: string) =
   c.message(Debug, p, arg)
 
+proc debugExtra*(c: var AtlasContext; p: PackageRepo; arg: string) =
+  c.message(ExtraDebug, p, arg)
+
 proc warn*(c: var AtlasContext; p: Package; arg: string) =
   c.warn(p.repo, arg)
 
@@ -208,6 +210,9 @@ proc info*(c: var AtlasContext; p: Package; arg: string) =
 
 proc debug*(c: var AtlasContext; p: Package; arg: string) =
   c.debug(p.repo, arg)
+
+proc debugExtra*(c: var AtlasContext; p: Package; arg: string) =
+  c.debugExtra(p.repo, arg)
 
 proc writePendingMessages*(c: var AtlasContext) =
   for i in 0..<c.messages.len:
