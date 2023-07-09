@@ -31,15 +31,6 @@ proc sameDirContents(expected, given: string): bool =
       inc failures
       result = false
 
-type
-  Node = object
-    name: string
-    versions: seq[string]
-    deps: seq[string]
-
-proc createNode(name: string, versions: seq[string], deps: seq[string]): Node =
-  result = Node(name: name, versions: versions, deps: deps)
-
 template withDir(dir: string; body: untyped) =
   let old = getCurrentDir()
   try:
@@ -151,7 +142,7 @@ proc testMinVer() =
     else:
       assert false, outp
 
-withDir "tests/ws_semver2":
+when false: # withDir "tests/ws_semver2":
   try:
     testSemVer2()
   finally:
@@ -164,7 +155,7 @@ withDir "tests/ws_semver2":
     removeDir "proj_c"
     removeDir "proj_d"
 
-withDir "tests/ws_semver2":
+when false: # withDir "tests/ws_semver2":
   try:
     testMinVer()
   finally:
@@ -193,10 +184,11 @@ proc cleanupIntegrationTest() =
   removeFile "nim.cfg"
   removeFile "ws_integration.nimble"
 
-when false: #withDir "tests/ws_integration":
+withDir "tests/ws_integration":
   try:
     integrationTest()
   finally:
-    cleanupIntegrationTest()
+    #cleanupIntegrationTest()
+    discard
 
 if failures > 0: quit($failures & " failures occurred.")

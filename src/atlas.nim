@@ -130,7 +130,7 @@ proc findSrcDir(c: var AtlasContext): string =
 
 proc activePaths(c: var AtlasContext; g: DepGraph): seq[CfgPath] =
   result = @[]
-  for i in 0 ..< g.nodes.len:
+  for i in 1 ..< g.nodes.len:
     let s = g.nodes[i].sindex
     if s >= 0:
       let x = CfgPath(g.nodes[i].dir / g.nodes[i].subs[s].srcDir)
@@ -159,24 +159,6 @@ proc afterGraphActions(c: var AtlasContext; g: DepGraph) =
 const
   FileProtocol = "file"
 
-when false:
-  proc checkoutCommit(c: var AtlasContext; g: var DepGraph; w: DepNode) =
-    if not dirExists(w.dir):
-      error c, w.name, "cannot find directory: " & w.dir
-      return
-    if w.selected < 0: return
-    withDir c, w.dir:
-      if w.subs[w.selected].commit.h.len == 0 or cmpIgnoreCase(w.subs[w.selected].commit.h, "head") == 0:
-        gitPull(c, w.name)
-      else:
-        let err = isCleanGit(c)
-        if err != "":
-          warn c, w.name, err
-        else:
-          for mx in matchingCommits(c, g, w):
-            checkoutGitCommit(c, w.name, mx.h)
-            break
-
 proc copyFromDisk(c: var AtlasContext; w: DepNode; destDir: string): (CloneStatus, string) =
   var u = w.url.getFilePath()
   if u.startsWith("./"): u = c.workspace / u.substr(2)
@@ -187,7 +169,8 @@ proc copyFromDisk(c: var AtlasContext; w: DepNode; destDir: string): (CloneStatu
     result = (NotFound, u)
 
 proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool) =
-  var i = 0
+  expandGraph c, g, 0
+  var i = 1
   while i < g.nodes.len:
     template w(): untyped = g.nodes[i]
     let destDir = toDestDir(w.name)

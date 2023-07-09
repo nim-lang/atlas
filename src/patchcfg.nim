@@ -17,7 +17,8 @@ proc patchNimCfg*(c: var AtlasContext; deps: seq[CfgPath]; cfgPath: string) =
   var paths = "--noNimblePath\n"
   for d in deps:
     let x = relativePath(d.string, cfgPath, '/')
-    paths.add "--path:\"" & x & "\"\n"
+    if x.len > 0:
+      paths.add "--path:\"" & x & "\"\n"
   var cfgContent = configPatternBegin & paths & configPatternEnd
 
   when MockupRun:

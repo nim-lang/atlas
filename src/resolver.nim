@@ -105,7 +105,7 @@ proc resolve*(c: var AtlasContext; g: var DepGraph) =
     inc varCounter, g.nodes[i].versions.len
 
   var s = newSeq[BindingKind](varCounter)
-  when true: #defined(showForm):
+  when defined(showForm):
     var nodeNames = newSeq[string]()
     for i in 0 ..< g.nodes.len:
       for j in 0 ..< g.nodes[i].versions.len:

@@ -1,3 +1,11 @@
+#
+#           Atlas Package Cloner
+#        (c) Copyright 2023 Andreas Rumpf
+#
+#    See the file "copying.txt", included in this
+#    distribution, for details about the copyright.
+#
+
 import std/[os, osproc, strutils]
 import context, osutils
 
@@ -88,21 +96,6 @@ proc collectTaggedVersions*(c: var AtlasContext): seq[Commit] =
   else:
     result = @[]
 
-when false:
-  proc versionToCommit*(c: var AtlasContext; d: DepNode): string =
-    let allVersions = collectTaggedVersions(c)
-    case d.algo
-    of MinVer:
-      result = selectBestCommitMinVer(allVersions, d.query)
-    of SemVer:
-      result = selectBestCommitSemVer(allVersions, d.query)
-    of MaxVer:
-      result = selectBestCommitMaxVer(allVersions, d.query)
-
-proc shortToCommit*(c: var AtlasContext; short: string): string =
-  let (cc, status) = exec(c, GitRevParse, [short])
-  result = if status == 0: strutils.strip(cc) else: ""
-
 proc checkoutGitCommit*(c: var AtlasContext; p: PackageName; commit: string) =
   let commit = if commit.startsWith('#'): commit else: ("#" & commit)
   let (_, status) = exec(c, GitCheckout, [commit.substr(1)])
@@ -161,18 +154,6 @@ proc incrementLastTag*(c: var AtlasContext; field: Natural): string =
     else:
       incrementTag(c, lastTag, field)
   else: "v0.0.1" # assuming no tags have been made yet
-
-proc needsCommitLookup*(commit: string): bool {.inline.} =
-  '.' in commit or commit == InvalidCommit
-
-proc isShortCommitHash*(commit: string): bool {.inline.} =
-  commit.len >= 4 and commit.len < 40
-
-when false:
-  proc getRequiredCommit*(c: var AtlasContext; w: Dependency): string =
-    if needsCommitLookup(w.commit): versionToCommit(c, w)
-    elif isShortCommitHash(w.commit): shortToCommit(c, w.commit)
-    else: w.commit
 
 proc getRemoteUrl*(): PackageUrl =
   execProcess("git config --get remote.origin.url").strip().getUrl()
