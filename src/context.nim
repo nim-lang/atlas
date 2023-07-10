@@ -166,13 +166,13 @@ proc writeMessage(c: var AtlasContext; k: MsgKind; p: PackageRepo; arg: string) 
     writeMessage(c, $k, p, arg)
   else:
     let pn = p.string.relativePath(c.workspace)
-    let color = case k
-                of Debug: fgDefault
-                of Trace: fgWhite
-                of Info: fgGreen
-                of Warning: fgYellow
-                of Error: fgRed
-    stdout.styledWriteLine(color, styleBright, $k, resetStyle, fgCyan, "(", pn, ")", resetStyle, " ", arg)
+    let (color, style) = case k
+                of Debug: (fgWhite, styleDim)
+                of Trace: (fgBlue, styleBright)
+                of Info: (fgGreen, styleBright)
+                of Warning: (fgYellow, styleBright)
+                of Error: (fgRed, styleBright)
+    stdout.styledWriteLine(color, style, $k, resetStyle, fgCyan, "(", pn, ")", resetStyle, " ", arg)
 
 proc message(c: var AtlasContext; k: MsgKind; p: PackageRepo; arg: string) =
   # c.messages.add (k, p, arg)
