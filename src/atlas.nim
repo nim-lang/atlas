@@ -16,8 +16,6 @@ import context, runners, osutils, packagesjson, sat, gitops, nimenv, lockfiles,
 
 export osutils, context
 
-import pretty # REMOVE!
-
 const
   AtlasVersion = "0.6.2"
   LockFileName = "atlas.lock"
