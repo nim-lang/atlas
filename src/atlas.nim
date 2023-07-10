@@ -191,6 +191,7 @@ proc isLaterCommit(destDir, version: string): bool =
     result = true
 
 proc collectAvailableVersions(c: var AtlasContext; g: var DepGraph; w: Dependency) =
+  trace c, w.pkg, "collecting versions"
   when MockupRun:
     # don't cache when doing the MockupRun:
     g.availableVersions[w.pkg] = collectTaggedVersions(c)
@@ -212,7 +213,9 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
   # project is listed multiple times in the .nimble file.
   # Implications:
   for i in 0..<g.nodes.len:
+    trace c, g.nodes[i].pkg, "resolving node"
     if g.nodes[i].active:
+      debug c, g.nodes[i].pkg, "resolved as active"
       for j in g.nodes[i].parents:
         # "parent has a dependency on x" is translated to:
         # "parent implies x" which is "not parent or x"
@@ -225,6 +228,7 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
           b.closeOpr
     elif g.nodes[i].status == NotFound:
       # dependency produced an error and so cannot be 'true':
+      debug c, g.nodes[i].pkg, "resolved: not found"
       b.openOpr(NotForm)
       b.add newVar(VarId i)
       b.closeOpr
@@ -234,6 +238,7 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
   # Version selection:
   for i in 0..<g.nodes.len:
     let av = g.availableVersions.getOrDefault(g.nodes[i].pkg.name)
+    trace c, g.nodes[i].pkg, "resolving version"
     if g.nodes[i].active and av.len > 0:
       let bpos = rememberPos(b)
       # A -> (exactly one of: A1, A2, A3)
@@ -290,7 +295,7 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
       if s[i] == setToTrue:
         let pkg = mapping[i - g.nodes.len][0]
         let destDir = pkg.name.string
-        info c, pkg, "satisfiable: " & $pkg
+        debug c, pkg, "package satisfiable: " & $pkg
         let dir = pkg.path.string
         withDir c, dir:
           checkoutGitCommit(c, toRepo(destDir), mapping[i - g.nodes.len][1])
@@ -323,7 +328,7 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
   while i < g.nodes.len:
     let w = g.nodes[i]
     let oldErrors = c.errors
-    info c, w.pkg, "traverseLoop: " & $w.pkg & " depsDir: " & c.depsDir
+    info c, w.pkg, "traversing dependency"
 
     if not dirExists(w.pkg.path.string):
       withDir c, (if i != 0 or startIsDep: c.depsDir else: c.workspace):
@@ -334,7 +339,7 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
             info(c, w.pkg, "cloning: " & $w.pkg)
             cloneUrl(c, w.pkg.url, w.pkg.path.string, false)
         g.nodes[i].status = status
-        info c, w.pkg, "traverseLoop: status: " & $status & " pkg: " & $w.pkg
+        debug c, w.pkg, "traverseLoop: status: " & $status & " pkg: " & $w.pkg
         case status
         of NotFound:
           discard "setting the status is enough here"
