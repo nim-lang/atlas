@@ -9,7 +9,7 @@
 ## Helpers for the graph traversal.
 
 import std / [strutils, os]
-import context, osutils, gitops, nameresolver
+import context, nameresolver
 
 proc createGraph*(c: var AtlasContext; start: Package): DepGraph =
   let dep = Dependency(pkg: start, commit: "",

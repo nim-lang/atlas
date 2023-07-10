@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import context, osutils
+import context
 
 import std / [strutils, os, osproc]
 
