@@ -667,7 +667,8 @@ proc main(c: var AtlasContext) =
   of "clone", "update":
     singleArg()
     let deps = traverse(c, args[0], startIsDep = false)
-    let cfgPath = if CfgHere in c.flags: CfgPath c.currentDir else: findCfgDir(c)
+    let cfgPath = if CfgHere in c.flags: CfgPath c.currentDir
+                  else: findCfgDir(c)
     patchNimCfg c, deps, cfgPath
     when MockupRun:
       if not c.mockupSuccess:
@@ -683,7 +684,7 @@ proc main(c: var AtlasContext) =
       pinWorkspace c, args[0]
     else:
       pinProject c, args[0]
-  of "rep", "replay":
+  of "rep", "replay", "reproduce":
     optSingleArg(LockFileName)
     replay c, args[0]
   of "convert":
