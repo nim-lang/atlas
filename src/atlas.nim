@@ -76,7 +76,8 @@ Options:
   --showGraph           show the dependency graph
   --list                list all available and installed versions
   --version             show the version
-  --verbose             print extra debugging information
+  --verbosity:normal|trace|debug
+                        set verbosity level to normal, trace, debug
   --help                show this help
   --global              use global workspace in ~/.atlas
 """
@@ -612,9 +613,9 @@ proc main(c: var AtlasContext) =
         else: writeHelp()
       of "verbosity":
         case val.normalize
-        of "0": c.verbosity = 0
-        of "1": c.verbosity = 1
-        of "2": c.verbosity = 2
+        of "normal": c.verbosity = 0
+        of "trace": c.verbosity = 1
+        of "debug": c.verbosity = 2
         else: writeHelp()
       of "assertonerror": c.flags.incl AssertOnError
       of "resolver":

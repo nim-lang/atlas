@@ -128,14 +128,15 @@ proc dependencyDir*(c: var AtlasContext; pkg: Package): PackageDir =
   checkDir c.workspace / pkg.name.string
   checkDir c.depsDir / pkg.name.string
   result = PackageDir c.depsDir / pkg.repo.string
-  info c, pkg, "finding dependency dir failed; defaulting to " & result.string 
+  trace c, pkg, "finding dependency dir failed; defaulting to " & result.string.relativePath(c.workspace)
 
-proc findNimbleFile*(c: var AtlasContext; pkg: Package): Option[string] =
+proc findNimbleFile*(c: var AtlasContext; pkg: Package, depDir = PackageDir ""): Option[string] =
   when MockupRun:
     result = TestsDir / pkg.name.string & ".nimble"
     doAssert fileExists(result), "file does not exist " & result
   else:
-    let dir = dependencyDir(c, pkg).string
+    let dir = if depDir.string.len() == 0: dependencyDir(c, pkg).string
+              else: depDir.string
     result = some dir / (pkg.name.string & ".nimble")
     debug  c, pkg, "findNimbleFile: searching: " & pkg.repo.string & " path: " & pkg.path.string & " dir: " & dir & " curr: " & result.get()
     if not fileExists(result.get()):
@@ -239,7 +240,7 @@ proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
 
   fillPackageLookupTable(c)
 
-  trace c, result, "resolvePackage: search: " & rawHandle
+  trace c, toRepo(rawHandle), "resolving package"
 
   if rawHandle.isUrl():
     result = c.resolvePackageUrl(rawHandle)
@@ -247,7 +248,7 @@ proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
     result = c.resolvePackageName(unicode.toLower(rawHandle))
   
   result.path = dependencyDir(c, result)
-  let res = c.findNimbleFile(result)
+  let res = c.findNimbleFile(result, result.path)
   if res.isSome:
     let nimble = PackageNimble res.get()
     # let path = PackageDir res.get().parentDir()

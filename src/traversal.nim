@@ -100,7 +100,7 @@ proc collectNewDeps*(
     parent: int;
     dep: Dependency
 ): CfgPath =
-  trace c, dep.pkg, "collecting deps: pkg: " & $dep.pkg
+  trace c, dep.pkg, "collecting dependencies"
   if dep.pkg.exists:
     let nimble = dep.pkg.nimble
     debug c, dep.pkg, "collecting deps: using nimble file: '" & nimble.string & "'"

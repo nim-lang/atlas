@@ -251,7 +251,7 @@ template withDir*(c: var AtlasContext; dir: string; body: untyped) =
     body
   else:
     let oldDir = getCurrentDir()
-    info c, toRepo(dir), "Current directory is now: " & dir
+    debug c, toRepo(dir), "Current directory is now: " & dir
     try:
       when ProduceTest:
         echo "Current directory is now ", dir
