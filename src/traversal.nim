@@ -43,13 +43,6 @@ proc parseNimbleFile(c: var AtlasContext; nimbleFile: string; commit: Commit): D
       result.errors.add "invalid 'requires' syntax: " & r
     else:
       if cmpIgnoreCase(pkgName, "nim") != 0:
-        let commit = extractSpecificCommit(query)
-        if isShortCommitHash(commit):
-          let fullCommit = c.shortToCommit(commit)
-          if fullCommit.len > 0:
-            query.patchCommit("#" & fullCommit)
-          else:
-            assert false, commit & " " & getCurrentDir()
         result.deps.add SingleDep(nameOrUrl: pkgName, query: query)
       else:
         result.nimVersion = query

@@ -14,11 +14,13 @@ iterator matchingCommits(c: var AtlasContext; g: DepGraph; w: DepNode; q: Versio
   let commit = extractSpecificCommit(q)
   if commit.len > 0:
     var v = Version("#" & commit)
+    var h = commit
     for j in countup(0, w.versions.len-1):
       if q.matches(w.versions[j]):
         v = w.versions[j].v
+        h = w.versions[j].h
         break
-    yield Commit(h: commit, v: v)
+    yield Commit(h: h, v: v)
   elif w.algo == MinVer:
     for j in countup(0, w.versions.len-1):
       if q.matches(w.versions[j]):
@@ -41,7 +43,8 @@ proc findDeps(n: DepNode; commit: Commit): int =
 proc toKey(c: Commit): string =
   if c.h.len > 0: c.h else: c.v.string
 
-proc toGraph(c: var AtlasContext; g: DepGraph; b: var sat.Builder) =
+proc toGraph(c: var AtlasContext; g: DepGraph; b: var sat.Builder;
+             additionalVars: var seq[(int, Commit)]) =
   var urlToIndex = initTable[string, int]()
   var thisNode = 0
   for i in 0 ..< g.nodes.len:
@@ -51,6 +54,8 @@ proc toGraph(c: var AtlasContext; g: DepGraph; b: var sat.Builder) =
       inc thisNode
 
     urlToIndex[$g.nodes[i].url] = i+1
+
+  var lastNode = thisNode
 
   thisNode = 0
   for i in 0 ..< g.nodes.len:
@@ -69,8 +74,6 @@ proc toGraph(c: var AtlasContext; g: DepGraph; b: var sat.Builder) =
           else:
             let bpos = rememberPos(b)
             # A -> (exactly one of: A1, A2, A3)
-            if thisNode == 1:
-              echo "Came here!!! ", url, " ", dep.query
             b.openOpr(OrForm)
             b.openOpr(NotForm)
             b.add newVar(VarId thisNode)
@@ -84,21 +87,25 @@ proc toGraph(c: var AtlasContext; g: DepGraph; b: var sat.Builder) =
               let val = urlToIndex.getOrDefault(key)
               if val > 0:
                 b.add newVar(VarId(val - 1))
-                inc counter
               else:
-                echo "not found: ", key
+                b.add newVar(VarId(lastNode))
+                urlToIndex[key] = lastNode + 1
+                let nodeIdx = urlToIndex[$url] - 1
+                #g.nodes[nodeIdx].versions.add mx
+                additionalVars.add (nodeIdx, mx)
+                inc lastNode
+              inc counter
             b.closeOpr # ExactlyOneOfForm
             b.closeOpr # OrForm
             if counter == 0:
-              echo "bah it's empty for ", thisNode
               b.rewind bpos
       inc thisNode
 
-proc toFormular(c: var AtlasContext; g: var DepGraph): Formular =
+proc toFormular(c: var AtlasContext; g: var DepGraph; additionalVars: var seq[(int, Commit)]): Formular =
   var b = sat.Builder()
   b.openOpr(AndForm)
   b.add newVar(VarId 0) # root node must be true.
-  toGraph(c, g, b)
+  toGraph(c, g, b, additionalVars)
   b.closeOpr
   result = toForm(b)
 
@@ -108,23 +115,25 @@ proc checkoutGitCommitMaybe(c: var AtlasContext; n: DepNode) =
       checkoutGitCommit(c, n.name, n.versions[n.vindex].h)
 
 proc resolve*(c: var AtlasContext; g: var DepGraph) =
-  let f = toFormular(c, g)
+  var additionalVars: seq[(int, Commit)] = @[]
+  let f = toFormular(c, g, additionalVars)
 
   var varCounter = 0
   for i in 0 ..< g.nodes.len:
     inc varCounter, g.nodes[i].versions.len
 
-  var s = newSeq[BindingKind](varCounter)
-  when true: # defined(showForm):
+  var s = newSeq[BindingKind](varCounter+additionalVars.len)
+  when defined(showForm):
     var nodeNames = newSeq[string]()
     for i in 0 ..< g.nodes.len:
       for j in 0 ..< g.nodes[i].versions.len:
         nodeNames.add $g.nodes[i].name & "@" & $g.nodes[i].versions[j].v
+    for i in 0 ..< additionalVars.len:
+      nodeNames.add $g.nodes[additionalVars[i][0]].name & "@" & toKey(additionalVars[i][1])
     echo f$(proc (buf: var string; i: int) =
       buf.add nodeNames[i])
-  echo "before"
+
   if satisfiable(f, s):
-    echo "after"
     var thisNode = 0
     for i in 0 ..< g.nodes.len:
       for j in 0 ..< g.nodes[i].versions.len:
@@ -134,6 +143,13 @@ proc resolve*(c: var AtlasContext; g: var DepGraph) =
           if thisNode != 0:
             checkoutGitCommitMaybe(c, g.nodes[i])
         inc thisNode
+
+    let lastNode = thisNode
+    for i in 0 ..< additionalVars.len:
+      if s[i+lastNode] == setToTrue:
+        let nodeIdx = additionalVars[i][0]
+        withDir c, g.nodes[nodeIdx].dir:
+          checkoutGitCommit(c, g.nodes[nodeIdx].name, additionalVars[i][1].h)
 
     if NoExec notin c.flags:
       runBuildSteps(c, g)
@@ -150,6 +166,12 @@ proc resolve*(c: var AtlasContext; g: var DepGraph) =
             else:
               echo "[ ] ", nodeRepr
           inc thisNode
+      for i in 0 ..< additionalVars.len:
+        let nodeRepr = "(" & $g.nodes[additionalVars[i][0]].name & ", " & additionalVars[i][1].h & ")"
+        if s[i + lastNode] == setToTrue:
+          echo "[x] ", nodeRepr
+        else:
+          echo "[ ] ", nodeRepr
       echo "end of selection"
   else:
     error c, toName(c.workspace), "version conflict; for more information use --showGraph"
