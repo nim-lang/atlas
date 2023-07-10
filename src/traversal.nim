@@ -8,8 +8,6 @@
 
 ## Helpers for the graph traversal.
 
-import pretty
-
 import std / [strutils, os]
 import context, osutils, gitops, nameresolver
 
