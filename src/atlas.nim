@@ -210,11 +210,13 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
   b.add newVar(VarId 0)
 
   assert g.nodes.len > 0
+  trace c, g.nodes[0].pkg, "resolving versions"
+
   #assert g.nodes[0].active # this does not have to be true if some
   # project is listed multiple times in the .nimble file.
   # Implications:
   for i in 0..<g.nodes.len:
-    trace c, g.nodes[i].pkg, "resolving node i: " & $i & " parents: " & $g.nodes[i].parents
+    debug c, g.nodes[i].pkg, "resolving node i: " & $i & " parents: " & $g.nodes[i].parents
     if g.nodes[i].active:
       debug c, g.nodes[i].pkg, "resolved as active"
       for j in g.nodes[i].parents:
@@ -239,7 +241,7 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
   # Version selection:
   for i in 0..<g.nodes.len:
     let av = g.availableVersions.getOrDefault(g.nodes[i].pkg.name)
-    trace c, g.nodes[i].pkg, "resolving version out of " & $len(av)
+    debug c, g.nodes[i].pkg, "resolving version out of " & $len(av)
     if g.nodes[i].active and av.len > 0:
       let bpos = rememberPos(b)
       # A -> (exactly one of: A1, A2, A3)
@@ -337,7 +339,7 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
           if w.pkg.url.scheme == FileProtocol:
             copyFromDisk(c, w, w.pkg.path.string)
           else:
-            info(c, w.pkg, "cloning: " & $w.pkg)
+            info(c, w.pkg, "cloning: " & $(w.pkg.url))
             cloneUrl(c, w.pkg.url, w.pkg.path.string, false)
         g.nodes[i].status = status
         debug c, w.pkg, "traverseLoop: status: " & $status & " pkg: " & $w.pkg
