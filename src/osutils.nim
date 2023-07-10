@@ -34,10 +34,6 @@ proc readableFile*(s: string): string =
   else:
     s
 
-proc selectDir*(a, b: string): string =
-  ## selects the first dir that exists
-  ## 
-  if dirExists(a): a else: b
 
 proc absoluteDepsDir*(workspace, value: string): string =
   if value == ".":
@@ -47,14 +43,6 @@ proc absoluteDepsDir*(workspace, value: string): string =
   else:
     result = workspace / value
 
-template tryWithDir*(dir: string; body: untyped) =
-  let oldDir = getCurrentDir()
-  try:
-    if dirExists(dir):
-      setCurrentDir(dir)
-      body
-  finally:
-    setCurrentDir(oldDir)
 
 proc silentExec*(cmd: string; args: openArray[string]): (string, int) =
   var cmdLine = cmd

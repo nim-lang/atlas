@@ -135,8 +135,7 @@ const
   ThisVersion = "current_version.atlas"
 
 proc checkoutCommit(c: var AtlasContext; g: var DepGraph; w: Dependency) =
-  let dir = w.pkg.path.string
-  withDir c, dir:
+  withDir c, w.pkg:
     if w.commit.len == 0 or cmpIgnoreCase(w.commit, "head") == 0:
       gitPull(c, w.pkg.repo)
     else:
@@ -173,6 +172,9 @@ proc checkoutCommit(c: var AtlasContext; g: var DepGraph; w: Dependency) =
 proc copyFromDisk(c: var AtlasContext; w: Dependency; destDir: string): (CloneStatus, string) =
   var u = w.pkg.url.getFilePath()
   if u.startsWith("./"): u = c.workspace / u.substr(2)
+  template selectDir(a, b: string): string =
+    if dirExists(a): a else: b
+
   let dir = selectDir(u & "@" & w.commit, u)
   if dirExists(dir):
     copyDir(dir, destDir)
@@ -297,8 +299,7 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
         let pkg = mapping[i - g.nodes.len][0]
         let destDir = pkg.name.string
         debug c, pkg, "package satisfiable: " & $pkg
-        let dir = pkg.path.string
-        withDir c, dir:
+        withDir c, pkg:
           checkoutGitCommit(c, toRepo(destDir), mapping[i - g.nodes.len][1])
     if NoExec notin c.flags:
       runBuildSteps(c, g)
@@ -347,10 +348,10 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
         of OtherError:
           error c, w.pkg, err
         else:
-          withDir c, w.pkg.path.string:
+          withDir c, w.pkg:
             collectAvailableVersions c, g, w
     else:
-        withDir c, w.pkg.path.string:
+        withDir c, w.pkg:
           collectAvailableVersions c, g, w
 
     c.resolveNimble(w.pkg)

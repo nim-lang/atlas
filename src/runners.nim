@@ -85,16 +85,20 @@ proc runNimScriptBuilder*(c: var AtlasContext; p: (string, string); name: Packag
   runNimScript c, BuilderScriptTemplate % [p[0].escape, p[1].escape], name
 
 proc runBuildSteps*(c: var AtlasContext; g: var DepGraph) =
-  # `countdown` suffices to give us some kind of topological sort:
+  ## execute build steps for the dependency graph
+  ## 
+  ## `countdown` suffices to give us some kind of topological sort:
+  ## 
   for i in countdown(g.nodes.len-1, 0):
     if g.nodes[i].active:
-      let destDir = g.nodes[i].pkg.path.string
-      let dir = selectDir(c.workspace / destDir, c.depsDir / destDir)
-      tryWithDir dir:
+      let pkg = g.nodes[i].pkg
+      tryWithDir c, pkg:
+        # check for install hooks
         if g.nodes[i].hasInstallHooks:
-          let nf = g.nodes[i].pkg.nimble
-          runNimScriptInstallHook c, nf, g.nodes[i].pkg
+          let nf = pkg.nimble
+          runNimScriptInstallHook c, nf, pkg
+        # check for nim script builders
         for p in mitems c.plugins.builderPatterns:
-          let f = p[0] % dir.lastPathComponent
+          let f = p[0] % pkg.repo.string
           if fileExists(f):
-            runNimScriptBuilder c, p, g.nodes[i].pkg
+            runNimScriptBuilder c, p, pkg

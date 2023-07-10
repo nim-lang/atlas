@@ -105,7 +105,7 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string) =
       if g.nodes[i].active:
         let w = g.nodes[i]
         let dir = w.pkg.path.string
-        tryWithDir dir:
+        tryWithDir c, dir:
           genLockEntry c, lf, dir.relativePath(c.currentDir, '/')
 
     let nimcfgPath = c.currentDir / NimCfg

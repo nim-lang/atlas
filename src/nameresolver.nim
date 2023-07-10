@@ -112,10 +112,10 @@ proc dependencyDir*(c: var AtlasContext; pkg: Package): PackageDir =
   
   debug c, pkg, "dependencyDir: check: pth: " & pkg.path.string & " cd: " & getCurrentDir() & " ws: " & c.workspace
   if pkg.exists:
-    debug  c, pkg, "dependencyDir: exists: " & pkg.path.string
+    debug c, pkg, "dependencyDir: exists: " & pkg.path.string
     return PackageDir pkg.path.string.absolutePath
   if c.workspace.lastPathComponent == pkg.repo.string:
-    debug  c, pkg, "dependencyDir: workspace: " & c.workspace
+    debug c, pkg, "dependencyDir: workspace: " & c.workspace
     return PackageDir getCurrentDir()
 
   if pkg.path.string.len() > 0:
@@ -236,6 +236,14 @@ proc resolvePackageName(c: var AtlasContext; name: string): Package =
       result.url = getUrl newUrl
 
 proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
+  ## Takes a raw handle which can be a name, a repo name, or a url
+  ## and resolves it into a package. If not found it will create
+  ## a new one.
+  ## 
+  ## Note that Package should be unique globally. This happens
+  ## by updating the packages list when new packages are added or
+  ## loaded from a packages.json.
+  ## 
   result.new()
 
   fillPackageLookupTable(c)
@@ -251,7 +259,6 @@ proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
   let res = c.findNimbleFile(result, result.path)
   if res.isSome:
     let nimble = PackageNimble res.get()
-    # let path = PackageDir res.get().parentDir()
     result.exists = true
     result.nimble = nimble
     debug c, result, "resolvePackageName: nimble: found: " & $result
@@ -260,6 +267,13 @@ proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
   
 
 proc resolveNimble*(c: var AtlasContext; pkg: Package) =
+  ## Try to resolve the nimble file for the given package.
+  ## 
+  ## This should be done after cloning a new repo. 
+  ## 
+
+  if pkg.exists:
+    return
 
   pkg.path = dependencyDir(c, pkg)
   let res = c.findNimbleFile(pkg)

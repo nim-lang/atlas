@@ -133,6 +133,11 @@ proc hash*(a: Package): Hash =
   result = result !& hash a.repo
   result = result !& hash a.url
 
+proc `$`*(a: PackageName): string {.borrow.}
+proc `$`*(a: PackageRepo): string {.borrow.}
+proc `$`*(a: PackageDir): string {.borrow.}
+proc `$`*(a: PackageNimble): string {.borrow.}
+
 proc `$`*(a: Package): string =
   result = "Package("
   result &= "name:" 
@@ -175,8 +180,9 @@ proc writeMessage(c: var AtlasContext; k: MsgKind; p: PackageRepo; arg: string) 
     stdout.styledWriteLine(color, style, $k, resetStyle, fgCyan, "(", pn, ")", resetStyle, " ", arg)
 
 proc message(c: var AtlasContext; k: MsgKind; p: PackageRepo; arg: string) =
-  # c.messages.add (k, p, arg)
-  writeMessage c, k, p, arg
+  ## collects messages or prints them out immediately
+  c.messages.add (k, p, arg)
+  # writeMessage c, k, p, arg
 
 
 proc warn*(c: var AtlasContext; p: PackageRepo; arg: string) =
@@ -240,22 +246,36 @@ proc toRepo*(p: string): PackageRepo =
   else:
     result = PackageRepo p
 
+proc toRepo*(p: Package): PackageRepo =
+  result = p.repo
+
 template projectFromCurrentDir*(): PackageRepo =
   PackageRepo(c.currentDir.lastPathComponent())
 
 proc toDestDir*(pkg: Package): PackageDir =
   pkg.path
 
-template withDir*(c: var AtlasContext; dir: string; body: untyped) =
+template toDir(pkg: Package): string = pkg.path.string
+template toDir(dir: string): string = dir
+
+template withDir*(c: var AtlasContext; dir: string | Package; body: untyped) =
   when MockupRun:
     body
   else:
     let oldDir = getCurrentDir()
-    debug c, toRepo(dir), "Current directory is now: " & dir
+    debug c, toRepo(dir), "Current directory is now: " & $dir.toDir()
     try:
-      when ProduceTest:
-        echo "Current directory is now ", dir
-      setCurrentDir(dir)
+      setCurrentDir(dir.toDir())
       body
     finally:
       setCurrentDir(oldDir)
+
+template tryWithDir*(c: var AtlasContext, dir: string | Package; body: untyped) =
+  let oldDir = getCurrentDir()
+  try:
+    if dirExists(dir.toDir()):
+      setCurrentDir(dir.toDir())
+      debug c, toRepo(dir), "Current directory is now: " & $dir.toDir()
+      body
+  finally:
+    setCurrentDir(oldDir)
