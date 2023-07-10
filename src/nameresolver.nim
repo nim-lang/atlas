@@ -128,7 +128,7 @@ proc dependencyDir*(c: var AtlasContext; pkg: Package): PackageDir =
   checkDir c.workspace / pkg.name.string
   checkDir c.depsDir / pkg.name.string
   result = PackageDir c.depsDir / pkg.repo.string
-  trace c, pkg, "finding dependency dir failed; defaulting to " & result.string.relativePath(c.workspace)
+  trace c, pkg, "dependency not found using default"
 
 proc findNimbleFile*(c: var AtlasContext; pkg: Package, depDir = PackageDir ""): Option[string] =
   when MockupRun:

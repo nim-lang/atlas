@@ -214,7 +214,7 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
   # project is listed multiple times in the .nimble file.
   # Implications:
   for i in 0..<g.nodes.len:
-    trace c, g.nodes[i].pkg, "resolving node"
+    trace c, g.nodes[i].pkg, "resolving node i: " & $i & " parents: " & $g.nodes[i].parents
     if g.nodes[i].active:
       debug c, g.nodes[i].pkg, "resolved as active"
       for j in g.nodes[i].parents:
@@ -239,7 +239,7 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
   # Version selection:
   for i in 0..<g.nodes.len:
     let av = g.availableVersions.getOrDefault(g.nodes[i].pkg.name)
-    trace c, g.nodes[i].pkg, "resolving version"
+    trace c, g.nodes[i].pkg, "resolving version out of " & $len(av)
     if g.nodes[i].active and av.len > 0:
       let bpos = rememberPos(b)
       # A -> (exactly one of: A1, A2, A3)
