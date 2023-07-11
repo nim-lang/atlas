@@ -119,9 +119,7 @@ proc pinWorkspace*(c: var AtlasContext; lockFilePath: string) =
 proc pinProject*(c: var AtlasContext; lockFilePath: string, exportNimble = false) =
   var lf = newLockFile()
   var nlf = newNimbleLockFile()
-
   let startPkg = resolvePackage(c, "file://" & c.currentDir)
-  let url = getRemoteUrl()
   var g = createGraph(c, startPkg)
 
   var nimbleDeps = newTable[PackageName, HashSet[PackageName]]()
@@ -142,8 +140,7 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string, exportNimble = false
       let cfgPath = collectNewDeps(c, g, i, w)
       cfgs[w.pkg.name] = cfgPath
       if exportNimble:
-        # expensive, but eh
-        for nx in g.nodes:
+        for nx in g.nodes: # expensive, but eh
           if i in nx.parents:
             nimbleDeps.mgetOrPut(w.pkg.name,
                                  initHashSet[PackageName]()).incl(nx.pkg.name)
