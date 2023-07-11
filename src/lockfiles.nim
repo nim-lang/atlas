@@ -89,7 +89,7 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string) =
   while i < g.nodes.len:
     let w = g.nodes[i]
 
-    info c, w.pkg, "pinning..."
+    info c, w.pkg, "pinning: " & $w.pkg
 
     if not w.pkg.exists:
       error c, w.pkg, "dependency does not exist"

@@ -142,9 +142,9 @@ proc findNimbleFile*(c: var AtlasContext; pkg: Package, depDir = PackageDir ""):
     if not fileExists(result.get()):
       debug  c, pkg, "findNimbleFile: not found: " & result.get()
       result = none[string]()
-      for x in walkFiles(dir / "*.nimble"):
+      for file in walkFiles(dir / "*.nimble"):
         if result.isNone:
-          result = some x
+          result = some file
           trace c, pkg, "nimble file found " & result.get()
         else:
           error c, pkg, "ambiguous .nimble file " & result.get()
@@ -261,6 +261,8 @@ proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
     let nimble = PackageNimble res.get()
     result.exists = true
     result.nimble = nimble
+    # the nimble package name is <name>.nimble
+    result.name = PackageName nimble.string.splitFile().ext
     debug c, result, "resolvePackageName: nimble: found: " & $result
   else:
     debug c, result, "resolvePackageName: nimble: not found: " & $result
