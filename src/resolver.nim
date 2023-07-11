@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import context, sat, gitops, osutils, nameresolver, runners
+import context, sat, gitops, osutils, nameresolver, runners, bitabs
 
 iterator matchingCommits(c: var AtlasContext; g: DepGraph; w: DepNode; q: VersionQuery): Commit =
   var q = q
@@ -43,21 +43,19 @@ proc findDeps(n: DepNode; commit: Commit): int =
 proc toKey(c: Commit): string =
   if c.h.len > 0: c.h else: c.v.string
 
+proc toReadableKey(c: Commit): string =
+  if c.v.string.len > 0: c.v.string else: c.h
+
+type
+  Mapping = BiTable[(int, int)] # package url, version index
+
 proc toGraph(c: var AtlasContext; g: DepGraph; b: var sat.Builder;
-             additionalVars: var seq[(int, Commit)]) =
-  var urlToIndex = initTable[string, int]()
-  var thisNode = 0
+             m: var Mapping) =
   for i in 0 ..< g.nodes.len:
-    for j in 0 ..< g.nodes[i].versions.len:
-      let key = $g.nodes[i].url & "/" & toKey g.nodes[i].versions[j]
-      urlToIndex[key] = thisNode + 1
-      inc thisNode
+    discard m.getOrIncl (i, -1, -1)
+    #for j in 0 ..< g.nodes[i].versions.len:
+    #  discard m.getOrIncl (i, j)
 
-    urlToIndex[$g.nodes[i].url] = i+1
-
-  var lastNode = thisNode
-
-  thisNode = 0
   for i in 0 ..< g.nodes.len:
     for j in 0 ..< g.nodes[i].versions.len:
       let jj = findDeps(g.nodes[i], g.nodes[i].versions[j])
@@ -80,20 +78,15 @@ proc toGraph(c: var AtlasContext; g: DepGraph; b: var sat.Builder;
             b.closeOpr
             b.openOpr(ExactlyOneOfForm)
             var counter = 0
-            let depIdx = urlToIndex.getOrDefault($url)
-            assert depIdx > 0
-            for mx in matchingCommits(c, g, g.nodes[depIdx-1], dep.query):
-              let key = $url & "/" & toKey mx
-              let val = urlToIndex.getOrDefault(key)
-              if val > 0:
-                b.add newVar(VarId(val - 1))
+            let depIdx = g.urlToIdx[url]
+            for mx in matchingCommits(c, g, g.nodes[depIdx], dep.query):
+              let val = m.getKeyId((depIdx, mx, jj))
+              if val != LitId(0):
+                b.add newVar(VarId(val.int - 1))
               else:
-                b.add newVar(VarId(lastNode))
-                urlToIndex[key] = lastNode + 1
-                let nodeIdx = urlToIndex[$url] - 1
-                #g.nodes[nodeIdx].versions.add mx
-                additionalVars.add (nodeIdx, mx)
-                inc lastNode
+                let val = m.getOrIncl((depIdx, g.nodes[depIdx].versions.len, jj))
+                b.add newVar(VarId(m.int - 1))
+                g.nodes[depIdx].versions.add mx
               inc counter
             b.closeOpr # ExactlyOneOfForm
             b.closeOpr # OrForm
@@ -101,11 +94,11 @@ proc toGraph(c: var AtlasContext; g: DepGraph; b: var sat.Builder;
               b.rewind bpos
       inc thisNode
 
-proc toFormular(c: var AtlasContext; g: var DepGraph; additionalVars: var seq[(int, Commit)]): Formular =
+proc toFormular(c: var AtlasContext; g: var DepGraph; m: var Mapping): Formular =
   var b = sat.Builder()
   b.openOpr(AndForm)
   b.add newVar(VarId 0) # root node must be true.
-  toGraph(c, g, b, additionalVars)
+  toGraph(c, g, b, m)
   b.closeOpr
   result = toForm(b)
 
@@ -115,41 +108,29 @@ proc checkoutGitCommitMaybe(c: var AtlasContext; n: DepNode) =
       checkoutGitCommit(c, n.name, n.versions[n.vindex].h)
 
 proc resolve*(c: var AtlasContext; g: var DepGraph) =
-  var additionalVars: seq[(int, Commit)] = @[]
-  let f = toFormular(c, g, additionalVars)
+  var m = default(Mapping)
+  let f = toFormular(c, g, m)
 
-  var varCounter = 0
-  for i in 0 ..< g.nodes.len:
-    inc varCounter, g.nodes[i].versions.len
-
-  var s = newSeq[BindingKind](varCounter+additionalVars.len)
-  when defined(showForm):
+  var s = newSeq[BindingKind](m.len)
+  when true: # defined(showForm):
     var nodeNames = newSeq[string]()
-    for i in 0 ..< g.nodes.len:
-      for j in 0 ..< g.nodes[i].versions.len:
-        nodeNames.add $g.nodes[i].name & "@" & $g.nodes[i].versions[j].v
-    for i in 0 ..< additionalVars.len:
-      nodeNames.add $g.nodes[additionalVars[i][0]].name & "@" & toKey(additionalVars[i][1])
+    for x in items(m):
+      var entry = $g.nodes[x[0]].name
+      if x[1] >= 0:
+        entry.add '@'
+        entry.add toReadableKey(g.nodes[x[0]].versions[x[1]])
+      nodeNames.add entry
     echo f$(proc (buf: var string; i: int) =
       buf.add nodeNames[i])
 
   if satisfiable(f, s):
-    var thisNode = 0
-    for i in 0 ..< g.nodes.len:
-      for j in 0 ..< g.nodes[i].versions.len:
-        if s[thisNode] == setToTrue:
-          g.nodes[i].vindex = j
-          g.nodes[i].sindex = findDeps(g.nodes[i], g.nodes[i].versions[j])
-          if thisNode != 0:
-            checkoutGitCommitMaybe(c, g.nodes[i])
-        inc thisNode
-
-    let lastNode = thisNode
-    for i in 0 ..< additionalVars.len:
-      if s[i+lastNode] == setToTrue:
-        let nodeIdx = additionalVars[i][0]
-        withDir c, g.nodes[nodeIdx].dir:
-          checkoutGitCommit(c, g.nodes[nodeIdx].name, additionalVars[i][1].h)
+    for i in 0 ..< s.len:
+      if s[i] == setToTrue:
+        let (nodeIdx, vindex, sindex) = m[LitId(i+1)]
+        g.nodes[nodeIdx].vindex = vindex
+        g.nodes[nodeIdx].sindex = sindex
+        if i != 0:
+          checkoutGitCommitMaybe(c, g.nodes[nodeIdx])
 
     if NoExec notin c.flags:
       runBuildSteps(c, g)
