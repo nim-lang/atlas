@@ -181,8 +181,8 @@ proc writeMessage(c: var AtlasContext; k: MsgKind; p: PackageRepo; arg: string) 
 
 proc message(c: var AtlasContext; k: MsgKind; p: PackageRepo; arg: string) =
   ## collects messages or prints them out immediately
-  c.messages.add (k, p, arg)
-  # writeMessage c, k, p, arg
+  # c.messages.add (k, p, arg)
+  writeMessage c, k, p, arg
 
 
 proc warn*(c: var AtlasContext; p: PackageRepo; arg: string) =
