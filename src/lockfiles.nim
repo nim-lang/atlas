@@ -8,7 +8,7 @@
 
 ## Lockfile implementation.
 
-import std / [strutils, algorithm, tables, os, json, jsonutils, sha1]
+import std / [sequtils, strutils, algorithm, tables, os, json, jsonutils, sha1]
 import context, gitops, osutils, traversal, compilerversions, nameresolver
 
 type
@@ -68,6 +68,11 @@ type
     packages*: OrderedTable[string, NimbleLockFileEntry]
     version*: int
 
+proc newNimbleLockFile(): NimbleLockFile =
+  let tbl = initOrderedTable[string, NimbleLockFileEntry]()
+  result = NimbleLockFile(version: 1,
+                          packages: tbl)
+
 proc write(lock: NimbleLockFile; lockFilePath: string) =
   writeFile lockFilePath, toJson(lock).pretty
 
@@ -76,7 +81,7 @@ proc genLockEntry(c: var AtlasContext;
                   pkg: Package,
                   cfg: CfgPath,
                   version: string,
-                  deps: seq[string]) =
+                  deps: HashSet[PackageName]) =
   let url = getRemoteUrl()
   let commit = getCurrentCommit()
   let name = pkg.name.string
@@ -86,14 +91,14 @@ proc genLockEntry(c: var AtlasContext;
     vcsRevision: commit,
     url: $url,
     downloadMethod: "git",
-    dependencies: deps,
+    dependencies: deps.mapIt(it.string),
     checksums: {"sha1": chk}.toTable
   )
 
 const
   NimCfg = "nim.cfg"
 
-proc pinWorkspace*(c: var AtlasContext; lockFilePath: string, exportNimble = false) =
+proc pinWorkspace*(c: var AtlasContext; lockFilePath: string) =
   var lf = newLockFile()
   genLockEntriesForDir(c, lf, c.workspace)
   if c.workspace != c.depsDir and c.depsDir.len > 0:
@@ -113,10 +118,14 @@ proc pinWorkspace*(c: var AtlasContext; lockFilePath: string, exportNimble = fal
 
 proc pinProject*(c: var AtlasContext; lockFilePath: string, exportNimble = false) =
   var lf = newLockFile()
+  var nlf = newNimbleLockFile()
 
   let startPkg = resolvePackage(c, "file://" & c.currentDir)
   let url = getRemoteUrl()
   var g = createGraph(c, startPkg)
+
+  var nimbleDeps = newTable[PackageName, HashSet[PackageName]]()
+  var cfgs = newTable[PackageName, CfgPath]()
 
   info c, startPkg, "pinning lockfile: " & lockFilePath
   var i = 0
@@ -130,7 +139,14 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string, exportNimble = false
     else:
       # assume this is the selected version, it might get overwritten later:
       selectNode c, g, w
-      discard collectNewDeps(c, g, i, w)
+      let cfgPath = collectNewDeps(c, g, i, w)
+      cfgs[w.pkg.name] = cfgPath
+      if exportNimble:
+        # expensive, but eh
+        for nx in g.nodes:
+          if i in nx.parents:
+            nimbleDeps.mgetOrPut(w.pkg.name,
+                                 initHashSet[PackageName]()).incl(nx.pkg.name)
     inc i
 
   if c.errors == 0:
@@ -141,6 +157,9 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string, exportNimble = false
         let dir = w.pkg.path.string
         tryWithDir c, dir:
           genLockEntry c, lf, dir.relativePath(c.currentDir, '/')
+          if exportNimble:
+            let name = w.pkg.name
+            genLockEntry c, nlf, w.pkg, cfgs[name], "0.1", nimbleDeps[name]
 
     let nimcfgPath = c.currentDir / NimCfg
     if fileExists(nimcfgPath):
@@ -152,7 +171,10 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string, exportNimble = false
         filename: c.currentDir.lastPathComponent & ".nimble",
         content: readFile(nimblePath))
 
-    write lf, lockFilePath
+    if not exportNimble:
+      write lf, lockFilePath
+    else:
+      write nlf, lockFilePath
 
 proc compareVersion(c: var AtlasContext; key, wanted, got: string) =
   if wanted != got:

@@ -86,7 +86,6 @@ type
     ListVersions
     GlobalWorkspace
     AssertOnError
-    ExportNimbleLock
 
   MsgKind = enum
     Info = "[Info] ",
