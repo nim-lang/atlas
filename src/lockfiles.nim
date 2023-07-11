@@ -155,6 +155,7 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string, exportNimble = false
           genLockEntry c, lf, dir.relativePath(c.currentDir, '/')
 
           if exportNimble:
+            infoNow c, w.pkg, "finding nimble deps " & w.pkg.name.string & " " 
             for nx in g.nodes: # expensive, but eh
               if nx.active and i in nx.parents:
                 nimbleDeps.mgetOrPut(w.pkg.name,
