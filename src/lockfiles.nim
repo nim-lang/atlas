@@ -162,7 +162,9 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string, exportNimble = false
             trace c, w.pkg, "exporting nimble " & w.pkg.name.string
             let name = w.pkg.name
             let deps = nimbleDeps.getOrDefault(name)
-            genLockEntry c, nlf, w.pkg, cfgs[name], "0.1.0", deps
+            var ver = versionKey(w.query)
+            if ver == "#head": ver = "0.1.0"
+            genLockEntry c, nlf, w.pkg, cfgs[name], ver, deps
 
     let nimcfgPath = c.currentDir / NimCfg
     if fileExists(nimcfgPath):
