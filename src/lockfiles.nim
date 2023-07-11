@@ -87,7 +87,7 @@ proc genLockEntry(c: var AtlasContext;
   let name = pkg.name.string
   let chk = c.nimbleChecksum(pkg, cfg)
   lf.packages[name] = NimbleLockFileEntry(
-    version: "",
+    version: version,
     vcsRevision: commit,
     url: $url,
     downloadMethod: "git",
@@ -117,11 +117,15 @@ proc pinWorkspace*(c: var AtlasContext; lockFilePath: string) =
   write lf, lockFilePath
 
 proc pinProject*(c: var AtlasContext; lockFilePath: string, exportNimble = false) =
+  ## Pin project using deps starting from the current project directory. 
+  ##
+  ##
   var lf = newLockFile()
-  var nlf = newNimbleLockFile()
   let startPkg = resolvePackage(c, "file://" & c.currentDir)
   var g = createGraph(c, startPkg)
 
+  # only used for exporting nimble locks
+  var nlf = newNimbleLockFile()
   var nimbleDeps = newTable[PackageName, HashSet[PackageName]]()
   var cfgs = newTable[PackageName, CfgPath]()
 
@@ -139,11 +143,6 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string, exportNimble = false
       selectNode c, g, w
       let cfgPath = collectNewDeps(c, g, i, w)
       cfgs[w.pkg.name] = cfgPath
-      if exportNimble:
-        for nx in g.nodes: # expensive, but eh
-          if i in nx.parents:
-            nimbleDeps.mgetOrPut(w.pkg.name,
-                                 initHashSet[PackageName]()).incl(nx.pkg.name)
     inc i
 
   if c.errors == 0:
@@ -156,6 +155,10 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string, exportNimble = false
           genLockEntry c, lf, dir.relativePath(c.currentDir, '/')
 
           if exportNimble:
+            for nx in g.nodes: # expensive, but eh
+              if nx.active and i in nx.parents:
+                nimbleDeps.mgetOrPut(w.pkg.name,
+                                    initHashSet[PackageName]()).incl(nx.pkg.name)
             trace c, w.pkg, "exporting nimble " & w.pkg.name.string
             let name = w.pkg.name
             let deps = nimbleDeps.getOrDefault(name)
