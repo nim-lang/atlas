@@ -121,7 +121,7 @@ suite "versions":
 
   test "version expressions":
 
-    proc p(s: string): VersionInterval =
+    proc p(s: string): VersionQuery =
       var err = false
       result = parseVersionInterval(s, 0, err)
       assert not err

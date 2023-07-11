@@ -9,7 +9,7 @@
 ## Implementation of the "Nim virtual environment" (`atlas env`) feature.
 
 import std / [os, strscans, strutils]
-import context, gitops
+import context, gitops, versions
 
 when defined(windows):
   const
@@ -77,15 +77,18 @@ proc setupNimEnv*(c: var AtlasContext; nimVersion: string) =
   withDir c, c.workspace / nimDest:
     let nimExe = "bin" / "nim".addFileExt(ExeExt)
     copyFileWithPermissions nimExe0, nimExe
-    let dep = Dependency(name: toName(nimDest), commit: nimVersion, self: 0,
-                         algo: c.defaultAlgo,
-                         query: createQueryEq(if nimVersion.isDevel: Version"#head" else: Version(nimVersion)))
     if not nimVersion.isDevel:
-      let commit = versionToCommit(c, dep)
-      if commit.len == 0:
+      var success = false
+      let allVersions = collectTaggedVersions(c)
+      for commit in items allVersions:
+        if commit.v == Version(nimVersion):
+          checkoutGitCommit(c, toName(nimDest), commit.h)
+          success = true
+          break
+      if not success:
         error c, toName(nimDest), "cannot resolve version to a commit"
         return
-      checkoutGitCommit(c, dep.name, commit)
+
     exec c, nimExe & " c --noNimblePath --skipUserCfg --skipParentCfg --hints:off koch"
     let kochExe = when defined(windows): "koch.exe" else: "./koch"
     exec c, kochExe & " boot -d:release --skipUserCfg --skipParentCfg --hints:off"

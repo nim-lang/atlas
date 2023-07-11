@@ -63,10 +63,11 @@ proc readConfig*(c: var AtlasContext) =
       of "overrides":
         parseOverridesFile(c, e.value)
       of "resolver":
-        try:
-          c.defaultAlgo = parseEnum[ResolutionAlgorithm](e.value)
-        except ValueError:
-          warn c, toName(configFile), "ignored unknown resolver: " & e.key
+        if OverideResolver notin c.flags:
+          try:
+            c.defaultAlgo = parseEnum[ResolutionAlgorithm](e.value)
+          except ValueError:
+            warn c, toName(configFile), "ignored unknown resolver: " & e.key
       of "plugins":
         readPluginsDir(c, e.value)
       else:

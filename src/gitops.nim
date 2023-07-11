@@ -1,3 +1,11 @@
+#
+#           Atlas Package Cloner
+#        (c) Copyright 2023 Andreas Rumpf
+#
+#    See the file "copying.txt", included in this
+#    distribution, for details about the copyright.
+#
+
 import std/[os, osproc, strutils]
 import context, osutils
 
@@ -15,7 +23,7 @@ type
     GitCurrentCommit = "git log -n 1 --format=%H"
     GitMergeBase = "git merge-base"
 
-proc isGitDir*(path: string): bool = dirExists(path / ".git")
+proc hasGitDir*(path: string): bool = dirExists(path / ".git")
 
 proc sameVersionAs*(tag, ver: string): bool =
   const VersionChars = {'0'..'9', '.'}
@@ -54,7 +62,10 @@ proc exec*(c: var AtlasContext; cmd: Command; args: openArray[string]): (string,
       result[1] = TestLog[c.step].exitCode
     inc c.step
   else:
-    result = silentExec($cmd, args)
+    if dirExists(".git"):
+      result = silentExec($cmd, args)
+    else:
+      result = ("not a git repository", 1)
     when ProduceTest:
       echo "cmd ", cmd, " args ", args, " --> ", result
 
@@ -78,29 +89,16 @@ proc getLastTaggedCommit*(c: var AtlasContext): string =
     if lastTag.len != 0:
       result = lastTag
 
-proc collectTaggedVersions*(c: var AtlasContext): seq[(string, Version)] =
+proc collectTaggedVersions*(c: var AtlasContext): seq[Commit] =
   let (outp, status) = exec(c, GitTags, [])
   if status == 0:
     result = parseTaggedVersions(outp)
   else:
     result = @[]
 
-proc versionToCommit*(c: var AtlasContext; d: Dependency): string =
-  let allVersions = collectTaggedVersions(c)
-  case d.algo
-  of MinVer:
-    result = selectBestCommitMinVer(allVersions, d.query)
-  of SemVer:
-    result = selectBestCommitSemVer(allVersions, d.query)
-  of MaxVer:
-    result = selectBestCommitMaxVer(allVersions, d.query)
-
-proc shortToCommit*(c: var AtlasContext; short: string): string =
-  let (cc, status) = exec(c, GitRevParse, [short])
-  result = if status == 0: strutils.strip(cc) else: ""
-
 proc checkoutGitCommit*(c: var AtlasContext; p: PackageName; commit: string) =
-  let (_, status) = exec(c, GitCheckout, [commit])
+  let commit = if commit.startsWith('#'): commit else: ("#" & commit)
+  let (_, status) = exec(c, GitCheckout, [commit.substr(1)])
   if status != 0:
     error(c, p, "could not checkout commit " & commit)
   else:
@@ -157,22 +155,18 @@ proc incrementLastTag*(c: var AtlasContext; field: Natural): string =
       incrementTag(c, lastTag, field)
   else: "v0.0.1" # assuming no tags have been made yet
 
-proc needsCommitLookup*(commit: string): bool {.inline.} =
-  '.' in commit or commit == InvalidCommit
-
-proc isShortCommitHash*(commit: string): bool {.inline.} =
-  commit.len >= 4 and commit.len < 40
-
-proc getRequiredCommit*(c: var AtlasContext; w: Dependency): string =
-  if needsCommitLookup(w.commit): versionToCommit(c, w)
-  elif isShortCommitHash(w.commit): shortToCommit(c, w.commit)
-  else: w.commit
-
 proc getRemoteUrl*(): PackageUrl =
   execProcess("git config --get remote.origin.url").strip().getUrl()
 
 proc getCurrentCommit*(): string =
   result = execProcess("git log -1 --pretty=format:%H").strip()
+
+proc isShortCommitHash*(commit: string): bool {.inline.} =
+  commit.len >= 4 and commit.len < 40
+
+proc shortToCommit*(c: var AtlasContext; short: string): string =
+  let (cc, status) = exec(c, GitRevParse, [short])
+  result = if status == 0: strutils.strip(cc) else: ""
 
 proc isOutdated*(c: var AtlasContext; f: string): bool =
   ## determine if the given git repo `f` is updateable

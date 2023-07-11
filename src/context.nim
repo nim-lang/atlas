@@ -41,24 +41,36 @@ type
   ResolutionAlgorithm* = enum
     MinVer, SemVer, MaxVer
 
-  Dependency* = object
+  SingleDep* = object
+    nameOrUrl*: string
+    query*: VersionQuery
+
+  DepSubnode* = object
+    commit*: Commit
+    deps*: seq[SingleDep]
+    nimVersion*: VersionQuery
+    errors*: seq[string]
+    hasInstallHooks*: bool
+    srcDir*: string
+
+  DepNode* = object
     name*: PackageName
     url*: PackageUrl
-    commit*: string
-    query*: VersionInterval
-    self*: int # position in the graph
-    parents*: seq[int] # why we need this dependency
-    active*: bool
-    hasInstallHooks*: bool
+    dir*: string
+    subs*: seq[DepSubnode]
+    versions*: seq[Commit] # sorted, latest version comes first
+    vindex*: int # index to `versions`
+    sindex*: int # index to `subs`
     algo*: ResolutionAlgorithm
     status*: CloneStatus
 
   DepGraph* = object
-    nodes*: seq[Dependency]
-    processed*: Table[string, int] # the key is (url / commit)
-    byName*: Table[PackageName, seq[int]]
-    availableVersions*: Table[PackageName, seq[(string, Version)]] # sorted, latest version comes first
-    bestNimVersion*: Version # Nim is a special snowflake
+    nodes*: seq[DepNode]
+    urlToIdx*: Table[PackageUrl, int]
+    #processed*: Table[string, int]
+    #byName*: Table[PackageName, int] #seq[int]]
+    #availableVersions*: Table[PackageName, seq[(string, Version)]] # sorted, latest version comes first
+    #bestNimVersion*: Version # Nim is a special snowflake
 
   Flag* = enum
     KeepCommits
@@ -70,6 +82,7 @@ type
     AutoEnv
     NoExec
     ListVersions
+    OverideResolver
 
   MsgKind = enum
     Info = "[Info] ",
@@ -94,6 +107,8 @@ proc `==`*(a, b: CfgPath): bool {.borrow.}
 
 proc `==`*(a, b: PackageName): bool {.borrow.}
 proc hash*(a: PackageName): Hash {.borrow.}
+
+proc `$`*(a: PackageName): string {.borrow.}
 
 const
   InvalidCommit* = "#head" #"<invalid commit>"
@@ -156,35 +171,38 @@ template projectFromCurrentDir*(): PackageName =
 
 template toDestDir*(p: PackageName): string = p.string
 
-proc dependencyDir*(c: AtlasContext; w: Dependency): string =
+proc dependencyDir(c: AtlasContext; w: DepNode): string =
   result = c.workspace / w.name.string
   if not dirExists(result):
     result = c.depsDir / w.name.string
 
-proc findNimbleFile*(c: AtlasContext; dep: Dependency): string =
+proc findNimbleFile*(c: AtlasContext; dep: DepNode): string =
   when MockupRun:
     result = TestsDir / dep.name.string & ".nimble"
     doAssert fileExists(result), "file does not exist " & result
   else:
-    let dir = dependencyDir(c, dep)
-    result = dir / (dep.name.string & ".nimble")
+    result = dep.name.string & ".nimble"
     if not fileExists(result):
-      result = ""
-      for x in walkFiles(dir / "*.nimble"):
-        if result.len == 0:
-          result = x
-        else:
-          # ambiguous .nimble file
-          return ""
+      let dir = dependencyDir(c, dep)
+      result = dir / (dep.name.string & ".nimble")
+      if not fileExists(result):
+        result = ""
+        for x in walkFiles(dir / "*.nimble"):
+          if result.len == 0:
+            result = x
+          else:
+            # ambiguous .nimble file
+            return ""
 
 template withDir*(c: var AtlasContext; dir: string; body: untyped) =
   when MockupRun:
     body
   else:
+    assert dir != ""
     let oldDir = getCurrentDir()
     try:
       when ProduceTest:
-        echo "Current directory is now ", dir
+        echo "Current directory is now ##", dir, "##"
       setCurrentDir(dir)
       body
     finally:
