@@ -430,6 +430,10 @@ proc findCfgDir(c: var AtlasContext): CfgPath =
     return CfgPath c.currentDir / nimbleInfo.srcDir
   return CfgPath c.currentDir
 
+proc findCfgDir(c: var AtlasContext, pkg: Package): CfgPath =
+  let nimbleInfo = extractRequiresInfo(c, pkg.nimble)
+  return CfgPath c.currentDir / nimbleInfo.srcDir
+
 proc installDependencies(c: var AtlasContext; nimbleFile: string; startIsDep: bool) =
   # 1. find .nimble file in CWD
   # 2. install deps from .nimble
@@ -755,6 +759,12 @@ proc main(c: var AtlasContext) =
     setupNimEnv c, args[0]
   of "outdated":
     listOutdated(c)
+  of "checksum":
+    singleArg()
+    let pkg = resolvePackage(c, args[0])
+    let cfg = findCfgDir(c, pkg)
+    let sha = nimbleChecksum(c, pkg, cfg)
+    info c, pkg, "SHA1Digest: " & sha
   else:
     fatal "Invalid action: " & action
 

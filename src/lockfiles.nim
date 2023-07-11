@@ -8,7 +8,7 @@
 
 ## Lockfile implementation.
 
-import std / [strutils, tables, os, json, jsonutils]
+import std / [strutils, algorithm, tables, os, json, jsonutils, sha1]
 import context, gitops, osutils, traversal, compilerversions, nameresolver
 
 type
@@ -145,6 +145,54 @@ proc convertNimbleLock*(c: var AtlasContext; nimblePath: string): LockFile =
       url: pkg["url"].getStr,
       commit: pkg["vcsRevision"].getStr,
     )
+
+proc updateSecureHash(
+    checksum: var Sha1State,
+    c: var AtlasContext;
+    pkg: Package,
+    name: string
+) =
+  let path = pkg.path.string / name
+  if not path.fileExists(): return
+  checksum.update(name)
+
+  if symlinkExists(path):
+    # checksum file path (?)
+    try:
+      let path = expandSymlink(path)
+      checksum.update(path)
+    except OSError:
+      error c, pkg, "cannot follow symbolic link " & path
+  else:
+    # checksum file contents
+    var file: File
+    try:
+      file = path.open(fmRead)
+      const bufferSize = 8192
+      var buffer = newString(bufferSize)
+      while true:
+        var bytesRead = readChars(file, buffer)
+        if bytesRead == 0: break
+        checksum.update(buffer.toOpenArray(0, bytesRead - 1))
+    except IOError:
+      error c, pkg, "error opening file " & path
+    finally:
+      file.close()
+
+proc nimbleChecksum*(c: var AtlasContext, pkg: Package, cfg: CfgPath): string =
+  ## calculate a nimble style checksum from a `CfgPath`.
+  ##
+  ## Useful for exporting a Nimble sync file.
+  ##
+  let res = c.listFiles(pkg)
+  if res.isNone:
+    error c, pkg, "couldn't list files"
+  else:
+    var files = res.get().sorted()
+    var checksum = newSha1State()
+    for file in files:
+      checksum.updateSecureHash(c, pkg, file)
+    result = toLowerAscii($SecureHash(checksum.finalize()))
 
 proc convertAndSaveNimbleLock*(c: var AtlasContext; nimblePath, lockFilePath: string) =
   ## convert and save a nimble.lock into an Atlast lockfile

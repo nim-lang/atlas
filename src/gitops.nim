@@ -1,4 +1,4 @@
-import std/[os, osproc, strutils]
+import std/[os, osproc, sequtils, strutils, options]
 import context, osutils
 
 type
@@ -16,6 +16,7 @@ type
     GitPull = "git pull",
     GitCurrentCommit = "git log -n 1 --format=%H"
     GitMergeBase = "git merge-base"
+    GitLsFiles = "git -C $1 ls-files",
 
 proc isGitDir*(path: string): bool = dirExists(path / ".git")
 
@@ -38,7 +39,10 @@ proc extractVersion*(s: string): string =
   while i < s.len and s[i] notin {'0'..'9'}: inc i
   result = s.substr(i)
 
-proc exec*(c: var AtlasContext; cmd: Command; args: openArray[string]): (string, int) =
+proc exec*(c: var AtlasContext;
+           cmd: Command;
+           args: openArray[string],
+           execDir = ""): (string, int) =
   when MockupRun:
     assert TestLog[c.step].cmd == cmd, $(TestLog[c.step].cmd, cmd, c.step)
     case cmd
@@ -56,7 +60,8 @@ proc exec*(c: var AtlasContext; cmd: Command; args: openArray[string]): (string,
       result[1] = TestLog[c.step].exitCode
     inc c.step
   else:
-    result = silentExec($cmd, args)
+    let cmd = if execDir.len() == 0: $cmd else: $(cmd) % [execDir]
+    result = silentExec(cmd, args)
     when ProduceTest:
       echo "cmd ", cmd, " args ", args, " --> ", result
 
@@ -114,6 +119,11 @@ proc versionToCommit*(c: var AtlasContext; d: Dependency): string =
 proc shortToCommit*(c: var AtlasContext; short: string): string =
   let (cc, status) = exec(c, GitRevParse, [short])
   result = if status == 0: strutils.strip(cc) else: ""
+
+proc listFiles*(c: var AtlasContext; pkg: Package): Option[seq[string]] =
+  let (outp, status) = exec(c, GitLsFiles, [], pkg.path.string)
+  if status == 0:
+    result = some outp.splitLines().mapIt(it.strip())
 
 proc checkoutGitCommit*(c: var AtlasContext; p: PackageRepo; commit: string) =
   let (_, status) = exec(c, GitCheckout, [commit])
