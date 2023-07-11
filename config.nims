@@ -11,5 +11,3 @@ task tester, "Runs integration tests":
 task test, "Runs all tests":
   # unitTestsTask() # tester runs both
   testerTask()
-
---path:"~/.nimble/pkgs/pretty-0.1.0/"
