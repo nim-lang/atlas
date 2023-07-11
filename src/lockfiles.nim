@@ -149,12 +149,6 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string, exportNimble = false
                                  initHashSet[PackageName]()).incl(nx.pkg.name)
     inc i
 
-  if exportNimble:
-    for (name, cfg) in cfgs.pairs():
-      warn c, startPkg, "CfgPath: name: " & name.string & " path: " & cfg.string
-    for (name, deps) in nimbleDeps.pairs():
-      warn c, startPkg, "deps: name: " & name.string & " deps: " & $deps
-
   if c.errors == 0:
     # topo-sort:
     for i in countdown(g.nodes.len-1, 1):
@@ -163,6 +157,7 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string, exportNimble = false
         let dir = w.pkg.path.string
         tryWithDir c, dir:
           genLockEntry c, lf, dir.relativePath(c.currentDir, '/')
+
           if exportNimble:
             trace c, w.pkg, "exporting: " & w.pkg.name.string
             let name = w.pkg.name
