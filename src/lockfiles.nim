@@ -85,6 +85,7 @@ proc genLockEntry(c: var AtlasContext;
   let url = getRemoteUrl()
   let commit = getCurrentCommit()
   let name = pkg.name.string
+  infoNow c, pkg, "calculating nimble checksum"
   let chk = c.nimbleChecksum(pkg, cfg)
   lf.packages[name] = NimbleLockFileEntry(
     version: version,
@@ -155,7 +156,6 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string, exportNimble = false
           genLockEntry c, lf, dir.relativePath(c.currentDir, '/')
 
           if exportNimble:
-            infoNow c, w.pkg, "finding nimble deps " & w.pkg.name.string & " " 
             for nx in g.nodes: # expensive, but eh
               if nx.active and i in nx.parents:
                 nimbleDeps.mgetOrPut(w.pkg.name,
