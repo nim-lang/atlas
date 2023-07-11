@@ -262,7 +262,7 @@ proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
     result.exists = true
     result.nimble = nimble
     # the nimble package name is <name>.nimble
-    result.name = PackageName nimble.string.splitFile().ext
+    result.name = PackageName nimble.string.splitFile().name
     debug c, result, "resolvePackageName: nimble: found: " & $result
   else:
     debug c, result, "resolvePackageName: nimble: not found: " & $result
