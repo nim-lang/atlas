@@ -79,9 +79,11 @@ proc runNimScript*(c: var AtlasContext; scriptContent: string; name: Package) =
     removeFile buildNims
 
 proc runNimScriptInstallHook*(c: var AtlasContext; nimble: PackageNimble; name: Package) =
+  infoNow c, name, "running install hooks"
   runNimScript c, InstallHookTemplate % [nimble.string.escape], name
 
 proc runNimScriptBuilder*(c: var AtlasContext; p: (string, string); name: Package) =
+  infoNow c, name, "running nimble build scripts"
   runNimScript c, BuilderScriptTemplate % [p[0].escape, p[1].escape], name
 
 proc runBuildSteps*(c: var AtlasContext; g: var DepGraph) =
