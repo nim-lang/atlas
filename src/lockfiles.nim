@@ -48,9 +48,6 @@ proc genLockEntriesForDir(c: var AtlasContext; lf: var LockFile; dir: string) =
       withDir c, f:
         genLockEntry c, lf, f.relativePath(dir, '/')
 
-const
-  NimCfg = "nim.cfg"
-
 proc newLockFile(): LockFile =
   result = LockFile(items: initOrderedTable[string, LockFileEntry](),
     hostOS: system.hostOS, hostCPU: system.hostCPU,
@@ -58,7 +55,45 @@ proc newLockFile(): LockFile =
     gccVersion: detectGccVersion(),
     clangVersion: detectClangVersion())
 
-proc pinWorkspace*(c: var AtlasContext; lockFilePath: string) =
+type
+  NimbleLockFileEntry* = object
+    version*: string
+    vcsRevision*: string
+    url*: string
+    downloadMethod*: string
+    dependencies*: seq[string]
+    checksums*: Table[string, string]
+
+  NimbleLockFile* = object # serialized as JSON
+    packages*: OrderedTable[string, NimbleLockFileEntry]
+    version*: int
+
+proc write(lock: NimbleLockFile; lockFilePath: string) =
+  writeFile lockFilePath, toJson(lock).pretty
+
+proc genLockEntry(c: var AtlasContext;
+                  lf: var NimbleLockFile;
+                  pkg: Package,
+                  cfg: CfgPath,
+                  version: string,
+                  deps: seq[string]) =
+  let url = getRemoteUrl()
+  let commit = getCurrentCommit()
+  let name = pkg.name.string
+  let chk = c.nimbleChecksum(pkg, cfg)
+  lf.packages[name] = NimbleLockFileEntry(
+    version: "",
+    vcsRevision: commit,
+    url: $url,
+    downloadMethod: "git",
+    dependencies: deps,
+    checksums: {"sha1": chk}.toTable
+  )
+
+const
+  NimCfg = "nim.cfg"
+
+proc pinWorkspace*(c: var AtlasContext; lockFilePath: string, exportNimble = false) =
   var lf = newLockFile()
   genLockEntriesForDir(c, lf, c.workspace)
   if c.workspace != c.depsDir and c.depsDir.len > 0:
@@ -76,15 +111,14 @@ proc pinWorkspace*(c: var AtlasContext; lockFilePath: string) =
 
   write lf, lockFilePath
 
-proc pinProject*(c: var AtlasContext; lockFilePath: string) =
+proc pinProject*(c: var AtlasContext; lockFilePath: string, exportNimble = false) =
   var lf = newLockFile()
 
-  let start = resolvePackage(c, "file://" & c.currentDir)
+  let startPkg = resolvePackage(c, "file://" & c.currentDir)
   let url = getRemoteUrl()
-  var g = createGraph(c, start)
+  var g = createGraph(c, startPkg)
 
-  info c, start, "pinning lockfile: " & lockFilePath
-
+  info c, startPkg, "pinning lockfile: " & lockFilePath
   var i = 0
   while i < g.nodes.len:
     let w = g.nodes[i]
@@ -112,8 +146,8 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string) =
     if fileExists(nimcfgPath):
       lf.nimcfg = readFile(nimcfgPath)
 
-    let nimblePath = c.currentDir / c.currentDir.lastPathComponent & ".nimble"
-    if fileExists nimblePath:
+    let nimblePath = startPkg.nimble.string
+    if nimblePath.len() > 0 and nimblePath.fileExists():
       lf.nimbleFile = LockedNimbleFile(
         filename: c.currentDir.lastPathComponent & ".nimble",
         content: readFile(nimblePath))
@@ -145,54 +179,6 @@ proc convertNimbleLock*(c: var AtlasContext; nimblePath: string): LockFile =
       url: pkg["url"].getStr,
       commit: pkg["vcsRevision"].getStr,
     )
-
-proc updateSecureHash(
-    checksum: var Sha1State,
-    c: var AtlasContext;
-    pkg: Package,
-    name: string
-) =
-  let path = pkg.path.string / name
-  if not path.fileExists(): return
-  checksum.update(name)
-
-  if symlinkExists(path):
-    # checksum file path (?)
-    try:
-      let path = expandSymlink(path)
-      checksum.update(path)
-    except OSError:
-      error c, pkg, "cannot follow symbolic link " & path
-  else:
-    # checksum file contents
-    var file: File
-    try:
-      file = path.open(fmRead)
-      const bufferSize = 8192
-      var buffer = newString(bufferSize)
-      while true:
-        var bytesRead = readChars(file, buffer)
-        if bytesRead == 0: break
-        checksum.update(buffer.toOpenArray(0, bytesRead - 1))
-    except IOError:
-      error c, pkg, "error opening file " & path
-    finally:
-      file.close()
-
-proc nimbleChecksum*(c: var AtlasContext, pkg: Package, cfg: CfgPath): string =
-  ## calculate a nimble style checksum from a `CfgPath`.
-  ##
-  ## Useful for exporting a Nimble sync file.
-  ##
-  let res = c.listFiles(pkg)
-  if res.isNone:
-    error c, pkg, "couldn't list files"
-  else:
-    var files = res.get().sorted()
-    var checksum = newSha1State()
-    for file in files:
-      checksum.updateSecureHash(c, pkg, file)
-    result = toLowerAscii($SecureHash(checksum.finalize()))
 
 proc convertAndSaveNimbleLock*(c: var AtlasContext; nimblePath, lockFilePath: string) =
   ## convert and save a nimble.lock into an Atlast lockfile

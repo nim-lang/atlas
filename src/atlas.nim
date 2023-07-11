@@ -49,6 +49,7 @@ Command:
                         ['major'|'minor'|'patch'] or a SemVer tag like ['1.0.3']
                         or a letter ['a'..'z']: a.b.c.d.e.f.g
   pin [atlas.lock]      pin the current checkouts and store them in the lock
+    --export            export Nimble lockfile as well
   rep [atlas.lock]      replay the state of the projects according to the lock
   convert <nimble.lock> [atlas.lock]
                         convert Nimble lockfile into an Atlas one
@@ -611,6 +612,7 @@ proc main(c: var AtlasContext) =
       of "noexec": c.flags.incl NoExec
       of "list": c.flags.incl ListVersions
       of "global", "g": c.flags.incl GlobalWorkspace
+      of "export": c.flags.incl ExportNimbleLock
       of "colors":
         case val.normalize
         of "off": c.flags.incl NoColors
@@ -687,7 +689,7 @@ proc main(c: var AtlasContext) =
     if c.projectDir == c.workspace or c.projectDir == c.depsDir:
       pinWorkspace c, args[0]
     else:
-      pinProject c, args[0]
+      pinProject c, args[0], ExportNimbleLock in c.flags
   of "rep", "replay", "reproduce":
     optSingleArg(LockFileName)
     replay c, args[0]
