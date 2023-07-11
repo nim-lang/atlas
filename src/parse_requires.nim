@@ -9,6 +9,7 @@ type
   NimbleFileInfo* = object
     requires*: seq[string]
     srcDir*: string
+    version*: string
     tasks*: seq[(string, string)]
     hasInstallHooks*: bool
 
@@ -49,6 +50,11 @@ proc extract(n: PNode; conf: ConfigRef; result: var NimbleFileInfo) =
         result.srcDir = n[1].strVal
       else:
         localError(conf, n[1].info, "assignments to 'srcDir' must be string literals")
+    elif n[0].kind == nkIdent and cmpIgnoreCase(n[0].ident.s, "version") == 0:
+      if n[1].kind in {nkStrLit..nkTripleStrLit}:
+        result.version = n[1].strVal
+      else:
+        localError(conf, n[1].info, "assignments to 'version' must be string literals")
   else:
     discard
 

@@ -9,7 +9,7 @@
 ## Lockfile implementation.
 
 import std / [sequtils, strutils, algorithm, tables, os, json, jsonutils, sha1]
-import context, gitops, osutils, traversal, compilerversions, nameresolver
+import context, gitops, osutils, traversal, compilerversions, nameresolver, parse_requires
 
 type
   LockFileEntry* = object
@@ -163,9 +163,8 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string, exportNimble = false
             trace c, w.pkg, "exporting nimble " & w.pkg.name.string
             let name = w.pkg.name
             let deps = nimbleDeps.getOrDefault(name)
-            var ver = versionKey(w.query)
-            if ver == "#head": ver = "0.1.0"
-            genLockEntry c, nlf, w.pkg, cfgs[name], ver, deps
+            let info = extractRequiresInfo(w.pkg.nimble.string)
+            genLockEntry c, nlf, w.pkg, cfgs[name], info.version, deps
 
     let nimcfgPath = c.currentDir / NimCfg
     if fileExists(nimcfgPath):
