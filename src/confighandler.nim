@@ -25,17 +25,17 @@ proc parseOverridesFile(c: var AtlasContext; filename: string) =
           let key = line.substr(0, splitPos-1)
           let val = line.substr(splitPos+len(Separator))
           if key.len == 0 or val.len == 0:
-            error c, toName(path), "key/value must not be empty"
+            error c, toRepo(path), "key/value must not be empty"
           let err = c.overrides.addPattern(key, val)
           if err.len > 0:
-            error c, toName(path), "(" & $lineCount & "): " & err
+            error c, toRepo(path), "(" & $lineCount & "): " & err
         else:
           discard "ignore the line"
         inc lineCount
     finally:
       close f
   else:
-    error c, toName(path), "cannot open: " & path
+    error c, toRepo(path), "cannot open: " & path
 
 proc readPluginsDir(c: var AtlasContext; dir: string) =
   for k, f in walkDir(c.workspace / dir):
@@ -46,7 +46,7 @@ proc readConfig*(c: var AtlasContext) =
   let configFile = c.workspace / AtlasWorkspace
   var f = newFileStream(configFile, fmRead)
   if f == nil:
-    error c, toName(configFile), "cannot open: " & configFile
+    error c, toRepo(configFile), "cannot open: " & configFile
     return
   var p: CfgParser
   open(p, f, configFile)
@@ -66,13 +66,13 @@ proc readConfig*(c: var AtlasContext) =
         try:
           c.defaultAlgo = parseEnum[ResolutionAlgorithm](e.value)
         except ValueError:
-          warn c, toName(configFile), "ignored unknown resolver: " & e.key
+          warn c, toRepo(configFile), "ignored unknown resolver: " & e.key
       of "plugins":
         readPluginsDir(c, e.value)
       else:
-        warn c, toName(configFile), "ignored unknown setting: " & e.key
+        warn c, toRepo(configFile), "ignored unknown setting: " & e.key
     of cfgOption:
       discard "who cares about options"
     of cfgError:
-      error c, toName(configFile), e.msg
+      error c, toRepo(configFile), e.msg
   close(p)

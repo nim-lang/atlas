@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import context, osutils
+import context
 
 import std / [strutils, os, osproc]
 
@@ -60,7 +60,7 @@ include $1
 
 """
 
-proc runNimScript*(c: var AtlasContext; scriptContent: string; name: PackageName) =
+proc runNimScript*(c: var AtlasContext; scriptContent: string; name: Package) =
   var buildNims = "atlas_build_0.nims"
   var i = 1
   while fileExists(buildNims):
@@ -78,24 +78,29 @@ proc runNimScript*(c: var AtlasContext; scriptContent: string; name: PackageName
   else:
     removeFile buildNims
 
-proc runNimScriptInstallHook*(c: var AtlasContext; nimbleFile: string; name: PackageName) =
-  runNimScript c, InstallHookTemplate % [nimbleFile.escape], name
+proc runNimScriptInstallHook*(c: var AtlasContext; nimble: PackageNimble; name: Package) =
+  infoNow c, name, "running install hooks"
+  runNimScript c, InstallHookTemplate % [nimble.string.escape], name
 
-proc runNimScriptBuilder*(c: var AtlasContext; p: (string, string); name: PackageName) =
+proc runNimScriptBuilder*(c: var AtlasContext; p: (string, string); name: Package) =
+  infoNow c, name, "running nimble build scripts"
   runNimScript c, BuilderScriptTemplate % [p[0].escape, p[1].escape], name
 
 proc runBuildSteps*(c: var AtlasContext; g: var DepGraph) =
-  # `countdown` suffices to give us some kind of topological sort:
+  ## execute build steps for the dependency graph
+  ## 
+  ## `countdown` suffices to give us some kind of topological sort:
+  ## 
   for i in countdown(g.nodes.len-1, 0):
     if g.nodes[i].active:
-      let destDir = toDestDir(g.nodes[i].name)
-      let dir = selectDir(c.workspace / destDir, c.depsDir / destDir)
-      tryWithDir dir:
+      let pkg = g.nodes[i].pkg
+      tryWithDir c, pkg:
+        # check for install hooks
         if g.nodes[i].hasInstallHooks:
-          let nf = findNimbleFile(c, g.nodes[i])
-          if nf.len > 0:
-            runNimScriptInstallHook c, nf, g.nodes[i].name
+          let nf = pkg.nimble
+          runNimScriptInstallHook c, nf, pkg
+        # check for nim script builders
         for p in mitems c.plugins.builderPatterns:
-          let f = p[0] % dir.lastPathComponent
+          let f = p[0] % pkg.repo.string
           if fileExists(f):
-            runNimScriptBuilder c, p, g.nodes[i].name
+            runNimScriptBuilder c, p, pkg

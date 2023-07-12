@@ -9,7 +9,7 @@ if execShellCmd("nim c -r tests/unittests.nim") != 0:
 var failures = 0
 
 let atlasExe = absolutePath("bin" / "atlas".addFileExt(ExeExt))
-if execShellCmd("nim c -o:$# src/atlas.nim" % [atlasExe]) != 0:
+if execShellCmd("nim c -d:debug -o:$# src/atlas.nim" % [atlasExe]) != 0:
   quit("FAILURE: compilation of atlas failed")
 
 proc exec(cmd: string) =
@@ -54,6 +54,7 @@ proc createNode(name: string, versions: seq[string], deps: seq[string]): Node =
 template withDir(dir: string; body: untyped) =
   let old = getCurrentDir()
   try:
+    echo "setting dir: ", dir
     setCurrentDir(dir)
     body
   finally:
@@ -99,12 +100,13 @@ when false:
   testWsConflict()
 
 const
-  SemVer2ExpectedResult = """selected:
-[ ] (proj_a, 1.0.0)
-[x] (proj_a, 1.1.0)
-[x] (proj_b, 1.1.0)
-[x] (proj_c, 1.2.0)
-"""
+  SemVer2ExpectedResult = dedent"""
+    [Info] (../resolve) selected:
+    [Info] (proj_a) [ ] (proj_a, 1.0.0)
+    [Info] (proj_a) [x] (proj_a, 1.1.0)
+    [Info] (proj_b) [x] (proj_b, 1.1.0)
+    [Info] (proj_c) [x] (proj_c, 1.2.0)
+    """
 
 proc testSemVer2() =
   createDir "source"
@@ -158,7 +160,7 @@ proc testSemVer2() =
 
   createDir "myproject"
   withDir "myproject":
-    let (outp, status) = execCmdEx(atlasExe & " --list use proj_a")
+    let (outp, status) = execCmdEx(atlasExe & " --colors=off --list use proj_a", {poStdErrToStdOut})
     if status == 0:
       if outp.contains SemVer2ExpectedResult:
         discard "fine"
@@ -166,12 +168,14 @@ proc testSemVer2() =
         echo "expected ", SemVer2ExpectedResult, " but got ", outp
         raise newException(AssertionDefect, "Test failed!")
     else:
-      assert false, outp
+      echo "atlas error:\n"
+      for line in outp.splitLines:
+        echo "> " & line
+      raise newException(Exception, "myproject: atlas exec error: " & $status)
 
 withDir "tests/ws_semver2":
-  try:
-    testSemVer2()
-  finally:
+  echo "\n## Integration Test: SemVer2\n"
+  proc cleanupDirs() =
     removeDir "does_not_exist"
     removeDir "myproject"
     removeDir "source"
@@ -179,12 +183,21 @@ withDir "tests/ws_semver2":
     removeDir "proj_b"
     removeDir "proj_c"
     removeDir "proj_d"
+  
+  try:
+    cleanupDirs()
+    testSemVer2()
+  finally:
+    if getEnv("KEEP_TEST_DIRS") == "":
+      echo "cleaning up directory"
+      cleanupDirs()
 
 proc integrationTest() =
   # Test installation of some "important_packages" which we are sure
   # won't disappear in the near or far future. Turns out `nitter` has
   # quite some dependencies so it suffices:
-  exec atlasExe & " use https://github.com/zedeus/nitter"
+  echo "\n## Integration Test: Nitter\n"
+  exec atlasExe & " --verbosity:trace use https://github.com/zedeus/nitter"
   discard sameDirContents("expected", ".")
 
 proc cleanupIntegrationTest() =
@@ -198,8 +211,10 @@ proc cleanupIntegrationTest() =
 
 withDir "tests/ws_integration":
   try:
+    cleanupIntegrationTest()
     integrationTest()
   finally:
-    cleanupIntegrationTest()
+    if getEnv("KEEP_TEST_DIRS") == "":
+      cleanupIntegrationTest()
 
 if failures > 0: quit($failures & " failures occurred.")

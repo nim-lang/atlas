@@ -1,8 +1,9 @@
-import std/[os, osproc, strutils]
+import std/[os, osproc, sequtils, strutils, options]
 import context, osutils
 
 type
   Command* = enum
+    GitClone = "git clone",
     GitDiff = "git diff",
     GitTag = "git tag",
     GitTags = "git show-ref --tags",
@@ -10,10 +11,12 @@ type
     GitDescribe = "git describe",
     GitRevParse = "git rev-parse",
     GitCheckout = "git checkout",
+    GitSubModUpdate = "git submodule update --init",
     GitPush = "git push origin",
     GitPull = "git pull",
     GitCurrentCommit = "git log -n 1 --format=%H"
     GitMergeBase = "git merge-base"
+    GitLsFiles = "git -C $1 ls-files",
 
 proc isGitDir*(path: string): bool = dirExists(path / ".git")
 
@@ -36,7 +39,10 @@ proc extractVersion*(s: string): string =
   while i < s.len and s[i] notin {'0'..'9'}: inc i
   result = s.substr(i)
 
-proc exec*(c: var AtlasContext; cmd: Command; args: openArray[string]): (string, int) =
+proc exec*(c: var AtlasContext;
+           cmd: Command;
+           args: openArray[string],
+           execDir = ""): (string, int) =
   when MockupRun:
     assert TestLog[c.step].cmd == cmd, $(TestLog[c.step].cmd, cmd, c.step)
     case cmd
@@ -54,7 +60,8 @@ proc exec*(c: var AtlasContext; cmd: Command; args: openArray[string]): (string,
       result[1] = TestLog[c.step].exitCode
     inc c.step
   else:
-    result = silentExec($cmd, args)
+    let cmd = if execDir.len() == 0: $cmd else: $(cmd) % [execDir]
+    result = silentExec(cmd, args)
     when ProduceTest:
       echo "cmd ", cmd, " args ", args, " --> ", result
 
@@ -65,6 +72,20 @@ proc isCleanGit*(c: var AtlasContext): string =
     result = "'git diff' not empty"
   elif status != 0:
     result = "'git diff' returned non-zero"
+
+proc clone*(c: var AtlasContext, url: PackageUrl, dest: string, retries = 5): bool =
+  ## clone git repo.
+  ##
+  ## note clones don't use `--recursive` but rely in the `checkoutCommit`
+  ## stage to setup submodules as this is less fragile on broken submodules.
+  ##
+  
+  # retry multiple times to avoid annoying github timeouts:
+  for i in 1..retries:
+    let cmd = $GitClone & " " & quoteShell($url) & " " & dest
+    if execShellCmd(cmd) == 0:
+      return true
+    os.sleep(i*2_000)
 
 proc gitDescribeRefTag*(c: var AtlasContext; commit: string): string =
   let (lt, status) = exec(c, GitDescribe, ["--tags", commit])
@@ -99,14 +120,25 @@ proc shortToCommit*(c: var AtlasContext; short: string): string =
   let (cc, status) = exec(c, GitRevParse, [short])
   result = if status == 0: strutils.strip(cc) else: ""
 
-proc checkoutGitCommit*(c: var AtlasContext; p: PackageName; commit: string) =
+proc listFiles*(c: var AtlasContext; pkg: Package): Option[seq[string]] =
+  let (outp, status) = exec(c, GitLsFiles, [], pkg.path.string)
+  if status == 0:
+    result = some outp.splitLines().mapIt(it.strip())
+
+proc checkoutGitCommit*(c: var AtlasContext; p: PackageRepo; commit: string) =
   let (_, status) = exec(c, GitCheckout, [commit])
   if status != 0:
     error(c, p, "could not checkout commit " & commit)
   else:
     info(c, p, "updated package to " & commit)
 
-proc gitPull*(c: var AtlasContext; p: PackageName) =
+  let (_, subModStatus) = exec(c, GitSubModUpdate, [])
+  if subModStatus != 0:
+    error(c, p, "could not update submodules")
+  else:
+    info(c, p, "updated submodules ")
+
+proc gitPull*(c: var AtlasContext; p: PackageRepo) =
   let (_, status) = exec(c, GitPull, [])
   if status != 0:
     error(c, p, "could not 'git pull'")
@@ -114,16 +146,16 @@ proc gitPull*(c: var AtlasContext; p: PackageName) =
 proc gitTag*(c: var AtlasContext; tag: string) =
   let (_, status) = exec(c, GitTag, [tag])
   if status != 0:
-    error(c, c.projectDir.PackageName, "could not 'git tag " & tag & "'")
+    error(c, c.projectDir.PackageRepo, "could not 'git tag " & tag & "'")
 
 proc pushTag*(c: var AtlasContext; tag: string) =
   let (outp, status) = exec(c, GitPush, [tag])
   if status != 0:
-    error(c, c.projectDir.PackageName, "could not 'git push " & tag & "'")
+    error(c, c.projectDir.PackageRepo, "could not 'git push " & tag & "'")
   elif outp.strip() == "Everything up-to-date":
-    info(c, c.projectDir.PackageName, "is up-to-date")
+    info(c, c.projectDir.PackageRepo, "is up-to-date")
   else:
-    info(c, c.projectDir.PackageName, "successfully pushed tag: " & tag)
+    info(c, c.projectDir.PackageRepo, "successfully pushed tag: " & tag)
 
 proc incrementTag*(c: var AtlasContext; lastTag: string; field: Natural): string =
   var startPos =
@@ -151,7 +183,7 @@ proc incrementLastTag*(c: var AtlasContext; field: Natural): string =
       currentCommit = exec(c, GitCurrentCommit, [])[0].strip()
 
     if lastTaggedRef == currentCommit:
-      info c, c.projectDir.PackageName, "the current commit '" & currentCommit & "' is already tagged '" & lastTag & "'"
+      info c, c.projectDir.PackageRepo, "the current commit '" & currentCommit & "' is already tagged '" & lastTag & "'"
       lastTag
     else:
       incrementTag(c, lastTag, field)
@@ -196,14 +228,14 @@ proc isOutdated*(c: var AtlasContext; f: string): bool =
           if status == 0 and mergeBase == currentCommit:
             let v = extractVersion gitDescribeRefTag(c, latestVersion)
             if v.len > 0:
-              info c, toName(f), "new version available: " & v
+              info c, toRepo(f), "new version available: " & v
               result = true
   else:
-    warn c, toName(f), "`git fetch` failed: " & outp
+    warn c, toRepo(f), "`git fetch` failed: " & outp
 
 proc updateDir*(c: var AtlasContext; file, filter: string) =
   withDir c, file:
-    let pkg = PackageName(file)
+    let pkg = PackageRepo(file)
     let (remote, _) = osproc.execCmdEx("git remote -v")
     if filter.len == 0 or filter in remote:
       let diff = isCleanGit(c)

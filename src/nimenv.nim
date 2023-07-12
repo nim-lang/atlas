@@ -26,9 +26,9 @@ const
 
 proc infoAboutActivation(c: var AtlasContext; nimDest, nimVersion: string) =
   when defined(windows):
-    info c, toName(nimDest), "RUN\nnim-" & nimVersion & "\\activate.bat"
+    info c, toRepo(nimDest), "RUN\nnim-" & nimVersion & "\\activate.bat"
   else:
-    info c, toName(nimDest), "RUN\nsource nim-" & nimVersion & "/activate.sh"
+    info c, toRepo(nimDest), "RUN\nsource nim-" & nimVersion & "/activate.sh"
 
 proc setupNimEnv*(c: var AtlasContext; nimVersion: string) =
   template isDevel(nimVersion: string): bool = nimVersion == "devel"
@@ -36,13 +36,13 @@ proc setupNimEnv*(c: var AtlasContext; nimVersion: string) =
   template exec(c: var AtlasContext; command: string) =
     let cmd = command # eval once
     if os.execShellCmd(cmd) != 0:
-      error c, toName("nim-" & nimVersion), "failed: " & cmd
+      error c, toRepo("nim-" & nimVersion), "failed: " & cmd
       return
 
   let nimDest = "nim-" & nimVersion
   if dirExists(c.workspace / nimDest):
     if not fileExists(c.workspace / nimDest / ActivationFile):
-      info c, toName(nimDest), "already exists; remove or rename and try again"
+      info c, toRepo(nimDest), "already exists; remove or rename and try again"
     else:
       infoAboutActivation c, nimDest, nimVersion
     return
@@ -50,7 +50,7 @@ proc setupNimEnv*(c: var AtlasContext; nimVersion: string) =
   var major, minor, patch: int
   if nimVersion != "devel":
     if not scanf(nimVersion, "$i.$i.$i", major, minor, patch):
-      error c, toName("nim"), "cannot parse version requirement"
+      error c, toRepo("nim"), "cannot parse version requirement"
       return
   let csourcesVersion =
     if nimVersion.isDevel or (major == 1 and minor >= 9) or major >= 2:
@@ -77,15 +77,20 @@ proc setupNimEnv*(c: var AtlasContext; nimVersion: string) =
   withDir c, c.workspace / nimDest:
     let nimExe = "bin" / "nim".addFileExt(ExeExt)
     copyFileWithPermissions nimExe0, nimExe
-    let dep = Dependency(name: toName(nimDest), commit: nimVersion, self: 0,
+    let pkg = Package(name: PackageName "nim",
+                      repo: toRepo(nimDest),
+                      url: getUrl "https://github.com/nim-lang/nim",
+                      exists: true,
+                      path: PackageDir nimDest)
+    let dep = Dependency(pkg: pkg, commit: nimVersion, self: 0,
                          algo: c.defaultAlgo,
                          query: createQueryEq(if nimVersion.isDevel: Version"#head" else: Version(nimVersion)))
     if not nimVersion.isDevel:
       let commit = versionToCommit(c, dep)
       if commit.len == 0:
-        error c, toName(nimDest), "cannot resolve version to a commit"
+        error c, toRepo(nimDest), "cannot resolve version to a commit"
         return
-      checkoutGitCommit(c, dep.name, commit)
+      checkoutGitCommit(c, dep.pkg.repo, commit)
     exec c, nimExe & " c --noNimblePath --skipUserCfg --skipParentCfg --hints:off koch"
     let kochExe = when defined(windows): "koch.exe" else: "./koch"
     exec c, kochExe & " boot -d:release --skipUserCfg --skipParentCfg --hints:off"

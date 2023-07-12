@@ -3,7 +3,7 @@
 import std/[unittest, os, strutils]
 
 import context, osutils
-from nameresolver import resolveUrl
+from nameresolver import resolvePackage
 
 let
   basicExamples = {
@@ -36,13 +36,13 @@ suite "urls and naming":
     var c = AtlasContext.initBasicWorkspace()
 
     for name, url in basicExamples.items:
-      let ures = resolveUrl(c, url.input)
-      check ures.hostname == "github.com"
-      check $ures == url.output
+      let upkg = resolvePackage(c, url.input)
+      check upkg.url.hostname == "github.com"
+      check $upkg.url == url.output
 
-      let nres = resolveUrl(c, name)
-      check nres.hostname == "github.com"
-      check $nres == url.output
+      let npkg = resolvePackage(c, name)
+      check npkg.url.hostname == "github.com"
+      check $npkg.url == url.output
 
 template v(x): untyped = Version(x)
 

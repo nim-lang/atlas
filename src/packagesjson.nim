@@ -14,8 +14,8 @@ when UnitTests:
       assert result != "", "atlas dir not found!"
 
 type
-  Package* = ref object
-    # Required fields in a package.
+  PackageInfo* = ref object
+    # Required fields in a PackageInfo.
     name*: string
     url*: string # Download location.
     license*: string
@@ -36,8 +36,8 @@ proc optionalField(obj: JsonNode, name: string, default = ""): string =
 proc requiredField(obj: JsonNode, name: string): string =
   result = optionalField(obj, name, "")
 
-proc fromJson*(obj: JSonNode): Package =
-  result = Package()
+proc fromJson*(obj: JSonNode): PackageInfo =
+  result = PackageInfo()
   result.name = obj.requiredField("name")
   if result.name.len == 0: return nil
   result.version = obj.optionalField("version")
@@ -53,13 +53,13 @@ proc fromJson*(obj: JSonNode): Package =
   result.description = obj.requiredField("description")
   result.web = obj.optionalField("web")
 
-const PackagesDir* = "packages"
+const DefaultPackagesDir* = "packages"
 
-proc getPackages*(workspaceDir: string): seq[Package] =
+proc getPackageInfos*(workspaceDir: string): seq[PackageInfo] =
   result = @[]
   var uniqueNames = initHashSet[string]()
   var jsonFiles = 0
-  for kind, path in walkDir(workspaceDir / PackagesDir):
+  for kind, path in walkDir(workspaceDir / DefaultPackagesDir):
     if kind == pcFile and path.endsWith(".json"):
       inc jsonFiles
       let packages = json.parseFile(path)
@@ -68,7 +68,7 @@ proc getPackages*(workspaceDir: string): seq[Package] =
         if pkg != nil and not uniqueNames.containsOrIncl(pkg.name):
           result.add(pkg)
 
-proc `$`*(pkg: Package): string =
+proc `$`*(pkg: PackageInfo): string =
   result = pkg.name & ":\n"
   result &= "  url:         " & pkg.url & " (" & pkg.downloadMethod & ")\n"
   result &= "  tags:        " & pkg.tags.join(", ") & "\n"
@@ -85,6 +85,7 @@ proc toTags(j: JsonNode): seq[string] =
 
 proc singleGithubSearch(term: string): JsonNode =
   when UnitTests:
+    echo "SEARCH: ", term
     let filename = "query_github_" & term & ".json"
     let path = findAtlasDir() / "tests" / "test_data" / filename
     result = json.parseFile(path)
@@ -104,7 +105,7 @@ proc githubSearch(seen: var HashSet[string]; terms: seq[string]) =
   for term in terms:
     let results = singleGithubSearch(term)
     for j in items(results.getOrDefault("items")):
-      let p = Package(
+      let p = PackageInfo(
         name: j.getOrDefault("name").getStr,
         url: j.getOrDefault("html_url").getStr,
         downloadMethod: "git",
@@ -129,7 +130,7 @@ proc getUrlFromGithub*(term: string): string =
     # ambiguous, not ok!
     result = ""
 
-proc search*(pkgList: seq[Package]; terms: seq[string]) =
+proc search*(pkgList: seq[PackageInfo]; terms: seq[string]) =
   var seen = initHashSet[string]()
   template onFound =
     echo pkg
@@ -152,11 +153,11 @@ proc search*(pkgList: seq[Package]; terms: seq[string]) =
       echo(pkg)
   githubSearch seen, terms
   if seen.len == 0 and terms.len > 0:
-    echo("No package found.")
+    echo("No PackageInfo found.")
 
-type PkgCandidates* = array[3, seq[Package]]
+type PkgCandidates* = array[3, seq[PackageInfo]]
 
-proc determineCandidates*(pkgList: seq[Package];
+proc determineCandidates*(pkgList: seq[PackageInfo];
                          terms: seq[string]): PkgCandidates =
   result[0] = @[]
   result[1] = @[]
