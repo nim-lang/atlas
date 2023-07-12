@@ -61,7 +61,10 @@ proc exec*(c: var AtlasContext;
     inc c.step
   else:
     let cmd = if execDir.len() == 0: $cmd else: $(cmd) % [execDir]
-    result = silentExec(cmd, args)
+    if dirExists(".git"):
+      result = silentExec(cmd, args)
+    else:
+      result = ("not a git repository", 1)
     when ProduceTest:
       echo "cmd ", cmd, " args ", args, " --> ", result
 
@@ -79,7 +82,7 @@ proc clone*(c: var AtlasContext, url: PackageUrl, dest: string, retries = 5): bo
   ## note clones don't use `--recursive` but rely in the `checkoutCommit`
   ## stage to setup submodules as this is less fragile on broken submodules.
   ##
-  
+
   # retry multiple times to avoid annoying github timeouts:
   for i in 1..retries:
     let cmd = $GitClone & " " & quoteShell($url) & " " & dest

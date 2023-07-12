@@ -3,7 +3,7 @@
 import std / [strutils, os, osproc, sequtils, strformat]
 from std/private/gitutils import diffFiles
 
-if execShellCmd("nim c -r tests/unittests.nim") != 0:
+if execShellCmd("nim c -d:debug -r tests/unittests.nim") != 0:
   quit("FAILURE: unit tests failed")
 
 var failures = 0
@@ -40,15 +40,14 @@ template withDir(dir: string; body: untyped) =
     setCurrentDir(old)
 
 const
-  SemVerExpectedResult = """selected:
-[x] (proj_a, 1.1.0)
-[ ] (proj_a, 1.0.0)
-[x] (proj_b, 1.1.0)
-[ ] (proj_b, 1.0.0)
-[x] (proj_c, 1.2.0)
-[ ] (proj_d, 2.0.0)
-[x] (proj_d, 1.0.0)
-end of selection
+  SemVerExpectedResult = """
+[Info] (../resolve) selected:
+[Info] (proj_a) [ ] (proj_a, 1.0.0)
+[Info] (proj_a) [x] (proj_a, 1.1.0)
+[Info] (proj_b) [x] (proj_b, 1.1.0)
+[Info] (proj_c) [x] (proj_c, 1.2.0)
+[Info] (proj_d) [x] (proj_d, 1.0.0)
+[Info] (../resolve) end of selection
 """
 
   MinVerExpectedResult = """selected:
@@ -118,7 +117,7 @@ proc testSemVer2() =
   buildGraph()
   createDir "semproject"
   withDir "semproject":
-    let (outp, status) = execCmdEx(atlasExe & " --resolver=SemVer --list use proj_a")
+    let (outp, status) = execCmdEx(atlasExe & " --resolver=SemVer --colors:off --list use proj_a")
     if status == 0:
       if outp.contains SemVerExpectedResult:
         discard "fine"
@@ -142,7 +141,7 @@ proc testMinVer() =
     else:
       assert false, outp
 
-when false: # withDir "tests/ws_semver2":
+withDir "tests/ws_semver2":
   try:
     testSemVer2()
   finally:
@@ -172,7 +171,7 @@ proc integrationTest() =
   # Test installation of some "important_packages" which we are sure
   # won't disappear in the near or far future. Turns out `nitter` has
   # quite some dependencies so it suffices:
-  exec atlasExe & " use https://github.com/zedeus/nitter"
+  exec atlasExe & " --verbosity:trace use https://github.com/zedeus/nitter"
   discard sameDirContents("expected", ".")
 
 proc cleanupIntegrationTest() =
@@ -188,7 +187,7 @@ withDir "tests/ws_integration":
   try:
     integrationTest()
   finally:
-    #cleanupIntegrationTest()
-    discard
+    when not defined(keepTestDirs):
+      cleanupIntegrationTest()
 
 if failures > 0: quit($failures & " failures occurred.")
