@@ -312,6 +312,7 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
           info c, item[0], "[x] " & toString item
         else:
           info c, item[0], "[ ] " & toString item
+      info c, toRepo("../resolve"), "end of selection"
   else:
     error c, toRepo(c.workspace), "version conflict; for more information use --showGraph"
     var usedVersions = initCountTable[Package]()
@@ -502,9 +503,9 @@ proc patchNimbleFile(c: var AtlasContext; dep: string): string =
 
 proc detectWorkspace(currentDir: string): string =
   ## find workspace by checking `currentDir` and its parents
-  ## 
+  ##
   ## failing that it will subdirs of the `currentDir`
-  ## 
+  ##
   result = currentDir
   while result.len > 0:
     if fileExists(result / AtlasWorkspace):
