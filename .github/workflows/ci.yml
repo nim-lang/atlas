@@ -1,4 +1,4 @@
-name: atlas
+name: atlas ci
 on:
   push:
     branches:
