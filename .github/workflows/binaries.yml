@@ -1,8 +1,11 @@
+name: tagging release
+
 on:
   push:
     tags:
     - '*'
     workflow_dispatch:
+
 jobs:
   build:
     strategy:
