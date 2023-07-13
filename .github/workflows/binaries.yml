@@ -91,8 +91,6 @@ jobs:
           artifacts: "*/*"
           allowUpdates: true
           makeLatest: true
-          prerelease: true
-          tag: latest
 
       - name: Delete artefacts
         uses: geekyeggo/delete-artifact@v1
