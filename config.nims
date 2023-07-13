@@ -1,6 +1,6 @@
 
 task build, "Build local atlas":
-  exec "nim c -o:bin/atlas src/atlas.nim"
+  exec "nim c -o:./atlas src/atlas.nim"
 
 task unitTests, "Runs unit tests":
   exec "nim c -d:debug -r tests/unittests.nim"
@@ -15,13 +15,13 @@ task test, "Runs all tests":
 task release, "Build local atlas":
 
   when defined(windows):
-    exec "nim c --passL:-static -o:bin/atlas src/atlas.nim"
+    exec "nim c --passL:-static -o:./atlas src/atlas.nim"
     let os = "windows"
   elif defined(macosx):
-    exec "nim c -o:bin/atlas src/atlas.nim"
+    exec "nim c -o:./atlas src/atlas.nim"
     let os = "macos"
   elif defined(linux):
-    exec "nim c --passL:-static -o:bin/atlas src/atlas.nim"
+    exec "nim c --passL:-static -o:./atlas src/atlas.nim"
     let os = "linux"
   else:
     quit 1, "unknown os"
@@ -38,4 +38,4 @@ task release, "Build local atlas":
     quit 1, "unknown arch"
 
   let name = "atlas_" & os & "_" & arch & ".tar.gz"
-  exec "tar -cjf " & name & " -C bin atlas"
+  exec "tar -cjf " & name & " atlas"
