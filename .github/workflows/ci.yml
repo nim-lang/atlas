@@ -128,3 +128,12 @@ jobs:
         run: |
           cd atlas
           nim c -r tests/tester.nim
+          nim build
+          nim release
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: 
+            atlas
