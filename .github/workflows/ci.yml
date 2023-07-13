@@ -135,4 +135,4 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: 
-            atlas
+            atlas/atlas_*.tar.gz
