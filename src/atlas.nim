@@ -696,8 +696,8 @@ proc main(c: var AtlasContext) =
       pinProject c, args[0], exportNimble
   of "rep", "replay", "reproduce":
     optSingleArg(LockFileName)
-    replay c, args[0]
-    if CfgHere in c.flags:
+    let res = replay(c, args[0])
+    if CfgHere in c.flags or res.hasCfg == false:
       let nimbleFile = findCurrentNimble()
       installDependencies(c, nimbleFile, startIsDep = true)
   of "convert":

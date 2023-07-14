@@ -216,7 +216,7 @@ proc convertAndSaveNimbleLock*(c: var AtlasContext; nimblePath, lockFilePath: st
   let lf = convertNimbleLock(c, nimblePath)
   write lf, lockFilePath
 
-proc replay*(c: var AtlasContext; lockFilePath: string) =
+proc replay*(c: var AtlasContext; lockFilePath: string): tuple[hasCfg: bool] =
   ## replays the given lockfile by cloning and updating all the deps
   ## 
   ## this also includes updating the nim.cfg and nimble file as well
@@ -229,6 +229,7 @@ proc replay*(c: var AtlasContext; lockFilePath: string) =
   # update the nim.cfg file
   if lf.nimcfg.len > 0:
     writeFile(base / NimCfg, lf.nimcfg)
+    result.hasCfg = true
   # update the nimble file
   if lf.nimbleFile.filename.len > 0:
     writeFile(base / lf.nimbleFile.filename, lf.nimbleFile.content)
