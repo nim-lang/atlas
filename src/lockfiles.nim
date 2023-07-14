@@ -199,6 +199,9 @@ proc convertNimbleLock*(c: var AtlasContext; nimblePath: string): LockFile =
 
   result = newLockFile()
   for (name, pkg) in jsonTree["packages"].pairs:
+    if name == "nim":
+      result.nimVersion = pkg["version"].getStr
+      continue
     info c, toRepo(name), " imported "
     let dir = c.depsDir / name
     result.items[name] = LockFileEntry(
@@ -206,6 +209,7 @@ proc convertNimbleLock*(c: var AtlasContext; nimblePath: string): LockFile =
       url: pkg["url"].getStr,
       commit: pkg["vcsRevision"].getStr,
     )
+
 
 proc convertAndSaveNimbleLock*(c: var AtlasContext; nimblePath, lockFilePath: string) =
   ## convert and save a nimble.lock into an Atlast lockfile
