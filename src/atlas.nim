@@ -565,6 +565,10 @@ proc main(c: var AtlasContext) =
     if c.projectDir == c.workspace or c.projectDir == c.depsDir:
       fatal action & " command must be executed in a project, not in the workspace"
 
+  proc findCurrentNimble(): string =
+    for x in walkPattern("*.nimble"):
+      return x
+  
   var autoinit = false
   var explicitProjectOverride = false
   var explicitDepsDirOverride = false
@@ -693,6 +697,9 @@ proc main(c: var AtlasContext) =
   of "rep", "replay", "reproduce":
     optSingleArg(LockFileName)
     replay c, args[0]
+    if CfgHere in c.flags:
+      let nimbleFile = findCurrentNimble()
+      installDependencies(c, nimbleFile, startIsDep = true)
   of "convert":
     if args.len < 1:
       fatal "convert command takes a nimble lockfile argument"
@@ -707,9 +714,7 @@ proc main(c: var AtlasContext) =
     if args.len == 1:
       nimbleFile = args[0]
     else:
-      for x in walkPattern("*.nimble"):
-        nimbleFile = x
-        break
+      nimbleFile = findCurrentNimble()
     if nimbleFile.len == 0:
       fatal "could not find a .nimble file"
     else:
