@@ -439,8 +439,8 @@ proc installDependencies(c: var AtlasContext; nimbleFile: string; startIsDep: bo
   # 1. find .nimble file in CWD
   # 2. install deps from .nimble
   var g = DepGraph(nodes: @[])
-  let (dir, pkgname, _) = splitFile(nimbleFile)
-  let pkg = c.resolvePackage("file://" & dir.lastPathComponent)
+  let (_, pkgname, _) = splitFile(nimbleFile.absolutePath)
+  let pkg = c.resolvePackage("file://" & nimbleFile.absolutePath)
   info c, pkg, "installing dependencies for " & pkgname & ".nimble"
   let dep = Dependency(pkg: pkg, commit: "", self: 0, algo: c.defaultAlgo)
   g.byName.mgetOrPut(pkg.name, @[]).add(0)
@@ -710,7 +710,7 @@ proc main(c: var AtlasContext) =
       for x in walkPattern("*.nimble"):
         nimbleFile = x
         break
-    if nimbleFile.len == 0:
+    if nimbleFile.len == 0 or not nimbleFile.fileExists():
       fatal "could not find a .nimble file"
     else:
       installDependencies(c, nimbleFile, startIsDep = true)

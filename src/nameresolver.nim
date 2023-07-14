@@ -153,6 +153,11 @@ proc findNimbleFile*(c: var AtlasContext; pkg: Package, depDir = PackageDir ""):
       trace c, pkg, "nimble file found " & result.get()
       discard
 
+proc checkIfNimble(url: PackageUrl): bool =
+  if url.scheme == "file":
+    let fl = url.hostname & url.path
+    result = fl.fileExists()
+
 proc resolvePackageUrl(c: var AtlasContext; url: string, checkOverrides = true): Package =
   result = Package(url: getUrl(url),
                    name: url.toRepo().PackageName,
@@ -187,13 +192,19 @@ proc resolvePackageUrl(c: var AtlasContext; url: string, checkOverrides = true):
   elif not repoPkg.isNil:
     debug c, result, "resolvePackageUrl: found by repo: " & $result.repo.string
     result = repoPkg
+  elif isFile and checkIfNimble(result.url):
+    result.path = PackageDir (result.url.hostname & result.url.path).parentDir
+    result.repo = PackageRepo result.path.string.lastPathComponent
+    debug c, result, "resolvePackageUrl: found by nimble file " & $result.repo.string
+    c.urlMapping["repo:" & result.name.string] = result
+    trace c, result, "resolvePackageUrl: not found; set pkg: " & $result.repo.string
   else:
     # package doesn't exit and doesn't conflict
     # set the url with package name as url name
     c.urlMapping["repo:" & result.name.string] = result
     trace c, result, "resolvePackageUrl: not found; set pkg: " & $result.repo.string
   
-  if result.url.scheme == "file":
+  if isFile and not result.url.checkIfNimble():
     result.path = PackageDir result.url.hostname & result.url.path
     trace c, result, "resolvePackageUrl: setting manual path: " & $result.path.string
 
