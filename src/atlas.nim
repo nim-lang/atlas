@@ -706,7 +706,7 @@ proc main(c: var AtlasContext) =
     let lfn = if args.len == 1: LockFileName
               else: args[1]
     convertAndSaveNimbleLock c, args[0], lfn
-  of "install":
+  of "install", "setup":
     # projectCmd()
     if args.len > 1:
       fatal "install command takes a single argument"
