@@ -199,20 +199,63 @@ proc convertNimbleLock*(c: var AtlasContext; nimblePath: string): LockFile =
 
   result = newLockFile()
   for (name, pkg) in jsonTree["packages"].pairs:
+    if name == "nim":
+      result.nimVersion = pkg["version"].getStr
+      continue
     info c, toRepo(name), " imported "
     let dir = c.depsDir / name
     result.items[name] = LockFileEntry(
-      dir: dir,
+      dir: dir.relativePath(c.projectDir),
       url: pkg["url"].getStr,
       commit: pkg["vcsRevision"].getStr,
     )
+
 
 proc convertAndSaveNimbleLock*(c: var AtlasContext; nimblePath, lockFilePath: string) =
   ## convert and save a nimble.lock into an Atlast lockfile
   let lf = convertNimbleLock(c, nimblePath)
   write lf, lockFilePath
 
-proc replay*(c: var AtlasContext; lockFilePath: string) =
+proc listChanged*(c: var AtlasContext; lockFilePath: string) =
+  ## replays the given lockfile by cloning and updating all the deps
+  ## 
+  ## this also includes updating the nim.cfg and nimble file as well
+  ## if they're included in the lockfile
+  ## 
+  let lf = if lockFilePath == "nimble.lock": convertNimbleLock(c, lockFilePath)
+           else: readLockFile(lockFilePath)
+
+  let base = splitPath(lockFilePath).head
+
+  # update the the dependencies
+  for _, v in pairs(lf.items):
+    let dir = base / v.dir
+    if not dirExists(dir):
+      warn c, toRepo(dir), "repo missing!"
+      continue
+    withDir c, dir:
+      let url = $getRemoteUrl()
+      if v.url != url:
+        warn c, toRepo(v.dir), "remote URL has been changed;" &
+                                  " found: " & url &
+                                  " lockfile has: " & v.url
+      
+      let commit = gitops.getCurrentCommit()
+      if commit != v.commit:
+        let pkg = c.resolvePackage("file://" & dir)
+        c.resolveNimble(pkg)
+        let info = extractRequiresInfo(c, pkg.nimble)
+        warn c, toRepo(dir), "commit differs;" &
+                                            " found: " & commit &
+                                            " (" & info.version & ")" &
+                                            " lockfile has: " & v.commit
+
+  if lf.hostOS == system.hostOS and lf.hostCPU == system.hostCPU:
+    compareVersion c, "nim", lf.nimVersion, detectNimVersion()
+    compareVersion c, "gcc", lf.gccVersion, detectGccVersion()
+    compareVersion c, "clang", lf.clangVersion, detectClangVersion()
+
+proc replay*(c: var AtlasContext; lockFilePath: string): tuple[hasCfg: bool] =
   ## replays the given lockfile by cloning and updating all the deps
   ## 
   ## this also includes updating the nim.cfg and nimble file as well
@@ -225,6 +268,7 @@ proc replay*(c: var AtlasContext; lockFilePath: string) =
   # update the nim.cfg file
   if lf.nimcfg.len > 0:
     writeFile(base / NimCfg, lf.nimcfg)
+    result.hasCfg = true
   # update the nimble file
   if lf.nimbleFile.filename.len > 0:
     writeFile(base / lf.nimbleFile.filename, lf.nimbleFile.content)

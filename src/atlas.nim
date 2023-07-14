@@ -48,8 +48,9 @@ Command:
                         add and push a new tag, input must be one of:
                         ['major'|'minor'|'patch'] or a SemVer tag like ['1.0.3']
                         or a letter ['a'..'z']: a.b.c.d.e.f.g
-  pin [atlas.lock]      pin the current checkouts and store them in the lock
-  rep [atlas.lock]      replay the state of the projects according to the lock
+  pin [atlas.lock]      pin the current checkouts and store them in the lock file
+  rep [atlas.lock]      replay the state of the projects according to the lock file
+  changed <atlack.lock> list any packages that differ from the lock file
   convert <nimble.lock> [atlas.lock]
                         convert Nimble lockfile into an Atlas one
   outdated              list the packages that are outdated
@@ -440,7 +441,7 @@ proc installDependencies(c: var AtlasContext; nimbleFile: string; startIsDep: bo
   # 2. install deps from .nimble
   var g = DepGraph(nodes: @[])
   let (dir, pkgname, _) = splitFile(nimbleFile)
-  let pkg = c.resolvePackage("file://" & dir.lastPathComponent)
+  let pkg = c.resolvePackage("file://" & dir.absolutePath)
   info c, pkg, "installing dependencies for " & pkgname & ".nimble"
   let dep = Dependency(pkg: pkg, commit: "", self: 0, algo: c.defaultAlgo)
   g.byName.mgetOrPut(pkg.name, @[]).add(0)
@@ -565,6 +566,10 @@ proc main(c: var AtlasContext) =
     if c.projectDir == c.workspace or c.projectDir == c.depsDir:
       fatal action & " command must be executed in a project, not in the workspace"
 
+  proc findCurrentNimble(): string =
+    for x in walkPattern("*.nimble"):
+      return x
+  
   var autoinit = false
   var explicitProjectOverride = false
   var explicitDepsDirOverride = false
@@ -692,14 +697,20 @@ proc main(c: var AtlasContext) =
       pinProject c, args[0], exportNimble
   of "rep", "replay", "reproduce":
     optSingleArg(LockFileName)
-    replay c, args[0]
+    let res = replay(c, args[0])
+    if CfgHere in c.flags or res.hasCfg == false:
+      let nimbleFile = findCurrentNimble()
+      installDependencies(c, nimbleFile, startIsDep = true)
+  of "changed":
+    optSingleArg(LockFileName)
+    listChanged(c, args[0])
   of "convert":
     if args.len < 1:
       fatal "convert command takes a nimble lockfile argument"
     let lfn = if args.len == 1: LockFileName
               else: args[1]
     convertAndSaveNimbleLock c, args[0], lfn
-  of "install":
+  of "install", "setup":
     # projectCmd()
     if args.len > 1:
       fatal "install command takes a single argument"
@@ -707,9 +718,7 @@ proc main(c: var AtlasContext) =
     if args.len == 1:
       nimbleFile = args[0]
     else:
-      for x in walkPattern("*.nimble"):
-        nimbleFile = x
-        break
+      nimbleFile = findCurrentNimble()
     if nimbleFile.len == 0:
       fatal "could not find a .nimble file"
     else:

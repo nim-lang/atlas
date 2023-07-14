@@ -187,7 +187,7 @@ proc message(c: var AtlasContext; k: MsgKind; p: PackageRepo; arg: string) =
 
 proc warn*(c: var AtlasContext; p: PackageRepo; arg: string) =
   c.message(Warning, p, arg)
-  writeMessage c, Warning, p, arg
+  # writeMessage c, Warning, p, arg
   inc c.warnings
 
 proc error*(c: var AtlasContext; p: PackageRepo; arg: string) =
