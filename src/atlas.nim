@@ -440,7 +440,7 @@ proc installDependencies(c: var AtlasContext; nimbleFile: string; startIsDep: bo
   # 2. install deps from .nimble
   var g = DepGraph(nodes: @[])
   let (dir, pkgname, _) = splitFile(nimbleFile)
-  let pkg = c.resolvePackage("file://" & dir.lastPathComponent)
+  let pkg = c.resolvePackage("file://" & dir.absolutePath)
   info c, pkg, "installing dependencies for " & pkgname & ".nimble"
   let dep = Dependency(pkg: pkg, commit: "", self: 0, algo: c.defaultAlgo)
   g.byName.mgetOrPut(pkg.name, @[]).add(0)
