@@ -48,8 +48,9 @@ Command:
                         add and push a new tag, input must be one of:
                         ['major'|'minor'|'patch'] or a SemVer tag like ['1.0.3']
                         or a letter ['a'..'z']: a.b.c.d.e.f.g
-  pin [atlas.lock]      pin the current checkouts and store them in the lock
-  rep [atlas.lock]      replay the state of the projects according to the lock
+  pin [atlas.lock]      pin the current checkouts and store them in the lock file
+  rep [atlas.lock]      replay the state of the projects according to the lock file
+  changed <atlack.lock> list any packages that differ from the lock file
   convert <nimble.lock> [atlas.lock]
                         convert Nimble lockfile into an Atlas one
   outdated              list the packages that are outdated
@@ -700,6 +701,9 @@ proc main(c: var AtlasContext) =
     if CfgHere in c.flags or res.hasCfg == false:
       let nimbleFile = findCurrentNimble()
       installDependencies(c, nimbleFile, startIsDep = true)
+  of "changed":
+    optSingleArg(LockFileName)
+    listChanged(c, args[0])
   of "convert":
     if args.len < 1:
       fatal "convert command takes a nimble lockfile argument"
