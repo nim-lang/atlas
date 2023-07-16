@@ -200,7 +200,12 @@ proc parseVersionInterval*(s: string; start: int; err: var bool): VersionInterva
   else:
     result = VersionInterval(a: VersionReq(r: verAny, v: Version"#head"))
 
-proc parseTaggedVersions*(outp: string): seq[(string, Version)] =
+type
+  Commit* = object
+    h*: string
+    v*: Version
+
+proc parseTaggedVersions*(outp: string): seq[Commit] =
   result = @[]
   for line in splitLines(outp):
     if not line.endsWith("^{}"):
@@ -211,10 +216,10 @@ proc parseTaggedVersions*(outp: string): seq[(string, Version)] =
       while i < line.len and line[i] notin Digits: inc i
       let v = parseVersion(line, i)
       if v != Version(""):
-        result.add (line.substr(0, commitEnd-1), v)
-  result.sort proc (a, b: (string, Version)): int =
-    (if a[1] < b[1]: 1
-    elif a[1] == b[1]: 0
+        result.add Commit(h: line.substr(0, commitEnd-1), v: v)
+  result.sort proc (a, b: Commit): int =
+    (if a.v < b.v: 1
+    elif a.v == b.v: 0
     else: -1)
 
 proc matches(pattern: VersionReq; v: Version): bool =
@@ -247,23 +252,23 @@ proc extractSpecificCommit*(pattern: VersionInterval): string =
   else:
     result = ""
 
-proc matches*(pattern: VersionInterval; x: (string, Version)): bool =
+proc matches*(pattern: VersionInterval; x: Commit): bool =
   if pattern.isInterval:
-    result = matches(pattern.a, x[1]) and matches(pattern.b, x[1])
+    result = matches(pattern.a, x.v) and matches(pattern.b, x.v)
   elif pattern.a.r == verEq and pattern.a.v.isSpecial and pattern.a.v.string.len >= MinCommitLen:
-    result = x[0].startsWith(pattern.a.v.string.substr(1))
+    result = x.h.startsWith(pattern.a.v.string.substr(1))
   else:
-    result = matches(pattern.a, x[1])
+    result = matches(pattern.a, x.v)
 
-proc selectBestCommitMinVer*(data: openArray[(string, Version)]; elem: VersionInterval): string =
+proc selectBestCommitMinVer*(data: openArray[Commit]; elem: VersionInterval): string =
   for i in countdown(data.len-1, 0):
-    if elem.matches(data[i][1]):
-      return data[i][0]
+    if elem.matches(data[i]):
+      return data[i].h
   return ""
 
-proc selectBestCommitMaxVer*(data: openArray[(string, Version)]; elem: VersionInterval): string =
+proc selectBestCommitMaxVer*(data: openArray[Commit]; elem: VersionInterval): string =
   for i in countup(0, data.len-1):
-    if elem.matches(data[i][1]): return data[i][0]
+    if elem.matches(data[i]): return data[i].h
   return ""
 
 proc toSemVer*(i: VersionInterval): VersionInterval =
@@ -275,5 +280,5 @@ proc toSemVer*(i: VersionInterval): VersionInterval =
       result.isInterval = true
       result.b = VersionReq(r: verLt, v: Version($(major+1)))
 
-proc selectBestCommitSemVer*(data: openArray[(string, Version)]; elem: VersionInterval): string =
+proc selectBestCommitSemVer*(data: openArray[Commit]; elem: VersionInterval): string =
   result = selectBestCommitMaxVer(data, elem.toSemVer)

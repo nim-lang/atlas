@@ -102,7 +102,7 @@ proc getLastTaggedCommit*(c: var AtlasContext): string =
     if lastTag.len != 0:
       result = lastTag
 
-proc collectTaggedVersions*(c: var AtlasContext): seq[(string, Version)] =
+proc collectTaggedVersions*(c: var AtlasContext): seq[Commit] =
   let (outp, status) = exec(c, GitTags, [])
   if status == 0:
     result = parseTaggedVersions(outp)

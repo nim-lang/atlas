@@ -260,7 +260,7 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
         var v = Version("#" & commit)
         for j in countup(0, av.len-1):
           if q.matches(av[j]):
-            v = av[j][1]
+            v = av[j].v
             break
         mapping.add (g.nodes[i].pkg, commit, v)
         b.add newVar(VarId(idgen + g.nodes.len))
@@ -268,13 +268,13 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
       elif g.nodes[i].algo == MinVer:
         for j in countup(0, av.len-1):
           if q.matches(av[j]):
-            mapping.add (g.nodes[i].pkg, av[j][0], av[j][1])
+            mapping.add (g.nodes[i].pkg, av[j].h, av[j].v)
             b.add newVar(VarId(idgen + g.nodes.len))
             inc idgen
       else:
         for j in countdown(av.len-1, 0):
           if q.matches(av[j]):
-            mapping.add (g.nodes[i].pkg, av[j][0], av[j][1])
+            mapping.add (g.nodes[i].pkg, av[j].h, av[j].v)
             b.add newVar(VarId(idgen + g.nodes.len))
             inc idgen
 
@@ -569,7 +569,7 @@ proc main(c: var AtlasContext) =
   proc findCurrentNimble(): string =
     for x in walkPattern("*.nimble"):
       return x
-  
+
   var autoinit = false
   var explicitProjectOverride = false
   var explicitDepsDirOverride = false
