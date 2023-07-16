@@ -8,7 +8,7 @@
 
 ## Helpers for the graph traversal.
 
-import std / [strutils, os, sha1, algorithm]
+import std / [strutils, os, sha1, algorithm, osproc]
 import context, nameresolver, gitops
 
 proc createGraph*(c: var AtlasContext; start: Package): DepGraph =
@@ -57,47 +57,61 @@ proc extractRequiresInfo*(c: var AtlasContext; nimble: PackageNimble): NimbleFil
   when ProduceTest:
     echo "nimble ", nimbleFile, " info ", result
 
-proc collectDeps*(
-    c: var AtlasContext;
-    g: var DepGraph,
-    parent: int;
-    dep: Dependency
-): CfgPath =
-  # If there is a .nimble file, return the dependency path & srcDir
-  # else return "".
-  let nimbleInfo = extractRequiresInfo(c, dep.pkg.nimble)
-  if dep.self >= 0 and dep.self < g.nodes.len:
-    g.nodes[dep.self].hasInstallHooks = nimbleInfo.hasInstallHooks
-
+proc parseNimbleFile(c: var AtlasContext; g: var DepGraph; nimbleFile: PackageNimble;
+                     parent: int; commit: Commit): DepInfo =
+  result = DepInfo(c: commit) #, nimble: extractRequiresInfo(c, nimbleFile))
+  let nimbleInfo = extractRequiresInfo(c, nimbleFile)
+  result.hasInstallHooks = nimbleInfo.hasInstallHooks
   for r in nimbleInfo.requires:
     var i = 0
     while i < r.len and r[i] notin {'#', '<', '=', '>'} + Whitespace: inc i
     let name = r.substr(0, i-1)
     let pkg = c.resolvePackage(name)
-    debug c, dep.pkg, "collect deps: " & name & " pkg: " & $dep.pkg
+    #debug c, dep.pkg, "collect deps: " & name & " pkg: " & $dep.pkg
 
     var err = pkg.name.string.len == 0
     if len($pkg.url) == 0:
-      error c, pkg, "invalid pkgUrl in nimble file: " & name
+      result.errors.add "invalid pkgUrl in nimble file: " & name
       err = true
-    
+
     let query = parseVersionInterval(r, i, err) # update err
 
     if err:
-      error c, pkg, "invalid 'requires' syntax in nimble file: " & r
+      result.errors.add "invalid 'requires' syntax in nimble file: " & r
     else:
       if cmpIgnoreCase(pkg.name.string, "nim") != 0:
         c.addUniqueDep g, parent, pkg, query
       else:
-        rememberNimVersion g, query
-  result = CfgPath(toDestDir(dep.pkg).string / nimbleInfo.srcDir)
+        let v = extractGeQuery(query)
+        if v != Version"":
+          result.nimVersion = v
+  result.srcDir = nimbleInfo.srcDir
+  # CfgPath(toDestDir(dep.pkg).string / nimbleInfo.srcDir)
 
-proc collectNewDeps*(
-    c: var AtlasContext;
-    g: var DepGraph;
-    parent: int;
-    dep: Dependency
-): CfgPath =
+proc allDeps*(c: var AtlasContext; g: var DepGraph; parent: int; nimbleFile: PackageNimble; dep: Dependency): seq[DepInfo] =
+  #let cv = nimbleFileVersions(c, nimbleFile)
+  result = @[parseNimbleFile(c, g, nimbleFile, parent, HeadCommit)]
+
+  #if not g.availableVersions.hasKey(dep.pkg.name):
+  #  g.availableVersions[dep.pkg.name] =
+  let tags = collectTaggedVersions(c)
+  try:
+    for commit in items tags:
+      let (err, exitCode) = osproc.execCmdEx("git checkout " & commit.h & " -- " & quoteShell(nimbleFile.string))
+      if exitCode == 0:
+        result.add parseNimbleFile(c, g, nimbleFile, parent, commit)
+      else:
+        error c, projectFromCurrentDir(), err
+  finally:
+    discard osproc.execCmdEx("git checkout HEAD " & quoteShell(nimbleFile.string))
+
+proc collectDeps*(c: var AtlasContext; g: var DepGraph; parent: int; dep: Dependency): seq[DepInfo] =
+  #let nimbleInfo = extractRequiresInfo(c, dep.pkg.nimble)
+  #if dep.self >= 0 and dep.self < g.nodes.len:
+  #  g.nodes[dep.self].hasInstallHooks = nimbleInfo.hasInstallHooks
+  result = allDeps(c, g, parent, dep.pkg.nimble, dep)
+
+proc collectNewDeps*(c: var AtlasContext; g: var DepGraph; parent: int; dep: Dependency): seq[DepInfo] =
   trace c, dep.pkg, "collecting dependencies"
   if dep.pkg.exists:
     let nimble = dep.pkg.nimble
@@ -105,14 +119,10 @@ proc collectNewDeps*(
     result = collectDeps(c, g, parent, dep)
   else:
     warn c, dep.pkg, "collecting deps: no nimble skipping deps'"
-    result = CfgPath dep.pkg.path.string
+    #CfgPath dep.pkg.path.string
+    result = @[]
 
-proc updateSecureHash(
-    checksum: var Sha1State,
-    c: var AtlasContext;
-    pkg: Package,
-    name: string
-) =
+proc updateSecureHash(checksum: var Sha1State; c: var AtlasContext; pkg: Package; name: string) =
   let path = pkg.path.string / name
   if not path.fileExists(): return
   checksum.update(name)

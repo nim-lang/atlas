@@ -125,7 +125,59 @@ proc generateDepGraph(c: var AtlasContext; g: DepGraph) =
   else:
     discard execShellCmd("dot -Tpng -odeps.png " & quoteShell(dotFile))
 
+proc findCfgDir(c: var AtlasContext): CfgPath =
+  for nimbleFile in walkPattern(c.currentDir / "*.nimble"):
+    let nimbleInfo = extractRequiresInfo(c, PackageNimble nimbleFile)
+    return CfgPath c.currentDir / nimbleInfo.srcDir
+  return CfgPath c.currentDir
+
+proc findCfgDir(c: var AtlasContext, pkg: Package): CfgPath =
+  let nimbleInfo = extractRequiresInfo(c, pkg.nimble)
+  return CfgPath c.currentDir / nimbleInfo.srcDir
+
+const
+  configPatternBegin = "############# begin Atlas config section ##########\n"
+  configPatternEnd =   "############# end Atlas config section   ##########\n"
+
+proc patchNimCfg(c: var AtlasContext; g: DepGraph; cfgPath: CfgPath) =
+  var paths = "--noNimblePath\n"
+  for d in g.nodes:
+    if d.active:
+      let x = relativePath(d.srcDir, cfgPath.string, '/')
+      paths.add "--path:\"" & x & "\"\n"
+  var cfgContent = configPatternBegin & paths & configPatternEnd
+
+  when MockupRun:
+    assert readFile(TestsDir / "nim.cfg") == cfgContent
+    c.mockupSuccess = true
+  else:
+    let cfg = cfgPath.string / "nim.cfg"
+    assert cfgPath.string.len > 0
+    if cfgPath.string.len > 0 and not dirExists(cfgPath.string):
+      error(c, c.projectDir.toRepo, "could not write the nim.cfg")
+    elif not fileExists(cfg):
+      writeFile(cfg, cfgContent)
+      info(c, projectFromCurrentDir(), "created: " & cfg.readableFile)
+    else:
+      let content = readFile(cfg)
+      let start = content.find(configPatternBegin)
+      if start >= 0:
+        cfgContent = content.substr(0, start-1) & cfgContent
+        let theEnd = content.find(configPatternEnd, start)
+        if theEnd >= 0:
+          cfgContent.add content.substr(theEnd+len(configPatternEnd))
+      else:
+        cfgContent = content & "\n" & cfgContent
+      if cfgContent != content:
+        # do not touch the file if nothing changed
+        # (preserves the file date information):
+        writeFile(cfg, cfgContent)
+        info(c, projectFromCurrentDir(), "updated: " & cfg.readableFile)
+
 proc afterGraphActions(c: var AtlasContext; g: DepGraph) =
+  let cfgPath = if CfgHere in c.flags: CfgPath(c.currentDir) else: findCfgDir(c)
+  patchNimCfg(c, g, cfgPath)
+
   if ShowGraph in c.flags:
     generateDepGraph c, g
   if AutoEnv in c.flags and g.bestNimVersion != Version"":
@@ -192,17 +244,17 @@ proc isLaterCommit(destDir, version: string): bool =
   else:
     result = true
 
-proc collectAvailableVersions(c: var AtlasContext; g: var DepGraph; w: Dependency) =
-  trace c, w.pkg, "collecting versions"
+proc collectAvailableVersions(c: var AtlasContext; g: var DepGraph; parent: int; dep: Dependency) =
+  trace c, dep.pkg, "collecting versions"
   when MockupRun:
     # don't cache when doing the MockupRun:
-    g.availableVersions[w.pkg] = collectTaggedVersions(c)
+    g.availableVersions[dep.pkg.name] = collectNewDeps(c, g, parent, dep)
   else:
-    if not g.availableVersions.hasKey(w.pkg.name):
-      g.availableVersions[w.pkg.name] = collectTaggedVersions(c)
+    if not g.availableVersions.hasKey(dep.pkg.name):
+      g.availableVersions[dep.pkg.name] = collectNewDeps(c, g, parent, dep)
 
-proc toString(x: (Package, string, Version)): string =
-  "(" & x[0].repo.string & ", " & $x[2] & ")"
+proc toString(x: (Package, Commit)): string =
+  "(" & x[0].repo.string & ", " & $x[1].v & ")"
 
 proc resolve(c: var AtlasContext; g: var DepGraph) =
   var b = sat.Builder()
@@ -238,7 +290,7 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
       b.closeOpr
 
   var idgen = 0
-  var mapping: seq[(Package, string, Version)] = @[]
+  var mapping: seq[(Package, Commit)] = @[]
   # Version selection:
   for i in 0..<g.nodes.len:
     let av = g.availableVersions.getOrDefault(g.nodes[i].pkg.name)
@@ -259,22 +311,22 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
       if commit.len > 0:
         var v = Version("#" & commit)
         for j in countup(0, av.len-1):
-          if q.matches(av[j]):
-            v = av[j].v
+          if q.matches(av[j].c):
+            v = av[j].c.v
             break
-        mapping.add (g.nodes[i].pkg, commit, v)
+        mapping.add (g.nodes[i].pkg, Commit(h: commit, v: v))
         b.add newVar(VarId(idgen + g.nodes.len))
         inc idgen
       elif g.nodes[i].algo == MinVer:
         for j in countup(0, av.len-1):
-          if q.matches(av[j]):
-            mapping.add (g.nodes[i].pkg, av[j].h, av[j].v)
+          if q.matches(av[j].c):
+            mapping.add (g.nodes[i].pkg, av[j].c)
             b.add newVar(VarId(idgen + g.nodes.len))
             inc idgen
       else:
         for j in countdown(av.len-1, 0):
-          if q.matches(av[j]):
-            mapping.add (g.nodes[i].pkg, av[j].h, av[j].v)
+          if q.matches(av[j].c):
+            mapping.add (g.nodes[i].pkg, av[j].c)
             b.add newVar(VarId(idgen + g.nodes.len))
             inc idgen
 
@@ -301,7 +353,7 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
         let destDir = pkg.name.string
         debug c, pkg, "package satisfiable: " & $pkg
         withDir c, pkg:
-          checkoutGitCommit(c, toRepo(destDir), mapping[i - g.nodes.len][1])
+          checkoutGitCommit(c, toRepo(destDir), mapping[i - g.nodes.len][1].h)
     if NoExec notin c.flags:
       runBuildSteps(c, g)
       #echo f
@@ -324,10 +376,9 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
       if s[i] == setToTrue:
         let counter = usedVersions.getOrDefault(mapping[i - g.nodes.len][0])
         if counter > 0:
-          error c, mapping[i - g.nodes.len][0], $mapping[i - g.nodes.len][2] & " required"
+          error c, mapping[i - g.nodes.len][0], $mapping[i - g.nodes.len][1].v & " required"
 
-proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[CfgPath] =
-  result = @[]
+proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool) =
   var i = 0
   while i < g.nodes.len:
     let w = g.nodes[i]
@@ -351,10 +402,10 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
           error c, w.pkg, err
         else:
           withDir c, w.pkg:
-            collectAvailableVersions c, g, w
+            collectAvailableVersions c, g, i, w
     else:
-        withDir c, w.pkg:
-          collectAvailableVersions c, g, w
+      withDir c, w.pkg:
+        collectAvailableVersions c, g, i, w
 
     c.resolveNimble(w.pkg)
 
@@ -366,7 +417,7 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
       # even if the checkout fails, we can make use of the somewhat
       # outdated .nimble file to clone more of the most likely still relevant
       # dependencies:
-      result.addUnique collectNewDeps(c, g, i, w)
+      #collectNewDeps(c, g, i, w)
     else:
       warn(c, w.pkg, "traverseLoop: errors found, skipping collect deps")
     inc i
@@ -374,7 +425,7 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
   if g.availableVersions.len > 0:
     resolve c, g
 
-proc traverse(c: var AtlasContext; start: string; startIsDep: bool): seq[CfgPath] =
+proc traverse(c: var AtlasContext; start: string; startIsDep: bool) =
   # returns the list of paths for the nim.cfg file.
   let pkg = resolvePackage(c, start)
   var g = c.createGraph(pkg)
@@ -385,56 +436,8 @@ proc traverse(c: var AtlasContext; start: string; startIsDep: bool): seq[CfgPath
 
   c.projectDir = pkg.path.string
 
-  result = traverseLoop(c, g, startIsDep)
+  traverseLoop(c, g, startIsDep)
   afterGraphActions c, g
-
-const
-  configPatternBegin = "############# begin Atlas config section ##########\n"
-  configPatternEnd =   "############# end Atlas config section   ##########\n"
-
-proc patchNimCfg(c: var AtlasContext; deps: seq[CfgPath]; cfgPath: CfgPath) =
-  var paths = "--noNimblePath\n"
-  for d in deps:
-    let x = relativePath(d.string, cfgPath.string, '/')
-    paths.add "--path:\"" & x & "\"\n"
-  var cfgContent = configPatternBegin & paths & configPatternEnd
-
-  when MockupRun:
-    assert readFile(TestsDir / "nim.cfg") == cfgContent
-    c.mockupSuccess = true
-  else:
-    let cfg = cfgPath.string / "nim.cfg"
-    assert cfgPath.string.len > 0
-    if cfgPath.string.len > 0 and not dirExists(cfgPath.string):
-      error(c, c.projectDir.toRepo, "could not write the nim.cfg")
-    elif not fileExists(cfg):
-      writeFile(cfg, cfgContent)
-      info(c, projectFromCurrentDir(), "created: " & cfg.readableFile)
-    else:
-      let content = readFile(cfg)
-      let start = content.find(configPatternBegin)
-      if start >= 0:
-        cfgContent = content.substr(0, start-1) & cfgContent
-        let theEnd = content.find(configPatternEnd, start)
-        if theEnd >= 0:
-          cfgContent.add content.substr(theEnd+len(configPatternEnd))
-      else:
-        cfgContent = content & "\n" & cfgContent
-      if cfgContent != content:
-        # do not touch the file if nothing changed
-        # (preserves the file date information):
-        writeFile(cfg, cfgContent)
-        info(c, projectFromCurrentDir(), "updated: " & cfg.readableFile)
-
-proc findCfgDir(c: var AtlasContext): CfgPath =
-  for nimbleFile in walkPattern(c.currentDir / "*.nimble"):
-    let nimbleInfo = extractRequiresInfo(c, PackageNimble nimbleFile)
-    return CfgPath c.currentDir / nimbleInfo.srcDir
-  return CfgPath c.currentDir
-
-proc findCfgDir(c: var AtlasContext, pkg: Package): CfgPath =
-  let nimbleInfo = extractRequiresInfo(c, pkg.nimble)
-  return CfgPath c.currentDir / nimbleInfo.srcDir
 
 proc installDependencies(c: var AtlasContext; nimbleFile: string; startIsDep: bool) =
   # 1. find .nimble file in CWD
@@ -446,9 +449,7 @@ proc installDependencies(c: var AtlasContext; nimbleFile: string; startIsDep: bo
   let dep = Dependency(pkg: pkg, commit: "", self: 0, algo: c.defaultAlgo)
   g.byName.mgetOrPut(pkg.name, @[]).add(0)
   discard collectDeps(c, g, -1, dep)
-  let paths = traverseLoop(c, g, startIsDep)
-  let cfgPath = if CfgHere in c.flags: CfgPath c.currentDir else: findCfgDir(c)
-  patchNimCfg(c, paths, cfgPath)
+  traverseLoop(c, g, startIsDep)
   afterGraphActions c, g
 
 proc updateDir(c: var AtlasContext; dir, filter: string) =
@@ -676,10 +677,7 @@ proc main(c: var AtlasContext) =
     createWorkspaceIn c
   of "clone", "update":
     singleArg()
-    let deps = traverse(c, args[0], startIsDep = false)
-    let cfgPath = if CfgHere in c.flags: CfgPath c.currentDir
-                  else: findCfgDir(c)
-    patchNimCfg c, deps, cfgPath
+    traverse(c, args[0], startIsDep = false)
     when MockupRun:
       if not c.mockupSuccess:
         fatal "There were problems."

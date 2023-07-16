@@ -118,7 +118,7 @@ proc pinWorkspace*(c: var AtlasContext; lockFilePath: string) =
   write lf, lockFilePath
 
 proc pinProject*(c: var AtlasContext; lockFilePath: string, exportNimble = false) =
-  ## Pin project using deps starting from the current project directory. 
+  ## Pin project using deps starting from the current project directory.
   ##
   ##
   var lf = newLockFile()
@@ -128,7 +128,6 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string, exportNimble = false
   # only used for exporting nimble locks
   var nlf = newNimbleLockFile()
   var nimbleDeps = newTable[PackageName, HashSet[PackageName]]()
-  var cfgs = newTable[PackageName, CfgPath]()
 
   info c, startPkg, "pinning lockfile: " & lockFilePath
   var i = 0
@@ -142,8 +141,7 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string, exportNimble = false
     else:
       # assume this is the selected version, it might get overwritten later:
       selectNode c, g, w
-      let cfgPath = collectNewDeps(c, g, i, w)
-      cfgs[w.pkg.name] = cfgPath
+      discard collectNewDeps(c, g, i, w)
     inc i
 
   if c.errors == 0:
@@ -164,7 +162,7 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string, exportNimble = false
             let name = w.pkg.name
             let deps = nimbleDeps.getOrDefault(name)
             let info = extractRequiresInfo(w.pkg.nimble.string)
-            genLockEntry c, nlf, w.pkg, cfgs[name], info.version, deps
+            genLockEntry c, nlf, w.pkg, CfgPath(dir / info.srcDir), info.version, deps
 
     let nimcfgPath = c.currentDir / NimCfg
     if fileExists(nimcfgPath):
@@ -188,7 +186,7 @@ proc compareVersion(c: var AtlasContext; key, wanted, got: string) =
 
 proc convertNimbleLock*(c: var AtlasContext; nimblePath: string): LockFile =
   ## converts nimble lock file into a Atlas lockfile
-  ## 
+  ##
   let jsonAsStr = readFile(nimblePath)
   let jsonTree = parseJson(jsonAsStr)
 
@@ -218,10 +216,10 @@ proc convertAndSaveNimbleLock*(c: var AtlasContext; nimblePath, lockFilePath: st
 
 proc listChanged*(c: var AtlasContext; lockFilePath: string) =
   ## replays the given lockfile by cloning and updating all the deps
-  ## 
+  ##
   ## this also includes updating the nim.cfg and nimble file as well
   ## if they're included in the lockfile
-  ## 
+  ##
   let lf = if lockFilePath == "nimble.lock": convertNimbleLock(c, lockFilePath)
            else: readLockFile(lockFilePath)
 
@@ -239,7 +237,7 @@ proc listChanged*(c: var AtlasContext; lockFilePath: string) =
         warn c, toRepo(v.dir), "remote URL has been changed;" &
                                   " found: " & url &
                                   " lockfile has: " & v.url
-      
+
       let commit = gitops.getCurrentCommit()
       if commit != v.commit:
         let pkg = c.resolvePackage("file://" & dir)
@@ -257,10 +255,10 @@ proc listChanged*(c: var AtlasContext; lockFilePath: string) =
 
 proc replay*(c: var AtlasContext; lockFilePath: string): tuple[hasCfg: bool] =
   ## replays the given lockfile by cloning and updating all the deps
-  ## 
+  ##
   ## this also includes updating the nim.cfg and nimble file as well
   ## if they're included in the lockfile
-  ## 
+  ##
   let lf = if lockFilePath == "nimble.lock": convertNimbleLock(c, lockFilePath)
            else: readLockFile(lockFilePath)
 

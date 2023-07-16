@@ -88,15 +88,15 @@ proc runNimScriptBuilder*(c: var AtlasContext; p: (string, string); name: Packag
 
 proc runBuildSteps*(c: var AtlasContext; g: var DepGraph) =
   ## execute build steps for the dependency graph
-  ## 
+  ##
   ## `countdown` suffices to give us some kind of topological sort:
-  ## 
+  ##
   for i in countdown(g.nodes.len-1, 0):
     if g.nodes[i].active:
       let pkg = g.nodes[i].pkg
       tryWithDir c, pkg:
         # check for install hooks
-        if g.nodes[i].hasInstallHooks:
+        if false: #g.nodes[i].hasInstallHooks:
           let nf = pkg.nimble
           runNimScriptInstallHook c, nf, pkg
         # check for nim script builders

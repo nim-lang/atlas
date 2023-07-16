@@ -282,3 +282,6 @@ proc toSemVer*(i: VersionInterval): VersionInterval =
 
 proc selectBestCommitSemVer*(data: openArray[Commit]; elem: VersionInterval): string =
   result = selectBestCommitMaxVer(data, elem.toSemVer)
+
+const
+  HeadCommit* = Commit(h: "", v: Version"#head")
