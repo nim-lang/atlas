@@ -71,7 +71,7 @@ type
     nodes*: seq[Dependency]
     processed*: Table[string, int] # the key is (url / commit)
     byName*: Table[PackageName, seq[int]]
-    availableVersions*: Table[PackageName, seq[(string, Version)]] # sorted, latest version comes first
+    availableVersions*: Table[PackageName, seq[Commit]] # sorted, latest version comes first
     bestNimVersion*: Version # Nim is a special snowflake
 
   Flag* = enum
@@ -140,17 +140,17 @@ proc `$`*(a: PackageNimble): string {.borrow.}
 
 proc `$`*(a: Package): string =
   result = "Package("
-  result &= "name:" 
+  result &= "name:"
   result &= a.name.string
-  result &= ", repo:" 
+  result &= ", repo:"
   result &= a.repo.string
-  result &= ", url:" 
+  result &= ", url:"
   result &= $(a.url)
-  result &= ", p:" 
+  result &= ", p:"
   result &= a.path.string
-  result &= ", x:" 
+  result &= ", x:"
   result &= $(a.exists)
-  result &= ", nbl:" 
+  result &= ", nbl:"
   if a.exists:
     result &= $(a.nimble.string)
   result &= ")"
