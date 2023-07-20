@@ -198,16 +198,18 @@ proc convertNimbleLock*(c: var AtlasContext; nimblePath: string): LockFile =
     return
 
   result = newLockFile()
-  for (name, pkg) in jsonTree["packages"].pairs:
+  for (name, info) in jsonTree["packages"].pairs:
     if name == "nim":
-      result.nimVersion = pkg["version"].getStr
+      result.nimVersion = info["version"].getStr
       continue
+    # lookup package using url
+    let pkg = c.resolvePackage(info["url"].getStr)
     info c, toRepo(name), " imported "
-    let dir = c.depsDir / name
+    let dir = c.depsDir / pkg.repo.string
     result.items[name] = LockFileEntry(
       dir: dir.relativePath(c.projectDir),
-      url: pkg["url"].getStr,
-      commit: pkg["vcsRevision"].getStr,
+      url: info["url"].getStr,
+      commit: info["vcsRevision"].getStr,
     )
 
 
