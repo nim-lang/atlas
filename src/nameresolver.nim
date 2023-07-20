@@ -165,7 +165,7 @@ proc resolvePackageUrl(c: var AtlasContext; url: string, checkOverrides = true):
   if not isFile and checkOverrides and UsesOverrides in c.flags:
     let url = c.overrides.substitute($result.url)
     if url.len > 0:
-      info c, result, "resolvePackageUrl: url override found: " & $url
+      warn c, result, "resolvePackageUrl: url override found: " & $url
       result.url = url.getUrl()
       isUrlOverriden = true
 
