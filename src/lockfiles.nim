@@ -208,7 +208,7 @@ proc convertNimbleLock*(c: var AtlasContext; nimblePath: string): LockFile =
     let dir = c.depsDir / pkg.repo.string
     result.items[name] = LockFileEntry(
       dir: dir.relativePath(c.projectDir),
-      url: info["url"].getStr,
+      url: $pkg.url,
       commit: info["vcsRevision"].getStr,
     )
 
