@@ -175,7 +175,7 @@ proc resolvePackageUrl(c: var AtlasContext; url: string, checkOverrides = true):
   if not namePkg.isNil:
     debug c, result, "resolvePackageUrl: found by name: " & $result.name.string
     if namePkg.url != result.url and isUrlOverriden:
-      namePkg.url = result.url # update package url to match 
+      namePkg.url = result.url # update package url to match
       result = namePkg
     elif namePkg.url != result.url:
       # package conflicts
