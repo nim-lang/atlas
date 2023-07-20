@@ -284,7 +284,7 @@ proc replay*(c: var AtlasContext; lockFilePath: string): tuple[hasCfg: bool] =
         continue
     withDir c, dir:
       let url = $getRemoteUrl()
-      if v.url != url:
+      if $v.url.getUrl() != url:
         error c, toRepo(v.dir), "remote URL has been compromised: got: " &
             url & " but wanted: " & v.url
       checkoutGitCommit(c, toRepo(dir), v.commit)
