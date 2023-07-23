@@ -16,6 +16,7 @@ proc parseOverridesFile(c: var AtlasContext; filename: string) =
   let path = c.workspace / filename
   var f: File
   if open(f, path):
+    info c, toRepo("overrides"), "loading file: " & path
     c.flags.incl UsesOverrides
     try:
       var lineCount = 1

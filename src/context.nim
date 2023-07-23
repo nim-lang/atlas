@@ -21,9 +21,11 @@ const
 const
   AtlasWorkspace* = "atlas.workspace"
 
-proc getUrl*(x: string): PackageUrl =
+proc getUrl*(input: string): PackageUrl =
   try:
-    let u = parseUri(x).PackageUrl
+    var input = input
+    input.removeSuffix(".git")
+    let u = PackageUrl(parseUri(input))
     if u.scheme in ["git", "https", "http", "hg", "file"]:
       result = u
   except UriParseError:

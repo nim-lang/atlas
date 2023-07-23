@@ -161,16 +161,23 @@ proc resolvePackageUrl(c: var AtlasContext; url: string, checkOverrides = true):
   debug c, result, "resolvePackageUrl: search: " & url
 
   let isFile = result.url.scheme == "file"
+  var isUrlOverriden = false
   if not isFile and checkOverrides and UsesOverrides in c.flags:
-    let url = c.overrides.substitute(url)
+    let url = c.overrides.substitute($result.url)
     if url.len > 0:
+      warn c, result, "resolvePackageUrl: url override found: " & $url
       result.url = url.getUrl()
+      isUrlOverriden = true
 
   let namePkg = c.urlMapping.getOrDefault("name:" & result.name.string, nil)
   let repoPkg = c.urlMapping.getOrDefault("repo:" & result.repo.string, nil)
 
   if not namePkg.isNil:
-    if namePkg.url != result.url:
+    debug c, result, "resolvePackageUrl: found by name: " & $result.name.string
+    if namePkg.url != result.url and isUrlOverriden:
+      namePkg.url = result.url # update package url to match
+      result = namePkg
+    elif namePkg.url != result.url:
       # package conflicts
       # change package repo to `repo.user.host`
       let purl = result.url
@@ -183,7 +190,8 @@ proc resolvePackageUrl(c: var AtlasContext; url: string, checkOverrides = true):
                 result.name.string & " to " & pname
       result.repo = PackageRepo pname
       c.urlMapping["name:" & result.name.string] = result
-    debug c, result, "resolvePackageUrl: found by name: " & $result.name.string
+    else:
+      result = namePkg
   elif not repoPkg.isNil:
     debug c, result, "resolvePackageUrl: found by repo: " & $result.repo.string
     result = repoPkg
