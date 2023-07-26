@@ -18,7 +18,9 @@ type
     GitMergeBase = "git merge-base"
     GitLsFiles = "git -C $1 ls-files",
 
-proc isGitDir*(path: string): bool = dirExists(path / ".git")
+proc isGitDir*(path: string): bool =
+  let gitPath = path / ".git"
+  dirExists(gitPath) or fileExists(gitPath)
 
 proc sameVersionAs*(tag, ver: string): bool =
   const VersionChars = {'0'..'9', '.'}
@@ -61,7 +63,7 @@ proc exec*(c: var AtlasContext;
     inc c.step
   else:
     let cmd = if execDir.len() == 0: $cmd else: $(cmd) % [execDir]
-    if dirExists(".git"):
+    if isGitDir(if execDir.len() == 0: getCurrentDir() else: execDir):
       result = silentExec(cmd, args)
     else:
       result = ("not a git repository", 1)
