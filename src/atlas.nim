@@ -454,7 +454,9 @@ proc installDependencies(c: var AtlasContext; nimbleFile: string; startIsDep: bo
 proc updateDir(c: var AtlasContext; dir, filter: string) =
   ## update the package's VCS
   for kind, file in walkDir(dir):
+    debug c, toRepo(c.workspace / "updating"), "checking directory: " & $kind & " file: " & file.absolutePath
     if kind == pcDir and isGitDir(file):
+      trace c, toRepo(file), "updating directory"
       gitops.updateDir(c, file, filter)
 
 proc patchNimbleFile(c: var AtlasContext; dep: string): string =
