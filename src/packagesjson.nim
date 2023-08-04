@@ -96,7 +96,7 @@ proc singleGithubSearch(c: var AtlasContext, term: string, fullSearch = false): 
     var client = newHttpClient()
     try:
       var searchUrl = "https://api.github.com/search/repositories?q=" & encodeUrl(term)
-      if fullSearch:
+      if not fullSearch:
         searchUrl &= "+language:nim"
 
       let x = client.getContent(searchUrl)
@@ -104,14 +104,24 @@ proc singleGithubSearch(c: var AtlasContext, term: string, fullSearch = false): 
       if result.kind != JArray:
         error c, toRepo("github search"), "got bad results from GitHub"
         result = newJArray()
+      # do full search and filter for languages
       if fullSearch:
         var filtered = newJArray()
         for item in result.items():
-          echo "item: ", item
+          let queryUrl = item["languages_url"].getStr
+          let langs = client.getContent(queryUrl).parseJson()
+          if langs.hasKey("Nim"):
+            filtered.add item
+        result = filtered
       
-      trace c, toRepo("github search"), "found " & $result.len() & " results on GitHub"
-      if not fullSearch and result.len() == 0:
-        result = c.singleGithubSearch(term, fullSearch=true)
+      if result.len() == 0:
+        if fullSearch == false:
+          trace c, toRepo("github search"), "no results found by Github quick search; doing full search"
+          result = c.singleGithubSearch(term, fullSearch=true)
+        else:
+          trace c, toRepo("github search"), "no results found by Github full search"
+      else:
+        trace c, toRepo("github search"), "found " & $result.len() & " results on GitHub"
     except CatchableError as exc:
       error c, toRepo("github search"), "error searching github: " & exc.msg
       # result = parseJson("{\"items\": []}")
