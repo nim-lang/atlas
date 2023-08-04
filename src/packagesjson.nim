@@ -84,7 +84,7 @@ proc toTags(j: JsonNode): seq[string] =
     for elem in items j:
       result.add elem.getStr("")
 
-proc singleGithubSearch(c: var AtlasContext, term: string): JsonNode =
+proc singleGithubSearch(c: var AtlasContext, term: string, fullSearch = false): JsonNode =
   when UnitTests:
     echo "SEARCH: ", term
     let filename = "query_github_" & term & ".json"
@@ -95,12 +95,23 @@ proc singleGithubSearch(c: var AtlasContext, term: string): JsonNode =
     # https://api.github.com/search/repositories?q=weave+language:nim
     var client = newHttpClient()
     try:
-      let x = client.getContent("https://api.github.com/search/repositories?q=" & encodeUrl(term) & "+language:nim")
+      var searchUrl = "https://api.github.com/search/repositories?q=" & encodeUrl(term)
+      if fullSearch:
+        searchUrl &= "+language:nim"
+
+      let x = client.getContent(searchUrl)
       result = parseJson(x).getOrDefault("items")
       if result.kind != JArray:
         error c, toRepo("github search"), "got bad results from GitHub"
         result = newJArray()
+      if fullSearch:
+        var filtered = newJArray()
+        for item in result.items():
+          echo "item: ", item
+      
       trace c, toRepo("github search"), "found " & $result.len() & " results on GitHub"
+      if not fullSearch and result.len() == 0:
+        result = c.singleGithubSearch(term, fullSearch=true)
     except CatchableError as exc:
       error c, toRepo("github search"), "error searching github: " & exc.msg
       # result = parseJson("{\"items\": []}")
