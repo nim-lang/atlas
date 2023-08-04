@@ -462,7 +462,7 @@ proc updateDir(c: var AtlasContext; dir, filter: string) =
 proc patchNimbleFile(c: var AtlasContext; dep: string): string =
   let thisProject = c.currentDir.lastPathComponent
   let oldErrors = c.errors
-  let url = resolvePackage(c, dep)
+  let pkg = resolvePackage(c, dep)
   result = ""
   if oldErrors != c.errors:
     warn c, toRepo(dep), "cannot resolve package name"
@@ -484,15 +484,15 @@ proc patchNimbleFile(c: var AtlasContext; dep: string): string =
           tokens.add token
         if tokens.len > 0:
           let oldErrors = c.errors
-          let urlB = resolvePackage(c, tokens[0])
+          let pkgB = resolvePackage(c, tokens[0])
           if oldErrors != c.errors:
             warn c, toRepo(tokens[0]), "cannot resolve package name; found in: " & result
-          if url == urlB:
+          if pkg == pkgB:
             found = true
             break
 
     if not found:
-      let line = "requires \"$1\"\n" % dep.escape("", "")
+      let line = "requires \"$1\"\n" % pkg.name.string.escape("", "")
       if result.len > 0:
         let oldContent = readFile(result)
         writeFile result, oldContent & "\n" & line
