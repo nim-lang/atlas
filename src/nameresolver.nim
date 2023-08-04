@@ -231,7 +231,7 @@ proc resolvePackageName(c: var AtlasContext; name: string): Package =
     result = repoPkg
   else:
     info c, result, "could not resolve by name or repo; searching GitHub"
-    let url = getUrlFromGithub(name)
+    let url = c.getUrlFromGithub(name)
     if url.len == 0:
       error c, result, "package not found by github search"
     else:

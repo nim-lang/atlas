@@ -17,7 +17,7 @@ import context, runners, osutils, packagesjson, sat, gitops, nimenv, lockfiles,
 export osutils, context
 
 const
-  AtlasVersion = "0.6.3"
+  AtlasVersion = "0.6.3.1"
   LockFileName = "atlas.lock"
   NimbleLockFileName = "nimble.lock"
   Usage = "atlas - Nim Package Cloner Version " & AtlasVersion & """
@@ -732,9 +732,9 @@ proc main(c: var AtlasContext) =
     if c.workspace.len != 0:
       updatePackages(c)
       let pkgInfos = getPackageInfos(c.workspace)
-      search pkgInfos, args
+      search c, pkgInfos, args
     else:
-      search @[], args
+      search c, @[], args
   of "updateprojects":
     updateDir(c, c.workspace, if args.len == 0: "" else: args[0])
   of "updatedeps":
