@@ -494,8 +494,12 @@ proc patchNimbleFile(c: var AtlasContext; dep: string): string =
     if not found:
       let line = "requires \"$1\"\n" % pkg.name.string.escape("", "")
       if result.len > 0:
-        let oldContent = readFile(result)
-        writeFile result, oldContent & "\n" & line
+        var oldContent = readFile(result).splitLines()
+        var idx = oldContent.len()
+        for i, line in oldContent:
+          if line.startsWith "requires": idx = i
+        oldContent.insert(line, idx+1)
+        writeFile result, oldContent.join("\n")
         info(c, toRepo(thisProject), "updated: " & result.readableFile)
       else:
         result = c.currentDir / thisProject & ".nimble"
