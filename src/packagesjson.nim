@@ -1,6 +1,6 @@
 
 import std / [json, os, sets, strutils, httpclient, uri, options]
-import ./context
+import context
 
 const
   MockupRun = defined(atlasTests)
