@@ -115,7 +115,7 @@ proc singleGithubSearch(c: var AtlasContext, term: string, fullSearch = false): 
         result = filtered
       
       if result.len() == 0:
-        if fullSearch == false:
+        if not fullSearch:
           trace c, toRepo("github search"), "no results found by Github quick search; doing full search"
           result = c.singleGithubSearch(term, fullSearch=true)
         else:
