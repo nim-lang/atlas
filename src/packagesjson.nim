@@ -1,5 +1,6 @@
 
 import std / [json, os, sets, strutils, httpclient, uri, options]
+import context
 
 const
   MockupRun = defined(atlasTests)
@@ -83,7 +84,7 @@ proc toTags(j: JsonNode): seq[string] =
     for elem in items j:
       result.add elem.getStr("")
 
-proc singleGithubSearch(term: string): JsonNode =
+proc singleGithubSearch(c: var AtlasContext, term: string, fullSearch = false): JsonNode =
   when UnitTests:
     echo "SEARCH: ", term
     let filename = "query_github_" & term & ".json"
@@ -94,17 +95,43 @@ proc singleGithubSearch(term: string): JsonNode =
     # https://api.github.com/search/repositories?q=weave+language:nim
     var client = newHttpClient()
     try:
-      let x = client.getContent("https://api.github.com/search/repositories?q=" & encodeUrl(term) & "+language:nim")
-      result = parseJson(x)
-    except:
-      result = parseJson("{\"items\": []}")
+      var searchUrl = "https://api.github.com/search/repositories?q=" & encodeUrl(term)
+      if not fullSearch:
+        searchUrl &= "+language:nim"
+
+      let x = client.getContent(searchUrl)
+      result = parseJson(x).getOrDefault("items")
+      if result.kind != JArray:
+        error c, toRepo("github search"), "got bad results from GitHub"
+        result = newJArray()
+      # do full search and filter for languages
+      if fullSearch:
+        var filtered = newJArray()
+        for item in result.items():
+          let queryUrl = item["languages_url"].getStr
+          let langs = client.getContent(queryUrl).parseJson()
+          if langs.hasKey("Nim"):
+            filtered.add item
+        result = filtered
+      
+      if result.len() == 0:
+        if not fullSearch:
+          trace c, toRepo("github search"), "no results found by Github quick search; doing full search"
+          result = c.singleGithubSearch(term, fullSearch=true)
+        else:
+          trace c, toRepo("github search"), "no results found by Github full search"
+      else:
+        trace c, toRepo("github search"), "found " & $result.len() & " results on GitHub"
+    except CatchableError as exc:
+      error c, toRepo("github search"), "error searching github: " & exc.msg
+      # result = parseJson("{\"items\": []}")
+      result = newJArray()
     finally:
       client.close()
 
-proc githubSearch(seen: var HashSet[string]; terms: seq[string]) =
+proc githubSearch(c: var AtlasContext, seen: var HashSet[string]; terms: seq[string]) =
   for term in terms:
-    let results = singleGithubSearch(term)
-    for j in items(results.getOrDefault("items")):
+    for j in items(c.singleGithubSearch(term)):
       let p = PackageInfo(
         name: j.getOrDefault("name").getStr,
         url: j.getOrDefault("html_url").getStr,
@@ -117,11 +144,10 @@ proc githubSearch(seen: var HashSet[string]; terms: seq[string]) =
       if not seen.containsOrIncl(p.url):
         echo p
 
-proc getUrlFromGithub*(term: string): string =
-  let results = singleGithubSearch(term)
+proc getUrlFromGithub*(c: var AtlasContext, term: string): string =
   var matches = 0
   result = ""
-  for j in items(results.getOrDefault("items")):
+  for j in items(c.singleGithubSearch(term)):
     let name = j.getOrDefault("name").getStr
     if cmpIgnoreCase(name, term) == 0:
       result = j.getOrDefault("html_url").getStr
@@ -130,7 +156,7 @@ proc getUrlFromGithub*(term: string): string =
     # ambiguous, not ok!
     result = ""
 
-proc search*(pkgList: seq[PackageInfo]; terms: seq[string]) =
+proc search*(c: var AtlasContext, pkgList: seq[PackageInfo]; terms: seq[string]) =
   var seen = initHashSet[string]()
   template onFound =
     echo pkg
@@ -151,7 +177,7 @@ proc search*(pkgList: seq[PackageInfo]; terms: seq[string]) =
               onFound()
     else:
       echo(pkg)
-  githubSearch seen, terms
+  githubSearch c, seen, terms
   if seen.len == 0 and terms.len > 0:
     echo("No PackageInfo found.")
 

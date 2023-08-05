@@ -13,32 +13,34 @@ jobs:
       matrix:
         target:
           - os: linux
-            triple: x86_64-linux-musl
+            triple: x86_64-linux-gnu
             name: linux_x86_64
-          - os: linux
-            triple: i686-linux-musl
-            name: linux_i686
-          - os: linux
-            triple: i686-linux-musl
-            name: linux_i386
-          - os: linux
-            triple: aarch64-linux-musl
-            name: linux_arm64
-          - os: linux
-            triple: armv7l-linux-musleabihf
-            name: linux_arm
+          ## these triples don't actually work (yet) 
+          ## TODO: add cross compilation for arm targets
+          # - os: linux
+          #   triple: i686-linux-musl
+          #   name: linux_i686
+          # - os: linux
+          #   triple: i686-linux-musl
+          #   name: linux_i386
+          # - os: linux
+          #   triple: aarch64-linux-musl
+          #   name: linux_arm64
+          # - os: linux
+          #   triple: armv7l-linux-musleabihf
+          #   name: linux_arm
           - os: macosx
             triple: x86_64-apple-darwin14
             name: apple_x86_64
           - os: windows
             triple: x86_64-w64-mingw32
             name: windows_x86_64
-          - os: windows
-            triple: i686-w64-mingw32
-            name: windows_i686
-          - os: windows
-            triple: i686-w64-mingw32
-            name: windows_i386
+          # - os: windows
+          #   triple: i686-w64-mingw32
+          #   name: windows_i686
+          # - os: windows
+          #   triple: i686-w64-mingw32
+          #   name: windows_i386
         include:
           - target:
               os: linux

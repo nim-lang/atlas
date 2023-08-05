@@ -54,6 +54,7 @@ type
     name*: PackageName
     repo*: PackageRepo
     url*: PackageUrl
+    inPackages*: bool
     path*: PackageDir
     exists*: bool
     nimble*: PackageNimble

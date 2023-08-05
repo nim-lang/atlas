@@ -225,13 +225,15 @@ proc resolvePackageName(c: var AtlasContext; name: string): Package =
     # great, found package!
     debug c, result, "resolvePackageName: found!"
     result = namePkg
+    result.inPackages = true
   elif not repoPkg.isNil:
     # check if rawHandle is a package repo name
     debug c, result, "resolvePackageName: found by repo!"
     result = repoPkg
+    result.inPackages = true
   else:
     info c, result, "could not resolve by name or repo; searching GitHub"
-    let url = getUrlFromGithub(name)
+    let url = c.getUrlFromGithub(name)
     if url.len == 0:
       error c, result, "package not found by github search"
     else:

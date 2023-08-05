@@ -144,8 +144,9 @@ proc checkoutGitCommit*(c: var AtlasContext; p: PackageRepo; commit: string) =
     info(c, p, "updated submodules ")
 
 proc gitPull*(c: var AtlasContext; p: PackageRepo) =
-  let (_, status) = exec(c, GitPull, [])
+  let (outp, status) = exec(c, GitPull, [])
   if status != 0:
+    debug c, p, "git pull error: \n" & outp.splitLines().mapIt("\n>>> " & it).join("")
     error(c, p, "could not 'git pull'")
 
 proc gitTag*(c: var AtlasContext; tag: string) =
