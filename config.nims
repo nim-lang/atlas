@@ -18,7 +18,12 @@ task buildRelease, "Build release":
     rmFile("atlas_x86_64")
     rmFile("atlas_arm64")
   else:
-    exec "nim c -d:release -o:./atlas src/atlas.nim"
+    let os = getEnv("OS")
+    let arch = getEnv("ARCH")
+    if os != "" and arch != "":
+      exec "nim c -d:release --cpu:" & arch & " --os:" & os & " -o:./atlas src/atlas.nim"
+    else:
+      exec "nim c -d:release -o:./atlas src/atlas.nim"
 
 task test, "Runs all tests":
   # unitTestsTask() # tester runs both

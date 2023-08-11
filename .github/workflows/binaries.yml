@@ -23,9 +23,9 @@ jobs:
           # - os: linux
           #   triple: i686-linux-musl
           #   name: linux_i386
-          # - os: linux
-          #   triple: aarch64-linux-musl
-          #   name: linux_arm64
+          - os: linux
+            triple: aarch64-linux-gnu
+            name: linux_arm64
           # - os: linux
           #   triple: armv7l-linux-musleabihf
           #   name: linux_arm
@@ -68,6 +68,12 @@ jobs:
       - name: build
         run: |
           nim buildRelease
+
+      - name: build
+        if: ${{ matrix.target.name }} == "linux_arm64"
+        run: |
+          sudo apt install gcc make gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
+          nim buildRelease -d:${{matrix.target.name}}
 
       - name: Compress the Nim Language Server binaries
         run: |
