@@ -27,9 +27,9 @@ jobs:
             triple: aarch64-linux-gnu
             arch: aarch64
             name: linux_arm64
-          # - os: linux
-          #   triple: armv7l-linux-musleabihf
-          #   name: linux_arm
+          - os: linux
+            triple: arm-linux-gnueabihf
+            name: linux_arm
           - os: macosx
             triple: x86_64-apple-darwin14
             name: apple_universal
