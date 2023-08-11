@@ -13,32 +13,25 @@ jobs:
       matrix:
         target:
           - os: linux
+            arch: amd64
             triple: x86_64-linux-gnu
             name: linux_x86_64
-          ## these triples don't actually work (yet) 
-          ## TODO: add cross compilation for arm targets
-          # - os: linux
-          #   triple: i686-linux-musl
-          #   name: linux_i686
-          # - os: linux
-          #   triple: i686-linux-musl
-          #   name: linux_i386
           - os: linux
-            triple: aarch64-linux-gnu
             arch: aarch64
+            triple: aarch64-linux-gnu
             name: linux_arm64
           - os: linux
+            arch: arm
             triple: arm-linux-gnueabihf
             name: linux_arm
           - os: macosx
+            arch: universal
             triple: x86_64-apple-darwin14
             name: apple_universal
           - os: windows
+            arch: amd64
             triple: x86_64-w64-mingw32
             name: windows_x86_64
-          # - os: windows
-          #   triple: i686-w64-mingw32
-          #   name: windows_i686
           # - os: windows
           #   triple: i686-w64-mingw32
           #   name: windows_i386
