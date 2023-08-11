@@ -60,10 +60,10 @@ jobs:
           nim-version: "stable"
 
       - name: setup build
-        if: ${{ matrix.target.name }} == "arm" || ${{ matrix.target.name }} == "arm64"
         run: |
           sudo apt install gcc make gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
-                                    gcc-arm-linux-gnueabihf binutils-arm-linux-gnueabihf
+                                    gcc-arm-linux-gnueabihf binutils-arm-linux-gnueabihf \
+                                    mingw-w64
 
       - name: build
         run: |

@@ -17,6 +17,8 @@ task buildRelease, "Build release":
     exec "lipo -create -output atlas atlas_x86_64 atlas_arm64"
     rmFile("atlas_x86_64")
     rmFile("atlas_arm64")
+  elif defined(windows):
+    exec "nim c -d:mingw -d:release -o:./atlas src/atlas.nim"
   else:
     let os = getEnv("OS")
     let arch = getEnv("ARCH")
