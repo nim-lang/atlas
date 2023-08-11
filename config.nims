@@ -22,7 +22,7 @@ task buildRelease, "Build release":
     let arch = getEnv("ARCH")
     if os != "" and arch != "":
       if os == "windows":
-        exec "nim c -d:release -d:mingw --cpu:" & arch & " --os:" & os & " -o:./atlas src/atlas.nim"
+        exec "nim c -d:release -d:mingw -o:./atlas src/atlas.nim"
       else:
         exec "nim c -d:release --cpu:" & arch & " --os:" & os & " -o:./atlas src/atlas.nim"
     else:
