@@ -31,7 +31,7 @@ jobs:
           #   name: linux_arm
           - os: macosx
             triple: x86_64-apple-darwin14
-            name: apple_x86_64
+            name: apple_universal
           - os: windows
             triple: x86_64-w64-mingw32
             name: windows_x86_64
@@ -67,7 +67,7 @@ jobs:
 
       - name: build
         run: |
-          nim release
+          nim buildRelease
 
       - name: Compress the Nim Language Server binaries
         run: |
