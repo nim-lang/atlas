@@ -18,7 +18,7 @@ task buildRelease, "Build release":
     rmFile("atlas_x86_64")
     rmFile("atlas_arm64")
   else:
-    exec "nim c -d:release -o:./atlas -r src/atlas.nim"
+    exec "nim c -d:release -o:./atlas src/atlas.nim"
 
 task test, "Runs all tests":
   # unitTestsTask() # tester runs both
