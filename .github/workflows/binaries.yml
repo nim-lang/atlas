@@ -32,19 +32,13 @@ jobs:
             arch: amd64
             triple: x86_64-w64-mingw32
             name: windows_x86_64
-          # - os: windows
-          #   triple: i686-w64-mingw32
-          #   name: windows_i386
         include:
           - target:
               os: linux
-            builder: ubuntu-20.04
+            builder: ubuntu-latest
           - target:
               os: macosx
-            builder: macos-11
-          - target:
-              os: windows
-            builder: windows-2019
+            builder: macos-latest
     defaults:
       run:
         shell: bash
@@ -60,6 +54,7 @@ jobs:
           nim-version: "stable"
 
       - name: setup build
+        if: ${{ matrix.builder }} == "ubuntu-latest"
         run: |
           sudo apt install gcc make gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
                                     gcc-arm-linux-gnueabihf binutils-arm-linux-gnueabihf \
