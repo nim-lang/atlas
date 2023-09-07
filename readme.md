@@ -12,7 +12,11 @@ nim c src/atlas.nim
 # copy src/atlas[.exe] somewhere in your PATH
 ```
 
-# Tutorial
+# Documentation
+
+Read the [full documantation](./doc/atlas.md) or go through the following tutorial.
+
+## Tutorial
 
 Create a new workspace. A workspace contains everything we need and can safely be deleted after
 this tutorial:
@@ -54,14 +58,14 @@ atlas use file://../../existingDepdency/
 
 Sometimes it's helpful to understand what Atlas is doing. You can run commands with: `atlas --verbosity:<trace|debug>` to get more information. 
 
-# Installing Nim with Atlas
+## Installing Nim with Atlas
 
 ```sh
 atlas env 2.0.0
 source $WORKSPACE/nim-2.0.0/activate.sh
 ```
 
-# Vendoring with Atlas
+## Vendoring with Atlas
 
 Atlas also supports vendoring using an "inverted workspace". The project layout is where the workspace is a top-level subfolder like `vendor/` or `deps/` in your project. Like this:
 
