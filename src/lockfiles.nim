@@ -339,6 +339,7 @@ proc replay*(c: var AtlasContext; lockFilePath: string) =
     # installDependencies(c, nimbleFile, startIsDep = true)
 
   # update the the dependencies
+  var paths: seq[CfgPath]
   for _, v in pairs(lf.items):
     trace c, toRepo("replay"), "replaying: " & v.repr
     let dir = c.fromPrefixedPath(v.dir)
@@ -354,11 +355,16 @@ proc replay*(c: var AtlasContext; lockFilePath: string) =
             url & " but wanted: " & v.url
       checkoutGitCommit(c, toRepo(dir), v.commit)
 
-      # parseNimble()
-      # nimbleInfo.srcDir
+      if genCfg:
+        let pkg = resolvePackage(c, "file://" & c.currentDir)
+        let nimbleInfo = c.parseNimble(pkg.nimble)
+        paths.add CfgPath nimbleInfo.srcDir
 
-  # let cfgPath = if genCfg: CfgPath c.currentDir else: findCfgDir(c)
-  # patchNimCfg(c, paths, cfgPath)
+  if genCfg:
+    # this allows us to re-create a nim.cfg that uses the paths from the users workspace
+    # without needing to do a `installDependencies` or `traverseLoop`
+    let cfgPath = if genCfg: CfgPath c.currentDir else: findCfgDir(c)
+    patchNimCfg(c, paths, cfgPath)
 
   if lf.hostOS == system.hostOS and lf.hostCPU == system.hostCPU:
     compareVersion c, "nim", lf.nimVersion, detectNimVersion()
