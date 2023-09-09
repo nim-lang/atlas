@@ -321,22 +321,19 @@ proc replay*(c: var AtlasContext; lockFilePath: string) =
            else: readLockFile(lockFilePath)
 
   let lfBase = splitPath(lockFilePath).head
-  var genCfg = true
+  var genCfg = CfgHere in c.flags
 
   # update the nim.cfg file
   if lf.nimcfg.len > 0:
     writeFile(lfBase / NimCfg, lf.nimcfg.join("\n"))
-    genCfg = false
+  else:
+    genCfg = true
+
   # update the nimble file
   if lf.nimbleFile.filename.len > 0:
     writeFile(lfBase / lf.nimbleFile.filename,
               lf.nimbleFile.content.join("\n"))
   
-  genCfg = CfgHere in c.flags or genCfg
-    # info c, toRepo("replay"), "setting up nim.cfg"
-    # let nimbleFile = findCurrentNimble()
-    # trace c, toRepo("replay"), "using nimble file: " & nimbleFile
-    # installDependencies(c, nimbleFile, startIsDep = true)
 
   # update the the dependencies
   var paths: seq[CfgPath]
