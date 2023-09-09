@@ -9,7 +9,7 @@
 ## Lockfile implementation.
 
 import std / [sequtils, strutils, algorithm, tables, os, json, jsonutils, sha1]
-import context, gitops, osutils, traversal, compilerversions, nameresolver, parse_requires
+import context, gitops, osutils, traversal, compilerversions, nameresolver, configutils
 
 type
   LockFileEntry* = object
@@ -300,7 +300,7 @@ proc listChanged*(c: var AtlasContext; lockFilePath: string) =
       if commit != v.commit:
         let pkg = c.resolvePackage("file://" & dir)
         c.resolveNimble(pkg)
-        let info = extractRequiresInfo(c, pkg.nimble)
+        let info = parseNimble(c, pkg.nimble)
         warn c, toRepo(dir), "commit differs;" &
                                             " found: " & commit &
                                             " (" & info.version & ")" &
@@ -311,7 +311,7 @@ proc listChanged*(c: var AtlasContext; lockFilePath: string) =
     compareVersion c, "gcc", lf.gccVersion, detectGccVersion()
     compareVersion c, "clang", lf.clangVersion, detectClangVersion()
 
-proc replay*(c: var AtlasContext; lockFilePath: string): tuple[hasCfg: bool] =
+proc replay*(c: var AtlasContext; lockFilePath: string) =
   ## replays the given lockfile by cloning and updating all the deps
   ## 
   ## this also includes updating the nim.cfg and nimble file as well
@@ -321,15 +321,23 @@ proc replay*(c: var AtlasContext; lockFilePath: string): tuple[hasCfg: bool] =
            else: readLockFile(lockFilePath)
 
   let lfBase = splitPath(lockFilePath).head
+  var genCfg = true
 
   # update the nim.cfg file
   if lf.nimcfg.len > 0:
     writeFile(lfBase / NimCfg, lf.nimcfg.join("\n"))
-    result.hasCfg = true
+    genCfg = false
   # update the nimble file
   if lf.nimbleFile.filename.len > 0:
     writeFile(lfBase / lf.nimbleFile.filename,
               lf.nimbleFile.content.join("\n"))
+  
+  genCfg = CfgHere in c.flags or genCfg
+    # info c, toRepo("replay"), "setting up nim.cfg"
+    # let nimbleFile = findCurrentNimble()
+    # trace c, toRepo("replay"), "using nimble file: " & nimbleFile
+    # installDependencies(c, nimbleFile, startIsDep = true)
+
   # update the the dependencies
   for _, v in pairs(lf.items):
     trace c, toRepo("replay"), "replaying: " & v.repr
@@ -345,6 +353,12 @@ proc replay*(c: var AtlasContext; lockFilePath: string): tuple[hasCfg: bool] =
         error c, toRepo(v.dir), "remote URL has been compromised: got: " &
             url & " but wanted: " & v.url
       checkoutGitCommit(c, toRepo(dir), v.commit)
+
+      # parseNimble()
+      # nimbleInfo.srcDir
+
+  # let cfgPath = if genCfg: CfgPath c.currentDir else: findCfgDir(c)
+  # patchNimCfg(c, paths, cfgPath)
 
   if lf.hostOS == system.hostOS and lf.hostCPU == system.hostCPU:
     compareVersion c, "nim", lf.nimVersion, detectNimVersion()

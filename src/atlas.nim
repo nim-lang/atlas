@@ -12,7 +12,7 @@
 import std / [parseopt, strutils, os, osproc, tables, sets, json, jsonutils,
   hashes, options]
 import context, runners, osutils, packagesjson, sat, gitops, nimenv, lockfiles,
-  traversal, confighandler, nameresolver
+  traversal, confighandler, configutils, nameresolver
 
 export osutils, context
 
@@ -388,53 +388,6 @@ proc traverse(c: var AtlasContext; start: string; startIsDep: bool): seq[CfgPath
   result = traverseLoop(c, g, startIsDep)
   afterGraphActions c, g
 
-const
-  configPatternBegin = "############# begin Atlas config section ##########\n"
-  configPatternEnd =   "############# end Atlas config section   ##########\n"
-
-proc patchNimCfg(c: var AtlasContext; deps: seq[CfgPath]; cfgPath: CfgPath) =
-  var paths = "--noNimblePath\n"
-  for d in deps:
-    let x = relativePath(d.string, cfgPath.string, '/')
-    paths.add "--path:\"" & x & "\"\n"
-  var cfgContent = configPatternBegin & paths & configPatternEnd
-
-  when MockupRun:
-    assert readFile(TestsDir / "nim.cfg") == cfgContent
-    c.mockupSuccess = true
-  else:
-    let cfg = cfgPath.string / "nim.cfg"
-    assert cfgPath.string.len > 0
-    if cfgPath.string.len > 0 and not dirExists(cfgPath.string):
-      error(c, c.projectDir.toRepo, "could not write the nim.cfg")
-    elif not fileExists(cfg):
-      writeFile(cfg, cfgContent)
-      info(c, projectFromCurrentDir(), "created: " & cfg.readableFile)
-    else:
-      let content = readFile(cfg)
-      let start = content.find(configPatternBegin)
-      if start >= 0:
-        cfgContent = content.substr(0, start-1) & cfgContent
-        let theEnd = content.find(configPatternEnd, start)
-        if theEnd >= 0:
-          cfgContent.add content.substr(theEnd+len(configPatternEnd))
-      else:
-        cfgContent = content & "\n" & cfgContent
-      if cfgContent != content:
-        # do not touch the file if nothing changed
-        # (preserves the file date information):
-        writeFile(cfg, cfgContent)
-        info(c, projectFromCurrentDir(), "updated: " & cfg.readableFile)
-
-proc findCfgDir(c: var AtlasContext): CfgPath =
-  for nimbleFile in walkPattern(c.currentDir / "*.nimble"):
-    let nimbleInfo = extractRequiresInfo(c, PackageNimble nimbleFile)
-    return CfgPath c.currentDir / nimbleInfo.srcDir
-  return CfgPath c.currentDir
-
-proc findCfgDir(c: var AtlasContext, pkg: Package): CfgPath =
-  let nimbleInfo = extractRequiresInfo(c, pkg.nimble)
-  return CfgPath c.currentDir / nimbleInfo.srcDir
 
 proc installDependencies(c: var AtlasContext; nimbleFile: string; startIsDep: bool) =
   # 1. find .nimble file in CWD
@@ -477,7 +430,7 @@ proc patchNimbleFile(c: var AtlasContext; dep: string): string =
     # see if we have this requirement already listed. If so, do nothing:
     var found = false
     if result.len > 0:
-      let nimbleInfo = extractRequiresInfo(c, PackageNimble result)
+      let nimbleInfo = parseNimble(c, PackageNimble result)
       for r in nimbleInfo.requires:
         var tokens: seq[string] = @[]
         for token in tokenizeRequires(r):
@@ -704,12 +657,7 @@ proc main(c: var AtlasContext) =
       pinProject c, args[0], exportNimble
   of "rep", "replay", "reproduce":
     optSingleArg(LockFileName)
-    let res = replay(c, args[0])
-    if CfgHere in c.flags or res.hasCfg == false:
-      info c, toRepo("replay"), "setting up nim.cfg"
-      let nimbleFile = findCurrentNimble()
-      trace c, toRepo("replay"), "using nimble file: " & nimbleFile
-      installDependencies(c, nimbleFile, startIsDep = true)
+    replay(c, args[0])
   of "changed":
     optSingleArg(LockFileName)
     listChanged(c, args[0])
