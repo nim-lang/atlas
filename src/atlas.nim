@@ -521,6 +521,7 @@ proc main(c: var AtlasContext) =
         else:
           writeHelp()
       of "cfghere": c.flags.incl CfgHere
+      of "shallow": c.flags.incl ShallowClones
       of "autoinit": autoinit = true
       of "showgraph": c.flags.incl ShowGraph
       of "keep": c.flags.incl Keep
