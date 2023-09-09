@@ -229,7 +229,9 @@ proc getCurrentCommit*(): string =
 proc isOutdated*(c: var AtlasContext; f: string): bool =
   ## determine if the given git repo `f` is updateable
   ##
-  let (outp, status) = exec(c, GitFetch, ["--update-shallow"])
+
+  # TODO: does --update-shallow fetch tags on a shallow repo?
+  let (outp, status) = exec(c, GitFetch, ["--update-shallow", "--tags"])
   if status == 0:
     let (cc, status) = exec(c, GitLastTaggedRef, [])
     let latestVersion = strutils.strip(cc)
