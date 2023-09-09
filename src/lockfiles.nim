@@ -16,6 +16,7 @@ type
     dir*: string
     url*: string
     commit*: string
+    version*: string
 
   LockedNimbleFile* = object
     filename*: string
@@ -78,17 +79,25 @@ proc fromPrefixedPath*(c: var AtlasContext, path: string): string =
     return c.workspace / path
 
 proc genLockEntry(c: var AtlasContext; lf: var LockFile; pkg: Package) =
+  let info = extractRequiresInfo(pkg.nimble.string)
   let url = getRemoteUrl()
   let commit = getCurrentCommit()
   let name = pkg.name.string
   let pth = c.prefixedPath(pkg.path.string)
-  lf.items[name] = LockFileEntry(dir: pth, url: $url, commit: commit)
+  lf.items[name] = LockFileEntry(dir: pth, url: $url, commit: commit, version: info.version)
 
 proc genLockEntriesForDir(c: var AtlasContext; lf: var LockFile; dir: string) =
   for k, f in walkDir(dir):
     if k == pcDir and dirExists(f / ".git"):
+      if f.absolutePath == c.workspace / "packages":
+        # skipping this gives us the locking behavior for a project
+        # TODO: is this what we want?
+        # we could just create a fake Package item here
+        continue
       withDir c, f:
-        let pkg = resolvePackage(c, "file://" & f)
+        let path = "file://" & f
+        debug c, toRepo("genLocKEntries"), "using pkg: " & path
+        let pkg = resolvePackage(c, path)
         genLockEntry(c, lf, pkg)
 
 proc newLockFile(): LockFile =
@@ -123,15 +132,15 @@ proc genLockEntry(c: var AtlasContext;
                   lf: var NimbleLockFile;
                   pkg: Package,
                   cfg: CfgPath,
-                  version: string,
                   deps: HashSet[PackageName]) =
+  let info = extractRequiresInfo(pkg.nimble.string)
   let url = getRemoteUrl()
   let commit = getCurrentCommit()
   let name = pkg.name.string
   infoNow c, pkg, "calculating nimble checksum"
   let chk = c.nimbleChecksum(pkg, cfg)
   lf.packages[name] = NimbleLockFileEntry(
-    version: version,
+    version: info.version,
     vcsRevision: commit,
     url: $url,
     downloadMethod: "git",
@@ -209,8 +218,7 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string, exportNimble = false
             trace c, w.pkg, "exporting nimble " & w.pkg.name.string
             let name = w.pkg.name
             let deps = nimbleDeps.getOrDefault(name)
-            let info = extractRequiresInfo(w.pkg.nimble.string)
-            genLockEntry c, nlf, w.pkg, cfgs[name], info.version, deps
+            genLockEntry c, nlf, w.pkg, cfgs[name], deps
 
     let nimcfgPath = c.currentDir / NimCfg
     if fileExists(nimcfgPath):
