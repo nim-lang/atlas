@@ -46,7 +46,7 @@ proc genLockEntriesForDir(c: var AtlasContext; lf: var LockFile; dir: string) =
   for k, f in walkDir(dir):
     if k == pcDir and dirExists(f / ".git"):
       withDir c, f:
-        genLockEntry c, lf, f.relativePath(dir, '/')
+        genLockEntry(c, lf, f.relativePath(dir, '/'))
 
 proc newLockFile(): LockFile =
   result = LockFile(items: initOrderedTable[string, LockFileEntry](),
@@ -153,9 +153,11 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string, exportNimble = false
         let w = g.nodes[i]
         let dir = w.pkg.path.string
         tryWithDir c, dir:
-          genLockEntry c, lf, dir.relativePath(c.currentDir, '/')
-
-          if exportNimble:
+          if not exportNimble:
+            # generate atlas native lockfile entries
+            genLockEntry c, lf, dir.relativePath(c.currentDir, '/')
+          else:
+            # handle exports for Nimble; these require lookig up a bit more info
             for nx in g.nodes: # expensive, but eh
               if nx.active and i in nx.parents:
                 nimbleDeps.mgetOrPut(w.pkg.name,
