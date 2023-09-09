@@ -301,7 +301,7 @@ proc replay*(c: var AtlasContext; lockFilePath: string): tuple[hasCfg: bool] =
   # update the nimble file
   if lf.nimbleFile.filename.len > 0:
     writeFile(lfBase / lf.nimbleFile.filename,
-              lf.nimbleFile.content.join($DirSep))
+              lf.nimbleFile.content.join("\n"))
   # update the the dependencies
   for _, v in pairs(lf.items):
     trace c, toRepo("replay"), "replaying: " & v.repr
