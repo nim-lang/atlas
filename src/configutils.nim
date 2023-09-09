@@ -94,8 +94,16 @@ proc patchNimbleFile*(c: var AtlasContext; dep: string): string =
       if result.len > 0:
         var oldContent = readFile(result).splitLines()
         var idx = oldContent.len()
+        var endsWithComma = false
         for i, line in oldContent:
-          if line.startsWith "requires": idx = i
+          if endsWithComma:
+            endsWithComma = line.strip().endsWith(",")
+            if not endsWithComma:
+              idx = i
+          if line.startsWith "requires":
+            idx = i
+            endsWithComma = line.strip().endsWith(",")
+
         oldContent.insert(line, idx+1)
         writeFile result, oldContent.join("\n")
         info(c, toRepo(thisProject), "updated: " & result.readableFile)
