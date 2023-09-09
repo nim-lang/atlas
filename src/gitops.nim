@@ -5,6 +5,7 @@ type
   Command* = enum
     GitClone = "git clone",
     GitDiff = "git diff",
+    GitFetch = "git fetch",
     GitTag = "git tag",
     GitTags = "git show-ref --tags",
     GitLastTaggedRef = "git rev-list --tags --max-count=1",
@@ -86,8 +87,12 @@ proc clone*(c: var AtlasContext, url: PackageUrl, dest: string, retries = 5): bo
   ##
 
   # retry multiple times to avoid annoying github timeouts:
+  let extraArgs =
+    if FullClones notin c.flags: "--depth=1"
+    else: ""
+
   for i in 1..retries:
-    let cmd = $GitClone & " " & quoteShell($url) & " " & dest
+    let cmd = $GitClone & " " & extraArgs & " " & quoteShell($url) & " " & dest
     if execShellCmd(cmd) == 0:
       return true
     os.sleep(i*2_000)
@@ -130,14 +135,33 @@ proc listFiles*(c: var AtlasContext; pkg: Package): Option[seq[string]] =
   if status == 0:
     result = some outp.splitLines().mapIt(it.strip())
 
-proc checkoutGitCommit*(c: var AtlasContext; p: PackageRepo; commit: string) =
+proc checkoutGitCommit*(c: var AtlasContext; p: PackageDir; commit: string) =
+  let p = p.string.PackageRepo
+  var smExtraArgs: seq[string]
+
+  if FullClones notin c.flags and commit.len() == 40:
+    smExtraArgs.add "--depth=1"
+
+    let (_, status) = exec(c, GitFetch, ["--update-shallow", "--tags", "origin", commit])
+    if status != 0:
+      error(c, p, "could not fetch commit " & commit)
+    else:
+      trace(c, p, "fetched package commit " & commit)
+  elif commit.len() != 40:
+    info(c, p, "found short commit id; doing full fetch to resolve " & commit)
+    let (outp, status) = exec(c, GitFetch, ["--unshallow"])
+    if status != 0:
+      error(c, p, "could not fetch: " & outp)
+    else:
+      trace(c, p, "fetched package updates ")
+
   let (_, status) = exec(c, GitCheckout, [commit])
   if status != 0:
     error(c, p, "could not checkout commit " & commit)
   else:
     info(c, p, "updated package to " & commit)
 
-  let (_, subModStatus) = exec(c, GitSubModUpdate, [])
+  let (_, subModStatus) = exec(c, GitSubModUpdate, smExtraArgs)
   if subModStatus != 0:
     error(c, p, "could not update submodules")
   else:
@@ -212,10 +236,15 @@ proc getRemoteUrl*(): PackageUrl =
 proc getCurrentCommit*(): string =
   result = execProcess("git log -1 --pretty=format:%H").strip()
 
-proc isOutdated*(c: var AtlasContext; f: string): bool =
+proc isOutdated*(c: var AtlasContext; path: PackageDir): bool =
   ## determine if the given git repo `f` is updateable
   ##
-  let (outp, status) = silentExec("git fetch", [])
+
+  info c, toRepo(path), "checking is package is up to date..."
+
+  # TODO: does --update-shallow fetch tags on a shallow repo?
+  let (outp, status) = exec(c, GitFetch, ["--update-shallow", "--tags"])
+
   if status == 0:
     let (cc, status) = exec(c, GitLastTaggedRef, [])
     let latestVersion = strutils.strip(cc)
@@ -234,10 +263,10 @@ proc isOutdated*(c: var AtlasContext; f: string): bool =
           if status == 0 and mergeBase == currentCommit:
             let v = extractVersion gitDescribeRefTag(c, latestVersion)
             if v.len > 0:
-              info c, toRepo(f), "new version available: " & v
+              info c, toRepo(path), "new version available: " & v
               result = true
   else:
-    warn c, toRepo(f), "`git fetch` failed: " & outp
+    warn c, toRepo(path), "`git fetch` failed: " & outp
 
 proc updateDir*(c: var AtlasContext; file, filter: string) =
   withDir c, file:

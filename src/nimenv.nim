@@ -90,7 +90,7 @@ proc setupNimEnv*(c: var AtlasContext; nimVersion: string) =
       if commit.len == 0:
         error c, toRepo(nimDest), "cannot resolve version to a commit"
         return
-      checkoutGitCommit(c, dep.pkg.repo, commit)
+      checkoutGitCommit(c, dep.pkg.path, commit)
     exec c, nimExe & " c --noNimblePath --skipUserCfg --skipParentCfg --hints:off koch"
     let kochExe = when defined(windows): "koch.exe" else: "./koch"
     exec c, kochExe & " boot -d:release --skipUserCfg --skipParentCfg --hints:off"

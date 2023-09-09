@@ -12,7 +12,7 @@
 import std / [parseopt, strutils, os, osproc, tables, sets, json, jsonutils,
   hashes, options]
 import context, runners, osutils, packagesjson, sat, gitops, nimenv, lockfiles,
-  traversal, confighandler, nameresolver
+  traversal, confighandler, configutils, nameresolver
 
 export osutils, context
 
@@ -61,6 +61,7 @@ Command:
 
 Options:
   --keepCommits         do not perform any `git checkouts`
+  --full                perform full checkouts rather than the default shallow
   --cfgHere             also create/maintain a nim.cfg in the current
                         working directory
   --workspace=DIR       use DIR as workspace
@@ -161,10 +162,10 @@ proc checkoutCommit(c: var AtlasContext; g: var DepGraph; w: Dependency) =
             if status == 0 and (mergeBase == currentCommit or mergeBase == requiredCommit):
               # conflict resolution: pick the later commit:
               if mergeBase == currentCommit:
-                checkoutGitCommit(c, w.pkg.repo, requiredCommit)
+                checkoutGitCommit(c, w.pkg.path, requiredCommit)
                 selectNode c, g, w
             else:
-              checkoutGitCommit(c, w.pkg.repo, requiredCommit)
+              checkoutGitCommit(c, w.pkg.path, requiredCommit)
               selectNode c, g, w
               when false:
                 warn c, w.pkg, "do not know which commit is more recent:",
@@ -301,7 +302,7 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
         let destDir = pkg.name.string
         debug c, pkg, "package satisfiable: " & $pkg
         withDir c, pkg:
-          checkoutGitCommit(c, toRepo(destDir), mapping[i - g.nodes.len][1])
+          checkoutGitCommit(c, PackageDir(destDir), mapping[i - g.nodes.len][1])
     if NoExec notin c.flags:
       runBuildSteps(c, g)
       #echo f
@@ -388,53 +389,6 @@ proc traverse(c: var AtlasContext; start: string; startIsDep: bool): seq[CfgPath
   result = traverseLoop(c, g, startIsDep)
   afterGraphActions c, g
 
-const
-  configPatternBegin = "############# begin Atlas config section ##########\n"
-  configPatternEnd =   "############# end Atlas config section   ##########\n"
-
-proc patchNimCfg(c: var AtlasContext; deps: seq[CfgPath]; cfgPath: CfgPath) =
-  var paths = "--noNimblePath\n"
-  for d in deps:
-    let x = relativePath(d.string, cfgPath.string, '/')
-    paths.add "--path:\"" & x & "\"\n"
-  var cfgContent = configPatternBegin & paths & configPatternEnd
-
-  when MockupRun:
-    assert readFile(TestsDir / "nim.cfg") == cfgContent
-    c.mockupSuccess = true
-  else:
-    let cfg = cfgPath.string / "nim.cfg"
-    assert cfgPath.string.len > 0
-    if cfgPath.string.len > 0 and not dirExists(cfgPath.string):
-      error(c, c.projectDir.toRepo, "could not write the nim.cfg")
-    elif not fileExists(cfg):
-      writeFile(cfg, cfgContent)
-      info(c, projectFromCurrentDir(), "created: " & cfg.readableFile)
-    else:
-      let content = readFile(cfg)
-      let start = content.find(configPatternBegin)
-      if start >= 0:
-        cfgContent = content.substr(0, start-1) & cfgContent
-        let theEnd = content.find(configPatternEnd, start)
-        if theEnd >= 0:
-          cfgContent.add content.substr(theEnd+len(configPatternEnd))
-      else:
-        cfgContent = content & "\n" & cfgContent
-      if cfgContent != content:
-        # do not touch the file if nothing changed
-        # (preserves the file date information):
-        writeFile(cfg, cfgContent)
-        info(c, projectFromCurrentDir(), "updated: " & cfg.readableFile)
-
-proc findCfgDir(c: var AtlasContext): CfgPath =
-  for nimbleFile in walkPattern(c.currentDir / "*.nimble"):
-    let nimbleInfo = extractRequiresInfo(c, PackageNimble nimbleFile)
-    return CfgPath c.currentDir / nimbleInfo.srcDir
-  return CfgPath c.currentDir
-
-proc findCfgDir(c: var AtlasContext, pkg: Package): CfgPath =
-  let nimbleInfo = extractRequiresInfo(c, pkg.nimble)
-  return CfgPath c.currentDir / nimbleInfo.srcDir
 
 proc installDependencies(c: var AtlasContext; nimbleFile: string; startIsDep: bool) =
   # 1. find .nimble file in CWD
@@ -459,55 +413,6 @@ proc updateDir(c: var AtlasContext; dir, filter: string) =
       trace c, toRepo(file), "updating directory"
       gitops.updateDir(c, file, filter)
 
-proc patchNimbleFile(c: var AtlasContext; dep: string): string =
-  let thisProject = c.currentDir.lastPathComponent
-  let oldErrors = c.errors
-  let pkg = resolvePackage(c, dep)
-  result = ""
-  if oldErrors != c.errors:
-    warn c, toRepo(dep), "cannot resolve package name"
-  else:
-    for x in walkFiles(c.currentDir / "*.nimble"):
-      if result.len == 0:
-        result = x
-      else:
-        # ambiguous .nimble file
-        warn c, toRepo(dep), "cannot determine `.nimble` file; there are multiple to choose from"
-        return ""
-    # see if we have this requirement already listed. If so, do nothing:
-    var found = false
-    if result.len > 0:
-      let nimbleInfo = extractRequiresInfo(c, PackageNimble result)
-      for r in nimbleInfo.requires:
-        var tokens: seq[string] = @[]
-        for token in tokenizeRequires(r):
-          tokens.add token
-        if tokens.len > 0:
-          let oldErrors = c.errors
-          let pkgB = resolvePackage(c, tokens[0])
-          if oldErrors != c.errors:
-            warn c, toRepo(tokens[0]), "cannot resolve package name; found in: " & result
-          if pkg == pkgB:
-            found = true
-            break
-
-    if not found:
-      let reqName = if pkg.inPackages: pkg.name.string else: $pkg.url
-      let line = "requires \"$1\"\n" % reqName.escape("", "")
-      if result.len > 0:
-        var oldContent = readFile(result).splitLines()
-        var idx = oldContent.len()
-        for i, line in oldContent:
-          if line.startsWith "requires": idx = i
-        oldContent.insert(line, idx+1)
-        writeFile result, oldContent.join("\n")
-        info(c, toRepo(thisProject), "updated: " & result.readableFile)
-      else:
-        result = c.currentDir / thisProject & ".nimble"
-        writeFile result, line
-        info(c, toRepo(thisProject), "created: " & result.readableFile)
-    else:
-      info(c, toRepo(thisProject), "up to date: " & result.readableFile)
 
 proc detectWorkspace(currentDir: string): string =
   ## find workspace by checking `currentDir` and its parents
@@ -541,7 +446,7 @@ proc listOutdated(c: var AtlasContext; dir: string) =
   for k, f in walkDir(dir, relative=true):
     if k in {pcDir, pcLinkToDir} and isGitDir(dir / f):
       withDir c, dir / f:
-        if gitops.isOutdated(c, f):
+        if gitops.isOutdated(c, PackageDir(dir / f)):
           inc updateable
 
   if updateable == 0:
@@ -617,6 +522,7 @@ proc main(c: var AtlasContext) =
         else:
           writeHelp()
       of "cfghere": c.flags.incl CfgHere
+      of "full": c.flags.incl FullClones
       of "autoinit": autoinit = true
       of "showgraph": c.flags.incl ShowGraph
       of "keep": c.flags.incl Keep
@@ -704,10 +610,7 @@ proc main(c: var AtlasContext) =
       pinProject c, args[0], exportNimble
   of "rep", "replay", "reproduce":
     optSingleArg(LockFileName)
-    let res = replay(c, args[0])
-    if CfgHere in c.flags or res.hasCfg == false:
-      let nimbleFile = findCurrentNimble()
-      installDependencies(c, nimbleFile, startIsDep = true)
+    replay(c, args[0])
   of "changed":
     optSingleArg(LockFileName)
     listChanged(c, args[0])

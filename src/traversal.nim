@@ -9,7 +9,7 @@
 ## Helpers for the graph traversal.
 
 import std / [strutils, os, sha1, algorithm]
-import context, nameresolver, gitops
+import context, nameresolver, gitops, configutils
 
 proc createGraph*(c: var AtlasContext; start: Package): DepGraph =
   let dep = Dependency(pkg: start, commit: "",
@@ -52,11 +52,6 @@ proc rememberNimVersion(g: var DepGraph; q: VersionInterval) =
   let v = extractGeQuery(q)
   if v != Version"" and v > g.bestNimVersion: g.bestNimVersion = v
 
-proc extractRequiresInfo*(c: var AtlasContext; nimble: PackageNimble): NimbleFileInfo =
-  result = extractRequiresInfo(nimble.string)
-  when ProduceTest:
-    echo "nimble ", nimbleFile, " info ", result
-
 proc collectDeps*(
     c: var AtlasContext;
     g: var DepGraph,
@@ -65,7 +60,7 @@ proc collectDeps*(
 ): CfgPath =
   # If there is a .nimble file, return the dependency path & srcDir
   # else return "".
-  let nimbleInfo = extractRequiresInfo(c, dep.pkg.nimble)
+  let nimbleInfo = parseNimble(c, dep.pkg.nimble)
   if dep.self >= 0 and dep.self < g.nodes.len:
     g.nodes[dep.self].hasInstallHooks = nimbleInfo.hasInstallHooks
 

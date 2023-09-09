@@ -11,3 +11,5 @@ task tester, "Runs integration tests":
 task test, "Runs all tests":
   # unitTestsTask() # tester runs both
   testerTask()
+
+--path:"$nim"

@@ -9,44 +9,96 @@
 ## Lockfile implementation.
 
 import std / [sequtils, strutils, algorithm, tables, os, json, jsonutils, sha1]
-import context, gitops, osutils, traversal, compilerversions, nameresolver, parse_requires
+import context, gitops, osutils, traversal, compilerversions, nameresolver, configutils
 
 type
   LockFileEntry* = object
     dir*: string
     url*: string
     commit*: string
+    version*: string
 
   LockedNimbleFile* = object
-    filename*, content*: string
+    filename*: string
+    content*: seq[string]
 
   LockFile* = object # serialized as JSON
     items*: OrderedTable[string, LockFileEntry]
-    nimcfg*: string
+    nimcfg*: seq[string]
     nimbleFile*: LockedNimbleFile
     hostOS*, hostCPU*: string
     nimVersion*, gccVersion*, clangVersion*: string
 
+proc convertKeyToArray(jsonTree: var JsonNode, path: varargs[string]) =
+  var parent: JsonNode
+  var content: JsonNode = jsonTree
+  for key in path:
+    if content.hasKey(key):
+      parent = content
+      content = parent[key]
+    else:
+      return 
+
+  if content.kind == JString:
+    var contents = newJArray()
+    for line in content.getStr.split("\n"):
+      contents.add(% line)
+    parent[path[^1]] = contents
+
 proc readLockFile(filename: string): LockFile =
   let jsonAsStr = readFile(filename)
-  let jsonTree = parseJson(jsonAsStr)
+  var jsonTree = parseJson(jsonAsStr)
+
+  # convert older non-array file contents to JArray
+  jsonTree.convertKeyToArray("nimcfg")
+  jsonTree.convertKeyToArray("nimbleFile", "content")
   result = jsonTo(jsonTree, LockFile,
     Joptions(allowExtraKeys: true, allowMissingKeys: true))
 
 proc write(lock: LockFile; lockFilePath: string) =
   writeFile lockFilePath, toJson(lock).pretty
 
-proc genLockEntry(c: var AtlasContext; lf: var LockFile; dir: string) =
+proc prefixedPath*(c: var AtlasContext, path: string): string =
+  let parts = path.splitPath
+  if path.isRelativeTo(c.depsDir):
+    return "$deps" / parts.tail
+  elif path.isRelativeTo(c.workspace):
+    return "$workspace" / parts.tail
+  else:
+    return path
+
+proc fromPrefixedPath*(c: var AtlasContext, path: string): string =
+  var path = path
+  if path.startsWith("$deps"):
+    path.removePrefix("$deps")
+    return c.depsDir / path
+  elif path.startsWith("$workspace"):
+    path.removePrefix("$workspace")
+    return c.workspace / path
+  else:
+    return c.depsDir / path
+
+proc genLockEntry(c: var AtlasContext; lf: var LockFile; pkg: Package) =
+  let info = extractRequiresInfo(pkg.nimble.string)
   let url = getRemoteUrl()
   let commit = getCurrentCommit()
-  let name = dir.lastPathComponent
-  lf.items[name] = LockFileEntry(dir: dir, url: $url, commit: commit)
+  let name = pkg.name.string
+  let pth = c.prefixedPath(pkg.path.string)
+  lf.items[name] = LockFileEntry(dir: pth, url: $url, commit: commit, version: info.version)
 
 proc genLockEntriesForDir(c: var AtlasContext; lf: var LockFile; dir: string) =
   for k, f in walkDir(dir):
     if k == pcDir and dirExists(f / ".git"):
+      if f.absolutePath == c.workspace / "packages":
+        # skipping this gives us the locking behavior for a project
+        # TODO: is this what we want?
+        # we could just create a fake Package item here
+        continue
       withDir c, f:
-        genLockEntry c, lf, f.relativePath(dir, '/')
+        let path = "file://" & f
+        debug c, toRepo("genLocKEntries"), "using pkg: " & path
+        let pkg = resolvePackage(c, path)
+        genLockEntry(c, lf, pkg)
 
 proc newLockFile(): LockFile =
   result = LockFile(items: initOrderedTable[string, LockFileEntry](),
@@ -80,15 +132,15 @@ proc genLockEntry(c: var AtlasContext;
                   lf: var NimbleLockFile;
                   pkg: Package,
                   cfg: CfgPath,
-                  version: string,
                   deps: HashSet[PackageName]) =
+  let info = extractRequiresInfo(pkg.nimble.string)
   let url = getRemoteUrl()
   let commit = getCurrentCommit()
   let name = pkg.name.string
   infoNow c, pkg, "calculating nimble checksum"
   let chk = c.nimbleChecksum(pkg, cfg)
   lf.packages[name] = NimbleLockFileEntry(
-    version: version,
+    version: info.version,
     vcsRevision: commit,
     url: $url,
     downloadMethod: "git",
@@ -100,6 +152,7 @@ const
   NimCfg = "nim.cfg"
 
 proc pinWorkspace*(c: var AtlasContext; lockFilePath: string) =
+  info c, toRepo("pin"), "pinning workspace: " & $c.workspace
   var lf = newLockFile()
   genLockEntriesForDir(c, lf, c.workspace)
   if c.workspace != c.depsDir and c.depsDir.len > 0:
@@ -107,20 +160,20 @@ proc pinWorkspace*(c: var AtlasContext; lockFilePath: string) =
 
   let nimcfgPath = c.workspace / NimCfg
   if fileExists(nimcfgPath):
-    lf.nimcfg = readFile(nimcfgPath)
+    lf.nimcfg = readFile(nimcfgPath).splitLines()
 
   let nimblePath = c.workspace / c.workspace.lastPathComponent & ".nimble"
   if fileExists nimblePath:
     lf.nimbleFile = LockedNimbleFile(
-      filename: c.workspace.lastPathComponent & ".nimble",
-      content: readFile(nimblePath))
+      filename: nimblePath.relativePath(c.workspace),
+      content: readFile(nimblePath).splitLines())
 
   write lf, lockFilePath
 
 proc pinProject*(c: var AtlasContext; lockFilePath: string, exportNimble = false) =
   ## Pin project using deps starting from the current project directory. 
   ##
-  ##
+  info c, toRepo("pin"), "pinning project"
   var lf = newLockFile()
   let startPkg = resolvePackage(c, "file://" & c.currentDir)
   var g = createGraph(c, startPkg)
@@ -153,9 +206,11 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string, exportNimble = false
         let w = g.nodes[i]
         let dir = w.pkg.path.string
         tryWithDir c, dir:
-          genLockEntry c, lf, dir.relativePath(c.currentDir, '/')
-
-          if exportNimble:
+          if not exportNimble:
+            # generate atlas native lockfile entries
+            genLockEntry c, lf, w.pkg
+          else:
+            # handle exports for Nimble; these require lookig up a bit more info
             for nx in g.nodes: # expensive, but eh
               if nx.active and i in nx.parents:
                 nimbleDeps.mgetOrPut(w.pkg.name,
@@ -163,18 +218,17 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string, exportNimble = false
             trace c, w.pkg, "exporting nimble " & w.pkg.name.string
             let name = w.pkg.name
             let deps = nimbleDeps.getOrDefault(name)
-            let info = extractRequiresInfo(w.pkg.nimble.string)
-            genLockEntry c, nlf, w.pkg, cfgs[name], info.version, deps
+            genLockEntry c, nlf, w.pkg, cfgs[name], deps
 
     let nimcfgPath = c.currentDir / NimCfg
     if fileExists(nimcfgPath):
-      lf.nimcfg = readFile(nimcfgPath)
+      lf.nimcfg = readFile(nimcfgPath).splitLines()
 
     let nimblePath = startPkg.nimble.string
     if nimblePath.len() > 0 and nimblePath.fileExists():
       lf.nimbleFile = LockedNimbleFile(
-        filename: c.currentDir.lastPathComponent & ".nimble",
-        content: readFile(nimblePath))
+        filename: nimblePath.relativePath(c.currentDir),
+        content: readFile(nimblePath).splitLines())
 
     if not exportNimble:
       write lf, lockFilePath
@@ -246,18 +300,19 @@ proc listChanged*(c: var AtlasContext; lockFilePath: string) =
       if commit != v.commit:
         let pkg = c.resolvePackage("file://" & dir)
         c.resolveNimble(pkg)
-        let info = extractRequiresInfo(c, pkg.nimble)
+        let info = parseNimble(c, pkg.nimble)
         warn c, toRepo(dir), "commit differs;" &
                                             " found: " & commit &
                                             " (" & info.version & ")" &
-                                            " lockfile has: " & v.commit
+                                            " lockfile has: " & v.commit &
+                                            " (" & v.version & ")"
 
   if lf.hostOS == system.hostOS and lf.hostCPU == system.hostCPU:
     compareVersion c, "nim", lf.nimVersion, detectNimVersion()
     compareVersion c, "gcc", lf.gccVersion, detectGccVersion()
     compareVersion c, "clang", lf.clangVersion, detectClangVersion()
 
-proc replay*(c: var AtlasContext; lockFilePath: string): tuple[hasCfg: bool] =
+proc replay*(c: var AtlasContext; lockFilePath: string) =
   ## replays the given lockfile by cloning and updating all the deps
   ## 
   ## this also includes updating the nim.cfg and nimble file as well
@@ -266,17 +321,25 @@ proc replay*(c: var AtlasContext; lockFilePath: string): tuple[hasCfg: bool] =
   let lf = if lockFilePath == "nimble.lock": convertNimbleLock(c, lockFilePath)
            else: readLockFile(lockFilePath)
 
-  let base = splitPath(lockFilePath).head
+  let lfBase = splitPath(lockFilePath).head
+  var genCfg = CfgHere in c.flags
+
   # update the nim.cfg file
   if lf.nimcfg.len > 0:
-    writeFile(base / NimCfg, lf.nimcfg)
-    result.hasCfg = true
+    writeFile(lfBase / NimCfg, lf.nimcfg.join("\n"))
+  else:
+    genCfg = true
+
   # update the nimble file
   if lf.nimbleFile.filename.len > 0:
-    writeFile(base / lf.nimbleFile.filename, lf.nimbleFile.content)
+    writeFile(lfBase / lf.nimbleFile.filename,
+              lf.nimbleFile.content.join("\n"))
+  
   # update the the dependencies
+  var paths: seq[CfgPath]
   for _, v in pairs(lf.items):
-    let dir = base / v.dir
+    trace c, toRepo("replay"), "replaying: " & v.repr
+    let dir = c.fromPrefixedPath(v.dir)
     if not dirExists(dir):
       let (status, err) = c.cloneUrl(getUrl v.url, dir, false)
       if status != Ok:
@@ -287,7 +350,18 @@ proc replay*(c: var AtlasContext; lockFilePath: string): tuple[hasCfg: bool] =
       if $v.url.getUrl() != url:
         error c, toRepo(v.dir), "remote URL has been compromised: got: " &
             url & " but wanted: " & v.url
-      checkoutGitCommit(c, toRepo(dir), v.commit)
+      checkoutGitCommit(c, dir.PackageDir, v.commit)
+
+      if genCfg:
+        let pkg = resolvePackage(c, "file://" & c.currentDir)
+        let nimbleInfo = c.parseNimble(pkg.nimble)
+        paths.add CfgPath nimbleInfo.srcDir
+
+  if genCfg:
+    # this allows us to re-create a nim.cfg that uses the paths from the users workspace
+    # without needing to do a `installDependencies` or `traverseLoop`
+    let cfgPath = if genCfg: CfgPath c.currentDir else: findCfgDir(c)
+    patchNimCfg(c, paths, cfgPath)
 
   if lf.hostOS == system.hostOS and lf.hostCPU == system.hostCPU:
     compareVersion c, "nim", lf.nimVersion, detectNimVersion()

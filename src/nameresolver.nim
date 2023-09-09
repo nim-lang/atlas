@@ -98,7 +98,7 @@ proc fillPackageLookupTable(c: var AtlasContext) =
     for entry in plist:
       let url = getUrl(entry.url)
       let pkg = Package(name: PackageName unicode.toLower entry.name,
-                        repo: url.toRepo(),
+                        repo: PackageRepo lastPathComponent($url),
                         url: url)
       c.urlMapping["name:" & pkg.name.string] = pkg
 
