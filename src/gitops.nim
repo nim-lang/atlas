@@ -87,7 +87,10 @@ proc clone*(c: var AtlasContext, url: PackageUrl, dest: string, retries = 5): bo
   ##
 
   # retry multiple times to avoid annoying github timeouts:
-  let extraArgs = if ShallowClones in c.flags: "--depth=1" else: ""
+  let extraArgs =
+    if FullClones notin c.flags: "--depth=1"
+    else: ""
+
   for i in 1..retries:
     let cmd = $GitClone & " " & extraArgs & " " & quoteShell($url) & " " & dest
     if execShellCmd(cmd) == 0:
@@ -135,10 +138,10 @@ proc listFiles*(c: var AtlasContext; pkg: Package): Option[seq[string]] =
 proc checkoutGitCommit*(c: var AtlasContext; p: PackageRepo; commit: string) =
   var smExtraArgs: seq[string]
 
-  if ShallowClones in c.flags:
+  if FullClones notin c.flags:
     smExtraArgs.add "--depth=1"
 
-    let (outp, status) = exec(c, GitFetch, ["--update-shallow", "origin", commit])
+    let (outp, status) = exec(c, GitFetch, ["--update-shallow", "--tags", "origin", commit])
     if status != 0:
       error(c, p, "could not fetch commit " & commit)
     else:
@@ -232,6 +235,7 @@ proc isOutdated*(c: var AtlasContext; f: string): bool =
 
   # TODO: does --update-shallow fetch tags on a shallow repo?
   let (outp, status) = exec(c, GitFetch, ["--update-shallow", "--tags"])
+
   if status == 0:
     let (cc, status) = exec(c, GitLastTaggedRef, [])
     let latestVersion = strutils.strip(cc)

@@ -89,7 +89,7 @@ type
     ListVersions
     GlobalWorkspace
     AssertOnError
-    ShallowClones
+    FullClones
 
   MsgKind = enum
     Info = "[Info] ",

@@ -61,6 +61,7 @@ Command:
 
 Options:
   --keepCommits         do not perform any `git checkouts`
+  --full                perform full checkouts rather than the default shallow
   --cfgHere             also create/maintain a nim.cfg in the current
                         working directory
   --workspace=DIR       use DIR as workspace
@@ -521,7 +522,7 @@ proc main(c: var AtlasContext) =
         else:
           writeHelp()
       of "cfghere": c.flags.incl CfgHere
-      of "shallow": c.flags.incl ShallowClones
+      of "full": c.flags.incl FullClones
       of "autoinit": autoinit = true
       of "showgraph": c.flags.incl ShowGraph
       of "keep": c.flags.incl Keep
