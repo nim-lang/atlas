@@ -304,7 +304,8 @@ proc listChanged*(c: var AtlasContext; lockFilePath: string) =
         warn c, toRepo(dir), "commit differs;" &
                                             " found: " & commit &
                                             " (" & info.version & ")" &
-                                            " lockfile has: " & v.commit
+                                            " lockfile has: " & v.commit &
+                                            " (" & v.version & ")"
 
   if lf.hostOS == system.hostOS and lf.hostCPU == system.hostCPU:
     compareVersion c, "nim", lf.nimVersion, detectNimVersion()
