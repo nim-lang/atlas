@@ -23,14 +23,34 @@ type
 
   LockFile* = object # serialized as JSON
     items*: OrderedTable[string, LockFileEntry]
-    nimcfg*: string
+    nimcfg*: seq[string]
     nimbleFile*: LockedNimbleFile
     hostOS*, hostCPU*: string
     nimVersion*, gccVersion*, clangVersion*: string
 
+proc convertKeyToArray(jsonTree: var JsonNode, path: varargs[string]) =
+  var parent: JsonNode
+  var content: JsonNode = jsonTree
+  for key in path:
+    if content.hasKey(key):
+      parent = content
+      content = parent[key]
+    else:
+      return 
+
+  if content.kind == JString:
+    var contents = newJArray()
+    for line in content.getStr.split("\n"):
+      contents.add(% line)
+    parent[path[^1]] = contents
+
 proc readLockFile(filename: string): LockFile =
   let jsonAsStr = readFile(filename)
-  let jsonTree = parseJson(jsonAsStr)
+  var jsonTree = parseJson(jsonAsStr)
+  # convert non-array content to JArray
+
+  jsonTree.convertKeyToArray("nimcfg")
+  jsonTree.convertKeyToArray("nimbleFile", "content")
   result = jsonTo(jsonTree, LockFile,
     Joptions(allowExtraKeys: true, allowMissingKeys: true))
 
@@ -131,7 +151,7 @@ proc pinWorkspace*(c: var AtlasContext; lockFilePath: string) =
 
   let nimcfgPath = c.workspace / NimCfg
   if fileExists(nimcfgPath):
-    lf.nimcfg = readFile(nimcfgPath)
+    lf.nimcfg = readFile(nimcfgPath).splitLines()
 
   let nimblePath = c.workspace / c.workspace.lastPathComponent & ".nimble"
   if fileExists nimblePath:
@@ -194,7 +214,7 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string, exportNimble = false
 
     let nimcfgPath = c.currentDir / NimCfg
     if fileExists(nimcfgPath):
-      lf.nimcfg = readFile(nimcfgPath)
+      lf.nimcfg = readFile(nimcfgPath).splitLines()
 
     let nimblePath = startPkg.nimble.string
     if nimblePath.len() > 0 and nimblePath.fileExists():
@@ -296,7 +316,7 @@ proc replay*(c: var AtlasContext; lockFilePath: string): tuple[hasCfg: bool] =
 
   # update the nim.cfg file
   if lf.nimcfg.len > 0:
-    writeFile(lfBase / NimCfg, lf.nimcfg)
+    writeFile(lfBase / NimCfg, lf.nimcfg.join("\n"))
     result.hasCfg = true
   # update the nimble file
   if lf.nimbleFile.filename.len > 0:
