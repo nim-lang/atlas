@@ -174,7 +174,15 @@ proc writeMessage(c: var AtlasContext; k: MsgKind; p: PackageRepo; arg: string) 
   if NoColors in c.flags:
     writeMessage(c, $k, p, arg)
   else:
-    let pn = p.string.relativePath(c.workspace)
+    echo "P: ", p.string, " depsDir: ", c.depsDir, " ws: ", c.workspace, " deps: ", p.string.relativePath(c.depsDir)
+    let pn =
+      if c.depsDir != "" and p.string.isRelativeTo(c.depsDir):
+        p.string.relativePath(c.depsDir)
+      elif p.string.isRelativeTo(c.workspace):
+        p.string.relativePath(c.workspace)
+      else:
+        p.string
+    echo "PN: ", pn
     let (color, style) = case k
                 of Debug: (fgWhite, styleDim)
                 of Trace: (fgBlue, styleBright)
@@ -240,13 +248,13 @@ proc fatal*(msg: string) =
     writeStackTrace()
   quit "[Error] " & msg
 
-proc toRepo*(p: PackageUrl): PackageRepo =
-  result = PackageRepo lastPathComponent($p)
-  result.string.removeSuffix(".git")
+# proc toRepo*(p: PackageUrl): PackageRepo =
+#   result = PackageRepo(lastPathComponent($p))
+#   result.string.removeSuffix(".git")
 
 proc toRepo*(p: string): PackageRepo =
   if p.contains("://"):
-    result = toRepo getUrl(p)
+    result = toRepo lastPathComponent($getUrl(p))
   else:
     result = PackageRepo p
 
@@ -254,7 +262,7 @@ proc toRepo*(p: Package): PackageRepo =
   result = p.repo
 
 template projectFromCurrentDir*(): PackageRepo =
-  PackageRepo(c.currentDir.lastPathComponent())
+  PackageRepo(c.currentDir.absolutePath())
 
 proc toDestDir*(pkg: Package): PackageDir =
   pkg.path

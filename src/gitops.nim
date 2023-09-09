@@ -229,9 +229,11 @@ proc getRemoteUrl*(): PackageUrl =
 proc getCurrentCommit*(): string =
   result = execProcess("git log -1 --pretty=format:%H").strip()
 
-proc isOutdated*(c: var AtlasContext; f: string): bool =
+proc isOutdated*(c: var AtlasContext; path: string): bool =
   ## determine if the given git repo `f` is updateable
   ##
+
+  info c, toRepo(path), "checking is package is up to date..."
 
   # TODO: does --update-shallow fetch tags on a shallow repo?
   let (outp, status) = exec(c, GitFetch, ["--update-shallow", "--tags"])
@@ -254,10 +256,10 @@ proc isOutdated*(c: var AtlasContext; f: string): bool =
           if status == 0 and mergeBase == currentCommit:
             let v = extractVersion gitDescribeRefTag(c, latestVersion)
             if v.len > 0:
-              info c, toRepo(f), "new version available: " & v
+              info c, toRepo(path), "new version available: " & v
               result = true
   else:
-    warn c, toRepo(f), "`git fetch` failed: " & outp
+    warn c, toRepo(path), "`git fetch` failed: " & outp
 
 proc updateDir*(c: var AtlasContext; file, filter: string) =
   withDir c, file:
