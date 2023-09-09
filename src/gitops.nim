@@ -139,15 +139,21 @@ proc checkoutGitCommit*(c: var AtlasContext; p: PackageDir; commit: string) =
   let p = p.string.PackageRepo
   var smExtraArgs: seq[string]
 
-  if FullClones notin c.flags:
+  if FullClones notin c.flags and commit.len() == 40:
     smExtraArgs.add "--depth=1"
 
-    let (outp, status) = exec(c, GitFetch, ["--update-shallow", "--tags", "origin", commit])
+    let (_, status) = exec(c, GitFetch, ["--update-shallow", "--tags", "origin", commit])
     if status != 0:
       error(c, p, "could not fetch commit " & commit)
     else:
       trace(c, p, "fetched package commit " & commit)
-
+  elif commit.len() != 40:
+    info(c, p, "found short commit id; doing full fetch to resolve " & commit)
+    let (outp, status) = exec(c, GitFetch, ["--unshallow"])
+    if status != 0:
+      error(c, p, "could not fetch: " & outp)
+    else:
+      trace(c, p, "fetched package updates ")
 
   let (_, status) = exec(c, GitCheckout, [commit])
   if status != 0:
