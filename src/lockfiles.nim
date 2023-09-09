@@ -349,7 +349,7 @@ proc replay*(c: var AtlasContext; lockFilePath: string) =
       if $v.url.getUrl() != url:
         error c, toRepo(v.dir), "remote URL has been compromised: got: " &
             url & " but wanted: " & v.url
-      checkoutGitCommit(c, toRepo(dir), v.commit)
+      checkoutGitCommit(c, dir.PackageDir, v.commit)
 
       if genCfg:
         let pkg = resolvePackage(c, "file://" & c.currentDir)

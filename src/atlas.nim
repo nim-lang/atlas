@@ -162,10 +162,10 @@ proc checkoutCommit(c: var AtlasContext; g: var DepGraph; w: Dependency) =
             if status == 0 and (mergeBase == currentCommit or mergeBase == requiredCommit):
               # conflict resolution: pick the later commit:
               if mergeBase == currentCommit:
-                checkoutGitCommit(c, w.pkg.repo, requiredCommit)
+                checkoutGitCommit(c, w.pkg.path, requiredCommit)
                 selectNode c, g, w
             else:
-              checkoutGitCommit(c, w.pkg.repo, requiredCommit)
+              checkoutGitCommit(c, w.pkg.path, requiredCommit)
               selectNode c, g, w
               when false:
                 warn c, w.pkg, "do not know which commit is more recent:",
@@ -302,7 +302,7 @@ proc resolve(c: var AtlasContext; g: var DepGraph) =
         let destDir = pkg.name.string
         debug c, pkg, "package satisfiable: " & $pkg
         withDir c, pkg:
-          checkoutGitCommit(c, toRepo(destDir), mapping[i - g.nodes.len][1])
+          checkoutGitCommit(c, PackageDir(destDir), mapping[i - g.nodes.len][1])
     if NoExec notin c.flags:
       runBuildSteps(c, g)
       #echo f

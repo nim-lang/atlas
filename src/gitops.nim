@@ -135,7 +135,8 @@ proc listFiles*(c: var AtlasContext; pkg: Package): Option[seq[string]] =
   if status == 0:
     result = some outp.splitLines().mapIt(it.strip())
 
-proc checkoutGitCommit*(c: var AtlasContext; p: PackageRepo; commit: string) =
+proc checkoutGitCommit*(c: var AtlasContext; p: PackageDir; commit: string) =
+  let p = p.string.PackageRepo
   var smExtraArgs: seq[string]
 
   if FullClones notin c.flags:
