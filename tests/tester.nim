@@ -117,7 +117,8 @@ proc testSemVer2() =
   buildGraph()
   createDir "semproject"
   withDir "semproject":
-    let (outp, status) = execCmdEx(atlasExe & " --resolver=SemVer --colors:off --list use proj_a")
+    let cmd = atlasExe & " --full --resolver=SemVer --colors:off --list use proj_a"
+    let (outp, status) = execCmdEx(cmd)
     if status == 0:
       if outp.contains SemVerExpectedResult:
         discard "fine"
@@ -125,7 +126,12 @@ proc testSemVer2() =
         echo "expected ", SemVerExpectedResult, " but got ", outp
         raise newException(AssertionDefect, "Test failed!")
     else:
-      assert false, outp
+      echo "\n\n<<<<<<<<<<<<<<<< failed "
+      echo "testSemVer2:command: ", cmd
+      echo "testSemVer2:pwd: ", getCurrentDir()
+      echo "testSemVer2:failed command:\n", outp
+      echo ">>>>>>>>>>>>>>>> failed\n"
+      assert false, "testSemVer2"
 
 proc testMinVer() =
   buildGraph()

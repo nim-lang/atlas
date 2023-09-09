@@ -174,7 +174,6 @@ proc writeMessage(c: var AtlasContext; k: MsgKind; p: PackageRepo; arg: string) 
   if NoColors in c.flags:
     writeMessage(c, $k, p, arg)
   else:
-    echo "P: ", p.string, " depsDir: ", c.depsDir, " ws: ", c.workspace, " deps: ", p.string.relativePath(c.depsDir)
     let pn =
       if c.depsDir != "" and p.string.isRelativeTo(c.depsDir):
         p.string.relativePath(c.depsDir)
@@ -182,7 +181,6 @@ proc writeMessage(c: var AtlasContext; k: MsgKind; p: PackageRepo; arg: string) 
         p.string.relativePath(c.workspace)
       else:
         p.string
-    echo "PN: ", pn
     let (color, style) = case k
                 of Debug: (fgWhite, styleDim)
                 of Trace: (fgBlue, styleBright)
