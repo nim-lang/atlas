@@ -76,7 +76,7 @@ proc fromPrefixedPath*(c: var AtlasContext, path: string): string =
     path.removePrefix("$workspace")
     return c.workspace / path
   else:
-    return c.workspace / path
+    return c.depsDir / path
 
 proc genLockEntry(c: var AtlasContext; lf: var LockFile; pkg: Package) =
   let info = extractRequiresInfo(pkg.nimble.string)
