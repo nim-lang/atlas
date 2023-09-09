@@ -47,8 +47,8 @@ proc convertKeyToArray(jsonTree: var JsonNode, path: varargs[string]) =
 proc readLockFile(filename: string): LockFile =
   let jsonAsStr = readFile(filename)
   var jsonTree = parseJson(jsonAsStr)
-  # convert non-array content to JArray
 
+  # convert older non-array file contents to JArray
   jsonTree.convertKeyToArray("nimcfg")
   jsonTree.convertKeyToArray("nimbleFile", "content")
   result = jsonTo(jsonTree, LockFile,
