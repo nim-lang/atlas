@@ -334,7 +334,6 @@ proc replay*(c: var AtlasContext; lockFilePath: string) =
     writeFile(lfBase / lf.nimbleFile.filename,
               lf.nimbleFile.content.join("\n"))
   
-
   # update the the dependencies
   var paths: seq[CfgPath]
   for _, v in pairs(lf.items):
