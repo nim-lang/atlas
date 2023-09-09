@@ -412,55 +412,6 @@ proc updateDir(c: var AtlasContext; dir, filter: string) =
       trace c, toRepo(file), "updating directory"
       gitops.updateDir(c, file, filter)
 
-proc patchNimbleFile(c: var AtlasContext; dep: string): string =
-  let thisProject = c.currentDir.lastPathComponent
-  let oldErrors = c.errors
-  let pkg = resolvePackage(c, dep)
-  result = ""
-  if oldErrors != c.errors:
-    warn c, toRepo(dep), "cannot resolve package name"
-  else:
-    for x in walkFiles(c.currentDir / "*.nimble"):
-      if result.len == 0:
-        result = x
-      else:
-        # ambiguous .nimble file
-        warn c, toRepo(dep), "cannot determine `.nimble` file; there are multiple to choose from"
-        return ""
-    # see if we have this requirement already listed. If so, do nothing:
-    var found = false
-    if result.len > 0:
-      let nimbleInfo = parseNimble(c, PackageNimble result)
-      for r in nimbleInfo.requires:
-        var tokens: seq[string] = @[]
-        for token in tokenizeRequires(r):
-          tokens.add token
-        if tokens.len > 0:
-          let oldErrors = c.errors
-          let pkgB = resolvePackage(c, tokens[0])
-          if oldErrors != c.errors:
-            warn c, toRepo(tokens[0]), "cannot resolve package name; found in: " & result
-          if pkg == pkgB:
-            found = true
-            break
-
-    if not found:
-      let reqName = if pkg.inPackages: pkg.name.string else: $pkg.url
-      let line = "requires \"$1\"\n" % reqName.escape("", "")
-      if result.len > 0:
-        var oldContent = readFile(result).splitLines()
-        var idx = oldContent.len()
-        for i, line in oldContent:
-          if line.startsWith "requires": idx = i
-        oldContent.insert(line, idx+1)
-        writeFile result, oldContent.join("\n")
-        info(c, toRepo(thisProject), "updated: " & result.readableFile)
-      else:
-        result = c.currentDir / thisProject & ".nimble"
-        writeFile result, line
-        info(c, toRepo(thisProject), "created: " & result.readableFile)
-    else:
-      info(c, toRepo(thisProject), "up to date: " & result.readableFile)
 
 proc detectWorkspace(currentDir: string): string =
   ## find workspace by checking `currentDir` and its parents
