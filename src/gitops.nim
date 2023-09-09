@@ -5,6 +5,7 @@ type
   Command* = enum
     GitClone = "git clone",
     GitDiff = "git diff",
+    GitFetch = "git fetch",
     GitTag = "git tag",
     GitTags = "git show-ref --tags",
     GitLastTaggedRef = "git rev-list --tags --max-count=1",
@@ -132,16 +133,25 @@ proc listFiles*(c: var AtlasContext; pkg: Package): Option[seq[string]] =
     result = some outp.splitLines().mapIt(it.strip())
 
 proc checkoutGitCommit*(c: var AtlasContext; p: PackageRepo; commit: string) =
+  var smExtraArgs: seq[string]
+
+  if ShallowClones in c.flags:
+    smExtraArgs.add "--depth=1"
+
+    let (outp, status) = exec(c, GitFetch, ["--update-shallow", "origin", commit])
+    if status != 0:
+      error(c, p, "could not fetch commit " & commit)
+    else:
+      trace(c, p, "fetched package commit " & commit)
+
+
   let (_, status) = exec(c, GitCheckout, [commit])
   if status != 0:
     error(c, p, "could not checkout commit " & commit)
   else:
     info(c, p, "updated package to " & commit)
 
-  var extraArgs: seq[string]
-  if ShallowClones in c.flags: extraArgs.add "--depth=1"
-
-  let (_, subModStatus) = exec(c, GitSubModUpdate, extraArgs)
+  let (_, subModStatus) = exec(c, GitSubModUpdate, smExtraArgs)
   if subModStatus != 0:
     error(c, p, "could not update submodules")
   else:
@@ -219,7 +229,7 @@ proc getCurrentCommit*(): string =
 proc isOutdated*(c: var AtlasContext; f: string): bool =
   ## determine if the given git repo `f` is updateable
   ##
-  let (outp, status) = silentExec("git fetch", [])
+  let (outp, status) = exec(c, GitFetch, ["--update-shallow"])
   if status == 0:
     let (cc, status) = exec(c, GitLastTaggedRef, [])
     let latestVersion = strutils.strip(cc)
