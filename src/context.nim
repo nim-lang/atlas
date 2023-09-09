@@ -261,6 +261,9 @@ proc toRepo*(p: string): PackageRepo =
 proc toRepo*(p: Package): PackageRepo =
   result = p.repo
 
+proc toRepo*(p: PackageDir): PackageRepo =
+  result = PackageRepo p.string
+
 template projectFromCurrentDir*(): PackageRepo =
   PackageRepo(c.currentDir.absolutePath())
 

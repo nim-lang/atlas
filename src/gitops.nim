@@ -229,7 +229,7 @@ proc getRemoteUrl*(): PackageUrl =
 proc getCurrentCommit*(): string =
   result = execProcess("git log -1 --pretty=format:%H").strip()
 
-proc isOutdated*(c: var AtlasContext; path: string): bool =
+proc isOutdated*(c: var AtlasContext; path: PackageDir): bool =
   ## determine if the given git repo `f` is updateable
   ##
 

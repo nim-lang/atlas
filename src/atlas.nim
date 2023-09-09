@@ -446,7 +446,7 @@ proc listOutdated(c: var AtlasContext; dir: string) =
   for k, f in walkDir(dir, relative=true):
     if k in {pcDir, pcLinkToDir} and isGitDir(dir / f):
       withDir c, dir / f:
-        if gitops.isOutdated(c, dir / f):
+        if gitops.isOutdated(c, PackageDir(dir / f)):
           inc updateable
 
   if updateable == 0:
