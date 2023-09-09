@@ -36,17 +36,19 @@ proc readLockFile(filename: string): LockFile =
 proc write(lock: LockFile; lockFilePath: string) =
   writeFile lockFilePath, toJson(lock).pretty
 
-proc genLockEntry(c: var AtlasContext; lf: var LockFile; dir: string) =
+proc genLockEntry(c: var AtlasContext; lf: var LockFile; pkg: Package) =
   let url = getRemoteUrl()
   let commit = getCurrentCommit()
-  let name = dir.lastPathComponent
+  let name = pkg.name.string
+  let dir = c.workspace.relativePath(pkg.path.string)
   lf.items[name] = LockFileEntry(dir: dir, url: $url, commit: commit)
 
 proc genLockEntriesForDir(c: var AtlasContext; lf: var LockFile; dir: string) =
   for k, f in walkDir(dir):
     if k == pcDir and dirExists(f / ".git"):
       withDir c, f:
-        genLockEntry(c, lf, f.relativePath(dir, '/'))
+        let pkg = resolvePackage(c, "file://" & f)
+        genLockEntry(c, lf, pkg)
 
 proc newLockFile(): LockFile =
   result = LockFile(items: initOrderedTable[string, LockFileEntry](),
@@ -155,7 +157,7 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string, exportNimble = false
         tryWithDir c, dir:
           if not exportNimble:
             # generate atlas native lockfile entries
-            genLockEntry c, lf, dir.relativePath(c.currentDir, '/')
+            genLockEntry c, lf, w.pkg
           else:
             # handle exports for Nimble; these require lookig up a bit more info
             for nx in g.nodes: # expensive, but eh
