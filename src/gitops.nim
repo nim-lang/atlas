@@ -3,7 +3,7 @@ import context, osutils
 
 type
   Command* = enum
-    GitClone = "git clone",
+    GitClone = "git clone --depth=1",
     GitDiff = "git diff",
     GitTag = "git tag",
     GitTags = "git show-ref --tags",
