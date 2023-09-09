@@ -18,7 +18,8 @@ type
     commit*: string
 
   LockedNimbleFile* = object
-    filename*, content*: string
+    filename*: string
+    content*: seq[string]
 
   LockFile* = object # serialized as JSON
     items*: OrderedTable[string, LockFileEntry]
@@ -135,8 +136,8 @@ proc pinWorkspace*(c: var AtlasContext; lockFilePath: string) =
   let nimblePath = c.workspace / c.workspace.lastPathComponent & ".nimble"
   if fileExists nimblePath:
     lf.nimbleFile = LockedNimbleFile(
-      filename: c.workspace.lastPathComponent & ".nimble",
-      content: readFile(nimblePath))
+      filename: nimblePath.relativePath(c.workspace),
+      content: readFile(nimblePath).splitLines())
 
   write lf, lockFilePath
 
@@ -199,7 +200,7 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string, exportNimble = false
     if nimblePath.len() > 0 and nimblePath.fileExists():
       lf.nimbleFile = LockedNimbleFile(
         filename: nimblePath.relativePath(c.currentDir),
-        content: readFile(nimblePath))
+        content: readFile(nimblePath).splitLines())
 
     if not exportNimble:
       write lf, lockFilePath
@@ -299,7 +300,8 @@ proc replay*(c: var AtlasContext; lockFilePath: string): tuple[hasCfg: bool] =
     result.hasCfg = true
   # update the nimble file
   if lf.nimbleFile.filename.len > 0:
-    writeFile(lfBase / lf.nimbleFile.filename, lf.nimbleFile.content)
+    writeFile(lfBase / lf.nimbleFile.filename,
+              lf.nimbleFile.content.join($DirSep))
   # update the the dependencies
   for _, v in pairs(lf.items):
     trace c, toRepo("replay"), "replaying: " & v.repr
