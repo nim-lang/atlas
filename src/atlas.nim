@@ -706,7 +706,9 @@ proc main(c: var AtlasContext) =
     optSingleArg(LockFileName)
     let res = replay(c, args[0])
     if CfgHere in c.flags or res.hasCfg == false:
+      info c, toRepo("replay"), "setting up nim.cfg"
       let nimbleFile = findCurrentNimble()
+      trace c, toRepo("replay"), "using nimble file: " & nimbleFile
       installDependencies(c, nimbleFile, startIsDep = true)
   of "changed":
     optSingleArg(LockFileName)

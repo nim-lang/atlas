@@ -45,6 +45,17 @@ proc prefixedPath*(c: var AtlasContext, path: string): string =
   else:
     return path
 
+proc fromPrefixedPath*(c: var AtlasContext, path: string): string =
+  var path = path
+  if path.startsWith("$deps"):
+    path.removePrefix("$deps")
+    return c.depsDir / path
+  elif path.startsWith("$workspace"):
+    path.removePrefix("$workspace")
+    return c.workspace / path
+  else:
+    return c.workspace / path
+
 proc genLockEntry(c: var AtlasContext; lf: var LockFile; pkg: Package) =
   let url = getRemoteUrl()
   let commit = getCurrentCommit()
@@ -187,7 +198,7 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string, exportNimble = false
     let nimblePath = startPkg.nimble.string
     if nimblePath.len() > 0 and nimblePath.fileExists():
       lf.nimbleFile = LockedNimbleFile(
-        filename: c.currentDir.lastPathComponent & ".nimble",
+        filename: nimblePath.relativePath(c.currentDir),
         content: readFile(nimblePath))
 
     if not exportNimble:
@@ -280,17 +291,19 @@ proc replay*(c: var AtlasContext; lockFilePath: string): tuple[hasCfg: bool] =
   let lf = if lockFilePath == "nimble.lock": convertNimbleLock(c, lockFilePath)
            else: readLockFile(lockFilePath)
 
-  let base = splitPath(lockFilePath).head
+  let lfBase = splitPath(lockFilePath).head
+
   # update the nim.cfg file
   if lf.nimcfg.len > 0:
-    writeFile(base / NimCfg, lf.nimcfg)
+    writeFile(lfBase / NimCfg, lf.nimcfg)
     result.hasCfg = true
   # update the nimble file
   if lf.nimbleFile.filename.len > 0:
-    writeFile(base / lf.nimbleFile.filename, lf.nimbleFile.content)
+    writeFile(lfBase / lf.nimbleFile.filename, lf.nimbleFile.content)
   # update the the dependencies
   for _, v in pairs(lf.items):
-    let dir = base / v.dir
+    trace c, toRepo("replay"), "replaying: " & v.repr
+    let dir = c.fromPrefixedPath(v.dir)
     if not dirExists(dir):
       let (status, err) = c.cloneUrl(getUrl v.url, dir, false)
       if status != Ok:
