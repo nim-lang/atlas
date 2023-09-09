@@ -3,7 +3,7 @@ import context, osutils
 
 type
   Command* = enum
-    GitClone = "git clone --depth=1",
+    GitClone = "git clone",
     GitDiff = "git diff",
     GitTag = "git tag",
     GitTags = "git show-ref --tags",
@@ -86,8 +86,9 @@ proc clone*(c: var AtlasContext, url: PackageUrl, dest: string, retries = 5): bo
   ##
 
   # retry multiple times to avoid annoying github timeouts:
+  let extraArgs = if ShallowClones in c.flags: "--depth=1" else: ""
   for i in 1..retries:
-    let cmd = $GitClone & " " & quoteShell($url) & " " & dest
+    let cmd = $GitClone & " " & extraArgs & " " & quoteShell($url) & " " & dest
     if execShellCmd(cmd) == 0:
       return true
     os.sleep(i*2_000)
@@ -137,7 +138,10 @@ proc checkoutGitCommit*(c: var AtlasContext; p: PackageRepo; commit: string) =
   else:
     info(c, p, "updated package to " & commit)
 
-  let (_, subModStatus) = exec(c, GitSubModUpdate, [])
+  var extraArgs: seq[string]
+  if ShallowClones in c.flags: extraArgs.add "--depth=1"
+
+  let (_, subModStatus) = exec(c, GitSubModUpdate, extraArgs)
   if subModStatus != 0:
     error(c, p, "could not update submodules")
   else:
