@@ -36,12 +36,21 @@ proc readLockFile(filename: string): LockFile =
 proc write(lock: LockFile; lockFilePath: string) =
   writeFile lockFilePath, toJson(lock).pretty
 
+proc prefixedPath*(c: var AtlasContext, path: string): string =
+  let parts = path.splitPath
+  if path.isRelativeTo(c.depsDir):
+    return "$deps" / parts.tail
+  elif path.isRelativeTo(c.workspace):
+    return "$workspace" / parts.tail
+  else:
+    return path
+
 proc genLockEntry(c: var AtlasContext; lf: var LockFile; pkg: Package) =
   let url = getRemoteUrl()
   let commit = getCurrentCommit()
   let name = pkg.name.string
-  let dir = c.workspace.relativePath(pkg.path.string)
-  lf.items[name] = LockFileEntry(dir: dir, url: $url, commit: commit)
+  let pth = c.prefixedPath(pkg.path.string)
+  lf.items[name] = LockFileEntry(dir: pth, url: $url, commit: commit)
 
 proc genLockEntriesForDir(c: var AtlasContext; lf: var LockFile; dir: string) =
   for k, f in walkDir(dir):
@@ -102,6 +111,7 @@ const
   NimCfg = "nim.cfg"
 
 proc pinWorkspace*(c: var AtlasContext; lockFilePath: string) =
+  info c, toRepo("pin"), "pinning workspace: " & $c.workspace
   var lf = newLockFile()
   genLockEntriesForDir(c, lf, c.workspace)
   if c.workspace != c.depsDir and c.depsDir.len > 0:
@@ -122,7 +132,7 @@ proc pinWorkspace*(c: var AtlasContext; lockFilePath: string) =
 proc pinProject*(c: var AtlasContext; lockFilePath: string, exportNimble = false) =
   ## Pin project using deps starting from the current project directory. 
   ##
-  ##
+  info c, toRepo("pin"), "pinning project"
   var lf = newLockFile()
   let startPkg = resolvePackage(c, "file://" & c.currentDir)
   var g = createGraph(c, startPkg)
