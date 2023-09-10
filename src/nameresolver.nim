@@ -78,22 +78,22 @@ proc cloneUrl*(c: var AtlasContext;
       echo "cloned ", url, " into ", dest
 
 proc updatePackages*(c: var AtlasContext) =
-  if dirExists(c.workspace / DefaultPackagesDir):
-    withDir(c, c.workspace / DefaultPackagesDir):
-      gitPull(c, PackageRepo DefaultPackagesDir)
+  if dirExists(c.depsDir / DefaultPackagesSubDir):
+    withDir(c, c.depsDir / DefaultPackagesSubDir):
+      gitPull(c, PackageRepo DefaultPackagesSubDir)
   else:
-    withDir c, c.workspace:
-      let (status, err) = cloneUrl(c, getUrl "https://github.com/nim-lang/packages", DefaultPackagesDir, false)
+    withDir c, c.depsDir:
+      let (status, err) = cloneUrl(c, getUrl "https://github.com/nim-lang/packages", DefaultPackagesSubDir, false)
       if status != Ok:
-        error c, PackageRepo(DefaultPackagesDir), err
+        error c, PackageRepo(DefaultPackagesSubDir), err
 
 proc fillPackageLookupTable(c: var AtlasContext) =
   if not c.hasPackageList:
     c.hasPackageList = true
     when not MockupRun:
-      if not fileExists(c.workspace / DefaultPackagesDir / "packages.json"):
+      if not fileExists(c.depsDir / DefaultPackagesSubDir / "packages.json"):
         updatePackages(c)
-    let plist = getPackageInfos(when MockupRun: TestsDir else: c.workspace)
+    let plist = getPackageInfos(when MockupRun: TestsDir else: c.depsDir)
     debug c, toRepo("fillPackageLookupTable"), "initializing..."
     for entry in plist:
       let url = getUrl(entry.url)
@@ -105,11 +105,11 @@ proc fillPackageLookupTable(c: var AtlasContext) =
 proc dependencyDir*(c: var AtlasContext; pkg: Package): PackageDir =
   template checkDir(dir: string) =
     if dir.len() > 0 and dirExists(dir):
-      debug c, pkg, "dependencyDir: found: " & dir 
+      debug c, pkg, "dependencyDir: found: " & dir
       return PackageDir dir
     else:
-      debug c, pkg, "dependencyDir: not found: " & dir 
-  
+      debug c, pkg, "dependencyDir: not found: " & dir
+
   debug c, pkg, "dependencyDir: check: pth: " & pkg.path.string & " cd: " & getCurrentDir() & " ws: " & c.workspace
   if pkg.exists:
     debug c, pkg, "dependencyDir: exists: " & pkg.path.string
@@ -122,7 +122,7 @@ proc dependencyDir*(c: var AtlasContext; pkg: Package): PackageDir =
     checkDir pkg.path.string
     checkDir c.workspace / pkg.path.string
     checkDir c.depsDir / pkg.path.string
-  
+
   checkDir c.workspace / pkg.repo.string
   checkDir c.depsDir / pkg.repo.string
   checkDir c.workspace / pkg.name.string
@@ -157,7 +157,7 @@ proc resolvePackageUrl(c: var AtlasContext; url: string, checkOverrides = true):
   result = Package(url: getUrl(url),
                    name: url.toRepo().PackageName,
                    repo: url.toRepo())
-  
+
   debug c, result, "resolvePackageUrl: search: " & url
 
   let isFile = result.url.scheme == "file"
@@ -184,7 +184,7 @@ proc resolvePackageUrl(c: var AtlasContext; url: string, checkOverrides = true):
       let host = purl.hostname
       let org = purl.path.parentDir.lastPathPart
       let rname = purl.path.lastPathPart
-      let pname = [rname, org, host].join(".") 
+      let pname = [rname, org, host].join(".")
       warn c, result,
               "conflicting url's for package; renaming package: " &
                 result.name.string & " to " & pname
@@ -200,7 +200,7 @@ proc resolvePackageUrl(c: var AtlasContext; url: string, checkOverrides = true):
     # set the url with package name as url name
     c.urlMapping["repo:" & result.name.string] = result
     trace c, result, "resolvePackageUrl: not found; set pkg: " & $result.repo.string
-  
+
   if result.url.scheme == "file":
     result.path = PackageDir result.url.hostname & result.url.path
     trace c, result, "resolvePackageUrl: setting manual path: " & $result.path.string
@@ -208,7 +208,7 @@ proc resolvePackageUrl(c: var AtlasContext; url: string, checkOverrides = true):
 proc resolvePackageName(c: var AtlasContext; name: string): Package =
   result = Package(name: PackageName name,
                    repo: PackageRepo name)
-                   
+
   # the project name can be overwritten too!
   if UsesOverrides in c.flags:
     let name = c.overrides.substitute(name)
@@ -249,11 +249,11 @@ proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
   ## Takes a raw handle which can be a name, a repo name, or a url
   ## and resolves it into a package. If not found it will create
   ## a new one.
-  ## 
+  ##
   ## Note that Package should be unique globally. This happens
   ## by updating the packages list when new packages are added or
   ## loaded from a packages.json.
-  ## 
+  ##
   result.new()
 
   fillPackageLookupTable(c)
@@ -264,7 +264,7 @@ proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
     result = c.resolvePackageUrl(rawHandle)
   else:
     result = c.resolvePackageName(unicode.toLower(rawHandle))
-  
+
   result.path = dependencyDir(c, result)
   let res = c.findNimbleFile(result, result.path)
   if res.isSome:
@@ -276,13 +276,13 @@ proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
     debug c, result, "resolvePackageName: nimble: found: " & $result
   else:
     debug c, result, "resolvePackageName: nimble: not found: " & $result
-  
+
 
 proc resolveNimble*(c: var AtlasContext; pkg: Package) =
   ## Try to resolve the nimble file for the given package.
-  ## 
-  ## This should be done after cloning a new repo. 
-  ## 
+  ##
+  ## This should be done after cloning a new repo.
+  ##
 
   if pkg.exists:
     return
@@ -297,4 +297,3 @@ proc resolveNimble*(c: var AtlasContext; pkg: Package) =
     info c, pkg, "resolvePackageName: nimble: found: " & $pkg
   else:
     info c, pkg, "resolvePackageName: nimble: not found: " & $pkg
-

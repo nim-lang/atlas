@@ -28,6 +28,7 @@ let
 
 proc initBasicWorkspace(typ: type AtlasContext): AtlasContext =
   result.workspace = currentSourcePath().parentDir / "ws_basic"
+  result.depsDir = result.workspace
 
 suite "urls and naming":
 
