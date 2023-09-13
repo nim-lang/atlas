@@ -35,6 +35,7 @@ Command:
   clone url|pkgname     clone a package and all of its dependencies
   update url|pkgname    update a package and all of its dependencies
   install proj.nimble   use the .nimble file to setup the project's dependencies
+  new <project>         init a new project directory
   search keyw keywB...  search for package that contains the given keywords
   extract file.nimble   extract the requirements and custom commands from
                         the given Nimble file
@@ -457,6 +458,57 @@ proc listOutdated(c: var AtlasContext) =
     listOutdated c, c.depsDir
   listOutdated c, c.workspace
 
+proc newProject(c: var AtlasContext; projectName: string) =
+  ## Tries to create a new project directory in the current dir
+  ## with a single bare `projectname.nim` file inside.
+  ## `projectName` is validated.
+
+  proc isValidProjectName(n: openArray[char]): bool =
+    ## Validates `n` as a project name:
+    ## Valid Nim identifier with addition of dashes (`-`) being allowed,
+    ## but replaced with underscores (`_`) for the `.nim` file name.
+    ## .. Note: Doesn't check if `n` is a valid file/directory name.
+    if not (n.len > 0 and n[0] in IdentStartChars):
+      return false
+    var prevDashOrUnderscore = false
+    for c in n:
+      if c in {'-', '_'}:
+        if prevDashOrUnderscore:
+          return false
+        else:
+          prevDashOrUnderscore = true
+      elif c notin (Letters + Digits):
+        return false
+      else:
+        prevDashOrUnderscore = false
+    true
+
+  let name = block:
+    var n = projectName.strip()
+    if n.isValidFilename() and isValidProjectName(n):
+      n
+    else:
+      error c, toRepo(n), "'" & n & "' is not a vaild project name!"
+      quit(1)
+  if dirExists(name):
+    error c, toRepo(name), "Directory '" & name & "' already exists!"
+    quit(1)
+  else:
+    try:
+      createDir(name)
+    except OSError as e:
+      error c, toRepo(name), "Failed to create directory '$#': $#" % [name, e.msg]
+      quit(1)
+  info c, toRepo(name), "created project dir"
+  withDir(c, name):
+    let fname = name.replace('-', '_') & ".nim"
+    try:
+      # A header doc comment with the project's name
+      fname.writeFile("## $#\n" % name) 
+    except IOError as e:
+      error c, toRepo(name), "Failed writing to file '$#': $#" % [fname, e.msg]
+      quit(1)
+
 proc main(c: var AtlasContext) =
   var action = ""
   var args: seq[string] = @[]
@@ -687,6 +739,9 @@ proc main(c: var AtlasContext) =
     let cfg = findCfgDir(c, pkg)
     let sha = nimbleChecksum(c, pkg, cfg)
     info c, pkg, "SHA1Digest: " & sha
+  of "new":
+    singleArg()
+    newProject(c, args[0])
   else:
     fatal "Invalid action: " & action
 
