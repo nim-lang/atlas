@@ -8,63 +8,73 @@
 
 ## Resolves package names and turn them to URLs.
 
-import std / [os, unicode, strutils, osproc, sequtils, options]
+import std / [os, unicode, strutils, osproc, options]
 import context, osutils, packagesjson, gitops
 
 export options
 
+proc retryUrl(cmd, urlstr: string; c: var AtlasContext; repo: PackageRepo;
+              tryBeforeSleep = true): bool =
+  ## Retries a url-based command `cmd` with an increasing delay.
+  ## Performs an initial request when `tryBeforeSLeep` is `true`.
+  const Pauses = [0, 1000, 2000, 3000, 4000, 6000]
+  let firstPause = if tryBeforeSleep: 0 else: 1
+  for i, pause in Pauses[firstPause..^1].pairs():
+    if i > 0: infoNow c, repo, "Retrying remote URL: " & urlstr
+    os.sleep(pause)
+    if execCmdEx(cmd)[1] == QuitSuccess: return true
+  false
+
 proc cloneUrlImpl(c: var AtlasContext,
                   url: PackageUrl,
                   dest: string;
-                  cloneUsingHttps: bool):
-                (CloneStatus, string) =
+                  cloneUsingHttps: bool): (CloneStatus, string) =
   ## Returns an error message on error or else "".
   assert not dest.contains("://")
-  result = (OtherError, "")
-  var modUrl = url
-  if url.scheme == "git" and cloneUsingHttps:
-    modUrl.scheme = "https"
 
-  if url.scheme == "git":
-    modUrl.scheme = "" # git doesn't recognize git://
-
-  infoNow c, toRepo($modUrl), "Cloning URL: " & $modUrl
-
-  var isGithub = false
-  if modUrl.hostname == "github.com":
-    if modUrl.path.endsWith("/"):
+  let (repo, url, urlstr, isGitHub) = block:
+    var modurl = url
+    if url.scheme == "git":
+      modurl.scheme = if cloneusinghttps:
+          "https"
+        else:
+          "" # git doesn't recognize git://
+    let isGitHub = modurl.hostname == "github.com"
+    if isGitHub and modurl.path.endswith("/"):
       # github + https + trailing url slash causes a
-      # checkout/ls-remote to fail with Repository not found
-      modUrl.path = modUrl.path[0 .. ^2]
-    isGithub = true
+      # checkout/ls-remote to fail with repository not found
+      modurl.path = modurl.path[0 .. ^2]
+    (toRepo($modurl), modurl, $modurl, isGitHub)
 
-  let (_, exitCode) = execCmdEx("git ls-remote --quiet --tags " & $modUrl)
-  var xcode = exitCode
-  if isGithub and exitCode != QuitSuccess:
-    # retry multiple times to avoid annoying github timeouts:
-    for i in 0..4:
-      os.sleep(4000)
-      infoNow c, toRepo($modUrl), "Check remote URL: " & $modUrl
-      xcode = execCmdEx("git ls-remote --quiet --tags " & $modUrl)[1]
-      if xcode == QuitSuccess: break
+  infonow c, repo, "Cloning url: " & urlstr
 
-  if xcode == QuitSuccess:
-    if gitops.clone(c, modUrl, dest):
-      return (Ok, "")
+  # Checking repo with git
+  let gitLsSuccess = block:
+    let gitCmdStr = "git ls-remote --quiet --tags " & urlstr
+    var success = execCmdEx(gitCmdStr)[1] == QuitSuccess
+    if not success and isGitHub:
+      # retry multiple times to avoid annoying GitHub timeouts:
+      success = retryUrl(gitCmdStr, urlstr, c, repo, false)
+    success
+
+  if not gitLsSuccess:
+    if isGitHub:
+      (NotFound, "Unable to identify url: " & urlstr)
     else:
-      result = (OtherError, "exernal program failed: " & $GitClone)
-  elif not isGithub:
-    let (_, exitCode) = execCmdEx("hg identify " & $modUrl)
-    if exitCode == QuitSuccess:
-      let cmd = "hg clone " & $modUrl & " " & dest
-      for i in 0..4:
-        if execShellCmd(cmd) == 0: return (Ok, "")
-        os.sleep(i*1_000+2_000)
-      result = (OtherError, "exernal program failed: " & cmd)
-    else:
-      result = (NotFound, "Unable to identify url: " & $modUrl)
+      # Checking repo with Mercurial
+      if retryUrl("hg identify " & urlstr, urlstr, c, repo, true):
+        (NotFound, "Unable to identify url: " & urlstr)
+      else:
+        let hgCmdStr = "hg clone " & urlstr & " " & dest
+        if retryUrl(hgCmdStr, urlstr, c, repo, true):
+          (Ok, "")
+        else:
+          (OtherError, "exernal program failed: " & hgCmdStr)
   else:
-    result = (NotFound, "Unable to identify url: " & $modUrl)
+    if gitops.clone(c, url, dest): # gitops.clone has buit-in retrying
+      (Ok, "")
+    else:
+      (OtherError, "exernal program failed: " & $GitClone)
 
 proc cloneUrl*(c: var AtlasContext;
                url: PackageUrl,
@@ -105,11 +115,11 @@ proc fillPackageLookupTable(c: var AtlasContext) =
 proc dependencyDir*(c: var AtlasContext; pkg: Package): PackageDir =
   template checkDir(dir: string) =
     if dir.len() > 0 and dirExists(dir):
-      debug c, pkg, "dependencyDir: found: " & dir 
+      debug c, pkg, "dependencyDir: found: " & dir
       return PackageDir dir
     else:
-      debug c, pkg, "dependencyDir: not found: " & dir 
-  
+      debug c, pkg, "dependencyDir: not found: " & dir
+
   debug c, pkg, "dependencyDir: check: pth: " & pkg.path.string & " cd: " & getCurrentDir() & " ws: " & c.workspace
   if pkg.exists:
     debug c, pkg, "dependencyDir: exists: " & pkg.path.string
@@ -122,7 +132,7 @@ proc dependencyDir*(c: var AtlasContext; pkg: Package): PackageDir =
     checkDir pkg.path.string
     checkDir c.workspace / pkg.path.string
     checkDir c.depsDir / pkg.path.string
-  
+
   checkDir c.workspace / pkg.repo.string
   checkDir c.depsDir / pkg.repo.string
   checkDir c.workspace / pkg.name.string
@@ -157,7 +167,7 @@ proc resolvePackageUrl(c: var AtlasContext; url: string, checkOverrides = true):
   result = Package(url: getUrl(url),
                    name: url.toRepo().PackageName,
                    repo: url.toRepo())
-  
+
   debug c, result, "resolvePackageUrl: search: " & url
 
   let isFile = result.url.scheme == "file"
@@ -184,7 +194,7 @@ proc resolvePackageUrl(c: var AtlasContext; url: string, checkOverrides = true):
       let host = purl.hostname
       let org = purl.path.parentDir.lastPathPart
       let rname = purl.path.lastPathPart
-      let pname = [rname, org, host].join(".") 
+      let pname = [rname, org, host].join(".")
       warn c, result,
               "conflicting url's for package; renaming package: " &
                 result.name.string & " to " & pname
@@ -200,7 +210,7 @@ proc resolvePackageUrl(c: var AtlasContext; url: string, checkOverrides = true):
     # set the url with package name as url name
     c.urlMapping["repo:" & result.name.string] = result
     trace c, result, "resolvePackageUrl: not found; set pkg: " & $result.repo.string
-  
+
   if result.url.scheme == "file":
     result.path = PackageDir result.url.hostname & result.url.path
     trace c, result, "resolvePackageUrl: setting manual path: " & $result.path.string
@@ -208,7 +218,7 @@ proc resolvePackageUrl(c: var AtlasContext; url: string, checkOverrides = true):
 proc resolvePackageName(c: var AtlasContext; name: string): Package =
   result = Package(name: PackageName name,
                    repo: PackageRepo name)
-                   
+
   # the project name can be overwritten too!
   if UsesOverrides in c.flags:
     let name = c.overrides.substitute(name)
@@ -249,11 +259,11 @@ proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
   ## Takes a raw handle which can be a name, a repo name, or a url
   ## and resolves it into a package. If not found it will create
   ## a new one.
-  ## 
+  ##
   ## Note that Package should be unique globally. This happens
   ## by updating the packages list when new packages are added or
   ## loaded from a packages.json.
-  ## 
+  ##
   result.new()
 
   fillPackageLookupTable(c)
@@ -264,7 +274,7 @@ proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
     result = c.resolvePackageUrl(rawHandle)
   else:
     result = c.resolvePackageName(unicode.toLower(rawHandle))
-  
+
   result.path = dependencyDir(c, result)
   let res = c.findNimbleFile(result, result.path)
   if res.isSome:
@@ -276,13 +286,13 @@ proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
     debug c, result, "resolvePackageName: nimble: found: " & $result
   else:
     debug c, result, "resolvePackageName: nimble: not found: " & $result
-  
+
 
 proc resolveNimble*(c: var AtlasContext; pkg: Package) =
   ## Try to resolve the nimble file for the given package.
-  ## 
-  ## This should be done after cloning a new repo. 
-  ## 
+  ##
+  ## This should be done after cloning a new repo.
+  ##
 
   if pkg.exists:
     return
@@ -297,4 +307,3 @@ proc resolveNimble*(c: var AtlasContext; pkg: Package) =
     info c, pkg, "resolvePackageName: nimble: found: " & $pkg
   else:
     info c, pkg, "resolvePackageName: nimble: not found: " & $pkg
-
