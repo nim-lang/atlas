@@ -639,7 +639,7 @@ proc main(c: var AtlasContext) =
   of "search", "list":
     if c.workspace.len != 0:
       updatePackages(c)
-      let pkgInfos = getPackageInfos(c.workspace)
+      let pkgInfos = getPackageInfos(c.depsDir)
       search c, pkgInfos, args
     else:
       search c, @[], args

@@ -88,22 +88,22 @@ proc cloneUrl*(c: var AtlasContext;
       echo "cloned ", url, " into ", dest
 
 proc updatePackages*(c: var AtlasContext) =
-  if dirExists(c.workspace / DefaultPackagesDir):
-    withDir(c, c.workspace / DefaultPackagesDir):
-      gitPull(c, PackageRepo DefaultPackagesDir)
+  if dirExists(c.depsDir / DefaultPackagesSubDir):
+    withDir(c, c.depsDir / DefaultPackagesSubDir):
+      gitPull(c, PackageRepo DefaultPackagesSubDir)
   else:
-    withDir c, c.workspace:
-      let (status, err) = cloneUrl(c, getUrl "https://github.com/nim-lang/packages", DefaultPackagesDir, false)
+    withDir c, c.depsDir:
+      let (status, err) = cloneUrl(c, getUrl "https://github.com/nim-lang/packages", DefaultPackagesSubDir, false)
       if status != Ok:
-        error c, PackageRepo(DefaultPackagesDir), err
+        error c, PackageRepo(DefaultPackagesSubDir), err
 
 proc fillPackageLookupTable(c: var AtlasContext) =
   if not c.hasPackageList:
     c.hasPackageList = true
     when not MockupRun:
-      if not fileExists(c.workspace / DefaultPackagesDir / "packages.json"):
+      if not fileExists(c.depsDir / DefaultPackagesSubDir / "packages.json"):
         updatePackages(c)
-    let plist = getPackageInfos(when MockupRun: TestsDir else: c.workspace)
+    let plist = getPackageInfos(when MockupRun: TestsDir else: c.depsDir)
     debug c, toRepo("fillPackageLookupTable"), "initializing..."
     for entry in plist:
       let url = getUrl(entry.url)
