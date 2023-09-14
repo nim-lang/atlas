@@ -427,7 +427,7 @@ proc detectWorkspace(currentDir: string): string =
   # alternatively check for "sub-directory" workspace
   for kind, file in walkDir(currentDir):
     if kind == pcDir and fileExists(file / AtlasWorkspace):
-      result = file
+      return file
 
 proc autoWorkspace(currentDir: string): string =
   result = currentDir
