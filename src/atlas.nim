@@ -468,37 +468,29 @@ proc newProject(c: var AtlasContext; projectName: string) =
     ## Valid Nim identifier with addition of dashes (`-`) being allowed,
     ## but replaced with underscores (`_`) for the `.nim` file name.
     ## .. Note: Doesn't check if `n` is a valid file/directory name.
-    if not (n.len > 0 and n[0] in IdentStartChars):
-      return false
-    var prevDashOrUnderscore = false
-    for c in n:
-      if c in {'-', '_'}:
-        if prevDashOrUnderscore:
-          return false
-        else:
-          prevDashOrUnderscore = true
-      elif c notin (Letters + Digits):
-        return false
-      else:
-        prevDashOrUnderscore = false
-    true
+    if n.len > 0 and n[0] in IdentStartChars:
+      for i, c in n:
+        case c:
+          of Letters + Digits: continue # fine
+          of '-', '_':
+            if i > 0 and n[i-1] in {'-', '_'}: return false
+            else: continue # fine
+          else: return false
+      true
+    else: false
 
-  let name = block:
-    var n = projectName.strip()
-    if n.isValidFilename() and isValidProjectName(n):
-      n
-    else:
-      error c, toRepo(n), "'" & n & "' is not a vaild project name!"
-      quit(1)
+  let name = projectName.strip()
+  if not (isValidFilename(name) and isValidProjectName(name)):
+    error c, toRepo(name), "'" & name & "' is not a vaild project name!"
+    quit(1)
   if dirExists(name):
     error c, toRepo(name), "Directory '" & name & "' already exists!"
     quit(1)
-  else:
-    try:
-      createDir(name)
-    except OSError as e:
-      error c, toRepo(name), "Failed to create directory '$#': $#" % [name, e.msg]
-      quit(1)
+  try:
+    createDir(name)
+  except OSError as e:
+    error c, toRepo(name), "Failed to create directory '$#': $#" % [name, e.msg]
+    quit(1)
   info c, toRepo(name), "created project dir"
   withDir(c, name):
     let fname = name.replace('-', '_') & ".nim"
