@@ -30,14 +30,15 @@ Command:
     --deps=DIR          use DIR as the directory for dependencies
                         (default: store directly in the workspace)
 
-  use url|pkgname       clone a package and all of its dependencies and make
+  use <url|pkgname>     clone a package and all of its dependencies and make
                         it importable for the current project
-  clone url|pkgname     clone a package and all of its dependencies
-  update url|pkgname    update a package and all of its dependencies
-  install proj.nimble   use the .nimble file to setup the project's dependencies
+  clone <url|pkgname>   clone a package and all of its dependencies
+  update <url|pkgname>  update a package and all of its dependencies
+  install <proj.nimble> use the .nimble file to setup the project's dependencies
   new <project>         init a new project directory
-  search keyw keywB...  search for package that contains the given keywords
-  extract file.nimble   extract the requirements and custom commands from
+  search <keyA> [keyB ...]
+                        search for package that contains the given keywords
+  extract <file.nimble> extract the requirements and custom commands from
                         the given Nimble file
   updateProjects [filter]
                         update every project that has a remote
@@ -77,10 +78,10 @@ Options:
   --showGraph           show the dependency graph
   --list                list all available and installed versions
   --version             show the version
-  --verbosity:normal|trace|debug
+  --verbosity=normal|trace|debug
                         set verbosity level to normal, trace, debug
-  --help                show this help
   --global              use global workspace in ~/.atlas
+  --help                show this help
 """
 
 proc writeHelp() =
@@ -92,9 +93,6 @@ proc writeVersion() =
   stdout.write(AtlasVersion & "\n")
   stdout.flushFile()
   quit(0)
-
-
-include testdata
 
 proc tag(c: var AtlasContext; tag: string) =
   gitTag(c, tag)

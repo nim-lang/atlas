@@ -42,6 +42,8 @@ proc extractVersion*(s: string): string =
   while i < s.len and s[i] notin {'0'..'9'}: inc i
   result = s.substr(i)
 
+include testdata # used in `exec` testing
+
 proc exec*(c: var AtlasContext;
            cmd: Command;
            args: openArray[string],
