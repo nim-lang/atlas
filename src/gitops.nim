@@ -42,8 +42,6 @@ proc extractVersion*(s: string): string =
   while i < s.len and s[i] notin {'0'..'9'}: inc i
   result = s.substr(i)
 
-include testdata # used in `exec` testing
-
 proc exec*(c: var AtlasContext;
            cmd: Command;
            args: openArray[string],
@@ -73,13 +71,14 @@ proc exec*(c: var AtlasContext;
     when ProduceTest:
       echo "cmd ", cmd, " args ", args, " --> ", result
 
-proc isCleanGit*(c: var AtlasContext): string =
-  result = ""
+proc checkGitDiffStatus*(c: var AtlasContext): Option[string] =
   let (outp, status) = exec(c, GitDiff, [])
   if outp.len != 0:
-    result = "'git diff' not empty"
+    some("'git diff' not empty")
   elif status != 0:
-    result = "'git diff' returned non-zero"
+    some("'git diff' returned non-zero")
+  else:
+    none(string)
 
 proc clone*(c: var AtlasContext, url: PackageUrl, dest: string, retries = 5): bool =
   ## clone git repo.
@@ -275,8 +274,8 @@ proc updateDir*(c: var AtlasContext; file, filter: string) =
     let pkg = PackageRepo(file)
     let (remote, _) = osproc.execCmdEx("git remote -v")
     if filter.len == 0 or filter in remote:
-      let diff = isCleanGit(c)
-      if diff != "":
+      let diff = checkGitDiffStatus(c)
+      if diff.isSome():
         warn(c, pkg, "has uncommitted changes; skipped")
       else:
         let (branch, _) = osproc.execCmdEx("git rev-parse --abbrev-ref HEAD")

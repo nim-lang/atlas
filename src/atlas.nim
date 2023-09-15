@@ -19,7 +19,6 @@ export osutils, context
 const
   AtlasVersion = block: (include pkgversion; AtlasVersion)
   LockFileName = "atlas.lock"
-  NimbleLockFileName = "nimble.lock"
   Usage = "atlas - Nim Package Cloner Version " & AtlasVersion & """
 
   (c) 2021 Andreas Rumpf
@@ -133,16 +132,16 @@ proc afterGraphActions(c: var AtlasContext; g: DepGraph) =
 
 const
   FileProtocol = "file"
-  ThisVersion = "current_version.atlas"
+  #ThisVersion = "current_version.atlas" # used by `isLaterCommit`
 
 proc checkoutCommit(c: var AtlasContext; g: var DepGraph; w: Dependency) =
   withDir c, w.pkg:
     if w.commit.len == 0 or cmpIgnoreCase(w.commit, "head") == 0:
       gitPull(c, w.pkg.repo)
     else:
-      let err = isCleanGit(c)
-      if err != "":
-        warn c, w.pkg, err
+      let err = checkGitDiffStatus(c)
+      if err.isSome():
+        warn c, w.pkg, err.get()
       else:
         let requiredCommit = getRequiredCommit(c, w)
         let (cc, status) = exec(c, GitCurrentCommit, [])
@@ -185,12 +184,12 @@ proc copyFromDisk(c: var AtlasContext; w: Dependency; destDir: string): (CloneSt
   #writeFile destDir / ThisVersion, w.commit
   #echo "WRITTEN ", destDir / ThisVersion
 
-proc isLaterCommit(destDir, version: string): bool =
-  let oldVersion = try: readFile(destDir / ThisVersion).strip except: "0.0"
-  if isValidVersion(oldVersion) and isValidVersion(version):
-    result = Version(oldVersion) < Version(version)
-  else:
-    result = true
+# proc isLaterCommit(destDir, version: string): bool =
+#   let oldVersion = try: readFile(destDir / ThisVersion).strip except: "0.0"
+#   if isValidVersion(oldVersion) and isValidVersion(version):
+#     result = Version(oldVersion) < Version(version)
+#   else:
+#     result = true
 
 proc collectAvailableVersions(c: var AtlasContext; g: var DepGraph; w: Dependency) =
   trace c, w.pkg, "collecting versions"
@@ -648,7 +647,7 @@ proc main(c: var AtlasContext) =
     if c.projectDir == c.workspace or c.projectDir == c.depsDir:
       pinWorkspace c, args[0]
     else:
-      let exportNimble = args[0] == "nimble.lock"
+      let exportNimble = args[0] == NimbleLockFileName
       pinProject c, args[0], exportNimble
   of "rep", "replay", "reproduce":
     optSingleArg(LockFileName)
