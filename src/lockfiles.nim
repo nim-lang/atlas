@@ -326,13 +326,13 @@ proc replay*(c: var AtlasContext; lockFilePath: string) =
 
   # update the nim.cfg file
   if lf.nimcfg.len > 0:
-    writeFile(lfBase / NimCfg, lf.nimcfg.join("\n"))
+    writeFile(c.currentDir / NimCfg, lf.nimcfg.join("\n"))
   else:
     genCfg = true
 
   # update the nimble file
   if lf.nimbleFile.filename.len > 0:
-    writeFile(lfBase / lf.nimbleFile.filename,
+    writeFile(c.currentDir / lf.nimbleFile.filename,
               lf.nimbleFile.content.join("\n"))
 
   # update the the dependencies
@@ -353,9 +353,8 @@ proc replay*(c: var AtlasContext; lockFilePath: string) =
       checkoutGitCommit(c, dir.PackageDir, v.commit)
 
       if genCfg:
-        let pkg = resolvePackage(c, "file://" & c.currentDir)
-        let nimbleInfo = c.parseNimble(pkg.nimble)
-        paths.add CfgPath nimbleInfo.srcDir
+        let pkg = resolvePackage(c, "file://" & dir)
+        paths.add c.findCfgDir(pkg)
 
   if genCfg:
     # this allows us to re-create a nim.cfg that uses the paths from the users workspace
