@@ -17,7 +17,16 @@ import context, runners, osutils, packagesjson, sat, gitops, nimenv, lockfiles,
 export osutils, context
 
 const
-  AtlasVersion = block: (include pkgversion; AtlasVersion)
+  AtlasVersion =
+    block:
+      var ver = ""
+      for line in staticRead("../atlas.nimble").splitLines():
+        if line.startsWith("version ="):
+          ver = line.split("=")[1].replace(" ", "")
+      assert ver != ""
+      ver
+
+const
   LockFileName = "atlas.lock"
   NimbleLockFileName = "nimble.lock"
   Usage = "atlas - Nim Package Cloner Version " & AtlasVersion & """
