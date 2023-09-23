@@ -24,7 +24,7 @@ const
         if line.startsWith("version ="):
           ver = line.split("=")[1].replace("\"", "").replace(" ", "")
       assert ver != ""
-      ver
+      ver & " (sha: " & staticExec("git log -n 1 --format=%H") & ")"
 
 const
   LockFileName = "atlas.lock"
@@ -99,7 +99,7 @@ proc writeHelp() =
   quit(0)
 
 proc writeVersion() =
-  stdout.write(AtlasVersion & "\n")
+  stdout.write("version: " & AtlasVersion & "\n")
   stdout.flushFile()
   quit(0)
 
