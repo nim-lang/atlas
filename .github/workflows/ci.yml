@@ -135,4 +135,6 @@ jobs:
 
       - name: Test install with Nimble
         run: |
+          cd ../
+          find .
           nimble install -y
