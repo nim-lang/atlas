@@ -17,7 +17,16 @@ import context, runners, osutils, packagesjson, sat, gitops, nimenv, lockfiles,
 export osutils, context
 
 const
-  AtlasVersion = block: (include pkgversion; AtlasVersion)
+  AtlasVersion =
+    block:
+      var ver = ""
+      for line in staticRead("../atlas.nimble").splitLines():
+        if line.startsWith("version ="):
+          ver = line.split("=")[1].replace("\"", "").replace(" ", "")
+      assert ver != ""
+      ver & " (sha: " & staticExec("git log -n 1 --format=%H") & ")"
+
+const
   LockFileName = "atlas.lock"
   NimbleLockFileName = "nimble.lock"
   Usage = "atlas - Nim Package Cloner Version " & AtlasVersion & """
@@ -78,6 +87,7 @@ Options:
   --showGraph           show the dependency graph
   --list                list all available and installed versions
   --version             show the version
+  --ignoreUrls          don't error on mismatching urls
   --verbosity=normal|trace|debug
                         set verbosity level to normal, trace, debug
   --global              use global workspace in ~/.atlas
@@ -90,7 +100,7 @@ proc writeHelp() =
   quit(0)
 
 proc writeVersion() =
-  stdout.write(AtlasVersion & "\n")
+  stdout.write("version: " & AtlasVersion & "\n")
   stdout.flushFile()
   quit(0)
 
@@ -567,6 +577,7 @@ proc main(c: var AtlasContext) =
       of "full": c.flags.incl FullClones
       of "autoinit": autoinit = true
       of "showgraph": c.flags.incl ShowGraph
+      of "ignoreurls": c.flags.incl IgnoreUrls
       of "keep": c.flags.incl Keep
       of "autoenv": c.flags.incl AutoEnv
       of "noexec": c.flags.incl NoExec
@@ -605,7 +616,7 @@ proc main(c: var AtlasContext) =
         c.workspace = detectWorkspace(c.currentDir)
       if c.workspace.len > 0:
         readConfig c
-        info c, toRepo(c.workspace.readableFile), "is the current workspace"
+        info c, toRepo(c.workspace.absolutePath), "is the current workspace"
       elif autoinit:
         c.workspace = autoWorkspace(c.currentDir)
         createWorkspaceIn c

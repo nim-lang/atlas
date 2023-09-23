@@ -1,6 +1,5 @@
 # Package
-include src/pkgversion
-version = AtlasVersion
+version = "0.6.3"
 author = "Araq"
 description = "Atlas is a simple package cloner tool. It manages an isolated workspace."
 license = "MIT"

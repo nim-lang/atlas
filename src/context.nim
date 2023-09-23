@@ -90,6 +90,7 @@ type
     GlobalWorkspace
     AssertOnError
     FullClones
+    IgnoreUrls
 
   MsgKind = enum
     Info = "[Info] ",
@@ -175,7 +176,9 @@ proc writeMessage(c: var AtlasContext; k: MsgKind; p: PackageRepo; arg: string) 
     writeMessage(c, $k, p, arg)
   else:
     let pn =
-      if c.depsDir != "" and p.string.isRelativeTo(c.depsDir):
+      if p.string == c.workspace:
+        p.string.absolutePath
+      elif c.depsDir != "" and p.string.isRelativeTo(c.depsDir):
         p.string.relativePath(c.depsDir)
       elif p.string.isRelativeTo(c.workspace):
         p.string.relativePath(c.workspace)

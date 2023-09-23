@@ -132,3 +132,8 @@ jobs:
         run: |
           cd atlas
           nim c -r tests/tester.nim
+
+      - name: Test install with Nimble
+        run: |
+          cd atlas
+          nimble install -y

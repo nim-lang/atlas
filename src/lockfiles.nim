@@ -80,7 +80,7 @@ proc fromPrefixedPath*(c: var AtlasContext, path: string): string =
 
 proc genLockEntry(c: var AtlasContext; lf: var LockFile; pkg: Package) =
   let info = extractRequiresInfo(pkg.nimble.string)
-  let url = getRemoteUrl()
+  let url = $pkg.url
   let commit = getCurrentCommit()
   let name = pkg.name.string
   let pth = c.prefixedPath(pkg.path.string)
@@ -134,7 +134,6 @@ proc genLockEntry(c: var AtlasContext;
                   cfg: CfgPath,
                   deps: HashSet[PackageName]) =
   let info = extractRequiresInfo(pkg.nimble.string)
-  let url = getRemoteUrl()
   let commit = getCurrentCommit()
   let name = pkg.name.string
   infoNow c, pkg, "calculating nimble checksum"
@@ -142,7 +141,7 @@ proc genLockEntry(c: var AtlasContext;
   lf.packages[name] = NimbleLockFileEntry(
     version: info.version,
     vcsRevision: commit,
-    url: $url,
+    url: $pkg.url,
     downloadMethod: "git",
     dependencies: deps.mapIt(it.string),
     checksums: {"sha1": chk}.toTable
@@ -348,7 +347,11 @@ proc replay*(c: var AtlasContext; lockFilePath: string) =
     withDir c, dir:
       let url = $getRemoteUrl()
       if $v.url.getUrl() != url:
-        error c, toRepo(v.dir), "remote URL has been compromised: got: " &
+        if IgnoreUrls in c.flags:
+          warn c, toRepo(v.dir), "remote URL differs from expected: got: " &
+            url & " but expected: " & v.url
+        else:
+          error c, toRepo(v.dir), "remote URL has been compromised: got: " &
             url & " but wanted: " & v.url
       checkoutGitCommit(c, dir.PackageDir, v.commit)
 
