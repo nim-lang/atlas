@@ -87,6 +87,7 @@ Options:
   --showGraph           show the dependency graph
   --list                list all available and installed versions
   --version             show the version
+  --ignoreUrls          don't error on mismatching urls
   --verbosity=normal|trace|debug
                         set verbosity level to normal, trace, debug
   --global              use global workspace in ~/.atlas
@@ -576,6 +577,7 @@ proc main(c: var AtlasContext) =
       of "full": c.flags.incl FullClones
       of "autoinit": autoinit = true
       of "showgraph": c.flags.incl ShowGraph
+      of "ignoreurls": c.flags.incl IgnoreUrls
       of "keep": c.flags.incl Keep
       of "autoenv": c.flags.incl AutoEnv
       of "noexec": c.flags.incl NoExec

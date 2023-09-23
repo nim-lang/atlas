@@ -90,6 +90,7 @@ type
     GlobalWorkspace
     AssertOnError
     FullClones
+    IgnoreUrls
 
   MsgKind = enum
     Info = "[Info] ",
