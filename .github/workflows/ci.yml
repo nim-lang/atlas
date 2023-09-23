@@ -135,6 +135,7 @@ jobs:
 
       - name: Test install with Nimble
         run: |
-          cd ../
+          cd atlas
+          pwd
           find .
           nimble install -y
