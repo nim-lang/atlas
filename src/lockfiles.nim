@@ -134,7 +134,6 @@ proc genLockEntry(c: var AtlasContext;
                   cfg: CfgPath,
                   deps: HashSet[PackageName]) =
   let info = extractRequiresInfo(pkg.nimble.string)
-  let url = getRemoteUrl()
   let commit = getCurrentCommit()
   let name = pkg.name.string
   infoNow c, pkg, "calculating nimble checksum"
@@ -142,7 +141,7 @@ proc genLockEntry(c: var AtlasContext;
   lf.packages[name] = NimbleLockFileEntry(
     version: info.version,
     vcsRevision: commit,
-    url: $url,
+    url: $pkg.url,
     downloadMethod: "git",
     dependencies: deps.mapIt(it.string),
     checksums: {"sha1": chk}.toTable
