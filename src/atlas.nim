@@ -22,7 +22,7 @@ const
       var ver = ""
       for line in staticRead("../atlas.nimble").splitLines():
         if line.startsWith("version ="):
-          ver = line.split("=")[1].replace(" ", "")
+          ver = line.split("=")[1].replace("\"", "").replace(" ", "")
       assert ver != ""
       ver
 
