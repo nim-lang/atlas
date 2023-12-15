@@ -3,9 +3,9 @@ import std / [json, os, sets, strutils, httpclient, uri, options]
 import context
 
 const
-  MockupRun = defined(atlasTests)
+  #MockupRun = defined(atlasTests)
   UnitTests = defined(atlasUnitTests)
-  TestsDir = "atlas/tests"
+  #TestsDir = "atlas/tests"
 
 when UnitTests:
   proc findAtlasDir*(): string =

@@ -8,8 +8,11 @@
 
 ## Lockfile implementation.
 
-import std / [sequtils, strutils, algorithm, tables, os, json, jsonutils, sha1]
+import std / [sequtils, strutils, tables, os, json, jsonutils]
 import context, gitops, osutils, traversal, compilerversions, nameresolver, configutils
+
+const
+  NimbleLockFileName* = "nimble.lock"
 
 type
   LockFileEntry* = object
@@ -277,8 +280,10 @@ proc listChanged*(c: var AtlasContext; lockFilePath: string) =
   ## this also includes updating the nim.cfg and nimble file as well
   ## if they're included in the lockfile
   ##
-  let lf = if lockFilePath == "nimble.lock": convertNimbleLock(c, lockFilePath)
-           else: readLockFile(lockFilePath)
+  let lf = if lockFilePath == NimbleLockFileName:
+              convertNimbleLock(c, lockFilePath)
+           else:
+              readLockFile(lockFilePath)
 
   let base = splitPath(lockFilePath).head
 
@@ -317,8 +322,10 @@ proc replay*(c: var AtlasContext; lockFilePath: string) =
   ## this also includes updating the nim.cfg and nimble file as well
   ## if they're included in the lockfile
   ##
-  let lf = if lockFilePath == "nimble.lock": convertNimbleLock(c, lockFilePath)
-           else: readLockFile(lockFilePath)
+  let lf = if lockFilePath == NimbleLockFileName:
+              convertNimbleLock(c, lockFilePath)
+           else:
+              readLockFile(lockFilePath)
 
   let lfBase = splitPath(lockFilePath).head
   var genCfg = CfgHere in c.flags
