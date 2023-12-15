@@ -13,44 +13,32 @@ jobs:
       matrix:
         target:
           - os: linux
+            arch: amd64
             triple: x86_64-linux-gnu
             name: linux_x86_64
-          ## these triples don't actually work (yet) 
-          ## TODO: add cross compilation for arm targets
-          # - os: linux
-          #   triple: i686-linux-musl
-          #   name: linux_i686
-          # - os: linux
-          #   triple: i686-linux-musl
-          #   name: linux_i386
-          # - os: linux
-          #   triple: aarch64-linux-musl
-          #   name: linux_arm64
-          # - os: linux
-          #   triple: armv7l-linux-musleabihf
-          #   name: linux_arm
+          - os: linux
+            arch: aarch64
+            triple: aarch64-linux-gnu
+            name: linux_arm64
+          - os: linux
+            arch: arm
+            triple: arm-linux-gnueabihf
+            name: linux_arm
           - os: macosx
+            arch: universal
             triple: x86_64-apple-darwin14
-            name: apple_x86_64
+            name: apple_universal
           - os: windows
+            arch: amd64
             triple: x86_64-w64-mingw32
             name: windows_x86_64
-          # - os: windows
-          #   triple: i686-w64-mingw32
-          #   name: windows_i686
-          # - os: windows
-          #   triple: i686-w64-mingw32
-          #   name: windows_i386
         include:
           - target:
               os: linux
-            builder: ubuntu-20.04
+            builder: ubuntu-latest
           - target:
               os: macosx
-            builder: macos-11
-          - target:
-              os: windows
-            builder: windows-2019
+            builder: macos-latest
     defaults:
       run:
         shell: bash
@@ -65,9 +53,16 @@ jobs:
         with:
           nim-version: "stable"
 
+      - name: setup build
+        if: ${{ matrix.builder }} == "ubuntu-latest"
+        run: |
+          sudo apt install gcc make gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
+                                    gcc-arm-linux-gnueabihf binutils-arm-linux-gnueabihf \
+                                    mingw-w64
+
       - name: build
         run: |
-          nim release
+          OS=${{ matrix.target.os }} ARCH=${{ matrix.target.arch }} nim buildRelease
 
       - name: Compress the Nim Language Server binaries
         run: |
