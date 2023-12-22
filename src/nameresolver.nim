@@ -38,7 +38,7 @@ proc cloneUrlImpl(c: var AtlasContext,
       modurl.scheme = if cloneusinghttps:
           "https"
         else:
-          "" # git doesn't recognize git://
+           "" # git doesn't recognize git://
     let isGitHub = modurl.hostname == "github.com"
     if isGitHub and modurl.path.endswith("/"):
       # github + https + trailing url slash causes a
@@ -49,15 +49,13 @@ proc cloneUrlImpl(c: var AtlasContext,
   infonow c, repo, "Cloning url: " & urlstr
 
   # Checking repo with git
-  let gitLsSuccess = block:
-    let gitCmdStr = "git ls-remote --quiet --tags " & urlstr
-    var success = execCmdEx(gitCmdStr)[1] == QuitSuccess
-    if not success and isGitHub:
-      # retry multiple times to avoid annoying GitHub timeouts:
-      success = retryUrl(gitCmdStr, urlstr, c, repo, false)
-    success
+  let gitCmdStr = "git ls-remote --quiet --tags " & urlstr
+  var success = execCmdEx(gitCmdStr)[1] == QuitSuccess
+  if not success and isGitHub:
+    # retry multiple times to avoid annoying GitHub timeouts:
+    success = retryUrl(gitCmdStr, urlstr, c, repo, false)
 
-  if not gitLsSuccess:
+  if not success:
     if isGitHub:
       (NotFound, "Unable to identify url: " & urlstr)
     else:
@@ -148,9 +146,9 @@ proc findNimbleFile*(c: var AtlasContext; pkg: Package, depDir = PackageDir ""):
     let dir = if depDir.string.len() == 0: dependencyDir(c, pkg).string
               else: depDir.string
     result = some dir / (pkg.name.string & ".nimble")
-    debug  c, pkg, "findNimbleFile: searching: " & pkg.repo.string & " path: " & pkg.path.string & " dir: " & dir & " curr: " & result.get()
+    debug c, pkg, "findNimbleFile: searching: " & pkg.repo.string & " path: " & pkg.path.string & " dir: " & dir & " curr: " & result.get()
     if not fileExists(result.get()):
-      debug  c, pkg, "findNimbleFile: not found: " & result.get()
+      debug c, pkg, "findNimbleFile: not found: " & result.get()
       result = none[string]()
       for file in walkFiles(dir / "*.nimble"):
         if result.isNone:
@@ -161,7 +159,6 @@ proc findNimbleFile*(c: var AtlasContext; pkg: Package, depDir = PackageDir ""):
           return none[string]()
     else:
       trace c, pkg, "nimble file found " & result.get()
-      discard
 
 proc resolvePackageUrl(c: var AtlasContext; url: string, checkOverrides = true): Package =
   result = Package(url: getUrl(url),
@@ -241,13 +238,6 @@ proc resolvePackageName(c: var AtlasContext; name: string): Package =
     debug c, result, "resolvePackageName: found by repo!"
     result = repoPkg
     result.inPackages = true
-  else:
-    info c, result, "could not resolve by name or repo; searching GitHub"
-    let url = c.getUrlFromGithub(name)
-    if url.len == 0:
-      error c, result, "package not found by github search"
-    else:
-      result.url = getUrl url
 
   if UsesOverrides in c.flags:
     let newUrl = c.overrides.substitute($result.url)
@@ -293,9 +283,7 @@ proc resolveNimble*(c: var AtlasContext; pkg: Package) =
   ##
   ## This should be done after cloning a new repo.
   ##
-
-  if pkg.exists:
-    return
+  if pkg.exists: return
 
   pkg.path = dependencyDir(c, pkg)
   let res = c.findNimbleFile(pkg)

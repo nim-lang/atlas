@@ -52,12 +52,7 @@ proc rememberNimVersion(g: var DepGraph; q: VersionInterval) =
   let v = extractGeQuery(q)
   if v != Version"" and v > g.bestNimVersion: g.bestNimVersion = v
 
-proc collectDeps*(
-    c: var AtlasContext;
-    g: var DepGraph,
-    parent: int;
-    dep: Dependency
-): CfgPath =
+proc collectDeps*(c: var AtlasContext; g: var DepGraph; parent: int; dep: Dependency): CfgPath =
   # If there is a .nimble file, return the dependency path & srcDir
   # else return "".
   let nimbleInfo = parseNimble(c, dep.pkg.nimble)
@@ -75,7 +70,7 @@ proc collectDeps*(
     if len($pkg.url) == 0:
       error c, pkg, "invalid pkgUrl in nimble file: " & name
       err = true
-    
+
     let query = parseVersionInterval(r, i, err) # update err
 
     if err:
@@ -87,12 +82,7 @@ proc collectDeps*(
         rememberNimVersion g, query
   result = CfgPath(toDestDir(dep.pkg).string / nimbleInfo.srcDir)
 
-proc collectNewDeps*(
-    c: var AtlasContext;
-    g: var DepGraph;
-    parent: int;
-    dep: Dependency
-): CfgPath =
+proc collectNewDeps*(c: var AtlasContext; g: var DepGraph; parent: int; dep: Dependency): CfgPath =
   trace c, dep.pkg, "collecting dependencies"
   if dep.pkg.exists:
     let nimble = dep.pkg.nimble
@@ -102,12 +92,7 @@ proc collectNewDeps*(
     warn c, dep.pkg, "collecting deps: no nimble skipping deps'"
     result = CfgPath dep.pkg.path.string
 
-proc updateSecureHash(
-    checksum: var Sha1State,
-    c: var AtlasContext;
-    pkg: Package,
-    name: string
-) =
+proc updateSecureHash(checksum: var Sha1State; c: var AtlasContext; pkg: Package; name: string) =
   let path = pkg.path.string / name
   if not path.fileExists(): return
   checksum.update(name)
