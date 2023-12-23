@@ -19,11 +19,11 @@ proc retryUrl(cmd, urlstr: string; c: var AtlasContext; repo: PackageRepo;
   ## Performs an initial request when `tryBeforeSLeep` is `true`.
   const Pauses = [0, 1000, 2000, 3000, 4000, 6000]
   let firstPause = if tryBeforeSleep: 0 else: 1
-  for i, pause in Pauses[firstPause..^1].pairs():
-    if i > 0: infoNow c, repo, "Retrying remote URL: " & urlstr
-    os.sleep(pause)
+  for i in firstPause..<Pauses.len:
+    if i > firstPause: infoNow c, repo, "Retrying remote URL: " & urlstr
+    os.sleep(Pauses[i])
     if execCmdEx(cmd)[1] == QuitSuccess: return true
-  false
+  return false
 
 proc cloneUrlImpl(c: var AtlasContext,
                   url: PackageUrl,
@@ -32,19 +32,20 @@ proc cloneUrlImpl(c: var AtlasContext,
   ## Returns an error message on error or else "".
   assert not dest.contains("://")
 
-  let (repo, url, urlstr, isGitHub) = block:
-    var modurl = url
-    if url.scheme == "git":
-      modurl.scheme = if cloneusinghttps:
-          "https"
-        else:
-           "" # git doesn't recognize git://
-    let isGitHub = modurl.hostname == "github.com"
-    if isGitHub and modurl.path.endswith("/"):
-      # github + https + trailing url slash causes a
-      # checkout/ls-remote to fail with repository not found
-      modurl.path = modurl.path[0 .. ^2]
-    (toRepo($modurl), modurl, $modurl, isGitHub)
+  var modurl = url
+  if url.scheme == "git":
+    modurl.scheme = if cloneusinghttps:
+        "https"
+      else:
+          "" # git doesn't recognize git://
+  let isGitHub = modurl.hostname == "github.com"
+  if isGitHub and modurl.path.endswith("/"):
+    # github + https + trailing url slash causes a
+    # checkout/ls-remote to fail with repository not found
+    modurl.path = modurl.path[0 .. ^2]
+  let repo = toRepo($modurl)
+  let url = modurl
+  let urlstr = $modurl
 
   infonow c, repo, "Cloning url: " & urlstr
 
@@ -138,7 +139,7 @@ proc dependencyDir*(c: var AtlasContext; pkg: Package): PackageDir =
   result = PackageDir c.depsDir / pkg.repo.string
   trace c, pkg, "dependency not found using default"
 
-proc findNimbleFile*(c: var AtlasContext; pkg: Package, depDir = PackageDir ""): Option[string] =
+proc findNimbleFile*(c: var AtlasContext; pkg: Package; depDir = PackageDir""): Option[string] =
   when MockupRun:
     result = TestsDir / pkg.name.string & ".nimble"
     doAssert fileExists(result), "file does not exist " & result
