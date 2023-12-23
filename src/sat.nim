@@ -8,7 +8,7 @@
 
 type
   FormKind* = enum
-    FalseForm, TrueForm, VarForm, NotForm, AndForm, OrForm, ExactlyOneOfForm # roughly 8 so the last 3 bits
+    FalseForm, TrueForm, VarForm, NotForm, AndForm, OrForm, ExactlyOneOfForm, EqForm # 8 so the last 3 bits
   BaseType = int32
   Atom = distinct BaseType
   VarId* = distinct BaseType
@@ -50,6 +50,10 @@ proc prepare(dest: var Formular; source: Formular; sourcePos: FormPos): PatchPos
   result = PatchPos dest.len
   dest.add source[sourcePos.int]
 
+proc prepare(dest: var Formular; k: FormKind): PatchPos =
+  result = PatchPos dest.len
+  dest.add newOperation(k, 1)
+
 proc patch(f: var Formular; pos: PatchPos) =
   let pos = pos.int
   let k = f[pos].kind
@@ -75,6 +79,12 @@ iterator sons(dest: var Formular; source: Formular; n: FormPos): FormPos =
   for x in sonsReadonly(source, n): yield x
   patch dest, patchPos
 
+proc copyTree(dest: var Formular; source: Formular; n: FormPos) =
+  let x = source[int n]
+  let len = (if x.kind <= VarForm: 1 else: int(intVal(x)))
+  for i in 0..<len:
+    dest.add source[i+n.int]
+
 # String representation
 
 proc toString(dest: var string; f: Formular; n: FormPos; varRepr: proc (dest: var string; i: int)) =
@@ -95,6 +105,8 @@ proc toString(dest: var string; f: Formular; n: FormPos; varRepr: proc (dest: va
       dest.add "(1=="
     of NotForm:
       dest.add "(~"
+    of EqForm:
+      dest.add "(=="
     else: assert false, "cannot happen"
     for child in sonsReadonly(f, n):
       toString(dest, f, child, varRepr)
@@ -118,7 +130,7 @@ type
     toPatch: seq[PatchPos]
 
 proc isEmpty*(b: Builder): bool {.inline.} =
-  b.f.len == 0 or b.f.len == 1 and b.f[0].kind in {NotForm, AndForm, OrForm, ExactlyOneOfForm}
+  b.f.len == 0 or b.f.len == 1 and b.f[0].kind in {NotForm, AndForm, OrForm, ExactlyOneOfForm, EqForm}
 
 proc openOpr*(b: var Builder; k: FormKind) =
   b.toPatch.add PatchPos b.f.len
@@ -146,7 +158,7 @@ proc toForm*(b: var Builder): Formular =
 # Code from the blog translated into Nim and into our representation
 
 const
-  NoVar = VarId(-1)
+  NoVar* = VarId(-1)
 
 proc freeVariable(f: Formular): VarId =
   ## returns NoVar if there is no free variable.
@@ -227,6 +239,27 @@ proc simplify(dest: var Formular; source: Formular; n: FormPos; sol: Solution): 
       setLen dest, initialLen
       result = tForm
       dest.add lit(result)
+  of EqForm:
+    let oldLen = dest.len
+    var inner: FormKind
+    var childCount = 0
+    var interestingChild = FormPos(n.int+1)
+    for child in sons(dest, source, n):
+      inner = simplify(dest, source, child, sol)
+      if inner notin {TrueForm, FalseForm}:
+        interestingChild = child
+      inc childCount
+
+    assert childCount == 2, "EqForm must have exactly 2 children"
+    # simplify: `T == x` to `x` and `F == x` to `not x`:
+    if inner == TrueForm:
+      setLen dest, oldLen
+      copyTree dest, source, interestingChild
+    elif inner == FalseForm:
+      setLen dest, oldLen
+      let pp = prepare(dest, NotForm)
+      copyTree dest, source, interestingChild
+      dest.patch pp
   of ExactlyOneOfForm:
     let initialLen = dest.len
     var childCount = 0
@@ -320,9 +353,49 @@ when isMainModule:
     echo f
 
     var s: Solution
-    echo satisfiable(f, s)
+    echo "is solvable? ", satisfiable(f, s)
+    echo "solution"
+    for i in 0..<s.len:
+      echo "v", i, " ", s[i]
+
+  proc main2 =
+    var b: Builder
+    b.openOpr(AndForm)
+
+    b.openOpr(EqForm)
+    b.add newVar(VarId 9)
+
+    b.openOpr(OrForm)
+    b.add newVar(VarId 1)
+    b.add newVar(VarId 2)
+    b.add newVar(VarId 3)
+    b.add newVar(VarId 4)
+    b.closeOpr # OrForm
+    b.closeOpr # EqForm
+
+    b.openOpr(ExactlyOneOfForm)
+    b.add newVar(VarId 5)
+    b.add newVar(VarId 6)
+    b.add newVar(VarId 7)
+
+    #b.openOpr(NotForm)
+    b.add newVar(VarId 8)
+    #b.closeOpr
+    b.closeOpr
+
+    b.add newVar(VarId 6)
+    b.add newVar(VarId 1)
+    b.closeOpr
+
+    let f = toForm(b)
+    echo "original: "
+    echo f
+
+    var s: Solution
+    echo "is solvable? ", satisfiable(f, s)
     echo "solution"
     for i in 0..<s.len:
       echo "v", i, " ", s[i]
 
   main()
+  main2()
