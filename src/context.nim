@@ -54,8 +54,8 @@ type
     name*: PackageName
     repo*: PackageRepo
     url*: PackageUrl
-    inPackages*: bool
     path*: PackageDir
+    inPackages*: bool
     exists*: bool
     nimble*: PackageNimble
 
@@ -184,12 +184,13 @@ proc writeMessage(c: var AtlasContext; k: MsgKind; p: PackageRepo; arg: string) 
         p.string.relativePath(c.workspace)
       else:
         p.string
-    let (color, style) = case k
-                of Debug: (fgWhite, styleDim)
-                of Trace: (fgBlue, styleBright)
-                of Info: (fgGreen, styleBright)
-                of Warning: (fgYellow, styleBright)
-                of Error: (fgRed, styleBright)
+    let (color, style) =
+      case k
+      of Debug: (fgWhite, styleDim)
+      of Trace: (fgBlue, styleBright)
+      of Info: (fgGreen, styleBright)
+      of Warning: (fgYellow, styleBright)
+      of Error: (fgRed, styleBright)
     stdout.styledWriteLine(color, style, $k, resetStyle, fgCyan, "(", pn, ")", resetStyle, " ", arg)
 
 proc message(c: var AtlasContext; k: MsgKind; p: PackageRepo; arg: string) =
