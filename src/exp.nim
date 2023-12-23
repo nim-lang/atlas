@@ -25,6 +25,7 @@ type
     version*: Version
     dependencies*: Dependencies
     status*: ProjectStatus
+    v: VarId
 
   Project* = object
     pkg*: Package
@@ -124,7 +125,7 @@ proc expand*(c: var AtlasContext; g: var Graph) =
     if not processed.containsOrIncl(w.pkg.repo):
       if not dirExists(w.pkg.path.string):
         withDir c, (if i < g.startProjectsLen: c.workspace else: c.depsDir):
-          info(c, w.pkg, "cloning: " & $(w.pkg.url))
+          info(c, w.pkg, "cloning: " & $w.pkg.url)
           let (status, err) = cloneUrl(c, w.pkg.url, w.pkg.path.string, false)
           #g.nodes[i].status = status
 
@@ -132,9 +133,92 @@ proc expand*(c: var AtlasContext; g: var Graph) =
         traverseProject(c, g, i, processed)
     inc i
 
-proc toFormular*(g: Graph): Formular =
+proc findProjectForDep(g: Graph; dep: Package): Project =
+  # XXX Optimize this:
+  for p in g.projects:
+    if p.pkg == dep: return p
+  return Project()
+
+proc toFormular*(g: var Graph; algo: ResolutionAlgorithm): Formular =
   # Key idea: use a SAT variable for every `Dependencies` object, which are
   # shared.
   var idgen = g.idgen
 
+  var b: Builder
+  b.openOpr(AndForm)
 
+  # all active projects must be true:
+  for i in 0 ..< g.startProjectsLen:
+    b.add newVar(g.projects[i].v)
+
+  for p in mitems(g.projects):
+    # if Package p is installed, pick one of its concrete versions, but not versions
+    # that are errornous:
+    # A -> (exactly one of: A1, A2, A3)
+    b.openOpr(OrForm)
+    b.openOpr(NotForm)
+    b.add newVar(p.v)
+    b.closeOpr # NotForm
+
+    b.openOpr(ExactlyOneOfForm)
+    for ver in mitems p.versions:
+      ver.v = VarId(idgen)
+      inc idgen
+      b.add newVar(ver.v)
+
+    b.closeOpr # ExactlyOneOfForm
+    b.closeOpr # OrForm
+
+  # Model the dependency graph:
+  for p in mitems(g.projects):
+    for ver in mitems p.versions:
+      if isValid(ver.dependencies.v):
+        # already covered this sub-formula (ref semantics!)
+        continue
+      ver.dependencies.v = VarId(idgen)
+      inc idgen
+
+      b.openOpr(EqForm)
+      b.add newVar(ver.dependencies.v)
+      b.openOpr(AndForm)
+
+      for dep, query in items ver.dependencies.deps:
+        b.openOpr(ExactlyOneOfForm)
+        let q = if algo == SemVer: toSemVer(query) else: query
+        let commit = extractSpecificCommit(q)
+        let av = findProjectForDep(g, dep)
+        if commit.len > 0:
+          var v = Version("#" & commit)
+          for j in countup(0, av.versions.len-1):
+            if q.matches(av.versions[j].version):
+              v = av.versions[j].version
+              b.add newVar(av.versions[j].v)
+              break
+          #mapping.add (g.nodes[i].pkg, commit, v)
+        elif algo == MinVer:
+          for j in countup(0, av.versions.len-1):
+            if q.matches(av.versions[j].version):
+              b.add newVar(av.versions[j].v)
+        else:
+          for j in countdown(av.versions.len-1, 0):
+            if q.matches(av.versions[j].version):
+              b.add newVar(av.versions[j].v)
+        b.closeOpr # ExactlyOneOfForm
+
+      b.closeOpr # AndForm
+      b.closeOpr # EqForm
+
+  # Model the dependency graph:
+  for p in mitems(g.projects):
+    for ver in mitems p.versions:
+      if ver.dependencies.deps.len > 0:
+        b.openOpr(OrForm)
+        b.openOpr(NotForm)
+        b.add newVar(ver.v) # if this version is chosen, these are its dependencies
+        b.closeOpr # NotForm
+
+        b.add newVar(ver.dependencies.v)
+        b.closeOpr # OrForm
+
+  b.closeOpr
+  result = toForm(b)

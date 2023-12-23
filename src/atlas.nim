@@ -362,8 +362,8 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[C
           withDir c, w.pkg:
             collectAvailableVersions c, g, w
     else:
-        withDir c, w.pkg:
-          collectAvailableVersions c, g, w
+      withDir c, w.pkg:
+        collectAvailableVersions c, g, w
 
     c.resolveNimble(w.pkg)
 
@@ -503,7 +503,7 @@ proc newProject(c: var AtlasContext; projectName: string) =
     let fname = name.replace('-', '_') & ".nim"
     try:
       # A header doc comment with the project's name
-      fname.writeFile("## $#\n" % name) 
+      fname.writeFile("## $#\n" % name)
     except IOError as e:
       error c, toRepo(name), "Failed writing to file '$#': $#" % [fname, e.msg]
       quit(1)

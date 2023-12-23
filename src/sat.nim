@@ -160,6 +160,8 @@ proc toForm*(b: var Builder): Formular =
 const
   NoVar* = VarId(-1)
 
+proc isValid*(v: VarId): bool {.inline.} = v.int32 >= 0
+
 proc freeVariable(f: Formular): VarId =
   ## returns NoVar if there is no free variable.
   for i in 0..<f.len:
