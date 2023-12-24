@@ -6,6 +6,8 @@
 ## Formulars as packed ASTs, no pointers no cry. Solves formulars with many
 ## thousands of variables in no time.
 
+import std / hashes
+
 type
   FormKind* = enum
     FalseForm, TrueForm, VarForm, NotForm, AndForm, OrForm, ExactlyOneOfForm, EqForm # 8 so the last 3 bits
@@ -15,6 +17,7 @@ type
   Formular* = seq[Atom] # linear storage
 
 proc `==`*(a, b: VarId): bool {.borrow.}
+proc hash*(a: VarId): Hash {.borrow.}
 
 const
   KindBits = 3
@@ -106,7 +109,7 @@ proc toString(dest: var string; f: Formular; n: FormPos; varRepr: proc (dest: va
     of NotForm:
       dest.add "(~"
     of EqForm:
-      dest.add "(=="
+      dest.add "(<->"
     else: assert false, "cannot happen"
     for child in sonsReadonly(f, n):
       toString(dest, f, child, varRepr)

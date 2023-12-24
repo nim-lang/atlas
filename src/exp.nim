@@ -6,9 +6,9 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [sets, os, strutils]
+import std / [sets, tables, os, strutils]
 
-import context, sat, nameresolver, configutils
+import context, sat, nameresolver, configutils, gitops
 
 type
   Dependencies* = ref object
@@ -23,6 +23,7 @@ type
 
   ProjectVersion* = object  # Represents a specific version of a project.
     version*: Version
+    commit*: string
     dependencies*: Dependencies
     status*: ProjectStatus
     v: VarId
@@ -36,15 +37,18 @@ type
     projects: seq[Project]
     idgen: int32
     startProjectsLen: int
+    mapping: Table[VarId, (Package, string, Version)]
+    packageToProject: Table[Package, int]
 
 proc createGraph*(startSet: openArray[Package]): Graph =
   result = Graph(projects: @[], idgen: 0'i32, startProjectsLen: startSet.len)
   for s in startSet:
+    result.packageToProject[s] = result.projects.len
     result.projects.add Project(pkg: s, versions: @[], v: VarId(result.idgen))
     inc result.idgen
 
-iterator allReleases(c: var AtlasContext): Version =
-  yield Version"#head" # dummy implementation for now
+iterator allReleases(c: var AtlasContext): (string, Version) =
+  yield ("#head", Version"#head") # dummy implementation for now
 
 proc parseNimbleFile(c: var AtlasContext; proj: var Project; nimble: PackageNimble) =
   # XXX Fix code duplication. Copied from `traversal.nim`:
@@ -82,7 +86,7 @@ proc traverseProject(c: var AtlasContext; g: var Graph; idx: int;
                      processed: var HashSet[PackageRepo]) =
   var lastNimbleContents = "<invalid content>"
 
-  for release in allReleases(c):
+  for commit, release in allReleases(c):
     var nimbleFile = g.projects[idx].pkg.name.string & ".nimble"
     var found = 0
     if fileExists(nimbleFile):
@@ -93,6 +97,7 @@ proc traverseProject(c: var AtlasContext; g: var Graph; idx: int;
         inc found
     var pv = ProjectVersion(
       version: release,
+      commit: commit,
       dependencies: Dependencies(deps: @[], v: NoVar),
       status: Normal)
     if found != 1:
@@ -111,6 +116,7 @@ proc traverseProject(c: var AtlasContext; g: var Graph; idx: int;
           if not dep.exists:
             pv.status = HasBrokenDep
           elif not processed.containsOrIncl(dep.repo):
+            g.packageToProject[dep] = g.projects.len
             g.projects.add Project(pkg: dep, versions: @[])
 
     g.projects[idx].versions.add ensureMove pv
@@ -133,11 +139,13 @@ proc expand*(c: var AtlasContext; g: var Graph) =
         traverseProject(c, g, i, processed)
     inc i
 
-proc findProjectForDep(g: Graph; dep: Package): Project =
-  # XXX Optimize this:
-  for p in g.projects:
-    if p.pkg == dep: return p
-  return Project()
+proc findProjectForDep(g: Graph; dep: Package): int {.inline.} =
+  assert g.packageToProject.hasKey(dep)
+  result = g.packageToProject.getOrDefault(dep)
+
+iterator mvalidVersions*(p: var Project): var ProjectVersion =
+  for v in mitems p.versions:
+    if v.status == Normal: yield v
 
 proc toFormular*(g: var Graph; algo: ResolutionAlgorithm): Formular =
   # Key idea: use a SAT variable for every `Dependencies` object, which are
@@ -163,6 +171,8 @@ proc toFormular*(g: var Graph; algo: ResolutionAlgorithm): Formular =
     b.openOpr(ExactlyOneOfForm)
     for ver in mitems p.versions:
       ver.v = VarId(idgen)
+      g.mapping[ver.v] = (p.pkg, ver.commit, ver.version)
+
       inc idgen
       b.add newVar(ver.v)
 
@@ -171,7 +181,7 @@ proc toFormular*(g: var Graph; algo: ResolutionAlgorithm): Formular =
 
   # Model the dependency graph:
   for p in mitems(g.projects):
-    for ver in mitems p.versions:
+    for ver in mvalidVersions p:
       if isValid(ver.dependencies.v):
         # already covered this sub-formula (ref semantics!)
         continue
@@ -186,7 +196,7 @@ proc toFormular*(g: var Graph; algo: ResolutionAlgorithm): Formular =
         b.openOpr(ExactlyOneOfForm)
         let q = if algo == SemVer: toSemVer(query) else: query
         let commit = extractSpecificCommit(q)
-        let av = findProjectForDep(g, dep)
+        let av = g.projects[findProjectForDep(g, dep)]
         if commit.len > 0:
           var v = Version("#" & commit)
           for j in countup(0, av.versions.len-1):
@@ -210,7 +220,7 @@ proc toFormular*(g: var Graph; algo: ResolutionAlgorithm): Formular =
 
   # Model the dependency graph:
   for p in mitems(g.projects):
-    for ver in mitems p.versions:
+    for ver in mvalidVersions p:
       if ver.dependencies.deps.len > 0:
         b.openOpr(OrForm)
         b.openOpr(NotForm)
@@ -222,3 +232,37 @@ proc toFormular*(g: var Graph; algo: ResolutionAlgorithm): Formular =
 
   b.closeOpr
   result = toForm(b)
+
+proc solve(c: var AtlasContext; g: Graph; f: Formular) =
+  var s = newSeq[BindingKind](g.idgen)
+  if satisfiable(f, s):
+    for i in 0 ..< s.len:
+      if s[i] == setToTrue and g.mapping.hasKey(VarId i):
+        let pkg = g.mapping[VarId i][0]
+        let destDir = pkg.name.string
+        debug c, pkg, "package satisfiable: " & $pkg
+        withDir c, pkg:
+          checkoutGitCommit(c, PackageDir(destDir), g.mapping[VarId i][1])
+    if NoExec notin c.flags:
+      runBuildSteps(c, g)
+      #echo f
+    if ListVersions in c.flags:
+      info c, toRepo("../resolve"), "selected:"
+      for i in g.nodes.len..<s.len:
+        let item = mapping[i - g.nodes.len]
+        if s[i] == setToTrue:
+          info c, item[0], "[x] " & toString item
+        else:
+          info c, item[0], "[ ] " & toString item
+      info c, toRepo("../resolve"), "end of selection"
+  else:
+    error c, toRepo(c.workspace), "version conflict; for more information use --showGraph"
+    var usedVersions = initCountTable[Package]()
+    for i in g.nodes.len..<s.len:
+      if s[i] == setToTrue:
+        usedVersions.inc mapping[i - g.nodes.len][0]
+    for i in g.nodes.len..<s.len:
+      if s[i] == setToTrue:
+        let counter = usedVersions.getOrDefault(mapping[i - g.nodes.len][0])
+        if counter > 0:
+          error c, mapping[i - g.nodes.len][0], $mapping[i - g.nodes.len][2] & " required"
