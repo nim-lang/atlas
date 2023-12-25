@@ -150,8 +150,6 @@ iterator mvalidVersions*(p: var Dependency): var DependencyVersion =
 proc toFormular*(g: var DepGraph; algo: ResolutionAlgorithm): Formular =
   # Key idea: use a SAT variable for every `DepDescription` object, which are
   # shared.
-  var idgen = g.idgen
-
   var b: Builder
   b.openOpr(AndForm)
 
@@ -170,10 +168,10 @@ proc toFormular*(g: var DepGraph; algo: ResolutionAlgorithm): Formular =
 
     b.openOpr(ExactlyOneOfForm)
     for ver in mitems p.versions:
-      ver.v = VarId(idgen)
+      ver.v = VarId(g.idgen)
       g.mapping[ver.v] = (p.pkg, ver.commit, ver.version)
 
-      inc idgen
+      inc g.idgen
       b.add newVar(ver.v)
 
     b.closeOpr # ExactlyOneOfForm
@@ -185,8 +183,8 @@ proc toFormular*(g: var DepGraph; algo: ResolutionAlgorithm): Formular =
       if isValid(ver.desc.v):
         # already covered this sub-formula (ref semantics!)
         continue
-      ver.desc.v = VarId(idgen)
-      inc idgen
+      ver.desc.v = VarId(g.idgen)
+      inc g.idgen
 
       b.openOpr(EqForm)
       b.add newVar(ver.desc.v)
