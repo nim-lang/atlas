@@ -233,7 +233,7 @@ proc toFormular*(g: var Graph; algo: ResolutionAlgorithm): Formular =
   b.closeOpr
   result = toForm(b)
 
-proc solve(c: var AtlasContext; g: Graph; f: Formular) =
+proc solve(c: var AtlasContext; g: var Graph; f: Formular) =
   var s = newSeq[BindingKind](g.idgen)
   if satisfiable(f, s):
     for i in 0 ..< s.len:
@@ -243,6 +243,7 @@ proc solve(c: var AtlasContext; g: Graph; f: Formular) =
         debug c, pkg, "package satisfiable: " & $pkg
         withDir c, pkg:
           checkoutGitCommit(c, PackageDir(destDir), g.mapping[VarId i][1])
+    #[
     if NoExec notin c.flags:
       runBuildSteps(c, g)
       #echo f
@@ -255,14 +256,14 @@ proc solve(c: var AtlasContext; g: Graph; f: Formular) =
         else:
           info c, item[0], "[ ] " & toString item
       info c, toRepo("../resolve"), "end of selection"
+    ]#
   else:
     error c, toRepo(c.workspace), "version conflict; for more information use --showGraph"
-    var usedVersions = initCountTable[Package]()
-    for i in g.nodes.len..<s.len:
-      if s[i] == setToTrue:
-        usedVersions.inc mapping[i - g.nodes.len][0]
-    for i in g.nodes.len..<s.len:
-      if s[i] == setToTrue:
-        let counter = usedVersions.getOrDefault(mapping[i - g.nodes.len][0])
-        if counter > 0:
-          error c, mapping[i - g.nodes.len][0], $mapping[i - g.nodes.len][2] & " required"
+    for p in mitems(g.projects):
+      var usedVersions = 0
+      for ver in mvalidVersions p:
+        if s[ver.v.int] == setToTrue: inc usedVersions
+      if usedVersions > 1:
+        for ver in mvalidVersions p:
+          if s[ver.v.int] == setToTrue:
+            error c, p.pkg, string(ver.version) & " required"
