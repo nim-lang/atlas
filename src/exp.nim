@@ -11,51 +11,51 @@ import std / [sets, tables, os, strutils]
 import context, sat, nameresolver, configutils, gitops
 
 type
-  Dependencies* = ref object
+  DepDescription* = ref object
     deps*: seq[(Package, VersionInterval)]
     hasInstallHooks*: bool
     srcDir: string
     nimVersion: Version
     v: VarId
 
-  ProjectStatus* = enum
+  DependencyStatus* = enum
     Normal, HasBrokenNimbleFile, HasUnknownNimbleFile, HasBrokenDep
 
-  ProjectVersion* = object  # Represents a specific version of a project.
+  DependencyVersion* = object  # Represents a specific version of a project.
     version*: Version
     commit*: string
-    dependencies*: Dependencies
-    status*: ProjectStatus
+    desc*: DepDescription
+    status*: DependencyStatus
     v: VarId
 
-  Project* = object
+  Dependency* = object
     pkg*: Package
-    versions*: seq[ProjectVersion]
+    versions*: seq[DependencyVersion]
     v: VarId
 
-  Graph* = object
-    projects: seq[Project]
+  DepGraph* = object
+    nodes: seq[Dependency]
     idgen: int32
-    startProjectsLen: int
+    startNodesLen: int
     mapping: Table[VarId, (Package, string, Version)]
-    packageToProject: Table[Package, int]
+    packageToDependency: Table[Package, int]
 
-proc createGraph*(startSet: openArray[Package]): Graph =
-  result = Graph(projects: @[], idgen: 0'i32, startProjectsLen: startSet.len)
+proc createGraph*(startSet: openArray[Package]): DepGraph =
+  result = DepGraph(nodes: @[], idgen: 0'i32, startNodesLen: startSet.len)
   for s in startSet:
-    result.packageToProject[s] = result.projects.len
-    result.projects.add Project(pkg: s, versions: @[], v: VarId(result.idgen))
+    result.packageToDependency[s] = result.nodes.len
+    result.nodes.add Dependency(pkg: s, versions: @[], v: VarId(result.idgen))
     inc result.idgen
 
 iterator allReleases(c: var AtlasContext): (string, Version) =
   yield ("#head", Version"#head") # dummy implementation for now
 
-proc parseNimbleFile(c: var AtlasContext; proj: var Project; nimble: PackageNimble) =
+proc parseNimbleFile(c: var AtlasContext; proj: var Dependency; nimble: PackageNimble) =
   # XXX Fix code duplication. Copied from `traversal.nim`:
   let nimbleInfo = parseNimble(c, nimble)
 
-  proj.versions[^1].dependencies.hasInstallHooks = nimbleInfo.hasInstallHooks
-  proj.versions[^1].dependencies.srcDir = nimbleInfo.srcDir
+  proj.versions[^1].desc.hasInstallHooks = nimbleInfo.hasInstallHooks
+  proj.versions[^1].desc.srcDir = nimbleInfo.srcDir
 
   for r in nimbleInfo.requires:
     var i = 0
@@ -78,16 +78,16 @@ proc parseNimbleFile(c: var AtlasContext; proj: var Project; nimble: PackageNimb
       if cmpIgnoreCase(pkg.name.string, "nim") == 0:
         let v = extractGeQuery(query)
         if v != Version"":
-          proj.versions[^1].dependencies.nimVersion = v
+          proj.versions[^1].desc.nimVersion = v
       else:
-        proj.versions[^1].dependencies.deps.add (pkg, query)
+        proj.versions[^1].desc.deps.add (pkg, query)
 
-proc traverseProject(c: var AtlasContext; g: var Graph; idx: int;
+proc traverseDependency(c: var AtlasContext; g: var DepGraph; idx: int;
                      processed: var HashSet[PackageRepo]) =
   var lastNimbleContents = "<invalid content>"
 
   for commit, release in allReleases(c):
-    var nimbleFile = g.projects[idx].pkg.name.string & ".nimble"
+    var nimbleFile = g.nodes[idx].pkg.name.string & ".nimble"
     var found = 0
     if fileExists(nimbleFile):
       inc found
@@ -95,71 +95,71 @@ proc traverseProject(c: var AtlasContext; g: var Graph; idx: int;
       for file in walkFiles("*.nimble"):
         nimbleFile = file
         inc found
-    var pv = ProjectVersion(
+    var pv = DependencyVersion(
       version: release,
       commit: commit,
-      dependencies: Dependencies(deps: @[], v: NoVar),
+      desc: DepDescription(deps: @[], v: NoVar),
       status: Normal)
     if found != 1:
       pv.status = HasUnknownNimbleFile
     else:
       let nimbleContents = readFile(nimbleFile)
       if lastNimbleContents == nimbleContents:
-        pv.dependencies = g.projects[idx].versions[^1].dependencies
-        pv.status = g.projects[idx].versions[^1].status
+        pv.desc = g.nodes[idx].versions[^1].desc
+        pv.status = g.nodes[idx].versions[^1].status
       else:
-        parseNimbleFile(c, g.projects[idx], PackageNimble(nimbleFile))
+        parseNimbleFile(c, g.nodes[idx], PackageNimble(nimbleFile))
         lastNimbleContents = ensureMove nimbleContents
 
       if pv.status == Normal:
-        for dep, _ in items(pv.dependencies.deps):
+        for dep, _ in items(pv.desc.deps):
           if not dep.exists:
             pv.status = HasBrokenDep
           elif not processed.containsOrIncl(dep.repo):
-            g.packageToProject[dep] = g.projects.len
-            g.projects.add Project(pkg: dep, versions: @[])
+            g.packageToDependency[dep] = g.nodes.len
+            g.nodes.add Dependency(pkg: dep, versions: @[])
 
-    g.projects[idx].versions.add ensureMove pv
+    g.nodes[idx].versions.add ensureMove pv
 
-proc expand*(c: var AtlasContext; g: var Graph) =
+proc expand*(c: var AtlasContext; g: var DepGraph) =
   ## Expand the graph by adding all dependencies.
   var processed = initHashSet[PackageRepo]()
   var i = 0
-  while i < g.projects.len:
-    let w {.cursor.} = g.projects[i]
+  while i < g.nodes.len:
+    let w {.cursor.} = g.nodes[i]
 
     if not processed.containsOrIncl(w.pkg.repo):
       if not dirExists(w.pkg.path.string):
-        withDir c, (if i < g.startProjectsLen: c.workspace else: c.depsDir):
+        withDir c, (if i < g.startNodesLen: c.workspace else: c.depsDir):
           info(c, w.pkg, "cloning: " & $w.pkg.url)
           let (status, err) = cloneUrl(c, w.pkg.url, w.pkg.path.string, false)
           #g.nodes[i].status = status
 
       withDir c, w.pkg:
-        traverseProject(c, g, i, processed)
+        traverseDependency(c, g, i, processed)
     inc i
 
-proc findProjectForDep(g: Graph; dep: Package): int {.inline.} =
-  assert g.packageToProject.hasKey(dep)
-  result = g.packageToProject.getOrDefault(dep)
+proc findDependencyForDep(g: DepGraph; dep: Package): int {.inline.} =
+  assert g.packageToDependency.hasKey(dep)
+  result = g.packageToDependency.getOrDefault(dep)
 
-iterator mvalidVersions*(p: var Project): var ProjectVersion =
+iterator mvalidVersions*(p: var Dependency): var DependencyVersion =
   for v in mitems p.versions:
     if v.status == Normal: yield v
 
-proc toFormular*(g: var Graph; algo: ResolutionAlgorithm): Formular =
-  # Key idea: use a SAT variable for every `Dependencies` object, which are
+proc toFormular*(g: var DepGraph; algo: ResolutionAlgorithm): Formular =
+  # Key idea: use a SAT variable for every `DepDescription` object, which are
   # shared.
   var idgen = g.idgen
 
   var b: Builder
   b.openOpr(AndForm)
 
-  # all active projects must be true:
-  for i in 0 ..< g.startProjectsLen:
-    b.add newVar(g.projects[i].v)
+  # all active nodes must be true:
+  for i in 0 ..< g.startNodesLen:
+    b.add newVar(g.nodes[i].v)
 
-  for p in mitems(g.projects):
+  for p in mitems(g.nodes):
     # if Package p is installed, pick one of its concrete versions, but not versions
     # that are errornous:
     # A -> (exactly one of: A1, A2, A3)
@@ -180,23 +180,23 @@ proc toFormular*(g: var Graph; algo: ResolutionAlgorithm): Formular =
     b.closeOpr # OrForm
 
   # Model the dependency graph:
-  for p in mitems(g.projects):
+  for p in mitems(g.nodes):
     for ver in mvalidVersions p:
-      if isValid(ver.dependencies.v):
+      if isValid(ver.desc.v):
         # already covered this sub-formula (ref semantics!)
         continue
-      ver.dependencies.v = VarId(idgen)
+      ver.desc.v = VarId(idgen)
       inc idgen
 
       b.openOpr(EqForm)
-      b.add newVar(ver.dependencies.v)
+      b.add newVar(ver.desc.v)
       b.openOpr(AndForm)
 
-      for dep, query in items ver.dependencies.deps:
+      for dep, query in items ver.desc.deps:
         b.openOpr(ExactlyOneOfForm)
         let q = if algo == SemVer: toSemVer(query) else: query
         let commit = extractSpecificCommit(q)
-        let av = g.projects[findProjectForDep(g, dep)]
+        let av = g.nodes[findDependencyForDep(g, dep)]
         if commit.len > 0:
           var v = Version("#" & commit)
           for j in countup(0, av.versions.len-1):
@@ -219,21 +219,21 @@ proc toFormular*(g: var Graph; algo: ResolutionAlgorithm): Formular =
       b.closeOpr # EqForm
 
   # Model the dependency graph:
-  for p in mitems(g.projects):
+  for p in mitems(g.nodes):
     for ver in mvalidVersions p:
-      if ver.dependencies.deps.len > 0:
+      if ver.desc.deps.len > 0:
         b.openOpr(OrForm)
         b.openOpr(NotForm)
         b.add newVar(ver.v) # if this version is chosen, these are its dependencies
         b.closeOpr # NotForm
 
-        b.add newVar(ver.dependencies.v)
+        b.add newVar(ver.desc.v)
         b.closeOpr # OrForm
 
   b.closeOpr
   result = toForm(b)
 
-proc solve(c: var AtlasContext; g: var Graph; f: Formular) =
+proc solve(c: var AtlasContext; g: var DepGraph; f: Formular) =
   var s = newSeq[BindingKind](g.idgen)
   if satisfiable(f, s):
     for i in 0 ..< s.len:
@@ -259,7 +259,7 @@ proc solve(c: var AtlasContext; g: var Graph; f: Formular) =
     ]#
   else:
     error c, toRepo(c.workspace), "version conflict; for more information use --showGraph"
-    for p in mitems(g.projects):
+    for p in mitems(g.nodes):
       var usedVersions = 0
       for ver in mvalidVersions p:
         if s[ver.v.int] == setToTrue: inc usedVersions
