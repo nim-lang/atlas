@@ -32,6 +32,7 @@ type
     pkg*: Package
     versions*: seq[DependencyVersion]
     v: VarId
+    active*: bool
 
   DepGraph* = object
     nodes: seq[Dependency]
@@ -234,9 +235,13 @@ proc toFormular*(g: var DepGraph; algo: ResolutionAlgorithm): Formular =
 proc solve(c: var AtlasContext; g: var DepGraph; f: Formular) =
   var s = newSeq[BindingKind](g.idgen)
   if satisfiable(f, s):
+    for i in 0 ..< g.startNodesLen:
+      g.nodes[i].active = true
     for i in 0 ..< s.len:
       if s[i] == setToTrue and g.mapping.hasKey(VarId i):
         let pkg = g.mapping[VarId i][0]
+        let idx = findDependencyForDep(g, pkg)
+        g.nodes[idx].active = true
         let destDir = pkg.name.string
         debug c, pkg, "package satisfiable: " & $pkg
         withDir c, pkg:
