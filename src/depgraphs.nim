@@ -63,7 +63,7 @@ proc createGraph*(c: var AtlasContext; s: Package): DepGraph =
   inc result.idgen
 
 type
-  TraversalMode = enum
+  TraversalMode* = enum
     AllReleases,
     CurrentCommit
 
@@ -151,8 +151,8 @@ const
 proc copyFromDisk(c: var AtlasContext; w: Dependency; destDir: string): (CloneStatus, string) =
   var u = w.pkg.url.getFilePath()
   if u.startsWith("./"): u = c.workspace / u.substr(2)
-  template selectDir(a, b: string): string =
-    if dirExists(a): a else: b
+  #template selectDir(a, b: string): string =
+  #  if dirExists(a): a else: b
 
   #let dir = selectDir(u & "@" & w.commit, u)
   let dir = u
@@ -284,7 +284,7 @@ proc toFormular*(g: var DepGraph; algo: ResolutionAlgorithm): Formular =
 proc toString(x: SatVarInfo): string =
   "(" & x.pkg.repo.string & ", " & $x.version & ")"
 
-proc runBuildSteps*(c: var AtlasContext; g: var DepGraph) =
+proc runBuildSteps(c: var AtlasContext; g: var DepGraph) =
   ## execute build steps for the dependency graph
   ##
   ## `countdown` suffices to give us some kind of topological sort:
@@ -360,6 +360,11 @@ proc expandWithoutClone*(c: var AtlasContext; g: var DepGraph) =
 
 iterator allNodes*(g: DepGraph): lent Dependency =
   for i in 0 ..< g.nodes.len: yield g.nodes[i]
+
+iterator allActiveNodes*(g: DepGraph): lent Dependency =
+  for i in 0 ..< g.nodes.len:
+    if g.nodes[i].active:
+      yield g.nodes[i]
 
 iterator toposorted*(g: DepGraph): lent Dependency =
   for i in countdown(g.nodes.len-1, 0): yield g.nodes[i]

@@ -12,7 +12,7 @@
 import std / [parseopt, strutils, os, osproc, tables, sets, json, jsonutils,
   hashes, options]
 import context, runners, osutils, packagesjson, sat, gitops, nimenv, lockfiles,
-  depgraphs, confighandler, configutils, nameresolver
+  depgraphs, confighandler, configutils, nameresolver, nimblechecksums
 
 export osutils, context
 
@@ -179,55 +179,16 @@ proc checkoutLaterCommit(c: var AtlasContext; g: var DepGraph; w: Dependency) =
                 warn c, w.pkg, "do not know which commit is more recent:",
                   currentCommit, "(current) or", w.commit, " =", requiredCommit, "(required)"
 
-proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[CfgPath] =
+proc traverseLoop(c: var AtlasContext; g: var DepGraph): seq[CfgPath] =
   result = @[]
-  var i = 0
-  while i < g.nodes.len:
-    let w = g.nodes[i]
-    let oldErrors = c.errors
-    info c, w.pkg, "traversing dependency"
-
-    if not dirExists(w.pkg.path.string):
-      withDir c, (if i != 0 or startIsDep: c.depsDir else: c.workspace):
-        let (status, err) =
-          if w.pkg.url.scheme == FileProtocol:
-            copyFromDisk(c, w, w.pkg.path.string)
-          else:
-            info(c, w.pkg, "cloning: " & $(w.pkg.url))
-            cloneUrl(c, w.pkg.url, w.pkg.path.string, false)
-        g.nodes[i].status = status
-        debug c, w.pkg, "traverseLoop: status: " & $status & " pkg: " & $w.pkg
-        case status
-        of NotFound:
-          discard "setting the status is enough here"
-        of OtherError:
-          error c, w.pkg, err
-        else:
-          withDir c, w.pkg:
-            collectAvailableVersions c, g, w
-    else:
-      withDir c, w.pkg:
-        collectAvailableVersions c, g, w
-
+  expand c, g, TraversalMode.AllReleases
+  let f = toFormular(g, c.defaultAlgo)
+  solve c, g, f
+  for w in allActiveNodes(g):
     c.resolveNimble(w.pkg)
+    result.add CfgPath(toDestDir(w.pkg).string / getCfgPath(g, w).string)
 
-    # assume this is the selected version, it might get overwritten later:
-    selectNode c, g, w
-    if oldErrors == c.errors:
-      if KeepCommits notin c.flags and w.algo == MinVer:
-        checkoutCommit(c, g, w)
-      # even if the checkout fails, we can make use of the somewhat
-      # outdated .nimble file to clone more of the most likely still relevant
-      # dependencies:
-      result.addUnique collectNewDeps(c, g, i, w)
-    else:
-      warn(c, w.pkg, "traverseLoop: errors found, skipping collect deps")
-    inc i
-
-  if g.availableVersions.len > 0:
-    resolve c, g
-
-proc traverse(c: var AtlasContext; start: string; startIsDep: bool): seq[CfgPath] =
+proc traverse(c: var AtlasContext; start: string): seq[CfgPath] =
   # returns the list of paths for the nim.cfg file.
   let pkg = resolvePackage(c, start)
   var g = c.createGraph(pkg)
@@ -238,21 +199,18 @@ proc traverse(c: var AtlasContext; start: string; startIsDep: bool): seq[CfgPath
 
   c.projectDir = pkg.path.string
 
-  result = traverseLoop(c, g, startIsDep)
+  result = traverseLoop(c, g)
   afterGraphActions c, g
 
 
-proc installDependencies(c: var AtlasContext; nimbleFile: string; startIsDep: bool) =
+proc installDependencies(c: var AtlasContext; nimbleFile: string) =
   # 1. find .nimble file in CWD
   # 2. install deps from .nimble
-  var g = DepGraph(nodes: @[])
   let (dir, pkgname, _) = splitFile(nimbleFile)
   let pkg = c.resolvePackage("file://" & dir.absolutePath)
   info c, pkg, "installing dependencies for " & pkgname & ".nimble"
-  let dep = Dependency(pkg: pkg, commit: "", self: 0, algo: c.defaultAlgo)
-  g.byName.mgetOrPut(pkg.name, @[]).add(0)
-  discard collectDeps(c, g, -1, dep)
-  let paths = traverseLoop(c, g, startIsDep)
+  var g = createGraph(c, pkg)
+  let paths = traverseLoop(c, g)
   let cfgPath = if CfgHere in c.flags: CfgPath c.currentDir else: findCfgDir(c)
   patchNimCfg(c, paths, cfgPath)
   afterGraphActions c, g
@@ -485,7 +443,7 @@ proc main(c: var AtlasContext) =
     createWorkspaceIn c
   of "clone", "update":
     singleArg()
-    let deps = traverse(c, args[0], startIsDep = false)
+    let deps = traverse(c, args[0])
     let cfgPath = if CfgHere in c.flags: CfgPath c.currentDir
                   else: findCfgDir(c)
     patchNimCfg c, deps, cfgPath
@@ -496,7 +454,7 @@ proc main(c: var AtlasContext) =
     singleArg()
     let nimbleFile = patchNimbleFile(c, args[0])
     if nimbleFile.len > 0:
-      installDependencies(c, nimbleFile, startIsDep = false)
+      installDependencies(c, nimbleFile)
   of "pin":
     optSingleArg(LockFileName)
     if c.projectDir == c.workspace or c.projectDir == c.depsDir:
@@ -528,7 +486,7 @@ proc main(c: var AtlasContext) =
     if nimbleFile.len == 0:
       fatal "could not find a .nimble file"
     else:
-      installDependencies(c, nimbleFile, startIsDep = true)
+      installDependencies(c, nimbleFile)
   of "refresh":
     noArgs()
     updatePackages(c)
