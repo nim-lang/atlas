@@ -67,12 +67,21 @@ type
     AllReleases,
     CurrentCommit
 
-iterator releases(c: var AtlasContext; m: TraversalMode): (string, Version) =
-  yield ("#head", Version"#head") # dummy implementation for now
-  #let tags = collectTaggedVersions(c)
-  #for x in tags:
-  #  gitCheckout(...)
-  #  yield ()
+iterator releases(c: var AtlasContext; m: TraversalMode): Commit =
+  let (cc, status) = exec(c, GitCurrentCommit, [])
+  if status == 0:
+    case m
+    of AllReleases:
+      try:
+        let tags = collectTaggedVersions(c)
+        for t in tags:
+          let (_, status) = exec(c, GitCheckout, [t.h])
+          if status != 0:
+            yield t
+      finally:
+        discard exec(c, GitCheckout, [cc])
+    of CurrentCommit:
+      yield Commit(h: cc, v: Version"#head")
 
 proc parseNimbleFile(c: var AtlasContext; proj: var Dependency; nimble: PackageNimble) =
   let nimbleInfo = parseNimble(c, nimble)
@@ -110,7 +119,7 @@ proc traverseDependency(c: var AtlasContext; g: var DepGraph; idx: int;
                         m: TraversalMode) =
   var lastNimbleContents = "<invalid content>"
 
-  for commit, release in releases(c, m):
+  for r in releases(c, m):
     var nimbleFile = g.nodes[idx].pkg.name.string & ".nimble"
     var found = 0
     if fileExists(nimbleFile):
@@ -120,8 +129,8 @@ proc traverseDependency(c: var AtlasContext; g: var DepGraph; idx: int;
         nimbleFile = file
         inc found
     var pv = DependencyVersion(
-      version: release,
-      commit: commit,
+      version: r.v,
+      commit: r.h,
       req: Requirements(deps: @[], v: NoVar),
       status: Normal)
     if found != 1:
