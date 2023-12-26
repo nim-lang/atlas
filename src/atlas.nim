@@ -118,12 +118,11 @@ proc generateDepGraph(c: var AtlasContext; g: DepGraph) =
     $(w.pkg.url / w.commit)
 
   var dotGraph = ""
-  for i in 0 ..< g.nodes.len:
-    dotGraph.addf("\"$1\" [label=\"$2\"];\n", [g.nodes[i].repr, if g.nodes[i].active: "" else: "unused"])
-  for i in 0 ..< g.nodes.len:
-    for p in items g.nodes[i].parents:
-      if p >= 0:
-        dotGraph.addf("\"$1\" -> \"$2\";\n", [g.nodes[p].repr, g.nodes[i].repr])
+  for n in allNodes(g):
+    dotGraph.addf("\"$1\" [label=\"$2\"];\n", [n.repr, if n.active: "" else: "unused"])
+  for n in allNodes(g):
+    for child in directDependencies(g, n):
+      dotGraph.addf("\"$1\" -> \"$2\";\n", [n.repr, child.repr])
   let dotFile = c.currentDir / "deps.dot"
   writeFile(dotFile, "digraph deps {\n$1}\n" % dotGraph)
   let graphvizDotPath = findExe("dot")
@@ -137,14 +136,17 @@ proc generateDepGraph(c: var AtlasContext; g: DepGraph) =
 proc afterGraphActions(c: var AtlasContext; g: DepGraph) =
   if ShowGraph in c.flags:
     generateDepGraph c, g
-  if AutoEnv in c.flags and g.bestNimVersion != Version"":
-    setupNimEnv c, g.bestNimVersion.string
+  if AutoEnv in c.flags:
+    let v = g.bestNimVersion
+    if v != Version"":
+      setupNimEnv c, v.string
 
-const
-  FileProtocol = "file"
-  #ThisVersion = "current_version.atlas" # used by `isLaterCommit`
+proc getRequiredCommit*(c: var AtlasContext; w: Dependency): string =
+  if isShortCommitHash(w.commit): shortToCommit(c, w.commit)
+  else: w.commit
 
-proc checkoutCommit(c: var AtlasContext; g: var DepGraph; w: Dependency) =
+proc checkoutLaterCommit(c: var AtlasContext; g: var DepGraph; w: Dependency) =
+  # Now dead code.
   withDir c, w.pkg:
     if w.commit.len == 0 or cmpIgnoreCase(w.commit, "head") == 0:
       gitPull(c, w.pkg.repo)
@@ -171,169 +173,11 @@ proc checkoutCommit(c: var AtlasContext; g: var DepGraph; w: Dependency) =
               # conflict resolution: pick the later commit:
               if mergeBase == currentCommit:
                 checkoutGitCommit(c, w.pkg.path, requiredCommit)
-                selectNode c, g, w
             else:
               checkoutGitCommit(c, w.pkg.path, requiredCommit)
-              selectNode c, g, w
               when false:
                 warn c, w.pkg, "do not know which commit is more recent:",
                   currentCommit, "(current) or", w.commit, " =", requiredCommit, "(required)"
-
-proc copyFromDisk(c: var AtlasContext; w: Dependency; destDir: string): (CloneStatus, string) =
-  var u = w.pkg.url.getFilePath()
-  if u.startsWith("./"): u = c.workspace / u.substr(2)
-  template selectDir(a, b: string): string =
-    if dirExists(a): a else: b
-
-  let dir = selectDir(u & "@" & w.commit, u)
-  if dirExists(dir):
-    copyDir(dir, destDir)
-    result = (Ok, "")
-  else:
-    result = (NotFound, dir)
-  #writeFile destDir / ThisVersion, w.commit
-  #echo "WRITTEN ", destDir / ThisVersion
-
-# proc isLaterCommit(destDir, version: string): bool =
-#   let oldVersion = try: readFile(destDir / ThisVersion).strip except: "0.0"
-#   if isValidVersion(oldVersion) and isValidVersion(version):
-#     result = Version(oldVersion) < Version(version)
-#   else:
-#     result = true
-
-proc collectAvailableVersions(c: var AtlasContext; g: var DepGraph; w: Dependency) =
-  trace c, w.pkg, "collecting versions"
-  when MockupRun:
-    # don't cache when doing the MockupRun:
-    g.availableVersions[w.pkg] = collectTaggedVersions(c)
-  else:
-    if not g.availableVersions.hasKey(w.pkg.name):
-      g.availableVersions[w.pkg.name] = collectTaggedVersions(c)
-
-proc toString(x: (Package, string, Version)): string =
-  "(" & x[0].repo.string & ", " & $x[2] & ")"
-
-proc resolve(c: var AtlasContext; g: var DepGraph) =
-  var b = sat.Builder()
-  b.openOpr(AndForm)
-  # Root must true:
-  b.add newVar(VarId 0)
-
-  assert g.nodes.len > 0
-  trace c, g.nodes[0].pkg, "resolving versions"
-
-  #assert g.nodes[0].active # this does not have to be true if some
-  # project is listed multiple times in the .nimble file.
-  # Implications:
-  for i in 0..<g.nodes.len:
-    debug c, g.nodes[i].pkg, "resolving node i: " & $i & " parents: " & $g.nodes[i].parents
-    if g.nodes[i].active:
-      debug c, g.nodes[i].pkg, "resolved as active"
-      for j in g.nodes[i].parents:
-        # "parent has a dependency on x" is translated to:
-        # "parent implies x" which is "not parent or x"
-        if j >= 0:
-          b.openOpr(OrForm)
-          b.openOpr(NotForm)
-          b.add newVar(VarId j)
-          b.closeOpr
-          b.add newVar(VarId i)
-          b.closeOpr
-    elif g.nodes[i].status == NotFound:
-      # dependency produced an error and so cannot be 'true':
-      debug c, g.nodes[i].pkg, "resolved: not found"
-      b.openOpr(NotForm)
-      b.add newVar(VarId i)
-      b.closeOpr
-
-  var idgen = 0
-  var mapping: seq[(Package, string, Version)] = @[]
-  # Version selection:
-  for i in 0..<g.nodes.len:
-    let av = g.availableVersions.getOrDefault(g.nodes[i].pkg.name)
-    debug c, g.nodes[i].pkg, "resolving version out of " & $len(av)
-    if g.nodes[i].active and av.len > 0:
-      let bpos = rememberPos(b)
-      # A -> (exactly one of: A1, A2, A3)
-      b.openOpr(OrForm)
-      b.openOpr(NotForm)
-      b.add newVar(VarId i)
-      b.closeOpr
-      b.openOpr(ExactlyOneOfForm)
-
-      let oldIdgen = idgen
-      var q = g.nodes[i].query
-      if g.nodes[i].algo == SemVer: q = toSemVer(q)
-      let commit = extractSpecificCommit(q)
-      if commit.len > 0:
-        var v = Version("#" & commit)
-        for j in countup(0, av.len-1):
-          if q.matches(av[j]):
-            v = av[j].v
-            break
-        mapping.add (g.nodes[i].pkg, commit, v)
-        b.add newVar(VarId(idgen + g.nodes.len))
-        inc idgen
-      elif g.nodes[i].algo == MinVer:
-        for j in countup(0, av.len-1):
-          if q.matches(av[j]):
-            mapping.add (g.nodes[i].pkg, av[j].h, av[j].v)
-            b.add newVar(VarId(idgen + g.nodes.len))
-            inc idgen
-      else:
-        for j in countdown(av.len-1, 0):
-          if q.matches(av[j]):
-            mapping.add (g.nodes[i].pkg, av[j].h, av[j].v)
-            b.add newVar(VarId(idgen + g.nodes.len))
-            inc idgen
-
-      b.closeOpr # ExactlyOneOfForm
-      b.closeOpr # OrForm
-      if idgen == oldIdgen:
-        b.rewind bpos
-  b.closeOpr
-  let f = toForm(b)
-  var s = newSeq[BindingKind](idgen)
-  when false:
-    let L = g.nodes.len
-    var nodes = newSeq[string]()
-    for i in 0..<L: nodes.add g.nodes[i].name.string
-    echo f$(proc (buf: var string; i: int) =
-      if i < L:
-        buf.add nodes[i]
-      else:
-        buf.add $mapping[i - L])
-  if satisfiable(f, s):
-    for i in g.nodes.len..<s.len:
-      if s[i] == setToTrue:
-        let pkg = mapping[i - g.nodes.len][0]
-        let destDir = pkg.name.string
-        debug c, pkg, "package satisfiable: " & $pkg
-        withDir c, pkg:
-          checkoutGitCommit(c, PackageDir(destDir), mapping[i - g.nodes.len][1])
-    if NoExec notin c.flags:
-      runBuildSteps(c, g)
-      #echo f
-    if ListVersions in c.flags:
-      info c, toRepo("../resolve"), "selected:"
-      for i in g.nodes.len..<s.len:
-        let item = mapping[i - g.nodes.len]
-        if s[i] == setToTrue:
-          info c, item[0], "[x] " & toString item
-        else:
-          info c, item[0], "[ ] " & toString item
-      info c, toRepo("../resolve"), "end of selection"
-  else:
-    error c, toRepo(c.workspace), "version conflict; for more information use --showGraph"
-    var usedVersions = initCountTable[Package]()
-    for i in g.nodes.len..<s.len:
-      if s[i] == setToTrue:
-        usedVersions.inc mapping[i - g.nodes.len][0]
-    for i in g.nodes.len..<s.len:
-      if s[i] == setToTrue:
-        let counter = usedVersions.getOrDefault(mapping[i - g.nodes.len][0])
-        if counter > 0:
-          error c, mapping[i - g.nodes.len][0], $mapping[i - g.nodes.len][2] & " required"
 
 proc traverseLoop(c: var AtlasContext; g: var DepGraph; startIsDep: bool): seq[CfgPath] =
   result = @[]

@@ -8,7 +8,7 @@
 
 import std / [sets, tables, os, strutils]
 
-import context, sat, nameresolver, configutils, gitops, runners
+import context, sat, nameresolver, configutils, gitops, runners, osutils
 
 type
   Requirements* = ref object
@@ -145,6 +145,25 @@ proc traverseDependency(c: var AtlasContext; g: var DepGraph; idx: int;
 
     g.nodes[idx].versions.add ensureMove pv
 
+const
+  FileProtocol = "file"
+
+proc copyFromDisk(c: var AtlasContext; w: Dependency; destDir: string): (CloneStatus, string) =
+  var u = w.pkg.url.getFilePath()
+  if u.startsWith("./"): u = c.workspace / u.substr(2)
+  template selectDir(a, b: string): string =
+    if dirExists(a): a else: b
+
+  #let dir = selectDir(u & "@" & w.commit, u)
+  let dir = u
+  if dirExists(dir):
+    copyDir(dir, destDir)
+    result = (Ok, "")
+  else:
+    result = (NotFound, dir)
+  #writeFile destDir / ThisVersion, w.commit
+  #echo "WRITTEN ", destDir / ThisVersion
+
 proc expand*(c: var AtlasContext; g: var DepGraph; m: TraversalMode) =
   ## Expand the graph by adding all dependencies.
   var processed = initHashSet[PackageRepo]()
@@ -155,8 +174,13 @@ proc expand*(c: var AtlasContext; g: var DepGraph; m: TraversalMode) =
     if not processed.containsOrIncl(w.pkg.repo):
       if not dirExists(w.pkg.path.string):
         withDir c, (if i < g.startNodesLen: c.workspace else: c.depsDir):
-          info(c, w.pkg, "cloning: " & $w.pkg.url)
-          let (status, _) = cloneUrl(c, w.pkg.url, w.pkg.path.string, false)
+          let (status, _) =
+            if w.pkg.url.scheme == FileProtocol:
+              copyFromDisk(c, w, w.pkg.path.string)
+            else:
+              info(c, w.pkg, "cloning: " & $w.pkg.url)
+              cloneUrl(c, w.pkg.url, w.pkg.path.string, false)
+
           g.nodes[i].status = status
 
       withDir c, w.pkg:
@@ -348,3 +372,13 @@ iterator directDependencies*(g: DepGraph; d: Dependency): lent Dependency =
 
 proc getCfgPath*(g: DepGraph; d: Dependency): lent CfgPath =
   result = CfgPath d.versions[d.activeVersion].req.srcDir
+
+proc commit*(d: Dependency): string =
+  d.versions[d.activeVersion].commit
+
+proc bestNimVersion*(g: DepGraph): Version =
+  result = Version""
+  for n in allNodes(g):
+    if n.active and n.versions[n.activeVersion].req.nimVersion != Version"":
+      let v = n.versions[n.activeVersion].req.nimVersion
+      if v > result: result = v
