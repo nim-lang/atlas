@@ -12,7 +12,7 @@
 import std / [parseopt, strutils, os, osproc, tables, sets, json, jsonutils,
   hashes, options]
 import context, runners, osutils, packagesjson, sat, gitops, nimenv, lockfiles,
-  traversal, confighandler, configutils, nameresolver
+  depgraphs, confighandler, configutils, nameresolver
 
 export osutils, context
 

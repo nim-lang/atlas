@@ -117,15 +117,15 @@ proc collectTaggedVersions*(c: var AtlasContext): seq[Commit] =
   else:
     result = @[]
 
-proc versionToCommit*(c: var AtlasContext; d: Dependency): string =
+proc versionToCommit*(c: var AtlasContext; algo: ResolutionAlgorithm; query: VersionInterval): string =
   let allVersions = collectTaggedVersions(c)
-  case d.algo
+  case algo
   of MinVer:
-    result = selectBestCommitMinVer(allVersions, d.query)
+    result = selectBestCommitMinVer(allVersions, query)
   of SemVer:
-    result = selectBestCommitSemVer(allVersions, d.query)
+    result = selectBestCommitSemVer(allVersions, query)
   of MaxVer:
-    result = selectBestCommitMaxVer(allVersions, d.query)
+    result = selectBestCommitMaxVer(allVersions, query)
 
 proc shortToCommit*(c: var AtlasContext; short: string): string =
   let (cc, status) = exec(c, GitRevParse, [short])
@@ -226,10 +226,11 @@ proc needsCommitLookup*(commit: string): bool {.inline.} =
 proc isShortCommitHash*(commit: string): bool {.inline.} =
   commit.len >= 4 and commit.len < 40
 
-proc getRequiredCommit*(c: var AtlasContext; w: Dependency): string =
-  if needsCommitLookup(w.commit): versionToCommit(c, w)
-  elif isShortCommitHash(w.commit): shortToCommit(c, w.commit)
-  else: w.commit
+when false:
+  proc getRequiredCommit*(c: var AtlasContext; w: Dependency): string =
+    if needsCommitLookup(w.commit): versionToCommit(c, w)
+    elif isShortCommitHash(w.commit): shortToCommit(c, w.commit)
+    else: w.commit
 
 proc getRemoteUrl*(): PackageUrl =
   execProcess("git config --get remote.origin.url").strip().getUrl()

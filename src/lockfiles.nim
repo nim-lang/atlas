@@ -9,7 +9,8 @@
 ## Lockfile implementation.
 
 import std / [sequtils, strutils, tables, os, json, jsonutils]
-import context, gitops, osutils, traversal, compilerversions, nameresolver, configutils
+import context, gitops, osutils, nimblechecksums, compilerversions,
+  nameresolver, configutils, depgraphs
 
 const
   NimbleLockFileName* = "nimble.lock"
@@ -178,7 +179,6 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string, exportNimble = false
   info c, toRepo("pin"), "pinning project"
   var lf = newLockFile()
   let startPkg = resolvePackage(c, "file://" & c.currentDir)
-  var g = createGraph(c, startPkg)
 
   # only used for exporting nimble locks
   var nlf = newNimbleLockFile()
@@ -186,48 +186,41 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string, exportNimble = false
   var cfgs = newTable[PackageName, CfgPath]()
 
   info c, startPkg, "pinning lockfile: " & lockFilePath
-  var i = 0
-  while i < g.nodes.len:
-    let w = g.nodes[i]
 
+  var g = createGraph(c, startPkg)
+  expandWithoutClone c, g
+  for w in allNodes(g):
     info c, w.pkg, "pinning: " & $w.pkg
 
     if not w.pkg.exists:
       error c, w.pkg, "dependency does not exist"
     else:
-      # assume this is the selected version, it might get overwritten later:
-      selectNode c, g, w
-      let cfgPath = collectNewDeps(c, g, i, w)
-      cfgs[w.pkg.name] = cfgPath
-    inc i
+      cfgs[w.pkg.name] = getCfgPath(g, w)
 
   if c.errors == 0:
     # topo-sort:
-    for i in countdown(g.nodes.len-1, 1):
-      if g.nodes[i].active:
-        let w = g.nodes[i]
-        let dir = w.pkg.path.string
-        tryWithDir c, dir:
-          if not exportNimble:
-            # generate atlas native lockfile entries
-            genLockEntry c, lf, w.pkg
-          else:
-            # handle exports for Nimble; these require lookig up a bit more info
-            for nx in g.nodes: # expensive, but eh
-              if nx.active and i in nx.parents:
-                nimbleDeps.mgetOrPut(w.pkg.name,
-                                    initHashSet[PackageName]()).incl(nx.pkg.name)
-            trace c, w.pkg, "exporting nimble " & w.pkg.name.string
-            let name = w.pkg.name
-            let deps = nimbleDeps.getOrDefault(name)
-            genLockEntry c, nlf, w.pkg, cfgs[name], deps
+    for w in toposorted(g):
+      let dir = w.pkg.path.string
+      tryWithDir c, dir:
+        if not exportNimble:
+          # generate atlas native lockfile entries
+          genLockEntry c, lf, w.pkg
+        else:
+          # handle exports for Nimble; these require looking up a bit more info
+          for nx in directDependencies(g, w):
+            nimbleDeps.mgetOrPut(w.pkg.name,
+                                initHashSet[PackageName]()).incl(nx.pkg.name)
+          trace c, w.pkg, "exporting nimble " & w.pkg.name.string
+          let name = w.pkg.name
+          let deps = nimbleDeps.getOrDefault(name)
+          genLockEntry c, nlf, w.pkg, cfgs[name], deps
 
     let nimcfgPath = c.currentDir / NimCfg
     if fileExists(nimcfgPath):
       lf.nimcfg = readFile(nimcfgPath).splitLines()
 
     let nimblePath = startPkg.nimble.string
-    if nimblePath.len() > 0 and nimblePath.fileExists():
+    if nimblePath.len > 0 and nimblePath.fileExists():
       lf.nimbleFile = LockedNimbleFile(
         filename: nimblePath.relativePath(c.currentDir),
         content: readFile(nimblePath).splitLines())
@@ -257,16 +250,16 @@ proc convertNimbleLock*(c: var AtlasContext; nimblePath: string): LockFile =
   for (name, info) in jsonTree["packages"].pairs:
     if name == "nim":
       result.nimVersion = info["version"].getStr
-      continue
-    # lookup package using url
-    let pkg = c.resolvePackage(info["url"].getStr)
-    info c, toRepo(name), " imported "
-    let dir = c.depsDir / pkg.repo.string
-    result.items[name] = LockFileEntry(
-      dir: dir.relativePath(c.projectDir),
-      url: $pkg.url,
-      commit: info["vcsRevision"].getStr,
-    )
+    else:
+      # lookup package using url
+      let pkg = c.resolvePackage(info["url"].getStr)
+      info c, toRepo(name), " imported "
+      let dir = c.depsDir / pkg.repo.string
+      result.items[name] = LockFileEntry(
+        dir: dir.relativePath(c.projectDir),
+        url: $pkg.url,
+        commit: info["vcsRevision"].getStr,
+      )
 
 
 proc convertAndSaveNimbleLock*(c: var AtlasContext; nimblePath, lockFilePath: string) =
@@ -327,7 +320,7 @@ proc replay*(c: var AtlasContext; lockFilePath: string) =
            else:
               readLockFile(lockFilePath)
 
-  let lfBase = splitPath(lockFilePath).head
+  #let lfBase = splitPath(lockFilePath).head
   var genCfg = CfgHere in c.flags
 
   # update the nim.cfg file
@@ -342,7 +335,7 @@ proc replay*(c: var AtlasContext; lockFilePath: string) =
               lf.nimbleFile.content.join("\n"))
 
   # update the the dependencies
-  var paths: seq[CfgPath]
+  var paths: seq[CfgPath] = @[]
   for _, v in pairs(lf.items):
     trace c, toRepo("replay"), "replaying: " & v.repr
     let dir = c.fromPrefixedPath(v.dir)

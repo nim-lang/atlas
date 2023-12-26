@@ -59,24 +59,6 @@ type
     exists*: bool
     nimble*: PackageNimble
 
-  Dependency* = object
-    pkg*: Package
-    commit*: string
-    query*: VersionInterval
-    self*: int # position in the graph
-    parents*: seq[int] # why we need this dependency
-    active*: bool
-    hasInstallHooks*: bool
-    algo*: ResolutionAlgorithm
-    status*: CloneStatus
-
-  DepGraph* = object
-    nodes*: seq[Dependency]
-    processed*: Table[string, int] # the key is (url / commit)
-    byName*: Table[PackageName, seq[int]]
-    availableVersions*: Table[PackageName, seq[Commit]] # sorted, latest version comes first
-    bestNimVersion*: Version # Nim is a special snowflake
-
   Flag* = enum
     KeepCommits
     CfgHere
