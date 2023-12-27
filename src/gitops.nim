@@ -1,3 +1,11 @@
+#
+#           Atlas Package Cloner
+#        (c) Copyright 2021 Andreas Rumpf
+#
+#    See the file "copying.txt", included in this
+#    distribution, for details about the copyright.
+#
+
 import std/[os, osproc, sequtils, strutils, options]
 import context, osutils
 
@@ -138,7 +146,7 @@ proc listFiles*(c: var AtlasContext; pkg: Package): Option[seq[string]] =
 
 proc checkoutGitCommit*(c: var AtlasContext; p: PackageDir; commit: string) =
   let p = p.string.PackageRepo
-  var smExtraArgs: seq[string]
+  var smExtraArgs: seq[string] = @[]
 
   if FullClones notin c.flags and commit.len == 40:
     smExtraArgs.add "--depth=1"

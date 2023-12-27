@@ -1,3 +1,10 @@
+#
+#           Atlas Package Cloner
+#        (c) Copyright 2021 Andreas Rumpf
+#
+#    See the file "copying.txt", included in this
+#    distribution, for details about the copyright.
+#
 
 import std / [json, os, sets, strutils, httpclient, uri, options]
 import context

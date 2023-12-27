@@ -1,3 +1,11 @@
+#
+#           Atlas Package Cloner
+#        (c) Copyright 2021 Andreas Rumpf
+#
+#    See the file "copying.txt", included in this
+#    distribution, for details about the copyright.
+#
+
 import std/[os, strutils]
 import context, osutils, parse_requires, nameresolver
 

@@ -17,6 +17,7 @@ type
     srcDir: string
     nimVersion: Version
     v: VarId
+    status*: DependencyStatus
 
   DependencyStatus* = enum
     Normal, HasBrokenNimbleFile, HasUnknownNimbleFile, HasBrokenDep
@@ -25,7 +26,6 @@ type
     version*: Version
     commit*: string
     req*: Requirements
-    status*: DependencyStatus
     v: VarId
 
   Dependency* = object
@@ -83,12 +83,13 @@ iterator releases(c: var AtlasContext; m: TraversalMode): Commit =
     of CurrentCommit:
       yield Commit(h: cc, v: Version"#head")
 
-proc parseNimbleFile(c: var AtlasContext; proj: var Dependency; nimble: PackageNimble) =
+proc parseNimbleFile(c: var AtlasContext; nimble: PackageNimble): Requirements =
   let nimbleInfo = parseNimble(c, nimble)
-
-  proj.versions[^1].req.hasInstallHooks = nimbleInfo.hasInstallHooks
-  proj.versions[^1].req.srcDir = nimbleInfo.srcDir
-
+  result = Requirements(
+    hasInstallHooks: nimbleInfo.hasInstallHooks,
+    srcDir: nimbleInfo.srcDir,
+    status: Normal
+  )
   for r in nimbleInfo.requires:
     var i = 0
     while i < r.len and r[i] notin {'#', '<', '=', '>'} + Whitespace: inc i
@@ -98,21 +99,21 @@ proc parseNimbleFile(c: var AtlasContext; proj: var Dependency; nimble: PackageN
     var err = pkg.name.string.len == 0
     if len($pkg.url) == 0 or not pkg.exists:
       #error c, pkg, "invalid pkgUrl in nimble file: " & name
-      proj.versions[^1].status = HasBrokenDep
+      result.status = HasBrokenDep
 
     let query = parseVersionInterval(r, i, err) # update err
 
     if err:
-      if proj.versions[^1].status != HasBrokenDep:
-        proj.versions[^1].status = HasBrokenNimbleFile
+      if result.status != HasBrokenDep:
+        result.status = HasBrokenNimbleFile
       #error c, pkg, "invalid 'requires' syntax in nimble file: " & r
     else:
       if cmpIgnoreCase(pkg.name.string, "nim") == 0:
         let v = extractGeQuery(query)
         if v != Version"":
-          proj.versions[^1].req.nimVersion = v
+          result.nimVersion = v
       else:
-        proj.versions[^1].req.deps.add (pkg, query)
+        result.deps.add (pkg, query)
 
 proc traverseDependency(c: var AtlasContext; g: var DepGraph; idx: int;
                         processed: var HashSet[PackageRepo];
@@ -131,23 +132,21 @@ proc traverseDependency(c: var AtlasContext; g: var DepGraph; idx: int;
     var pv = DependencyVersion(
       version: r.v,
       commit: r.h,
-      req: Requirements(deps: @[], v: NoVar),
-      status: Normal)
+      req: Requirements(deps: @[], v: NoVar))
     if found != 1:
-      pv.status = HasUnknownNimbleFile
+      pv.req = Requirements(status: HasUnknownNimbleFile)
     else:
       let nimbleContents = readFile(nimbleFile)
       if lastNimbleContents == nimbleContents:
         pv.req = g.nodes[idx].versions[^1].req
-        pv.status = g.nodes[idx].versions[^1].status
       else:
-        parseNimbleFile(c, g.nodes[idx], PackageNimble(nimbleFile))
+        pv.req = parseNimbleFile(c, PackageNimble(nimbleFile))
         lastNimbleContents = ensureMove nimbleContents
 
-      if pv.status == Normal:
+      if pv.req.status == Normal:
         for dep, _ in items(pv.req.deps):
           if not dep.exists:
-            pv.status = HasBrokenDep
+            pv.req.status = HasBrokenDep
           elif not processed.containsOrIncl(dep.repo):
             g.packageToDependency[dep] = g.nodes.len
             g.nodes.add Dependency(pkg: dep, versions: @[])
@@ -202,7 +201,7 @@ proc findDependencyForDep(g: DepGraph; dep: Package): int {.inline.} =
 
 iterator mvalidVersions*(p: var Dependency): var DependencyVersion =
   for v in mitems p.versions:
-    if v.status == Normal: yield v
+    if v.req.status == Normal: yield v
 
 proc toFormular*(g: var DepGraph; algo: ResolutionAlgorithm): Formular =
   # Key idea: use a SAT variable for every `Requirements` object, which are
