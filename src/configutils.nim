@@ -100,7 +100,9 @@ proc patchNimbleFile*(c: var AtlasContext; dep: string): string =
     if not found:
       let reqName = if pkg.inPackages: pkg.name.string else: $pkg.url
       let line = "requires \"$1\"\n" % reqName.escape("", "")
-      if result.len > 0:
+      if reqName.len == 0:
+        discard "don't produce requires <empty string>"
+      elif result.len > 0:
         var oldContent = readFile(result).splitLines()
         var idx = oldContent.len()
         var endsWithComma = false

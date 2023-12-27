@@ -113,7 +113,7 @@ proc fillPackageLookupTable(c: var AtlasContext) =
 
 proc dependencyDir*(c: var AtlasContext; pkg: Package): PackageDir =
   template checkDir(dir: string) =
-    if dir.len() > 0 and dirExists(dir):
+    if dir.len > 0 and dirExists(dir):
       debug c, pkg, "dependencyDir: found: " & dir
       return PackageDir dir
     else:
@@ -127,7 +127,7 @@ proc dependencyDir*(c: var AtlasContext; pkg: Package): PackageDir =
     debug c, pkg, "dependencyDir: workspace: " & c.workspace
     return PackageDir getCurrentDir()
 
-  if pkg.path.string.len() > 0:
+  if pkg.path.string.len > 0:
     checkDir pkg.path.string
     checkDir c.workspace / pkg.path.string
     checkDir c.depsDir / pkg.path.string
@@ -144,7 +144,7 @@ proc findNimbleFile*(c: var AtlasContext; pkg: Package; depDir = PackageDir""): 
     result = TestsDir / pkg.name.string & ".nimble"
     doAssert fileExists(result), "file does not exist " & result
   else:
-    let dir = if depDir.string.len() == 0: dependencyDir(c, pkg).string
+    let dir = if depDir.string.len == 0: dependencyDir(c, pkg).string
               else: depDir.string
     result = some dir / (pkg.name.string & ".nimble")
     debug c, pkg, "findNimbleFile: searching: " & pkg.repo.string & " path: " & pkg.path.string & " dir: " & dir & " curr: " & result.get()
