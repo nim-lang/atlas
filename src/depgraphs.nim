@@ -82,6 +82,8 @@ iterator releases(c: var AtlasContext; m: TraversalMode): Commit =
         discard exec(c, GitCheckout, [cc])
     of CurrentCommit:
       yield Commit(h: cc, v: Version"#head")
+  else:
+    yield Commit(h: "", v: Version"#head")
 
 proc parseNimbleFile(c: var AtlasContext; nimble: PackageNimble): Requirements =
   let nimbleInfo = parseNimble(c, nimble)
@@ -147,7 +149,7 @@ proc traverseDependency(c: var AtlasContext; g: var DepGraph; idx: int;
         for dep, _ in items(pv.req.deps):
           if not dep.exists:
             pv.req.status = HasBrokenDep
-          elif not processed.containsOrIncl(dep.repo):
+          elif not processed.contains(dep.repo):
             g.packageToDependency[dep] = g.nodes.len
             g.nodes.add Dependency(pkg: dep, versions: @[])
 
@@ -217,6 +219,7 @@ proc toFormular*(g: var DepGraph; algo: ResolutionAlgorithm): Formular =
     # if Package p is installed, pick one of its concrete versions, but not versions
     # that are errornous:
     # A -> (exactly one of: A1, A2, A3)
+    if p.versions.len == 0: continue
     b.openOpr(OrForm)
     b.openOpr(NotForm)
     b.add newVar(p.v)
@@ -325,8 +328,9 @@ proc solve*(c: var AtlasContext; g: var DepGraph; f: Formular) =
         g.nodes[idx].activeVersion = m.index
         let destDir = m.pkg.name.string
         debug c, m.pkg, "package satisfiable: " & $m.pkg
-        withDir c, m.pkg:
-          checkoutGitCommit(c, PackageDir(destDir), m.commit)
+        if m.commit != "":
+          withDir c, m.pkg:
+            checkoutGitCommit(c, PackageDir(destDir), m.commit)
 
     if NoExec notin c.flags:
       runBuildSteps(c, g)
@@ -378,16 +382,19 @@ iterator toposorted*(g: DepGraph): lent Dependency =
   for i in countdown(g.nodes.len-1, 0): yield g.nodes[i]
 
 iterator directDependencies*(g: DepGraph; d: Dependency): lent Dependency =
-  let deps {.cursor.} = d.versions[d.activeVersion].req.deps
-  for dep in deps:
-    let idx = findDependencyForDep(g, dep[0])
-    yield g.nodes[idx]
+  if d.activeVersion < d.versions.len:
+    let deps {.cursor.} = d.versions[d.activeVersion].req.deps
+    for dep in deps:
+      let idx = findDependencyForDep(g, dep[0])
+      yield g.nodes[idx]
 
 proc getCfgPath*(g: DepGraph; d: Dependency): lent CfgPath =
   result = CfgPath d.versions[d.activeVersion].req.srcDir
 
 proc commit*(d: Dependency): string =
-  d.versions[d.activeVersion].commit
+  result =
+    if d.activeVersion < d.versions.len: d.versions[d.activeVersion].commit
+    else: ""
 
 proc bestNimVersion*(g: DepGraph): Version =
   result = Version""
