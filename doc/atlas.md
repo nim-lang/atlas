@@ -155,14 +155,14 @@ https://github.com/araq/ormin -> https://github.com/useMyForkInstead/ormin
 
 The `$` has a special meaning in a pattern:
 
-=================   ========================================================
-``$$``              Matches a single dollar sign.
-``$*``              Matches until the token following the ``$*`` was found.
-                    The match is allowed to be of 0 length.
-``$+``              Matches until the token following the ``$+`` was found.
-                    The match must consist of at least one char.
-``$s``              Skips optional whitespace.
-=================   ========================================================
+| Syntax             | Meaning
+|--------------------|--------------------------------------------------------
+|``$$``              |Matches a single dollar sign.
+|``$*``              |Matches until the token following the ``$*`` was found.
+|                    |The match is allowed to be of 0 length.
+|``$+``              |Matches until the token following the ``$+`` was found.
+|                    |The match must consist of at least one char.
+|``$s``              |Skips optional whitespace.
 
 For example, here is how to override any github link:
 
