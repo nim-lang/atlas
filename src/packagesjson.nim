@@ -10,7 +10,6 @@ import std / [json, os, sets, strutils, httpclient, uri]
 import context, reporters
 
 const
-  #MockupRun = defined(atlasTests)
   UnitTests = defined(atlasUnitTests)
   #TestsDir = "atlas/tests"
 

@@ -404,29 +404,23 @@ proc main(c: var AtlasContext) =
   if c.workspace.len > 0:
     if not dirExists(c.workspace): fatal "Workspace directory '" & c.workspace & "' not found."
   elif action != "init":
-    when MockupRun:
-      c.workspace = autoWorkspace(c.currentDir)
+    if GlobalWorkspace in c.flags:
+      c.workspace = detectWorkspace(getHomeDir() / ".atlas")
+      warn c, c.workspace, "using global workspace"
     else:
-      if GlobalWorkspace in c.flags:
-        c.workspace = detectWorkspace(getHomeDir() / ".atlas")
-        warn c, c.workspace, "using global workspace"
-      else:
-        c.workspace = detectWorkspace(c.currentDir)
-      if c.workspace.len > 0:
-        readConfig c
-        info c, c.workspace.absolutePath, "is the current workspace"
-      elif autoinit:
-        c.workspace = autoWorkspace(c.currentDir)
-        createWorkspaceIn c
-      elif action notin ["search", "list", "tag"]:
-        fatal "No workspace found. Run `atlas init` if you want this current directory to be your workspace."
+      c.workspace = detectWorkspace(c.currentDir)
+    if c.workspace.len > 0:
+      readConfig c
+      info c, c.workspace.absolutePath, "is the current workspace"
+    elif autoinit:
+      c.workspace = autoWorkspace(c.currentDir)
+      createWorkspaceIn c
+    elif action notin ["search", "list", "tag"]:
+      fatal "No workspace found. Run `atlas init` if you want this current directory to be your workspace."
 
-  when MockupRun:
+  if not explicitDepsDirOverride and action != "init" and c.depsDir.len() == 0:
     c.depsDir = c.workspace
-  else:
-    if not explicitDepsDirOverride and action != "init" and c.depsDir.len() == 0:
-      c.depsDir = c.workspace
-    createDir(c.depsDir)
+  createDir(c.depsDir)
 
   case action
   of "":

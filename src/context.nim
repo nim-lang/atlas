@@ -14,7 +14,6 @@ export tables, sets, json
 export versions, parse_requires, compiledpatterns
 
 const
-  MockupRun* = defined(atlasTests)
   UnitTests* = defined(atlasUnitTests)
   TestsDir* = "atlas/tests"
 
@@ -76,9 +75,6 @@ type
     urlMapping*: Table[string, Package] # name -> url mapping
     overrides*: Patterns
     defaultAlgo*: ResolutionAlgorithm
-    when MockupRun:
-      step*: int
-      mockupSuccess*: bool
     plugins*: PluginInfo
 
 proc nimble*(a: Package): PackageNimble =
@@ -180,16 +176,13 @@ template toDir(pkg: Package): string = pkg.path.string
 template toDir(dir: string): string = dir
 
 template withDir*(c: var AtlasContext; dir: string | Package; body: untyped) =
-  when MockupRun:
+  let oldDir = getCurrentDir()
+  debug c, toDir(dir), "Current directory is now: " & dir.toDir()
+  try:
+    setCurrentDir(dir.toDir())
     body
-  else:
-    let oldDir = getCurrentDir()
-    debug c, toDir(dir), "Current directory is now: " & dir.toDir()
-    try:
-      setCurrentDir(dir.toDir())
-      body
-    finally:
-      setCurrentDir(oldDir)
+  finally:
+    setCurrentDir(oldDir)
 
 template tryWithDir*(c: var AtlasContext, dir: string | Package; body: untyped) =
   let oldDir = getCurrentDir()

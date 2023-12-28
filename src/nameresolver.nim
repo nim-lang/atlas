@@ -86,10 +86,9 @@ proc updatePackages*(c: var AtlasContext) =
 proc fillPackageLookupTable(c: var AtlasContext) =
   if not c.hasPackageList:
     c.hasPackageList = true
-    when not MockupRun:
-      if not fileExists(c.depsDir / DefaultPackagesSubDir / "packages.json"):
-        updatePackages(c)
-    let plist = getPackageInfos(when MockupRun: TestsDir else: c.depsDir)
+    if not fileExists(c.depsDir / DefaultPackagesSubDir / "packages.json"):
+      updatePackages(c)
+    let plist = getPackageInfos(c.depsDir)
     debug c, "fillPackageLookupTable", "initializing..."
     for entry in plist:
       let url = getUrl(entry.url)
@@ -127,26 +126,22 @@ proc dependencyDir*(c: var AtlasContext; pkg: Package): PackageDir =
   trace c, pkg, "dependency not found using default"
 
 proc findNimbleFile*(c: var AtlasContext; pkg: Package; depDir = PackageDir""): string =
-  when MockupRun:
-    result = TestsDir / pkg.name.string & ".nimble"
-    doAssert fileExists(result), "file does not exist " & result
+  let dir = if depDir.string.len == 0: dependencyDir(c, pkg).string
+            else: depDir.string
+  result = dir / (pkg.name.string & ".nimble")
+  debug c, pkg, "findNimbleFile: searching: " & pkg.repo.string & " path: " & pkg.path.string & " dir: " & dir & " curr: " & result
+  if not fileExists(result):
+    debug c, pkg, "findNimbleFile: not found: " & result
+    result = ""
+    for file in walkFiles(dir / "*.nimble"):
+      if result.len == 0:
+        result = file
+        trace c, pkg, "nimble file found " & result
+      else:
+        error c, pkg, "ambiguous .nimble file " & result
+        return ""
   else:
-    let dir = if depDir.string.len == 0: dependencyDir(c, pkg).string
-              else: depDir.string
-    result = dir / (pkg.name.string & ".nimble")
-    debug c, pkg, "findNimbleFile: searching: " & pkg.repo.string & " path: " & pkg.path.string & " dir: " & dir & " curr: " & result
-    if not fileExists(result):
-      debug c, pkg, "findNimbleFile: not found: " & result
-      result = ""
-      for file in walkFiles(dir / "*.nimble"):
-        if result.len == 0:
-          result = file
-          trace c, pkg, "nimble file found " & result
-        else:
-          error c, pkg, "ambiguous .nimble file " & result
-          return ""
-    else:
-      trace c, pkg, "nimble file found " & result
+    trace c, pkg, "nimble file found " & result
 
 proc resolvePackageUrl(c: var AtlasContext; url: string, checkOverrides = true): Package =
   result = Package(url: getUrl(url),
