@@ -9,21 +9,21 @@
 ## Resolves package names and turn them to URLs.
 
 import std / [os, unicode, strutils, osproc]
-import context, osutils, packagesjson, gitops
+import context, osutils, packagesjson, gitops, reporters
 
-proc retryUrl(cmd, urlstr: string; c: var AtlasContext; repo: PackageRepo;
+proc retryUrl(cmd, urlstr: string; c: var AtlasContext; displayName: string;
               tryBeforeSleep = true): bool =
   ## Retries a url-based command `cmd` with an increasing delay.
   ## Performs an initial request when `tryBeforeSLeep` is `true`.
   const Pauses = [0, 1000, 2000, 3000, 4000, 6000]
   let firstPause = if tryBeforeSleep: 0 else: 1
   for i in firstPause..<Pauses.len:
-    if i > firstPause: infoNow c, repo, "Retrying remote URL: " & urlstr
+    if i > firstPause: infoNow c, displayName, "Retrying remote URL: " & urlstr
     os.sleep(Pauses[i])
     if execCmdEx(cmd)[1] == QuitSuccess: return true
   return false
 
-proc cloneUrlImpl(c: var AtlasContext,
+proc cloneUrl*(c: var AtlasContext,
                   url: PackageUrl,
                   dest: string;
                   cloneUsingHttps: bool): (CloneStatus, string) =
@@ -41,7 +41,7 @@ proc cloneUrlImpl(c: var AtlasContext,
     # github + https + trailing url slash causes a
     # checkout/ls-remote to fail with repository not found
     modurl.path = modurl.path[0 .. ^2]
-  let repo = toRepo($modurl)
+  let repo = toRepo($modurl).string
   let url = modurl
   let urlstr = $modurl
 
@@ -73,26 +73,15 @@ proc cloneUrlImpl(c: var AtlasContext,
     else:
       (OtherError, "exernal program failed: " & $GitClone)
 
-proc cloneUrl*(c: var AtlasContext;
-               url: PackageUrl,
-               dest: string;
-               cloneUsingHttps: bool): (CloneStatus, string) =
-  when MockupRun:
-    result = (Ok, "")
-  else:
-    result = cloneUrlImpl(c, url, dest, cloneUsingHttps)
-    when ProduceTest:
-      echo "cloned ", url, " into ", dest
-
 proc updatePackages*(c: var AtlasContext) =
   if dirExists(c.depsDir / DefaultPackagesSubDir):
     withDir(c, c.depsDir / DefaultPackagesSubDir):
-      gitPull(c, PackageRepo DefaultPackagesSubDir)
+      gitPull(c, DefaultPackagesSubDir)
   else:
     withDir c, c.depsDir:
       let (status, err) = cloneUrl(c, getUrl "https://github.com/nim-lang/packages", DefaultPackagesSubDir, false)
       if status != Ok:
-        error c, PackageRepo(DefaultPackagesSubDir), err
+        error c, DefaultPackagesSubDir, err
 
 proc fillPackageLookupTable(c: var AtlasContext) =
   if not c.hasPackageList:
@@ -101,7 +90,7 @@ proc fillPackageLookupTable(c: var AtlasContext) =
       if not fileExists(c.depsDir / DefaultPackagesSubDir / "packages.json"):
         updatePackages(c)
     let plist = getPackageInfos(when MockupRun: TestsDir else: c.depsDir)
-    debug c, toRepo("fillPackageLookupTable"), "initializing..."
+    debug c, "fillPackageLookupTable", "initializing..."
     for entry in plist:
       let url = getUrl(entry.url)
       let pkg = Package(name: PackageName unicode.toLower entry.name,
@@ -257,7 +246,7 @@ proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
 
   fillPackageLookupTable(c)
 
-  trace c, toRepo(rawHandle), "resolving package"
+  trace c, rawHandle, "resolving package"
 
   if rawHandle.isUrl:
     result = c.resolvePackageUrl(rawHandle)

@@ -9,12 +9,9 @@
 ## Simple tool to automate frequent workflows: Can "clone"
 ## a Nimble dependency and its dependencies recursively.
 
-import std / [parseopt, strutils, os, osproc, tables, sets, json, jsonutils,
-  hashes]
-import context, runners, osutils, packagesjson, sat, gitops, nimenv, lockfiles,
-  depgraphs, confighandler, configutils, nameresolver, nimblechecksums
-
-export osutils, context
+import std / [parseopt, strutils, os, osproc, tables, sets, json, jsonutils]
+import context, osutils, packagesjson, sat, gitops, nimenv, lockfiles,
+  depgraphs, confighandler, configutils, nameresolver, nimblechecksums, reporters
 
 const
   AtlasVersion =
@@ -104,12 +101,12 @@ proc writeVersion() =
   quit(0)
 
 proc tag(c: var AtlasContext; tag: string) =
-  gitTag(c, tag)
-  pushTag(c, tag)
+  gitTag(c, c.projectDir, tag)
+  pushTag(c, c.projectDir, tag)
 
 proc tag(c: var AtlasContext; field: Natural) =
   let oldErrors = c.errors
-  let newTag = incrementLastTag(c, field)
+  let newTag = incrementLastTag(c, c.projectDir, field)
   if c.errors == oldErrors:
     tag(c, newTag)
 
@@ -148,8 +145,8 @@ proc getRequiredCommit*(c: var AtlasContext; w: Dependency): string =
 proc checkoutLaterCommit(c: var AtlasContext; g: var DepGraph; w: Dependency) =
   # Now dead code.
   withDir c, w.pkg:
-    if w.commit.len == 0 or cmpIgnoreCase(w.commit, "head") == 0:
-      gitPull(c, w.pkg.repo)
+    if w.commit.len == 0 or cmpIgnoreCase(w.commit, InvalidCommit) == 0:
+      gitPull(c, w.pkg.repo.string)
     else:
       let err = checkGitDiffStatus(c)
       if err.len > 0:
@@ -172,9 +169,9 @@ proc checkoutLaterCommit(c: var AtlasContext; g: var DepGraph; w: Dependency) =
             if status == 0 and (mergeBase == currentCommit or mergeBase == requiredCommit):
               # conflict resolution: pick the later commit:
               if mergeBase == currentCommit:
-                checkoutGitCommit(c, w.pkg.path, requiredCommit)
+                checkoutGitCommit(c, w.pkg.path.string, requiredCommit, FullClones in c.flags)
             else:
-              checkoutGitCommit(c, w.pkg.path, requiredCommit)
+              checkoutGitCommit(c, w.pkg.path.string, requiredCommit, FullClones in c.flags)
               when false:
                 warn c, w.pkg, "do not know which commit is more recent:",
                   currentCommit, "(current) or", w.commit, " =", requiredCommit, "(required)"
@@ -218,9 +215,9 @@ proc installDependencies(c: var AtlasContext; nimbleFile: string) =
 proc updateDir(c: var AtlasContext; dir, filter: string) =
   ## update the package's VCS
   for kind, file in walkDir(dir):
-    debug c, toRepo(c.workspace / "updating"), "checking directory: " & $kind & " file: " & file.absolutePath
+    debug c, (c.workspace / "updating"), "checking directory: " & $kind & " file: " & file.absolutePath
     if kind == pcDir and isGitDir(file):
-      trace c, toRepo(file), "updating directory"
+      trace c, file, "updating directory"
       gitops.updateDir(c, file, filter)
 
 
@@ -247,20 +244,20 @@ proc autoWorkspace(currentDir: string): string =
 proc createWorkspaceIn(c: var AtlasContext) =
   if not fileExists(c.workspace / AtlasWorkspace):
     writeFile c.workspace / AtlasWorkspace, "deps=\"$#\"\nresolver=\"MaxVer\"\n" % escape(c.depsDir, "", "")
-    info c, toRepo(c.workspace), "created workspace file"
+    info c, c.workspace, "created workspace file"
   createDir absoluteDepsDir(c.workspace, c.depsDir)
-  info c, toRepo(c.depsDir), "created deps dir"
+  info c, c.depsDir, "created deps dir"
 
 proc listOutdated(c: var AtlasContext; dir: string) =
   var updateable = 0
   for k, f in walkDir(dir, relative=true):
     if k in {pcDir, pcLinkToDir} and isGitDir(dir / f):
       withDir c, dir / f:
-        if gitops.isOutdated(c, PackageDir(dir / f)):
+        if gitops.isOutdated(c, dir / f):
           inc updateable
 
   if updateable == 0:
-    info c, toRepo(c.workspace), "all packages are up to date"
+    info c, c.workspace, "all packages are up to date"
 
 proc listOutdated(c: var AtlasContext) =
   if c.depsDir.len > 0 and c.depsDir != c.workspace:
@@ -290,24 +287,24 @@ proc newProject(c: var AtlasContext; projectName: string) =
 
   let name = projectName.strip()
   if not (isValidFilename(name) and isValidProjectName(name)):
-    error c, toRepo(name), "'" & name & "' is not a vaild project name!"
+    error c, name, "'" & name & "' is not a vaild project name!"
     quit(1)
   if dirExists(name):
-    error c, toRepo(name), "Directory '" & name & "' already exists!"
+    error c, name, "Directory '" & name & "' already exists!"
     quit(1)
   try:
     createDir(name)
   except OSError as e:
-    error c, toRepo(name), "Failed to create directory '$#': $#" % [name, e.msg]
+    error c, name, "Failed to create directory '$#': $#" % [name, e.msg]
     quit(1)
-  info c, toRepo(name), "created project dir"
+  info c, name, "created project dir"
   withDir(c, name):
     let fname = name.replace('-', '_') & ".nim"
     try:
       # A header doc comment with the project's name
       fname.writeFile("## $#\n" % name)
     except IOError as e:
-      error c, toRepo(name), "Failed writing to file '$#': $#" % [fname, e.msg]
+      error c, name, "Failed writing to file '$#': $#" % [fname, e.msg]
       quit(1)
 
 proc main(c: var AtlasContext) =
@@ -386,8 +383,8 @@ proc main(c: var AtlasContext) =
       of "global", "g": c.flags.incl GlobalWorkspace
       of "colors":
         case val.normalize
-        of "off": c.flags.incl NoColors
-        of "on": c.flags.excl NoColors
+        of "off": c.noColors = true
+        of "on": c.noColors = false
         else: writeHelp()
       of "verbosity":
         case val.normalize
@@ -395,7 +392,7 @@ proc main(c: var AtlasContext) =
         of "trace": c.verbosity = 1
         of "debug": c.verbosity = 2
         else: writeHelp()
-      of "assertonerror": c.flags.incl AssertOnError
+      of "assertonerror": c.assertOnError = true
       of "resolver":
         try:
           c.defaultAlgo = parseEnum[ResolutionAlgorithm](val)
@@ -412,12 +409,12 @@ proc main(c: var AtlasContext) =
     else:
       if GlobalWorkspace in c.flags:
         c.workspace = detectWorkspace(getHomeDir() / ".atlas")
-        warn c, toRepo(c.workspace), "using global workspace"
+        warn c, c.workspace, "using global workspace"
       else:
         c.workspace = detectWorkspace(c.currentDir)
       if c.workspace.len > 0:
         readConfig c
-        info c, toRepo(c.workspace.absolutePath), "is the current workspace"
+        info c, c.workspace.absolutePath, "is the current workspace"
       elif autoinit:
         c.workspace = autoWorkspace(c.currentDir)
         createWorkspaceIn c
@@ -447,9 +444,6 @@ proc main(c: var AtlasContext) =
     let cfgPath = if CfgHere in c.flags: CfgPath c.currentDir
                   else: findCfgDir(c)
     patchNimCfg c, deps, cfgPath
-    when MockupRun:
-      if not c.mockupSuccess:
-        fatal "There were problems."
   of "use":
     singleArg()
     let nimbleFile = patchNimbleFile(c, args[0])

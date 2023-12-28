@@ -29,6 +29,12 @@ type
     b: VersionReq
     isInterval: bool
 
+  ResolutionAlgorithm* = enum
+    MinVer, SemVer, MaxVer
+
+const
+  InvalidCommit* = "#head" #"<invalid commit>"
+
 template versionKey*(i: VersionInterval): string = i.a.v.string
 
 proc createQueryEq*(v: Version): VersionInterval =

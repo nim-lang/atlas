@@ -9,7 +9,7 @@
 ## Implementation of the "Nim virtual environment" (`atlas env`) feature.
 
 import std / [os, strscans, strutils]
-import context, gitops
+import context, gitops, reporters
 
 when defined(windows):
   const
@@ -26,9 +26,9 @@ const
 
 proc infoAboutActivation(c: var AtlasContext; nimDest, nimVersion: string) =
   when defined(windows):
-    info c, toRepo(nimDest), "RUN\nnim-" & nimVersion & "\\activate.bat"
+    info c, nimDest, "RUN\nnim-" & nimVersion & "\\activate.bat"
   else:
-    info c, toRepo(nimDest), "RUN\nsource nim-" & nimVersion & "/activate.sh"
+    info c, nimDest, "RUN\nsource nim-" & nimVersion & "/activate.sh"
 
 proc setupNimEnv*(c: var AtlasContext; nimVersion: string) =
   template isDevel(nimVersion: string): bool = nimVersion == "devel"
@@ -36,13 +36,13 @@ proc setupNimEnv*(c: var AtlasContext; nimVersion: string) =
   template exec(c: var AtlasContext; command: string) =
     let cmd = command # eval once
     if os.execShellCmd(cmd) != 0:
-      error c, toRepo("nim-" & nimVersion), "failed: " & cmd
+      error c, ("nim-" & nimVersion), "failed: " & cmd
       return
 
   let nimDest = "nim-" & nimVersion
   if dirExists(c.workspace / nimDest):
     if not fileExists(c.workspace / nimDest / ActivationFile):
-      info c, toRepo(nimDest), "already exists; remove or rename and try again"
+      info c, nimDest, "already exists; remove or rename and try again"
     else:
       infoAboutActivation c, nimDest, nimVersion
     return
@@ -50,7 +50,7 @@ proc setupNimEnv*(c: var AtlasContext; nimVersion: string) =
   var major, minor, patch: int
   if nimVersion != "devel":
     if not scanf(nimVersion, "$i.$i.$i", major, minor, patch):
-      error c, toRepo("nim"), "cannot parse version requirement"
+      error c, "nim", "cannot parse version requirement"
       return
   let csourcesVersion =
     if nimVersion.isDevel or (major == 1 and minor >= 9) or major >= 2:
@@ -86,9 +86,9 @@ proc setupNimEnv*(c: var AtlasContext; nimVersion: string) =
     if not nimVersion.isDevel:
       let commit = versionToCommit(c, c.defaultAlgo, query)
       if commit.len == 0:
-        error c, toRepo(nimDest), "cannot resolve version to a commit"
+        error c, nimDest, "cannot resolve version to a commit"
         return
-      checkoutGitCommit(c, pkg.path, commit)
+      checkoutGitCommit(c, pkg.path.string, commit, FullClones in c.flags)
     exec c, nimExe & " c --noNimblePath --skipUserCfg --skipParentCfg --hints:off koch"
     let kochExe = when defined(windows): "koch.exe" else: "./koch"
     exec c, kochExe & " boot -d:release --skipUserCfg --skipParentCfg --hints:off"

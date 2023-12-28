@@ -7,7 +7,7 @@
 #
 
 import std / [strutils, os, sha1, algorithm]
-import context, nameresolver, gitops
+import context, gitops
 
 proc updateSecureHash(checksum: var Sha1State; c: var AtlasContext; pkg: Package; name: string) =
   let path = pkg.path.string / name
@@ -29,7 +29,7 @@ proc updateSecureHash(checksum: var Sha1State; c: var AtlasContext; pkg: Package
       const bufferSize = 8192
       var buffer = newString(bufferSize)
       while true:
-        var bytesRead = readChars(file, buffer)
+        let bytesRead = readChars(file, buffer)
         if bytesRead == 0: break
         checksum.update(buffer.toOpenArray(0, bytesRead - 1))
     except IOError:
@@ -42,11 +42,11 @@ proc nimbleChecksum*(c: var AtlasContext, pkg: Package, cfg: CfgPath): string =
   ##
   ## Useful for exporting a Nimble sync file.
   ##
-  let res = c.listFiles(pkg)
-  if res.len == 0:
+  var files = c.listFiles(pkg.path.string)
+  if files.len == 0:
     error c, pkg, "couldn't list files"
   else:
-    var files = res.sorted()
+    sort(files)
     var checksum = newSha1State()
     for file in files:
       checksum.updateSecureHash(c, pkg, file)

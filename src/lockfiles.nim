@@ -10,7 +10,7 @@
 
 import std / [sequtils, strutils, tables, os, json, jsonutils]
 import context, gitops, osutils, nimblechecksums, compilerversions,
-  nameresolver, configutils, depgraphs
+  nameresolver, configutils, depgraphs, reporters
 
 const
   NimbleLockFileName* = "nimble.lock"
@@ -100,7 +100,7 @@ proc genLockEntriesForDir(c: var AtlasContext; lf: var LockFile; dir: string) =
         continue
       withDir c, f:
         let path = "file://" & f
-        debug c, toRepo("genLocKEntries"), "using pkg: " & path
+        debug c, "genLockEntries", "using pkg: " & path
         let pkg = resolvePackage(c, path)
         genLockEntry(c, lf, pkg)
 
@@ -155,7 +155,7 @@ const
   NimCfg = "nim.cfg"
 
 proc pinWorkspace*(c: var AtlasContext; lockFilePath: string) =
-  info c, toRepo("pin"), "pinning workspace: " & $c.workspace
+  info c, "pin", "pinning workspace: " & $c.workspace
   var lf = newLockFile()
   genLockEntriesForDir(c, lf, c.workspace)
   if c.workspace != c.depsDir and c.depsDir.len > 0:
@@ -176,7 +176,7 @@ proc pinWorkspace*(c: var AtlasContext; lockFilePath: string) =
 proc pinProject*(c: var AtlasContext; lockFilePath: string, exportNimble = false) =
   ## Pin project using deps starting from the current project directory.
   ##
-  info c, toRepo("pin"), "pinning project"
+  info c, "pin", "pinning project"
   var lf = newLockFile()
   let startPkg = resolvePackage(c, "file://" & c.currentDir)
 
@@ -232,7 +232,7 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string, exportNimble = false
 
 proc compareVersion(c: var AtlasContext; key, wanted, got: string) =
   if wanted != got:
-    warn c, toRepo(key), "environment mismatch: " &
+    warn c, key, "environment mismatch: " &
       " versions differ: previously used: " & wanted & " but now at: " & got
 
 proc convertNimbleLock*(c: var AtlasContext; nimblePath: string): LockFile =
@@ -243,7 +243,7 @@ proc convertNimbleLock*(c: var AtlasContext; nimblePath: string): LockFile =
 
   if jsonTree.getOrDefault("version") == nil or
       "packages" notin jsonTree:
-    error c, toRepo(nimblePath), "invalid nimble lockfile"
+    error c, nimblePath, "invalid nimble lockfile"
     return
 
   result = newLockFile()
@@ -253,7 +253,7 @@ proc convertNimbleLock*(c: var AtlasContext; nimblePath: string): LockFile =
     else:
       # lookup package using url
       let pkg = c.resolvePackage(info["url"].getStr)
-      info c, toRepo(name), " imported "
+      info c, name, " imported "
       let dir = c.depsDir / pkg.repo.string
       result.items[name] = LockFileEntry(
         dir: dir.relativePath(c.projectDir),
@@ -284,25 +284,25 @@ proc listChanged*(c: var AtlasContext; lockFilePath: string) =
   for _, v in pairs(lf.items):
     let dir = base / v.dir
     if not dirExists(dir):
-      warn c, toRepo(dir), "repo missing!"
+      warn c, dir, "repo missing!"
       continue
     withDir c, dir:
       let url = $getRemoteUrl()
       if v.url != url:
-        warn c, toRepo(v.dir), "remote URL has been changed;" &
-                                  " found: " & url &
-                                  " lockfile has: " & v.url
+        warn c, v.dir, "remote URL has been changed;" &
+                       " found: " & url &
+                       " lockfile has: " & v.url
 
       let commit = gitops.getCurrentCommit()
       if commit != v.commit:
         let pkg = c.resolvePackage("file://" & dir)
         c.resolveNimble(pkg)
         let info = parseNimble(c, pkg.nimble)
-        warn c, toRepo(dir), "commit differs;" &
-                                            " found: " & commit &
-                                            " (" & info.version & ")" &
-                                            " lockfile has: " & v.commit &
-                                            " (" & v.version & ")"
+        warn c, dir, "commit differs;" &
+                     " found: " & commit &
+                     " (" & info.version & ")" &
+                     " lockfile has: " & v.commit &
+                     " (" & v.version & ")"
 
   if lf.hostOS == system.hostOS and lf.hostCPU == system.hostCPU:
     compareVersion c, "nim", lf.nimVersion, detectNimVersion()
@@ -337,23 +337,23 @@ proc replay*(c: var AtlasContext; lockFilePath: string) =
   # update the the dependencies
   var paths: seq[CfgPath] = @[]
   for _, v in pairs(lf.items):
-    trace c, toRepo("replay"), "replaying: " & v.repr
+    trace c, "replay", "replaying: " & v.repr
     let dir = c.fromPrefixedPath(v.dir)
     if not dirExists(dir):
       let (status, err) = c.cloneUrl(getUrl v.url, dir, false)
       if status != Ok:
-        error c, toRepo(lockFilePath), err
+        error c, lockFilePath, err
         continue
     withDir c, dir:
       let url = $getRemoteUrl()
       if $v.url.getUrl() != url:
         if IgnoreUrls in c.flags:
-          warn c, toRepo(v.dir), "remote URL differs from expected: got: " &
+          warn c, v.dir, "remote URL differs from expected: got: " &
             url & " but expected: " & v.url
         else:
-          error c, toRepo(v.dir), "remote URL has been compromised: got: " &
+          error c, v.dir, "remote URL has been compromised: got: " &
             url & " but wanted: " & v.url
-      checkoutGitCommit(c, dir.PackageDir, v.commit)
+      checkoutGitCommit(c, dir, v.commit, FullClones in c.flags)
 
       if genCfg:
         let pkg = resolvePackage(c, "file://" & dir)

@@ -9,14 +9,14 @@
 ## Configuration handling.
 
 import std / [strutils, os, streams, parsecfg]
-import context, osutils
+import context, osutils, reporters
 
 proc parseOverridesFile(c: var AtlasContext; filename: string) =
   const Separator = " -> "
   let path = c.workspace / filename
   var f: File
   if open(f, path):
-    info c, toRepo("overrides"), "loading file: " & path
+    info c, "overrides", "loading file: " & path
     c.flags.incl UsesOverrides
     try:
       var lineCount = 1
@@ -26,17 +26,17 @@ proc parseOverridesFile(c: var AtlasContext; filename: string) =
           let key = line.substr(0, splitPos-1)
           let val = line.substr(splitPos+len(Separator))
           if key.len == 0 or val.len == 0:
-            error c, toRepo(path), "key/value must not be empty"
+            error c, path, "key/value must not be empty"
           let err = c.overrides.addPattern(key, val)
           if err.len > 0:
-            error c, toRepo(path), "(" & $lineCount & "): " & err
+            error c, path, "(" & $lineCount & "): " & err
         else:
           discard "ignore the line"
         inc lineCount
     finally:
       close f
   else:
-    error c, toRepo(path), "cannot open: " & path
+    error c, path, "cannot open: " & path
 
 proc readPluginsDir(c: var AtlasContext; dir: string) =
   for k, f in walkDir(c.workspace / dir):
@@ -47,7 +47,7 @@ proc readConfig*(c: var AtlasContext) =
   let configFile = c.workspace / AtlasWorkspace
   var f = newFileStream(configFile, fmRead)
   if f == nil:
-    error c, toRepo(configFile), "cannot open: " & configFile
+    error c, configFile, "cannot open: " & configFile
     return
   var p: CfgParser
   open(p, f, configFile)
@@ -67,13 +67,13 @@ proc readConfig*(c: var AtlasContext) =
         try:
           c.defaultAlgo = parseEnum[ResolutionAlgorithm](e.value)
         except ValueError:
-          warn c, toRepo(configFile), "ignored unknown resolver: " & e.key
+          warn c, configFile, "ignored unknown resolver: " & e.key
       of "plugins":
         readPluginsDir(c, e.value)
       else:
-        warn c, toRepo(configFile), "ignored unknown setting: " & e.key
+        warn c, configFile, "ignored unknown setting: " & e.key
     of cfgOption:
       discard "who cares about options"
     of cfgError:
-      error c, toRepo(configFile), e.msg
+      error c, configFile, e.msg
   close(p)

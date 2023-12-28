@@ -7,7 +7,7 @@
 #
 
 import std/[os, strutils]
-import context, osutils, parse_requires, nameresolver
+import context, osutils, parse_requires, nameresolver, reporters
 
 export parse_requires
 
@@ -17,8 +17,6 @@ const
 
 proc parseNimble*(c: var AtlasContext; nimble: PackageNimble): NimbleFileInfo =
   result = extractRequiresInfo(nimble.string)
-  when ProduceTest:
-    echo "nimble ", nimbleFile, " info ", result
 
 proc findCfgDir*(c: var AtlasContext): CfgPath =
   for nimbleFile in walkPattern(c.currentDir / "*.nimble"):
@@ -38,32 +36,28 @@ proc patchNimCfg*(c: var AtlasContext; deps: seq[CfgPath]; cfgPath: CfgPath) =
     paths.add "--path:\"" & x & "\"\n"
   var cfgContent = configPatternBegin & paths & configPatternEnd
 
-  when MockupRun:
-    assert readFile(TestsDir / "nim.cfg") == cfgContent
-    c.mockupSuccess = true
+  let cfg = cfgPath.string / "nim.cfg"
+  assert cfgPath.string.len > 0
+  if cfgPath.string.len > 0 and not dirExists(cfgPath.string):
+    error(c, c.projectDir, "could not write the nim.cfg")
+  elif not fileExists(cfg):
+    writeFile(cfg, cfgContent)
+    info(c, projectFromCurrentDir().string, "created: " & cfg.readableFile)
   else:
-    let cfg = cfgPath.string / "nim.cfg"
-    assert cfgPath.string.len > 0
-    if cfgPath.string.len > 0 and not dirExists(cfgPath.string):
-      error(c, c.projectDir.toRepo, "could not write the nim.cfg")
-    elif not fileExists(cfg):
-      writeFile(cfg, cfgContent)
-      info(c, projectFromCurrentDir(), "created: " & cfg.readableFile)
+    let content = readFile(cfg)
+    let start = content.find(configPatternBegin)
+    if start >= 0:
+      cfgContent = content.substr(0, start-1) & cfgContent
+      let theEnd = content.find(configPatternEnd, start)
+      if theEnd >= 0:
+        cfgContent.add content.substr(theEnd+len(configPatternEnd))
     else:
-      let content = readFile(cfg)
-      let start = content.find(configPatternBegin)
-      if start >= 0:
-        cfgContent = content.substr(0, start-1) & cfgContent
-        let theEnd = content.find(configPatternEnd, start)
-        if theEnd >= 0:
-          cfgContent.add content.substr(theEnd+len(configPatternEnd))
-      else:
-        cfgContent = content & "\n" & cfgContent
-      if cfgContent != content:
-        # do not touch the file if nothing changed
-        # (preserves the file date information):
-        writeFile(cfg, cfgContent)
-        info(c, projectFromCurrentDir(), "updated: " & cfg.readableFile)
+      cfgContent = content & "\n" & cfgContent
+    if cfgContent != content:
+      # do not touch the file if nothing changed
+      # (preserves the file date information):
+      writeFile(cfg, cfgContent)
+      info(c, projectFromCurrentDir().string, "updated: " & cfg.readableFile)
 
 proc patchNimbleFile*(c: var AtlasContext; dep: string): string =
   let thisProject = c.currentDir.lastPathComponent
@@ -71,14 +65,14 @@ proc patchNimbleFile*(c: var AtlasContext; dep: string): string =
   let pkg = resolvePackage(c, dep)
   result = ""
   if oldErrors != c.errors:
-    warn c, toRepo(dep), "cannot resolve package name"
+    warn c, dep, "cannot resolve package name"
   else:
     for x in walkFiles(c.currentDir / "*.nimble"):
       if result.len == 0:
         result = x
       else:
         # ambiguous .nimble file
-        warn c, toRepo(dep), "cannot determine `.nimble` file; there are multiple to choose from"
+        warn c, dep, "cannot determine `.nimble` file; there are multiple to choose from"
         return ""
     # see if we have this requirement already listed. If so, do nothing:
     var found = false
@@ -92,7 +86,7 @@ proc patchNimbleFile*(c: var AtlasContext; dep: string): string =
           let oldErrors = c.errors
           let pkgB = resolvePackage(c, tokens[0])
           if oldErrors != c.errors:
-            warn c, toRepo(tokens[0]), "cannot resolve package name; found in: " & result
+            warn c, tokens[0], "cannot resolve package name; found in: " & result
           if pkg == pkgB:
             found = true
             break
@@ -117,10 +111,10 @@ proc patchNimbleFile*(c: var AtlasContext; dep: string): string =
 
         oldContent.insert(line, idx+1)
         writeFile result, oldContent.join("\n")
-        info(c, toRepo(thisProject), "updated: " & result.readableFile)
+        info(c, thisProject, "updated: " & result.readableFile)
       else:
         result = c.currentDir / thisProject & ".nimble"
         writeFile result, line
-        info(c, toRepo(thisProject), "created: " & result.readableFile)
+        info(c, thisProject, "created: " & result.readableFile)
     else:
-      info(c, toRepo(thisProject), "up to date: " & result.readableFile)
+      info(c, thisProject, "up to date: " & result.readableFile)

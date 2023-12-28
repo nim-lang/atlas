@@ -8,7 +8,7 @@
 
 import std / [sets, tables, os, strutils]
 
-import context, sat, nameresolver, configutils, gitops, runners, osutils
+import context, sat, nameresolver, configutils, gitops, runners, osutils, reporters
 
 type
   Requirements* = ref object
@@ -330,14 +330,14 @@ proc solve*(c: var AtlasContext; g: var DepGraph; f: Formular) =
         debug c, m.pkg, "package satisfiable: " & $m.pkg
         if m.commit != "":
           withDir c, m.pkg:
-            checkoutGitCommit(c, PackageDir(destDir), m.commit)
+            checkoutGitCommit(c, destDir, m.commit, FullClones in c.flags)
 
     if NoExec notin c.flags:
       runBuildSteps(c, g)
       #echo f
 
     if ListVersions in c.flags:
-      info c, toRepo("../resolve"), "selected:"
+      info c, "../resolve", "selected:"
       for i in g.startNodesLen ..< g.nodes.len:
         for v in mitems(g.nodes[i].versions):
           let item = g.mapping[v.v]
@@ -345,9 +345,9 @@ proc solve*(c: var AtlasContext; g: var DepGraph; f: Formular) =
             info c, item.pkg, "[x] " & toString item
           else:
             info c, item.pkg, "[ ] " & toString item
-      info c, toRepo("../resolve"), "end of selection"
+      info c, "../resolve", "end of selection"
   else:
-    error c, toRepo(c.workspace), "version conflict; for more information use --showGraph"
+    error c, c.workspace, "version conflict; for more information use --showGraph"
     for p in mitems(g.nodes):
       var usedVersions = 0
       for ver in mvalidVersions p:

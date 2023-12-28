@@ -7,8 +7,8 @@
 #
 
 import std / [strutils, os, tables, sets, json,
-  terminal, hashes, uri]
-import versions, parse_requires, compiledpatterns, osutils
+  hashes, uri]
+import versions, parse_requires, compiledpatterns, osutils, reporters
 
 export tables, sets, json
 export versions, parse_requires, compiledpatterns
@@ -39,9 +39,6 @@ type
   SemVerField* = enum
     major, minor, patch
 
-  ResolutionAlgorithm* = enum
-    MinVer, SemVer, MaxVer
-
   CloneStatus* = enum
     Ok, NotFound, OtherError
 
@@ -64,32 +61,19 @@ type
     CfgHere
     UsesOverrides
     Keep
-    NoColors
     ShowGraph
     AutoEnv
     NoExec
     ListVersions
     GlobalWorkspace
-    AssertOnError
     FullClones
     IgnoreUrls
 
-  MsgKind = enum
-    Info = "[Info] ",
-    Warning = "[Warning] ",
-    Error = "[Error] "
-    Trace = "[Trace] "
-    Debug = "[Debug] "
-
-  AtlasContext* = object
+  AtlasContext* = object of Reporter
     projectDir*, workspace*, depsDir*, currentDir*: string
     hasPackageList*: bool
-    verbosity*: int
     flags*: set[Flag]
     urlMapping*: Table[string, Package] # name -> url mapping
-    errors*: int
-    warnings*: int
-    messages: seq[(MsgKind, PackageRepo, string)] # delayed output
     overrides*: Patterns
     defaultAlgo*: ResolutionAlgorithm
     when MockupRun:
@@ -142,95 +126,33 @@ proc `$`*(a: Package): string =
     result &= $(a.nimble.string)
   result &= ")"
 
-const
-  InvalidCommit* = "#head" #"<invalid commit>"
-  ProduceTest* = false
-
-proc writeMessage(c: var AtlasContext; category: string; p: PackageRepo; arg: string) =
-  var msg = category & "(" & p.string & ") " & arg
-  stdout.writeLine msg
-
-proc writeMessage(c: var AtlasContext; k: MsgKind; p: PackageRepo; arg: string) =
-  if k == Trace and c.verbosity < 1: return
-  elif k == Debug and c.verbosity < 2: return
-
-  if NoColors in c.flags:
-    writeMessage(c, $k, p, arg)
+proc displayName(c: AtlasContext; p: PackageRepo): string =
+  if p.string == c.workspace:
+    p.string.absolutePath
+  elif c.depsDir != "" and p.string.isRelativeTo(c.depsDir):
+    p.string.relativePath(c.depsDir)
+  elif p.string.isRelativeTo(c.workspace):
+    p.string.relativePath(c.workspace)
   else:
-    let pn =
-      if p.string == c.workspace:
-        p.string.absolutePath
-      elif c.depsDir != "" and p.string.isRelativeTo(c.depsDir):
-        p.string.relativePath(c.depsDir)
-      elif p.string.isRelativeTo(c.workspace):
-        p.string.relativePath(c.workspace)
-      else:
-        p.string
-    let (color, style) =
-      case k
-      of Debug: (fgWhite, styleDim)
-      of Trace: (fgBlue, styleBright)
-      of Info: (fgGreen, styleBright)
-      of Warning: (fgYellow, styleBright)
-      of Error: (fgRed, styleBright)
-    stdout.styledWriteLine(color, style, $k, resetStyle, fgCyan, "(", pn, ")", resetStyle, " ", arg)
-
-proc message(c: var AtlasContext; k: MsgKind; p: PackageRepo; arg: string) =
-  ## collects messages or prints them out immediately
-  # c.messages.add (k, p, arg)
-  writeMessage c, k, p, arg
-
-
-proc warn*(c: var AtlasContext; p: PackageRepo; arg: string) =
-  c.message(Warning, p, arg)
-  # writeMessage c, Warning, p, arg
-  inc c.warnings
-
-proc error*(c: var AtlasContext; p: PackageRepo; arg: string) =
-  if AssertOnError in c.flags:
-    raise newException(AssertionDefect, p.string & ": " & arg)
-  c.message(Error, p, arg)
-  inc c.errors
-
-proc info*(c: var AtlasContext; p: PackageRepo; arg: string) =
-  c.message(Info, p, arg)
-
-proc trace*(c: var AtlasContext; p: PackageRepo; arg: string) =
-  c.message(Trace, p, arg)
-
-proc debug*(c: var AtlasContext; p: PackageRepo; arg: string) =
-  c.message(Debug, p, arg)
+    p.string
 
 proc warn*(c: var AtlasContext; p: Package; arg: string) =
-  c.warn(p.repo, arg)
+  c.warn(displayName(c, p.repo), arg)
 
 proc error*(c: var AtlasContext; p: Package; arg: string) =
-  c.error(p.repo, arg)
+  c.error(displayName(c, p.repo), arg)
 
 proc info*(c: var AtlasContext; p: Package; arg: string) =
-  c.info(p.repo, arg)
+  c.info(displayName(c, p.repo), arg)
 
 proc trace*(c: var AtlasContext; p: Package; arg: string) =
-  c.trace(p.repo, arg)
+  c.trace(displayName(c, p.repo), arg)
 
 proc debug*(c: var AtlasContext; p: Package; arg: string) =
-  c.debug(p.repo, arg)
+  c.debug(displayName(c, p.repo), arg)
 
-proc writePendingMessages*(c: var AtlasContext) =
-  for i in 0..<c.messages.len:
-    let (k, p, arg) = c.messages[i]
-    writeMessage c, k, p, arg
-  c.messages.setLen 0
-
-proc infoNow*(c: var AtlasContext; p: PackageRepo; arg: string) =
-  writeMessage c, Info, p, arg
 proc infoNow*(c: var AtlasContext; p: Package; arg: string) =
-  infoNow c, p.repo, arg
-
-proc fatal*(msg: string) =
-  when defined(debug):
-    writeStackTrace()
-  quit "[Error] " & msg
+  infoNow c, displayName(c, p.repo), arg
 
 # proc toRepo*(p: PackageUrl): PackageRepo =
 #   result = PackageRepo(lastPathComponent($p))
@@ -262,7 +184,7 @@ template withDir*(c: var AtlasContext; dir: string | Package; body: untyped) =
     body
   else:
     let oldDir = getCurrentDir()
-    debug c, toRepo(dir), "Current directory is now: " & $dir.toDir()
+    debug c, toDir(dir), "Current directory is now: " & dir.toDir()
     try:
       setCurrentDir(dir.toDir())
       body
@@ -274,7 +196,7 @@ template tryWithDir*(c: var AtlasContext, dir: string | Package; body: untyped) 
   try:
     if dirExists(dir.toDir()):
       setCurrentDir(dir.toDir())
-      debug c, toRepo(dir), "Current directory is now: " & $dir.toDir()
+      debug c, toDir(dir), "Current directory is now: " & dir.toDir()
       body
   finally:
     setCurrentDir(oldDir)
