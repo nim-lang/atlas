@@ -184,11 +184,11 @@ proc expand*(c: var AtlasContext; g: var DepGraph; m: TraversalMode) =
     if not processed.containsOrIncl(w.pkg.repo):
       if not dirExists(w.pkg.path.string):
         withDir c, (if i < g.startNodesLen: c.workspace else: c.depsDir):
+          info(c, w.pkg, "cloning: " & $w.pkg.url)
           let (status, _) =
             if w.pkg.url.scheme == FileProtocol:
               copyFromDisk(c, w, w.pkg.path.string)
             else:
-              info(c, w.pkg, "cloning: " & $w.pkg.url)
               cloneUrl(c, w.pkg.url, w.pkg.path.string, false)
 
           g.nodes[i].status = status
@@ -198,7 +198,7 @@ proc expand*(c: var AtlasContext; g: var DepGraph; m: TraversalMode) =
     inc i
 
 proc findDependencyForDep(g: DepGraph; dep: Package): int {.inline.} =
-  assert g.packageToDependency.hasKey(dep)
+  assert g.packageToDependency.hasKey(dep), $(dep, g.packageToDependency)
   result = g.packageToDependency.getOrDefault(dep)
 
 iterator mvalidVersions*(p: var Dependency): var DependencyVersion =

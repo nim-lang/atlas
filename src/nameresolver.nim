@@ -209,9 +209,9 @@ proc resolvePackageUrl(c: var AtlasContext; url: string, checkOverrides = true):
     c.urlMapping["repo:" & result.name.string] = result
     trace c, result, "resolvePackageUrl: not found; set pkg: " & $result.repo.string
 
-  if result.url.scheme == "file":
-    result.path = PackageDir result.url.hostname & result.url.path
-    trace c, result, "resolvePackageUrl: setting manual path: " & $result.path.string
+  #if result.url.scheme == "file":
+  #  result.path = PackageDir result.url.hostname & result.url.path
+  #  trace c, result, "resolvePackageUrl: setting manual path: " & $result.path.string
 
 proc resolvePackageName(c: var AtlasContext; name: string): Package =
   result = Package(name: PackageName name,
