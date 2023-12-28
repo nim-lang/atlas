@@ -136,7 +136,7 @@ proc afterGraphActions(c: var AtlasContext; g: DepGraph) =
   if AutoEnv in c.flags:
     let v = g.bestNimVersion
     if v != Version"":
-      setupNimEnv c, v.string
+      setupNimEnv c, c.workspace, v.string, Keep in c.flags
 
 proc getRequiredCommit*(c: var AtlasContext; w: Dependency): string =
   if isShortCommitHash(w.commit): shortToCommit(c, w.commit)
@@ -520,7 +520,7 @@ proc main(c: var AtlasContext) =
     nimbleExec("", args)
   of "env":
     singleArg()
-    setupNimEnv c, args[0]
+    setupNimEnv c, c.workspace, args[0], Keep in c.flags
   of "outdated":
     listOutdated(c)
   of "checksum":
