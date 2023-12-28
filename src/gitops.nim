@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std/[os, osproc, sequtils, strutils, options]
+import std/[os, osproc, sequtils, strutils]
 import context, osutils
 
 type
@@ -79,14 +79,14 @@ proc exec*(c: var AtlasContext;
     when ProduceTest:
       echo "cmd ", cmd, " args ", args, " --> ", result
 
-proc checkGitDiffStatus*(c: var AtlasContext): Option[string] =
+proc checkGitDiffStatus*(c: var AtlasContext): string =
   let (outp, status) = exec(c, GitDiff, [])
   if outp.len != 0:
-    some("'git diff' not empty")
+    "'git diff' not empty"
   elif status != 0:
-    some("'git diff' returned non-zero")
+    "'git diff' returned non-zero"
   else:
-    none(string)
+    ""
 
 proc clone*(c: var AtlasContext, url: PackageUrl, dest: string, retries = 5): bool =
   ## clone git repo.
@@ -139,10 +139,12 @@ proc shortToCommit*(c: var AtlasContext; short: string): string =
   let (cc, status) = exec(c, GitRevParse, [short])
   result = if status == 0: strutils.strip(cc) else: ""
 
-proc listFiles*(c: var AtlasContext; pkg: Package): Option[seq[string]] =
+proc listFiles*(c: var AtlasContext; pkg: Package): seq[string] =
   let (outp, status) = exec(c, GitLsFiles, [], pkg.path.string)
   if status == 0:
-    result = some outp.splitLines().mapIt(it.strip())
+    result = outp.splitLines().mapIt(it.strip())
+  else:
+    result = @[]
 
 proc checkoutGitCommit*(c: var AtlasContext; p: PackageDir; commit: string) =
   let p = p.string.PackageRepo
@@ -284,7 +286,7 @@ proc updateDir*(c: var AtlasContext; file, filter: string) =
     let (remote, _) = osproc.execCmdEx("git remote -v")
     if filter.len == 0 or filter in remote:
       let diff = checkGitDiffStatus(c)
-      if diff.isSome():
+      if diff.len > 0:
         warn(c, pkg, "has uncommitted changes; skipped")
       else:
         let (branch, _) = osproc.execCmdEx("git rev-parse --abbrev-ref HEAD")

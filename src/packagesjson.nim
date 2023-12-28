@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [json, os, sets, strutils, httpclient, uri, options]
+import std / [json, os, sets, strutils, httpclient, uri]
 import context
 
 const

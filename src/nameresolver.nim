@@ -8,10 +8,8 @@
 
 ## Resolves package names and turn them to URLs.
 
-import std / [os, unicode, strutils, osproc, options]
+import std / [os, unicode, strutils, osproc]
 import context, osutils, packagesjson, gitops
-
-export options
 
 proc retryUrl(cmd, urlstr: string; c: var AtlasContext; repo: PackageRepo;
               tryBeforeSleep = true): bool =
@@ -139,27 +137,27 @@ proc dependencyDir*(c: var AtlasContext; pkg: Package): PackageDir =
   result = PackageDir c.depsDir / pkg.repo.string
   trace c, pkg, "dependency not found using default"
 
-proc findNimbleFile*(c: var AtlasContext; pkg: Package; depDir = PackageDir""): Option[string] =
+proc findNimbleFile*(c: var AtlasContext; pkg: Package; depDir = PackageDir""): string =
   when MockupRun:
     result = TestsDir / pkg.name.string & ".nimble"
     doAssert fileExists(result), "file does not exist " & result
   else:
     let dir = if depDir.string.len == 0: dependencyDir(c, pkg).string
               else: depDir.string
-    result = some dir / (pkg.name.string & ".nimble")
-    debug c, pkg, "findNimbleFile: searching: " & pkg.repo.string & " path: " & pkg.path.string & " dir: " & dir & " curr: " & result.get()
-    if not fileExists(result.get()):
-      debug c, pkg, "findNimbleFile: not found: " & result.get()
-      result = none[string]()
+    result = dir / (pkg.name.string & ".nimble")
+    debug c, pkg, "findNimbleFile: searching: " & pkg.repo.string & " path: " & pkg.path.string & " dir: " & dir & " curr: " & result
+    if not fileExists(result):
+      debug c, pkg, "findNimbleFile: not found: " & result
+      result = ""
       for file in walkFiles(dir / "*.nimble"):
-        if result.isNone:
-          result = some file
-          trace c, pkg, "nimble file found " & result.get()
+        if result.len == 0:
+          result = file
+          trace c, pkg, "nimble file found " & result
         else:
-          error c, pkg, "ambiguous .nimble file " & result.get()
-          return none[string]()
+          error c, pkg, "ambiguous .nimble file " & result
+          return ""
     else:
-      trace c, pkg, "nimble file found " & result.get()
+      trace c, pkg, "nimble file found " & result
 
 proc resolvePackageUrl(c: var AtlasContext; url: string, checkOverrides = true): Package =
   result = Package(url: getUrl(url),
@@ -268,8 +266,8 @@ proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
 
   result.path = dependencyDir(c, result)
   let res = c.findNimbleFile(result, result.path)
-  if res.isSome:
-    let nimble = PackageNimble res.get()
+  if res.len > 0:
+    let nimble = PackageNimble res
     result.exists = true
     result.nimble = nimble
     # the nimble package name is <name>.nimble
@@ -288,9 +286,9 @@ proc resolveNimble*(c: var AtlasContext; pkg: Package) =
 
   pkg.path = dependencyDir(c, pkg)
   let res = c.findNimbleFile(pkg)
-  if res.isSome:
-    let nimble = PackageNimble res.get()
-    # let path = PackageDir res.get().parentDir()
+  if res.len > 0:
+    let nimble = PackageNimble res
+    # let path = PackageDir res.parentDir()
     pkg.exists = true
     pkg.nimble = nimble
     info c, pkg, "resolvePackageName: nimble: found: " & $pkg

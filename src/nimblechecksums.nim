@@ -43,10 +43,10 @@ proc nimbleChecksum*(c: var AtlasContext, pkg: Package, cfg: CfgPath): string =
   ## Useful for exporting a Nimble sync file.
   ##
   let res = c.listFiles(pkg)
-  if res.isNone:
+  if res.len == 0:
     error c, pkg, "couldn't list files"
   else:
-    var files = res.get().sorted()
+    var files = res.sorted()
     var checksum = newSha1State()
     for file in files:
       checksum.updateSecureHash(c, pkg, file)

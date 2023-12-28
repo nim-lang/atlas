@@ -10,7 +10,7 @@
 ## a Nimble dependency and its dependencies recursively.
 
 import std / [parseopt, strutils, os, osproc, tables, sets, json, jsonutils,
-  hashes, options]
+  hashes]
 import context, runners, osutils, packagesjson, sat, gitops, nimenv, lockfiles,
   depgraphs, confighandler, configutils, nameresolver, nimblechecksums
 
@@ -152,8 +152,8 @@ proc checkoutLaterCommit(c: var AtlasContext; g: var DepGraph; w: Dependency) =
       gitPull(c, w.pkg.repo)
     else:
       let err = checkGitDiffStatus(c)
-      if err.isSome():
-        warn c, w.pkg, err.get()
+      if err.len > 0:
+        warn c, w.pkg, err
       else:
         let requiredCommit = getRequiredCommit(c, w)
         let (cc, status) = exec(c, GitCurrentCommit, [])
