@@ -139,11 +139,20 @@ proc openOpr*(b: var Builder; k: FormKind) =
   b.toPatch.add PatchPos b.f.len
   b.f.add newOperation(k, 0)
 
+proc closeOpr*(b: var Builder) =
+  patch(b.f, b.toPatch.pop())
+
 proc add*(b: var Builder; a: Atom) =
   b.f.add a
 
-proc closeOpr*(b: var Builder) =
-  patch(b.f, b.toPatch.pop())
+proc add*(b: var Builder; a: VarId) =
+  b.f.add newVar(a)
+
+proc addNegated*(b: var Builder; a: VarId) =
+  b.openOpr NotForm
+  b.f.add newVar(a)
+  b.closeOpr
+
 
 proc deleteLastNode*(b: var Builder) =
   b.f.setLen b.f.len - 1

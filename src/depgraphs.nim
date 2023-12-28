@@ -208,12 +208,12 @@ iterator mvalidVersions*(p: var Dependency): var DependencyVersion =
 proc toFormular*(g: var DepGraph; algo: ResolutionAlgorithm): Formular =
   # Key idea: use a SAT variable for every `Requirements` object, which are
   # shared.
-  var b: Builder
+  var b = Builder()
   b.openOpr(AndForm)
 
   # all active nodes must be true:
   for i in 0 ..< g.startNodesLen:
-    b.add newVar(g.nodes[i].v)
+    b.add g.nodes[i].v
 
   for p in mitems(g.nodes):
     # if Package p is installed, pick one of its concrete versions, but not versions
@@ -221,9 +221,7 @@ proc toFormular*(g: var DepGraph; algo: ResolutionAlgorithm): Formular =
     # A -> (exactly one of: A1, A2, A3)
     if p.versions.len == 0: continue
     b.openOpr(OrForm)
-    b.openOpr(NotForm)
-    b.add newVar(p.v)
-    b.closeOpr # NotForm
+    b.addNegated p.v
 
     b.openOpr(ExactlyOneOfForm)
     var i = 0
@@ -232,7 +230,7 @@ proc toFormular*(g: var DepGraph; algo: ResolutionAlgorithm): Formular =
       g.mapping[ver.v] = SatVarInfo(pkg: p.pkg, commit: ver.commit, version: ver.version, index: i)
 
       inc g.idgen
-      b.add newVar(ver.v)
+      b.add ver.v
       inc i
 
     b.closeOpr # ExactlyOneOfForm
@@ -248,7 +246,7 @@ proc toFormular*(g: var DepGraph; algo: ResolutionAlgorithm): Formular =
       inc g.idgen
 
       b.openOpr(EqForm)
-      b.add newVar(ver.req.v)
+      b.add ver.req.v
       b.openOpr(AndForm)
 
       for dep, query in items ver.req.deps:
@@ -261,17 +259,17 @@ proc toFormular*(g: var DepGraph; algo: ResolutionAlgorithm): Formular =
           for j in countup(0, av.versions.len-1):
             if q.matches(av.versions[j].version):
               v = av.versions[j].version
-              b.add newVar(av.versions[j].v)
+              b.add av.versions[j].v
               break
           #mapping.add (g.nodes[i].pkg, commit, v)
         elif algo == MinVer:
           for j in countup(0, av.versions.len-1):
             if q.matches(av.versions[j].version):
-              b.add newVar(av.versions[j].v)
+              b.add av.versions[j].v
         else:
           for j in countdown(av.versions.len-1, 0):
             if q.matches(av.versions[j].version):
-              b.add newVar(av.versions[j].v)
+              b.add av.versions[j].v
         b.closeOpr # ExactlyOneOfForm
 
       b.closeOpr # AndForm
@@ -282,11 +280,8 @@ proc toFormular*(g: var DepGraph; algo: ResolutionAlgorithm): Formular =
     for ver in mvalidVersions p:
       if ver.req.deps.len > 0:
         b.openOpr(OrForm)
-        b.openOpr(NotForm)
-        b.add newVar(ver.v) # if this version is chosen, these are its dependencies
-        b.closeOpr # NotForm
-
-        b.add newVar(ver.req.v)
+        b.addNegated ver.v # if this version is chosen, these are its dependencies
+        b.add ver.req.v
         b.closeOpr # OrForm
 
   b.closeOpr
