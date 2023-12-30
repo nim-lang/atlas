@@ -8,20 +8,9 @@
 
 import std / [sets, tables, os, strutils]
 
-import context, sat, nameresolver, configutils, gitops, runners, osutils, reporters
+import context, sat, configutils, gitops, runners, osutils, reporters, nimbleparser
 
 type
-  Requirements* = ref object
-    deps*: seq[(Package, VersionInterval)]
-    hasInstallHooks*: bool
-    srcDir: string
-    nimVersion: Version
-    v: VarId
-    status*: DependencyStatus
-
-  DependencyStatus* = enum
-    Normal, HasBrokenNimbleFile, HasUnknownNimbleFile, HasBrokenDep
-
   DependencyVersion* = object  # Represents a specific version of a project.
     version*: Version
     commit*: string
@@ -84,38 +73,6 @@ iterator releases(c: var AtlasContext; m: TraversalMode): Commit =
       yield Commit(h: cc, v: Version"#head")
   else:
     yield Commit(h: "", v: Version"#head")
-
-proc parseNimbleFile(c: var AtlasContext; nimble: PackageNimble): Requirements =
-  let nimbleInfo = parseNimble(c, nimble)
-  result = Requirements(
-    hasInstallHooks: nimbleInfo.hasInstallHooks,
-    srcDir: nimbleInfo.srcDir,
-    status: Normal
-  )
-  for r in nimbleInfo.requires:
-    var i = 0
-    while i < r.len and r[i] notin {'#', '<', '=', '>'} + Whitespace: inc i
-    let name = r.substr(0, i-1)
-    let pkg = c.resolvePackage(name)
-
-    var err = pkg.name.string.len == 0
-    if len($pkg.url) == 0 or not pkg.exists:
-      #error c, pkg, "invalid pkgUrl in nimble file: " & name
-      result.status = HasBrokenDep
-
-    let query = parseVersionInterval(r, i, err) # update err
-
-    if err:
-      if result.status != HasBrokenDep:
-        result.status = HasBrokenNimbleFile
-      #error c, pkg, "invalid 'requires' syntax in nimble file: " & r
-    else:
-      if cmpIgnoreCase(pkg.name.string, "nim") == 0:
-        let v = extractGeQuery(query)
-        if v != Version"":
-          result.nimVersion = v
-      else:
-        result.deps.add (pkg, query)
 
 proc traverseDependency(c: var AtlasContext; g: var DepGraph; idx: int;
                         processed: var HashSet[PackageRepo];

@@ -69,7 +69,7 @@ proc checkGitDiffStatus*(c: var Reporter): string =
   else:
     ""
 
-proc clone*(c: var Reporter; url: PackageUrl; dest: string; retries = 5; fullClones=false): bool =
+proc clone*(c: var Reporter; url, dest: string; retries = 5; fullClones=false): bool =
   ## clone git repo.
   ##
   ## note clones don't use `--recursive` but rely in the `checkoutCommit`
@@ -81,7 +81,7 @@ proc clone*(c: var Reporter; url: PackageUrl; dest: string; retries = 5; fullClo
     if not fullClones: "--depth=1"
     else: ""
 
-  let cmd = $GitClone & " " & extraArgs & " " & quoteShell($url) & " " & dest
+  let cmd = $GitClone & " " & extraArgs & " " & quoteShell(url) & " " & dest
   for i in 1..retries:
     if execShellCmd(cmd) == 0:
       return true

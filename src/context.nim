@@ -6,8 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [strutils, os, tables, sets, json,
-  hashes, uri]
+import std / [strutils, os, tables, sets, json, hashes, uri]
 import versions, parse_requires, compiledpatterns, osutils, reporters
 
 export tables, sets, json
@@ -70,9 +69,8 @@ type
 
   AtlasContext* = object of Reporter
     projectDir*, workspace*, depsDir*, currentDir*: string
-    hasPackageList*: bool
     flags*: set[Flag]
-    urlMapping*: Table[string, Package] # name -> url mapping
+    #urlMapping*: Table[string, Package] # name -> url mapping
     overrides*: Patterns
     defaultAlgo*: ResolutionAlgorithm
     plugins*: PluginInfo

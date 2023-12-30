@@ -68,7 +68,7 @@ proc cloneUrl*(c: var AtlasContext,
         else:
           (OtherError, "exernal program failed: " & hgCmdStr)
   else:
-    if gitops.clone(c, url, dest): # gitops.clone has buit-in retrying
+    if gitops.clone(c, $url, dest): # gitops.clone has buit-in retrying
       (Ok, "")
     else:
       (OtherError, "exernal program failed: " & $GitClone)
@@ -83,19 +83,20 @@ proc updatePackages*(c: var AtlasContext) =
       if status != Ok:
         error c, DefaultPackagesSubDir, err
 
-proc fillPackageLookupTable(c: var AtlasContext) =
-  if not c.hasPackageList:
-    c.hasPackageList = true
-    if not fileExists(c.depsDir / DefaultPackagesSubDir / "packages.json"):
-      updatePackages(c)
-    let plist = getPackageInfos(c.depsDir)
-    debug c, "fillPackageLookupTable", "initializing..."
-    for entry in plist:
-      let url = getUrl(entry.url)
-      let pkg = Package(name: PackageName unicode.toLower entry.name,
-                        repo: PackageRepo lastPathComponent($url),
-                        url: url)
-      c.urlMapping["name:" & pkg.name.string] = pkg
+when false:
+  proc fillPackageLookupTable(c: var AtlasContext) =
+    if not c.hasPackageList:
+      c.hasPackageList = true
+      if not fileExists(c.depsDir / DefaultPackagesSubDir / "packages.json"):
+        updatePackages(c)
+      let plist = getPackageInfos(c.depsDir)
+      debug c, "fillPackageLookupTable", "initializing..."
+      for entry in plist:
+        let url = getUrl(entry.url)
+        let pkg = Package(name: PackageName unicode.toLower entry.name,
+                          repo: PackageRepo lastPathComponent($url),
+                          url: url)
+        c.urlMapping["name:" & pkg.name.string] = pkg
 
 proc dependencyDir*(c: var AtlasContext; pkg: Package): PackageDir =
   template checkDir(dir: string) =
@@ -143,138 +144,139 @@ proc findNimbleFile*(c: var AtlasContext; pkg: Package; depDir = PackageDir""): 
   else:
     trace c, pkg, "nimble file found " & result
 
-proc resolvePackageUrl(c: var AtlasContext; url: string, checkOverrides = true): Package =
-  result = Package(url: getUrl(url),
-                   name: url.toRepo().PackageName,
-                   repo: url.toRepo())
+when false:
+  proc resolvePackageUrl(c: var AtlasContext; url: string, checkOverrides = true): Package =
+    result = Package(url: getUrl(url),
+                    name: url.toRepo().PackageName,
+                    repo: url.toRepo())
 
-  debug c, result, "resolvePackageUrl: search: " & url
+    debug c, result, "resolvePackageUrl: search: " & url
 
-  let isFile = result.url.scheme == "file"
-  var isUrlOverriden = false
-  if not isFile and checkOverrides and UsesOverrides in c.flags:
-    let url = c.overrides.substitute($result.url)
-    if url.len > 0:
-      warn c, result, "resolvePackageUrl: url override found: " & $url
-      result.url = url.getUrl()
-      isUrlOverriden = true
+    let isFile = result.url.scheme == "file"
+    var isUrlOverriden = false
+    if not isFile and checkOverrides and UsesOverrides in c.flags:
+      let url = c.overrides.substitute($result.url)
+      if url.len > 0:
+        warn c, result, "resolvePackageUrl: url override found: " & $url
+        result.url = url.getUrl()
+        isUrlOverriden = true
 
-  let namePkg = c.urlMapping.getOrDefault("name:" & result.name.string, nil)
-  let repoPkg = c.urlMapping.getOrDefault("repo:" & result.repo.string, nil)
+    let namePkg = c.urlMapping.getOrDefault("name:" & result.name.string, nil)
+    let repoPkg = c.urlMapping.getOrDefault("repo:" & result.repo.string, nil)
 
-  if not namePkg.isNil:
-    debug c, result, "resolvePackageUrl: found by name: " & $result.name.string
-    if namePkg.url != result.url and isUrlOverriden:
-      namePkg.url = result.url # update package url to match
-      result = namePkg
-    elif namePkg.url != result.url:
-      # package conflicts
-      # change package repo to `repo.user.host`
-      let purl = result.url
-      let host = purl.hostname
-      let org = purl.path.parentDir.lastPathPart
-      let rname = purl.path.lastPathPart
-      let pname = [rname, org, host].join(".")
-      warn c, result,
-              "conflicting url's for package; renaming package: " &
-                result.name.string & " to " & pname
-      result.repo = PackageRepo pname
-      c.urlMapping["name:" & result.name.string] = result
+    if not namePkg.isNil:
+      debug c, result, "resolvePackageUrl: found by name: " & $result.name.string
+      if namePkg.url != result.url and isUrlOverriden:
+        namePkg.url = result.url # update package url to match
+        result = namePkg
+      elif namePkg.url != result.url:
+        # package conflicts
+        # change package repo to `repo.user.host`
+        let purl = result.url
+        let host = purl.hostname
+        let org = purl.path.parentDir.lastPathPart
+        let rname = purl.path.lastPathPart
+        let pname = [rname, org, host].join(".")
+        warn c, result,
+                "conflicting url's for package; renaming package: " &
+                  result.name.string & " to " & pname
+        result.repo = PackageRepo pname
+        c.urlMapping["name:" & result.name.string] = result
+      else:
+        result = namePkg
+    elif not repoPkg.isNil:
+      debug c, result, "resolvePackageUrl: found by repo: " & $result.repo.string
+      result = repoPkg
     else:
+      # package doesn't exit and doesn't conflict
+      # set the url with package name as url name
+      c.urlMapping["repo:" & result.name.string] = result
+      trace c, result, "resolvePackageUrl: not found; set pkg: " & $result.repo.string
+
+    #if result.url.scheme == "file":
+    #  result.path = PackageDir result.url.hostname & result.url.path
+    #  trace c, result, "resolvePackageUrl: setting manual path: " & $result.path.string
+
+  proc resolvePackageName(c: var AtlasContext; name: string): Package =
+    result = Package(name: PackageName name,
+                    repo: PackageRepo name)
+
+    # the project name can be overwritten too!
+    if UsesOverrides in c.flags:
+      let name = c.overrides.substitute(name)
+      if name.len > 0:
+        if name.isUrl():
+          return c.resolvePackageUrl(name, checkOverrides=false)
+
+    # echo "URL MAP: ", repr c.urlMapping.keys().toSeq()
+    let namePkg = c.urlMapping.getOrDefault("name:" & result.name.string, nil)
+    let repoPkg = c.urlMapping.getOrDefault("repo:" & result.name.string, nil)
+
+    debug c, result, "resolvePackageName: searching for package name: " & result.name.string
+    if not namePkg.isNil:
+      # great, found package!
+      debug c, result, "resolvePackageName: found!"
       result = namePkg
-  elif not repoPkg.isNil:
-    debug c, result, "resolvePackageUrl: found by repo: " & $result.repo.string
-    result = repoPkg
-  else:
-    # package doesn't exit and doesn't conflict
-    # set the url with package name as url name
-    c.urlMapping["repo:" & result.name.string] = result
-    trace c, result, "resolvePackageUrl: not found; set pkg: " & $result.repo.string
+      result.inPackages = true
+    elif not repoPkg.isNil:
+      # check if rawHandle is a package repo name
+      debug c, result, "resolvePackageName: found by repo!"
+      result = repoPkg
+      result.inPackages = true
 
-  #if result.url.scheme == "file":
-  #  result.path = PackageDir result.url.hostname & result.url.path
-  #  trace c, result, "resolvePackageUrl: setting manual path: " & $result.path.string
+    if UsesOverrides in c.flags:
+      let newUrl = c.overrides.substitute($result.url)
+      if newUrl.len > 0:
+        trace c, result, "resolvePackageName: not url: UsesOverrides: " & $newUrl
+        result.url = getUrl newUrl
 
-proc resolvePackageName(c: var AtlasContext; name: string): Package =
-  result = Package(name: PackageName name,
-                   repo: PackageRepo name)
+  proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
+    ## Takes a raw handle which can be a name, a repo name, or a url
+    ## and resolves it into a package. If not found it will create
+    ## a new one.
+    ##
+    ## Note that Package should be unique globally. This happens
+    ## by updating the packages list when new packages are added or
+    ## loaded from a packages.json.
+    ##
+    result = Package()
 
-  # the project name can be overwritten too!
-  if UsesOverrides in c.flags:
-    let name = c.overrides.substitute(name)
-    if name.len > 0:
-      if name.isUrl():
-        return c.resolvePackageUrl(name, checkOverrides=false)
+    fillPackageLookupTable(c)
 
-  # echo "URL MAP: ", repr c.urlMapping.keys().toSeq()
-  let namePkg = c.urlMapping.getOrDefault("name:" & result.name.string, nil)
-  let repoPkg = c.urlMapping.getOrDefault("repo:" & result.name.string, nil)
+    trace c, rawHandle, "resolving package"
 
-  debug c, result, "resolvePackageName: searching for package name: " & result.name.string
-  if not namePkg.isNil:
-    # great, found package!
-    debug c, result, "resolvePackageName: found!"
-    result = namePkg
-    result.inPackages = true
-  elif not repoPkg.isNil:
-    # check if rawHandle is a package repo name
-    debug c, result, "resolvePackageName: found by repo!"
-    result = repoPkg
-    result.inPackages = true
+    if rawHandle.isUrl:
+      result = c.resolvePackageUrl(rawHandle)
+    else:
+      result = c.resolvePackageName(unicode.toLower(rawHandle))
 
-  if UsesOverrides in c.flags:
-    let newUrl = c.overrides.substitute($result.url)
-    if newUrl.len > 0:
-      trace c, result, "resolvePackageName: not url: UsesOverrides: " & $newUrl
-      result.url = getUrl newUrl
-
-proc resolvePackage*(c: var AtlasContext; rawHandle: string): Package =
-  ## Takes a raw handle which can be a name, a repo name, or a url
-  ## and resolves it into a package. If not found it will create
-  ## a new one.
-  ##
-  ## Note that Package should be unique globally. This happens
-  ## by updating the packages list when new packages are added or
-  ## loaded from a packages.json.
-  ##
-  result = Package()
-
-  fillPackageLookupTable(c)
-
-  trace c, rawHandle, "resolving package"
-
-  if rawHandle.isUrl:
-    result = c.resolvePackageUrl(rawHandle)
-  else:
-    result = c.resolvePackageName(unicode.toLower(rawHandle))
-
-  result.path = dependencyDir(c, result)
-  let res = c.findNimbleFile(result, result.path)
-  if res.len > 0:
-    let nimble = PackageNimble res
-    result.exists = true
-    result.nimble = nimble
-    # the nimble package name is <name>.nimble
-    result.name = PackageName nimble.string.splitFile().name
-    debug c, result, "resolvePackageName: nimble: found: " & $result
-  else:
-    debug c, result, "resolvePackageName: nimble: not found: " & $result
+    result.path = dependencyDir(c, result)
+    let res = c.findNimbleFile(result, result.path)
+    if res.len > 0:
+      let nimble = PackageNimble res
+      result.exists = true
+      result.nimble = nimble
+      # the nimble package name is <name>.nimble
+      result.name = PackageName nimble.string.splitFile().name
+      debug c, result, "resolvePackageName: nimble: found: " & $result
+    else:
+      debug c, result, "resolvePackageName: nimble: not found: " & $result
 
 
-proc resolveNimble*(c: var AtlasContext; pkg: Package) =
-  ## Try to resolve the nimble file for the given package.
-  ##
-  ## This should be done after cloning a new repo.
-  ##
-  if pkg.exists: return
+  proc resolveNimble*(c: var AtlasContext; pkg: Package) =
+    ## Try to resolve the nimble file for the given package.
+    ##
+    ## This should be done after cloning a new repo.
+    ##
+    if pkg.exists: return
 
-  pkg.path = dependencyDir(c, pkg)
-  let res = c.findNimbleFile(pkg)
-  if res.len > 0:
-    let nimble = PackageNimble res
-    # let path = PackageDir res.parentDir()
-    pkg.exists = true
-    pkg.nimble = nimble
-    info c, pkg, "resolvePackageName: nimble: found: " & $pkg
-  else:
-    info c, pkg, "resolvePackageName: nimble: not found: " & $pkg
+    pkg.path = dependencyDir(c, pkg)
+    let res = c.findNimbleFile(pkg)
+    if res.len > 0:
+      let nimble = PackageNimble res
+      # let path = PackageDir res.parentDir()
+      pkg.exists = true
+      pkg.nimble = nimble
+      info c, pkg, "resolvePackageName: nimble: found: " & $pkg
+    else:
+      info c, pkg, "resolvePackageName: nimble: not found: " & $pkg
