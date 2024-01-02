@@ -440,6 +440,7 @@ proc main(c: var AtlasContext) =
     patchNimCfg c, deps, cfgPath
   of "use":
     singleArg()
+    fillPackageLookupTable(c.nimbleContext, c, )
     let nimbleFile = patchNimbleFile(c, args[0])
     if nimbleFile.len > 0:
       installDependencies(c, nimbleFile)

@@ -8,7 +8,7 @@
 
 import std / [sets, tables, os, strutils]
 
-import context, sat, configutils, gitops, runners, osutils, reporters, nimbleparser
+import context, sat, configutils, gitops, runners, osutils, reporters, nimbleparser, pkgurls
 
 type
   DependencyVersion* = object  # Represents a specific version of a project.
@@ -18,7 +18,7 @@ type
     v: VarId
 
   Dependency* = object
-    pkg*: Package
+    pkg*: PkgUrl
     versions*: seq[DependencyVersion]
     v: VarId
     active*: bool
@@ -36,16 +36,16 @@ type
     idgen: int32
     startNodesLen: int
     mapping: Table[VarId, SatVarInfo]
-    packageToDependency: Table[Package, int]
+    packageToDependency: Table[PkgUrl, int]
 
-proc createGraph*(c: var AtlasContext; startSet: openArray[Package]): DepGraph =
+proc createGraph*(c: var AtlasContext; startSet: openArray[PkgUrl]): DepGraph =
   result = DepGraph(nodes: @[], idgen: 0'i32, startNodesLen: startSet.len)
   for s in startSet:
     result.packageToDependency[s] = result.nodes.len
     result.nodes.add Dependency(pkg: s, versions: @[], v: VarId(result.idgen))
     inc result.idgen
 
-proc createGraph*(c: var AtlasContext; s: Package): DepGraph =
+proc createGraph*(c: var AtlasContext; s: PkgUrl): DepGraph =
   result = DepGraph(nodes: @[], idgen: 0'i32, startNodesLen: 1)
   result.packageToDependency[s] = result.nodes.len
   result.nodes.add Dependency(pkg: s, versions: @[], v: VarId(result.idgen))
@@ -74,13 +74,13 @@ iterator releases(c: var AtlasContext; m: TraversalMode): Commit =
   else:
     yield Commit(h: "", v: Version"#head")
 
-proc traverseDependency(c: var AtlasContext; g: var DepGraph; idx: int;
-                        processed: var HashSet[PackageRepo];
+proc traverseDependency(c: var AtlasContext; nc: NimbleContext; g: var DepGraph; idx: int;
+                        processed: var HashSet[PkgUrl];
                         m: TraversalMode) =
   var lastNimbleContents = "<invalid content>"
 
   for r in releases(c, m):
-    var nimbleFile = g.nodes[idx].pkg.name.string & ".nimble"
+    var nimbleFile = g.nodes[idx].pkg.projectName & ".nimble"
     var found = 0
     if fileExists(nimbleFile):
       inc found
@@ -99,14 +99,12 @@ proc traverseDependency(c: var AtlasContext; g: var DepGraph; idx: int;
       if lastNimbleContents == nimbleContents:
         pv.req = g.nodes[idx].versions[^1].req
       else:
-        pv.req = parseNimbleFile(c, PackageNimble(nimbleFile))
+        pv.req = parseNimbleFile(nc, nimbleFile)
         lastNimbleContents = ensureMove nimbleContents
 
       if pv.req.status == Normal:
         for dep, _ in items(pv.req.deps):
-          if not dep.exists:
-            pv.req.status = HasBrokenDep
-          elif not processed.contains(dep.repo):
+          if not processed.contains(dep):
             g.packageToDependency[dep] = g.nodes.len
             g.nodes.add Dependency(pkg: dep, versions: @[])
 
@@ -114,10 +112,11 @@ proc traverseDependency(c: var AtlasContext; g: var DepGraph; idx: int;
 
 const
   FileProtocol = "file"
+  FileWorkspace = "file://./"
 
 proc copyFromDisk(c: var AtlasContext; w: Dependency; destDir: string): (CloneStatus, string) =
-  var u = w.pkg.url.getFilePath()
-  if u.startsWith("./"): u = c.workspace / u.substr(2)
+  var u = w.pkg.string
+  if u.startsWith(FileWorkspace): u = c.workspace / u.substr(FileWorkspace.len)
   #template selectDir(a, b: string): string =
   #  if dirExists(a): a else: b
 
@@ -131,26 +130,36 @@ proc copyFromDisk(c: var AtlasContext; w: Dependency; destDir: string): (CloneSt
   #writeFile destDir / ThisVersion, w.commit
   #echo "WRITTEN ", destDir / ThisVersion
 
-proc expand*(c: var AtlasContext; g: var DepGraph; m: TraversalMode) =
+type
+  PackageAction = enum
+    DoNothing, DoClone
+
+proc pkgUrlToDirname(g: var DepGraph; u: PkgUrl): (string, PackageAction) =
+  # XXX implement namespace support here
+  let n = projectName(u)
+  result = (n, if dirExists(n): DoNothing else: DoClone)
+
+proc expand*(c: var AtlasContext; g: var DepGraph; nc: NimbleContext; m: TraversalMode) =
   ## Expand the graph by adding all dependencies.
-  var processed = initHashSet[PackageRepo]()
+  var processed = initHashSet[PkgUrl]()
   var i = 0
   while i < g.nodes.len:
     let w {.cursor.} = g.nodes[i]
 
-    if not processed.containsOrIncl(w.pkg.repo):
-      if not dirExists(w.pkg.path.string):
-        withDir c, (if i < g.startNodesLen: c.workspace else: c.depsDir):
-          info(c, w.pkg, "cloning: " & $w.pkg.url)
-          let (status, _) =
-            if w.pkg.url.scheme == FileProtocol:
-              copyFromDisk(c, w, w.pkg.path.string)
-            else:
-              cloneUrl(c, w.pkg.url, w.pkg.path.string, false)
+    if not processed.containsOrIncl(w.pkg):
+      let (dirName, todo) = pkgUrlToDirname(g, w.pkg)
+      if todo == DoClone:
+        let depsDir = if i < g.startNodesLen: c.workspace else: c.depsDir
+        info(c, dirName, "cloning: " & w.pkg.string)
+        let (status, _) =
+          if w.pkg.isFileProtocol:
+            copyFromDisk(c, w, depsDir / dirName)
+          else:
+            cloneUrl(c, w.pkg, depsDir / dirName, false)
 
           g.nodes[i].status = status
 
-      withDir c, w.pkg:
+      withDir c, dirName:
         traverseDependency(c, g, i, processed, m)
     inc i
 
@@ -309,7 +318,7 @@ proc solve*(c: var AtlasContext; g: var DepGraph; f: Formular) =
           if s[ver.v.int] == setToTrue:
             error c, p.pkg, string(ver.version) & " required"
 
-proc expandWithoutClone*(c: var AtlasContext; g: var DepGraph) =
+proc expandWithoutClone*(c: var AtlasContext; g: var DepGraph; nc: NimbleContext) =
   ## Expand the graph by adding all dependencies.
   var processed = initHashSet[PackageRepo]()
   var i = 0
