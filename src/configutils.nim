@@ -24,10 +24,9 @@ proc findCfgDir*(c: var AtlasContext): CfgPath =
     return CfgPath c.currentDir / nimbleInfo.srcDir
   return CfgPath c.currentDir
 
-proc findCfgDir*(c: var AtlasContext, pkg: Package): CfgPath =
-  let nimbleInfo = parseNimble(c, pkg.nimble)
-  let pth = pkg.nimble.string.splitPath().head
-  return CfgPath pth.relativePath(c.currentDir) / nimbleInfo.srcDir
+proc findCfgDir*(c: var AtlasContext, dir: string): CfgPath =
+  c.withDir dir:
+    result = findCfgDir(c)
 
 proc patchNimCfg*(c: var AtlasContext; deps: seq[CfgPath]; cfgPath: CfgPath) =
   var paths = "--noNimblePath\n"

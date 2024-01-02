@@ -11,7 +11,8 @@
 
 import std / [parseopt, strutils, os, osproc, tables, sets, json, jsonutils]
 import context, osutils, packagesjson, sat, gitops, nimenv, lockfiles,
-  depgraphs, confighandler, configutils, nameresolver, nimblechecksums, reporters
+  depgraphs, confighandler, configutils, cloner, nimblechecksums, reporters,
+  nimbleparser, pkgurls
 
 const
   AtlasVersion =
@@ -112,7 +113,7 @@ proc tag(c: var AtlasContext; field: Natural) =
 
 proc generateDepGraph(c: var AtlasContext; g: DepGraph) =
   proc repr(w: Dependency): string =
-    $(w.pkg.url / w.commit)
+    $(w.pkg.string / w.commit)
 
   var dotGraph = ""
   for n in allNodes(g):
@@ -144,22 +145,22 @@ proc getRequiredCommit*(c: var AtlasContext; w: Dependency): string =
 
 proc checkoutLaterCommit(c: var AtlasContext; g: var DepGraph; w: Dependency) =
   # Now dead code.
-  withDir c, w.pkg:
+  withDir c, w.pkg.string:
     if w.commit.len == 0 or cmpIgnoreCase(w.commit, InvalidCommit) == 0:
-      gitPull(c, w.pkg.repo.string)
+      gitPull(c, w.pkg.string)
     else:
       let err = checkGitDiffStatus(c)
       if err.len > 0:
-        warn c, w.pkg, err
+        warn c, w.pkg.string, err
       else:
         let requiredCommit = getRequiredCommit(c, w)
         let (cc, status) = exec(c, GitCurrentCommit, [])
         let currentCommit = strutils.strip(cc)
         if requiredCommit == "" or status != 0:
           if requiredCommit == "" and w.commit == InvalidCommit:
-            warn c, w.pkg, "package has no tagged releases"
+            warn c, w.pkg.string, "package has no tagged releases"
           else:
-            warn c, w.pkg, "cannot find specified version/commit " & w.commit
+            warn c, w.pkg.string, "cannot find specified version/commit " & w.commit
         else:
           if currentCommit != requiredCommit:
             # checkout the later commit:
@@ -169,32 +170,31 @@ proc checkoutLaterCommit(c: var AtlasContext; g: var DepGraph; w: Dependency) =
             if status == 0 and (mergeBase == currentCommit or mergeBase == requiredCommit):
               # conflict resolution: pick the later commit:
               if mergeBase == currentCommit:
-                checkoutGitCommit(c, w.pkg.path.string, requiredCommit, FullClones in c.flags)
+                checkoutGitCommit(c, w.ondisk, requiredCommit, FullClones in c.flags)
             else:
-              checkoutGitCommit(c, w.pkg.path.string, requiredCommit, FullClones in c.flags)
+              checkoutGitCommit(c, w.ondisk, requiredCommit, FullClones in c.flags)
               when false:
                 warn c, w.pkg, "do not know which commit is more recent:",
                   currentCommit, "(current) or", w.commit, " =", requiredCommit, "(required)"
 
 proc traverseLoop(c: var AtlasContext; g: var DepGraph): seq[CfgPath] =
   result = @[]
-  expand c, g, TraversalMode.AllReleases
+  var nc = createNimbleContext(c, c.depsDir)
+  expand c, g, nc, TraversalMode.AllReleases
   let f = toFormular(g, c.defaultAlgo)
   solve c, g, f
   for w in allActiveNodes(g):
-    c.resolveNimble(w.pkg)
-    result.add CfgPath(toDestDir(w.pkg).string / getCfgPath(g, w).string)
+    result.add CfgPath(toDestDir(g, w) / getCfgPath(g, w).string)
 
 proc traverse(c: var AtlasContext; start: string): seq[CfgPath] =
   # returns the list of paths for the nim.cfg file.
-  let pkg = resolvePackage(c, start)
-  var g = c.createGraph(pkg)
+  var g = c.createGraph(PkgUrl start)
 
-  if $pkg.url == "":
-    error c, pkg, "cannot resolve package name"
-    return
+  #if $pkg.url == "":
+  #  error c, pkg, "cannot resolve package name"
+  #  return
 
-  c.projectDir = pkg.path.string
+  c.projectDir = projectName(PkgUrl start) #pkg.path.string
 
   result = traverseLoop(c, g)
   afterGraphActions c, g
@@ -204,9 +204,8 @@ proc installDependencies(c: var AtlasContext; nimbleFile: string) =
   # 1. find .nimble file in CWD
   # 2. install deps from .nimble
   let (dir, pkgname, _) = splitFile(nimbleFile)
-  let pkg = c.resolvePackage("file://" & dir.absolutePath)
-  info c, pkg, "installing dependencies for " & pkgname & ".nimble"
-  var g = createGraph(c, pkg)
+  info c, pkgname, "installing dependencies for " & pkgname & ".nimble"
+  var g = createGraph(c, PkgUrl("file://" & dir.absolutePath))
   let paths = traverseLoop(c, g)
   let cfgPath = if CfgHere in c.flags: CfgPath c.currentDir else: findCfgDir(c)
   patchNimCfg(c, paths, cfgPath)
@@ -440,10 +439,16 @@ proc main(c: var AtlasContext) =
     patchNimCfg c, deps, cfgPath
   of "use":
     singleArg()
-    fillPackageLookupTable(c.nimbleContext, c, )
-    let nimbleFile = patchNimbleFile(c, args[0])
-    if nimbleFile.len > 0:
+    #fillPackageLookupTable(c.nimbleContext, c, )
+    var amb = false
+    let nimbleFile = findNimbleFile(c, args[0], amb)
+    if nimbleFile.len > 0 and not amb:
       installDependencies(c, nimbleFile)
+    elif amb:
+      error c, args[0], "ambiguous .nimble file"
+    else:
+      error c, args[0], "cannot find .nimble file"
+
   of "pin":
     optSingleArg(LockFileName)
     if c.projectDir == c.workspace or c.projectDir == c.depsDir:
@@ -478,10 +483,10 @@ proc main(c: var AtlasContext) =
       installDependencies(c, nimbleFile)
   of "refresh":
     noArgs()
-    updatePackages(c)
+    updatePackages(c, c.depsDir)
   of "search", "list":
     if c.workspace.len != 0:
-      updatePackages(c)
+      updatePackages(c, c.depsDir)
       let pkgInfos = getPackageInfos(c.depsDir)
       search c, pkgInfos, args
     else:
@@ -524,12 +529,12 @@ proc main(c: var AtlasContext) =
     setupNimEnv c, c.workspace, args[0], Keep in c.flags
   of "outdated":
     listOutdated(c)
-  of "checksum":
-    singleArg()
-    let pkg = resolvePackage(c, args[0])
-    let cfg = findCfgDir(c, pkg)
-    let sha = nimbleChecksum(c, pkg, cfg)
-    info c, pkg, "SHA1Digest: " & sha
+  #of "checksum":
+  #  singleArg()
+  #  let pkg = resolvePackage(c, args[0])
+  #  let cfg = findCfgDir(c, pkg)
+  #  let sha = nimbleChecksum(c, pkg, cfg)
+  #  info c, pkg, "SHA1Digest: " & sha
   of "new":
     singleArg()
     newProject(c, args[0])

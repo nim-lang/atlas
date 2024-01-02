@@ -16,8 +16,8 @@ type
   Requirements* = ref object
     deps*: seq[(PkgUrl, VersionInterval)]
     hasInstallHooks*: bool
-    srcDir: string
-    nimVersion: Version
+    srcDir*: string
+    nimVersion*: Version
     v*: VarId
     status*: DependencyStatus
     err*: string

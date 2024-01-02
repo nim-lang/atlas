@@ -173,7 +173,7 @@ proc toDestDir*(pkg: Package): PackageDir =
 template toDir(pkg: Package): string = pkg.path.string
 template toDir(dir: string): string = dir
 
-template withDir*(c: var AtlasContext; dir: string | Package; body: untyped) =
+template withDir*(c: var AtlasContext; dir: string; body: untyped) =
   let oldDir = getCurrentDir()
   debug c, toDir(dir), "Current directory is now: " & dir.toDir()
   try:
@@ -182,7 +182,7 @@ template withDir*(c: var AtlasContext; dir: string | Package; body: untyped) =
   finally:
     setCurrentDir(oldDir)
 
-template tryWithDir*(c: var AtlasContext, dir: string | Package; body: untyped) =
+template tryWithDir*(c: var AtlasContext; dir: string; body: untyped) =
   let oldDir = getCurrentDir()
   try:
     if dirExists(dir.toDir()):

@@ -8,8 +8,8 @@
 
 ## Resolves package names and turn them to URLs.
 
-import std / [os, unicode, strutils, osproc]
-import context, osutils, packagesjson, gitops, reporters
+import std / [os, strutils, osproc]
+import context, osutils, gitops, reporters, pkgurls
 
 proc retryUrl(cmd, urlstr: string; c: var AtlasContext; displayName: string;
               tryBeforeSleep = true): bool =
@@ -23,67 +23,73 @@ proc retryUrl(cmd, urlstr: string; c: var AtlasContext; displayName: string;
     if execCmdEx(cmd)[1] == QuitSuccess: return true
   return false
 
+const
+  GitProtocol = "git://"
+
+proc hasHostnameOf(url: string; host: string): bool =
+  var i = 0
+  while i < url.len and url[i] in Letters: inc i
+  result = i > 0 and url.continuesWith("://", i) and url.continuesWith(host, i + 3)
+
 proc cloneUrl*(c: var AtlasContext,
-                  url: PackageUrl,
+                  url: PkgUrl,
                   dest: string;
                   cloneUsingHttps: bool): (CloneStatus, string) =
   ## Returns an error message on error or else "".
   assert not dest.contains("://")
 
-  var modurl = url
-  if url.scheme == "git":
-    modurl.scheme = if cloneusinghttps:
-        "https"
+  var modurl = url.string
+  if modurl.startsWith(GitProtocol):
+    modurl =
+      if cloneusinghttps:
+        "https://" & modurl.substr(GitProtocol.len)
       else:
-          "" # git doesn't recognize git://
-  let isGitHub = modurl.hostname == "github.com"
-  if isGitHub and modurl.path.endswith("/"):
+        modurl.substr(GitProtocol.len) # git doesn't recognize git://
+  let isGitHub = modurl.hasHostnameOf "github.com"
+  if isGitHub and modurl.endswith("/"):
     # github + https + trailing url slash causes a
     # checkout/ls-remote to fail with repository not found
-    modurl.path = modurl.path[0 .. ^2]
-  let repo = toRepo($modurl).string
-  let url = modurl
-  let urlstr = $modurl
-
-  infonow c, repo, "Cloning url: " & urlstr
+    setLen modurl, modurl.len - 1
+  let repo = toRepo(modurl).string
+  infoNow c, repo, "Cloning url: " & modurl
 
   # Checking repo with git
-  let gitCmdStr = "git ls-remote --quiet --tags " & urlstr
+  let gitCmdStr = "git ls-remote --quiet --tags " & modurl
   var success = execCmdEx(gitCmdStr)[1] == QuitSuccess
   if not success and isGitHub:
     # retry multiple times to avoid annoying GitHub timeouts:
-    success = retryUrl(gitCmdStr, urlstr, c, repo, false)
+    success = retryUrl(gitCmdStr, modurl, c, repo, false)
 
   if not success:
     if isGitHub:
-      (NotFound, "Unable to identify url: " & urlstr)
+      (NotFound, "Unable to identify url: " & modurl)
     else:
       # Checking repo with Mercurial
-      if retryUrl("hg identify " & urlstr, urlstr, c, repo, true):
-        (NotFound, "Unable to identify url: " & urlstr)
+      if retryUrl("hg identify " & modurl, modurl, c, repo, true):
+        (NotFound, "Unable to identify url: " & modurl)
       else:
-        let hgCmdStr = "hg clone " & urlstr & " " & dest
-        if retryUrl(hgCmdStr, urlstr, c, repo, true):
+        let hgCmdStr = "hg clone " & modurl & " " & dest
+        if retryUrl(hgCmdStr, modurl, c, repo, true):
           (Ok, "")
         else:
           (OtherError, "exernal program failed: " & hgCmdStr)
   else:
-    if gitops.clone(c, $url, dest): # gitops.clone has buit-in retrying
+    if gitops.clone(c, url.string, dest): # gitops.clone has buit-in retrying
       (Ok, "")
     else:
       (OtherError, "exernal program failed: " & $GitClone)
 
-proc updatePackages*(c: var AtlasContext) =
-  if dirExists(c.depsDir / DefaultPackagesSubDir):
-    withDir(c, c.depsDir / DefaultPackagesSubDir):
-      gitPull(c, DefaultPackagesSubDir)
-  else:
-    withDir c, c.depsDir:
-      let (status, err) = cloneUrl(c, getUrl "https://github.com/nim-lang/packages", DefaultPackagesSubDir, false)
-      if status != Ok:
-        error c, DefaultPackagesSubDir, err
-
 when false:
+  proc updatePackages*(c: var AtlasContext) =
+    if dirExists(c.depsDir / DefaultPackagesSubDir):
+      withDir(c, c.depsDir / DefaultPackagesSubDir):
+        gitPull(c, DefaultPackagesSubDir)
+    else:
+      withDir c, c.depsDir:
+        let (status, err) = cloneUrl(c, PkgUrl"https://github.com/nim-lang/packages", DefaultPackagesSubDir, false)
+        if status != Ok:
+          error c, DefaultPackagesSubDir, err
+
   proc fillPackageLookupTable(c: var AtlasContext) =
     if not c.hasPackageList:
       c.hasPackageList = true

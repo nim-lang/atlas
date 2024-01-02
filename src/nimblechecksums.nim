@@ -7,10 +7,9 @@
 #
 
 import std / [strutils, os, sha1, algorithm]
-import context, gitops
+import gitops, reporters
 
-proc updateSecureHash(checksum: var Sha1State; c: var AtlasContext; pkg: Package; name: string) =
-  let path = pkg.path.string / name
+proc updateSecureHash(checksum: var Sha1State; c: var Reporter; name, path: string) =
   if not path.fileExists(): return
   checksum.update(name)
 
@@ -20,7 +19,7 @@ proc updateSecureHash(checksum: var Sha1State; c: var AtlasContext; pkg: Package
       let path = expandSymlink(path)
       checksum.update(path)
     except OSError:
-      error c, pkg, "cannot follow symbolic link " & path
+      error c, name, "cannot follow symbolic link " & path
   else:
     # checksum file contents
     var file: File
@@ -33,21 +32,21 @@ proc updateSecureHash(checksum: var Sha1State; c: var AtlasContext; pkg: Package
         if bytesRead == 0: break
         checksum.update(buffer.toOpenArray(0, bytesRead - 1))
     except IOError:
-      error c, pkg, "error opening file " & path
+      error c, name, "error opening file " & path
     finally:
       file.close()
 
-proc nimbleChecksum*(c: var AtlasContext, pkg: Package, cfg: CfgPath): string =
-  ## calculate a nimble style checksum from a `CfgPath`.
+proc nimbleChecksum*(c: var Reporter; name, path: string): string =
+  ## calculate a nimble style checksum from a `path`.
   ##
   ## Useful for exporting a Nimble sync file.
   ##
-  var files = c.listFiles(pkg.path.string)
+  var files = c.listFiles(path)
   if files.len == 0:
-    error c, pkg, "couldn't list files"
+    error c, path, "couldn't list files"
   else:
     sort(files)
     var checksum = newSha1State()
     for file in files:
-      checksum.updateSecureHash(c, pkg, file)
+      checksum.updateSecureHash(c, name, file)
     result = toLowerAscii($SecureHash(checksum.finalize()))

@@ -9,8 +9,8 @@
 ## Lockfile implementation.
 
 import std / [sequtils, strutils, tables, os, json, jsonutils]
-import context, gitops, osutils, nimblechecksums, compilerversions,
-  nameresolver, configutils, depgraphs, reporters
+import context, gitops, nimblechecksums, compilerversions,
+  configutils, depgraphs, reporters, nimbleparser, pkgurls, cloner
 
 const
   NimbleLockFileName* = "nimble.lock"
@@ -82,27 +82,24 @@ proc fromPrefixedPath*(c: var AtlasContext, path: string): string =
   else:
     return c.depsDir / path
 
-proc genLockEntry(c: var AtlasContext; lf: var LockFile; pkg: Package) =
-  let info = extractRequiresInfo(pkg.nimble.string)
-  let url = $pkg.url
-  let commit = getCurrentCommit()
-  let name = pkg.name.string
-  let pth = c.prefixedPath(pkg.path.string)
-  lf.items[name] = LockFileEntry(dir: pth, url: $url, commit: commit, version: info.version)
+proc genLockEntry(c: var AtlasContext; lf: var LockFile; w: Dependency) =
+  lf.items[projectName(w.pkg)] = LockFileEntry(
+    dir: c.prefixedPath(w.ondisk), url: w.pkg.string, commit: getCurrentCommit(), version: "")
 
-proc genLockEntriesForDir(c: var AtlasContext; lf: var LockFile; dir: string) =
-  for k, f in walkDir(dir):
-    if k == pcDir and dirExists(f / ".git"):
-      if f.absolutePath == c.depsDir / "packages":
-        # skipping this gives us the locking behavior for a project
-        # TODO: is this what we want?
-        # we could just create a fake Package item here
-        continue
-      withDir c, f:
-        let path = "file://" & f
-        debug c, "genLockEntries", "using pkg: " & path
-        let pkg = resolvePackage(c, path)
-        genLockEntry(c, lf, pkg)
+when false:
+  proc genLockEntriesForDir(c: var AtlasContext; lf: var LockFile; dir: string) =
+    for k, f in walkDir(dir):
+      if k == pcDir and dirExists(f / ".git"):
+        if f.absolutePath == c.depsDir / "packages":
+          # skipping this gives us the locking behavior for a project
+          # TODO: is this what we want?
+          # we could just create a fake Package item here
+          continue
+        withDir c, f:
+          let path = "file://" & f
+          debug c, "genLockEntries", "using pkg: " & path
+          let pkg = resolvePackage(c, path)
+          genLockEntry(c, lf, pkg)
 
 proc newLockFile(): LockFile =
   result = LockFile(items: initOrderedTable[string, LockFileEntry](),
@@ -134,101 +131,90 @@ proc write(lock: NimbleLockFile; lockFilePath: string) =
 
 proc genLockEntry(c: var AtlasContext;
                   lf: var NimbleLockFile;
-                  pkg: Package,
+                  w: Dependency,
                   cfg: CfgPath,
-                  deps: HashSet[PackageName]) =
-  let info = extractRequiresInfo(pkg.nimble.string)
+                  deps: HashSet[string]) =
+  var amb = false
+  let nimbleFile = findNimbleFile(c, "", amb)
+  let info = extractRequiresInfo(nimbleFile)
   let commit = getCurrentCommit()
-  let name = pkg.name.string
-  infoNow c, pkg, "calculating nimble checksum"
-  let chk = c.nimbleChecksum(pkg, cfg)
+  let name = projectName w.pkg
+  infoNow c, name, "calculating nimble checksum"
+  let chk = c.nimbleChecksum(name, w.ondisk)
   lf.packages[name] = NimbleLockFileEntry(
     version: info.version,
     vcsRevision: commit,
-    url: $pkg.url,
+    url: w.pkg.string,
     downloadMethod: "git",
-    dependencies: deps.mapIt(it.string),
+    dependencies: deps.mapIt(it),
     checksums: {"sha1": chk}.toTable
   )
 
 const
   NimCfg = "nim.cfg"
 
-proc pinWorkspace*(c: var AtlasContext; lockFilePath: string) =
-  info c, "pin", "pinning workspace: " & $c.workspace
+proc pinGraph*(c: var AtlasContext; g: var DepGraph; lockFilePath: string; exportNimble = false) =
+  info c, "pin", "pinning project"
   var lf = newLockFile()
-  genLockEntriesForDir(c, lf, c.workspace)
-  if c.workspace != c.depsDir and c.depsDir.len > 0:
-    genLockEntriesForDir c, lf, c.depsDir
+  let startPkg = c.currentDir # resolvePackage(c, "file://" & c.currentDir)
 
-  let nimcfgPath = c.workspace / NimCfg
+  # only used for exporting nimble locks
+  var nlf = newNimbleLockFile()
+  var nimbleDeps = newTable[string, HashSet[string]]()
+
+  info c, startPkg, "pinning lockfile: " & lockFilePath
+
+  var nc = createNimbleContext(c, c.depsDir)
+  expandWithoutClone c, g, nc
+
+  for w in toposorted(g):
+    let dir = w.ondisk
+    tryWithDir c, dir:
+      if not exportNimble:
+        # generate atlas native lockfile entries
+        genLockEntry c, lf, w
+      else:
+        # handle exports for Nimble; these require looking up a bit more info
+        for nx in directDependencies(g, w):
+          nimbleDeps.mgetOrPut(projectName(w.pkg),
+                              initHashSet[string]()).incl(projectName nx.pkg)
+        let name = projectName w.pkg
+        trace c, w.pkg.string, "exporting nimble " & name
+        let deps = nimbleDeps.getOrDefault(name)
+        genLockEntry c, nlf, w, getCfgPath(g, w), deps
+
+  let nimcfgPath = c.currentDir / NimCfg
   if fileExists(nimcfgPath):
     lf.nimcfg = readFile(nimcfgPath).splitLines()
 
-  let nimblePath = c.workspace / c.workspace.lastPathComponent & ".nimble"
-  if fileExists nimblePath:
+  var amb = false
+  let nimblePath = findNimbleFile(c, startPkg, amb)
+  if not amb and nimblePath.len > 0 and nimblePath.fileExists():
     lf.nimbleFile = LockedNimbleFile(
-      filename: nimblePath.relativePath(c.workspace),
+      filename: nimblePath.relativePath(c.currentDir),
       content: readFile(nimblePath).splitLines())
 
-  write lf, lockFilePath
+  if not exportNimble:
+    write lf, lockFilePath
+  else:
+    write nlf, lockFilePath
+
+proc pinWorkspace*(c: var AtlasContext; lockFilePath: string) =
+  info c, "pin", "pinning workspace: " & $c.workspace
+  var g = createGraphFromWorkspace(c)
+  var nc = createNimbleContext(c, c.depsDir)
+  expandWithoutClone c, g, nc
+  pinGraph c, g, lockFilePath
 
 proc pinProject*(c: var AtlasContext; lockFilePath: string, exportNimble = false) =
   ## Pin project using deps starting from the current project directory.
   ##
   info c, "pin", "pinning project"
-  var lf = newLockFile()
-  let startPkg = resolvePackage(c, "file://" & c.currentDir)
 
-  # only used for exporting nimble locks
-  var nlf = newNimbleLockFile()
-  var nimbleDeps = newTable[PackageName, HashSet[PackageName]]()
-  var cfgs = newTable[PackageName, CfgPath]()
-
-  info c, startPkg, "pinning lockfile: " & lockFilePath
-
-  var g = createGraph(c, startPkg)
-  expandWithoutClone c, g
-  for w in allNodes(g):
-    info c, w.pkg, "pinning: " & $w.pkg
-
-    if not w.pkg.exists:
-      error c, w.pkg, "dependency does not exist"
-    else:
-      cfgs[w.pkg.name] = getCfgPath(g, w)
-
-  if c.errors == 0:
-    # topo-sort:
-    for w in toposorted(g):
-      let dir = w.pkg.path.string
-      tryWithDir c, dir:
-        if not exportNimble:
-          # generate atlas native lockfile entries
-          genLockEntry c, lf, w.pkg
-        else:
-          # handle exports for Nimble; these require looking up a bit more info
-          for nx in directDependencies(g, w):
-            nimbleDeps.mgetOrPut(w.pkg.name,
-                                initHashSet[PackageName]()).incl(nx.pkg.name)
-          trace c, w.pkg, "exporting nimble " & w.pkg.name.string
-          let name = w.pkg.name
-          let deps = nimbleDeps.getOrDefault(name)
-          genLockEntry c, nlf, w.pkg, cfgs[name], deps
-
-    let nimcfgPath = c.currentDir / NimCfg
-    if fileExists(nimcfgPath):
-      lf.nimcfg = readFile(nimcfgPath).splitLines()
-
-    let nimblePath = startPkg.nimble.string
-    if nimblePath.len > 0 and nimblePath.fileExists():
-      lf.nimbleFile = LockedNimbleFile(
-        filename: nimblePath.relativePath(c.currentDir),
-        content: readFile(nimblePath).splitLines())
-
-    if not exportNimble:
-      write lf, lockFilePath
-    else:
-      write nlf, lockFilePath
+  var g = createGraph(c, PkgUrl c.currentDir)
+  var nc = createNimbleContext(c, c.depsDir)
+  expandWithoutClone c, g, nc
+  pinGraph c, g, lockFilePath
 
 proc compareVersion(c: var AtlasContext; key, wanted, got: string) =
   if wanted != got:
@@ -252,12 +238,12 @@ proc convertNimbleLock*(c: var AtlasContext; nimblePath: string): LockFile =
       result.nimVersion = info["version"].getStr
     else:
       # lookup package using url
-      let pkg = c.resolvePackage(info["url"].getStr)
+      let pkgurl = info["url"].getStr
       info c, name, " imported "
-      let dir = c.depsDir / pkg.repo.string
+      let dir = c.depsDir / projectName(PkgUrl pkgurl)
       result.items[name] = LockFileEntry(
         dir: dir.relativePath(c.projectDir),
-        url: $pkg.url,
+        url: pkgurl,
         commit: info["vcsRevision"].getStr,
       )
 
@@ -295,14 +281,10 @@ proc listChanged*(c: var AtlasContext; lockFilePath: string) =
 
       let commit = gitops.getCurrentCommit()
       if commit != v.commit:
-        let pkg = c.resolvePackage("file://" & dir)
-        c.resolveNimble(pkg)
-        let info = parseNimble(c, pkg.nimble)
+        #let info = parseNimble(c, pkg.nimble)
         warn c, dir, "commit differs;" &
                      " found: " & commit &
-                     " (" & info.version & ")" &
-                     " lockfile has: " & v.commit &
-                     " (" & v.version & ")"
+                     " lockfile has: " & v.commit
 
   if lf.hostOS == system.hostOS and lf.hostCPU == system.hostCPU:
     compareVersion c, "nim", lf.nimVersion, detectNimVersion()
@@ -340,7 +322,7 @@ proc replay*(c: var AtlasContext; lockFilePath: string) =
     trace c, "replay", "replaying: " & v.repr
     let dir = c.fromPrefixedPath(v.dir)
     if not dirExists(dir):
-      let (status, err) = c.cloneUrl(getUrl v.url, dir, false)
+      let (status, err) = c.cloneUrl(PkgUrl v.url, dir, false)
       if status != Ok:
         error c, lockFilePath, err
         continue
@@ -356,8 +338,7 @@ proc replay*(c: var AtlasContext; lockFilePath: string) =
       checkoutGitCommit(c, dir, v.commit, FullClones in c.flags)
 
       if genCfg:
-        let pkg = resolvePackage(c, "file://" & dir)
-        paths.add c.findCfgDir(pkg)
+        paths.add c.findCfgDir(dir)
 
   if genCfg:
     # this allows us to re-create a nim.cfg that uses the paths from the users workspace
