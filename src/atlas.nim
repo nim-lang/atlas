@@ -13,6 +13,7 @@ import std / [parseopt, strutils, os, osproc, tables, sets, json, jsonutils,
   hashes, options]
 import context, runners, osutils, packagesjson, sat, gitops, nimenv, lockfiles,
   traversal, confighandler, configutils, nameresolver
+from std/terminal import isatty
 
 export osutils, context
 
@@ -536,6 +537,8 @@ proc main(c: var AtlasContext) =
   var autoinit = false
   var explicitProjectOverride = false
   var explicitDepsDirOverride = false
+  if existsEnv("NO_COLOR") or not isatty(stdout) or (getEnv("TERM") == "dumb"):
+    c.flags.incl NoColors
   for kind, key, val in getopt():
     case kind
     of cmdArgument:
