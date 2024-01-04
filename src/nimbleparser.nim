@@ -87,7 +87,7 @@ proc parseNimbleFile*(c: NimbleContext; nimbleFile: string): Requirements =
           if v != Version"":
             result.nimVersion = v
         else:
-          result.deps.add (PkgUrl u, query)
+          result.deps.add (createUrl u, query)
 
 proc findNimbleFile*(c: var Reporter; dir: string; ambiguous: var bool): string =
   result = ""
@@ -113,7 +113,7 @@ proc patchNimbleFile*(c: var NimbleContext; r: var Reporter; nimbleFile, name: s
   let req = parseNimbleFile(c, nimbleFile)
   # see if we have this requirement already listed. If so, do nothing:
   for d in req.deps:
-    if d[0] == PkgUrl u:
+    if d[0] == createUrl u:
       info(r, nimbleFile, "up to date")
       return
 

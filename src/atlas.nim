@@ -113,7 +113,7 @@ proc tag(c: var AtlasContext; field: Natural) =
 
 proc generateDepGraph(c: var AtlasContext; g: DepGraph) =
   proc repr(w: Dependency): string =
-    $(w.pkg.string / w.commit)
+    $(w.pkg.url / w.commit)
 
   var dotGraph = ""
   for n in allNodes(g):
@@ -145,22 +145,22 @@ proc getRequiredCommit*(c: var AtlasContext; w: Dependency): string =
 
 proc checkoutLaterCommit(c: var AtlasContext; g: var DepGraph; w: Dependency) =
   # Now dead code.
-  withDir c, w.pkg.string:
+  withDir c, w.ondisk:
     if w.commit.len == 0 or cmpIgnoreCase(w.commit, InvalidCommit) == 0:
-      gitPull(c, w.pkg.string)
+      gitPull(c, w.pkg.url)
     else:
       let err = checkGitDiffStatus(c)
       if err.len > 0:
-        warn c, w.pkg.string, err
+        warn c, w.pkg.projectName, err
       else:
         let requiredCommit = getRequiredCommit(c, w)
         let (cc, status) = exec(c, GitCurrentCommit, [])
         let currentCommit = strutils.strip(cc)
         if requiredCommit == "" or status != 0:
           if requiredCommit == "" and w.commit == InvalidCommit:
-            warn c, w.pkg.string, "package has no tagged releases"
+            warn c, w.pkg.projectName, "package has no tagged releases"
           else:
-            warn c, w.pkg.string, "cannot find specified version/commit " & w.commit
+            warn c, w.pkg.projectName, "cannot find specified version/commit " & w.commit
         else:
           if currentCommit != requiredCommit:
             # checkout the later commit:
@@ -174,7 +174,7 @@ proc checkoutLaterCommit(c: var AtlasContext; g: var DepGraph; w: Dependency) =
             else:
               checkoutGitCommit(c, w.ondisk, requiredCommit, FullClones in c.flags)
               when false:
-                warn c, w.pkg, "do not know which commit is more recent:",
+                warn c, w.pkg.projectName, "do not know which commit is more recent:",
                   currentCommit, "(current) or", w.commit, " =", requiredCommit, "(required)"
 
 proc traverseLoop(c: var AtlasContext; g: var DepGraph): seq[CfgPath] =
@@ -188,13 +188,16 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph): seq[CfgPath] =
 
 proc traverse(c: var AtlasContext; start: string): seq[CfgPath] =
   # returns the list of paths for the nim.cfg file.
-  var g = c.createGraph(PkgUrl start)
+  let u = createUrl start
+  var g = c.createGraph(u)
 
   #if $pkg.url == "":
   #  error c, pkg, "cannot resolve package name"
   #  return
-
-  c.projectDir = projectName(PkgUrl start) #pkg.path.string
+  #c.projectDir = c.depsDir / u.projectName
+  for n in allNodes(g):
+    c.projectDir = n.ondisk
+    break
 
   result = traverseLoop(c, g)
   afterGraphActions c, g
@@ -205,7 +208,7 @@ proc installDependencies(c: var AtlasContext; nimbleFile: string) =
   # 2. install deps from .nimble
   let (dir, pkgname, _) = splitFile(nimbleFile)
   info c, pkgname, "installing dependencies for " & pkgname & ".nimble"
-  var g = createGraph(c, PkgUrl("file://" & dir.absolutePath))
+  var g = createGraph(c, createUrl("file://" & dir.absolutePath))
   let paths = traverseLoop(c, g)
   let cfgPath = if CfgHere in c.flags: CfgPath c.currentDir else: findCfgDir(c)
   patchNimCfg(c, paths, cfgPath)

@@ -122,13 +122,12 @@ const
   FileWorkspace = "file://./"
 
 proc copyFromDisk(c: var AtlasContext; w: Dependency; destDir: string): (CloneStatus, string) =
-  var u = w.pkg.string
-  if u.startsWith(FileWorkspace): u = c.workspace / u.substr(FileWorkspace.len)
+  var dir = w.pkg.url
+  if dir.startsWith(FileWorkspace): dir = c.workspace / dir.substr(FileWorkspace.len)
   #template selectDir(a, b: string): string =
   #  if dirExists(a): a else: b
 
   #let dir = selectDir(u & "@" & w.commit, u)
-  let dir = u
   if dirExists(dir):
     copyDir(dir, destDir)
     result = (Ok, "")
@@ -143,12 +142,12 @@ type
 
 proc pkgUrlToDirname(g: var DepGraph; u: PkgUrl): (string, PackageAction) =
   # XXX implement namespace support here
-  let n = projectName(u)
+  let n = u.projectName
   result = (n, if dirExists(n): DoNothing else: DoClone)
 
 proc toDestDir*(g: DepGraph; d: Dependency): string =
   # XXX Use lookup table here
-  result = projectName(d.pkg)
+  result = d.pkg.projectName
 
 proc expand*(c: var AtlasContext; g: var DepGraph; nc: NimbleContext; m: TraversalMode) =
   ## Expand the graph by adding all dependencies.
@@ -161,7 +160,7 @@ proc expand*(c: var AtlasContext; g: var DepGraph; nc: NimbleContext; m: Travers
       let (dirName, todo) = pkgUrlToDirname(g, w.pkg)
       if todo == DoClone:
         let depsDir = if i < g.startNodesLen: c.workspace else: c.depsDir
-        info(c, dirName, "cloning: " & w.pkg.string)
+        info(c, dirName, "cloning: " & w.pkg.url)
         g.nodes[i].ondisk = depsDir / dirName
         let (status, _) =
           if w.pkg.isFileProtocol:
@@ -266,7 +265,7 @@ proc toFormular*(g: var DepGraph; algo: ResolutionAlgorithm): Formular =
   result = toForm(b)
 
 proc toString(x: SatVarInfo): string =
-  "(" & x.pkg.string & ", " & $x.version & ")"
+  "(" & x.pkg.projectName & ", " & $x.version & ")"
 
 proc runBuildSteps(c: var AtlasContext; g: var DepGraph) =
   ## execute build steps for the dependency graph
@@ -282,12 +281,12 @@ proc runBuildSteps(c: var AtlasContext; g: var DepGraph) =
         if g.nodes[i].versions[activeVersion].req.hasInstallHooks:
           let (nf, found) = findNimbleFile(g, i)
           if found == 1:
-            runNimScriptInstallHook c, nf, projectName pkg
+            runNimScriptInstallHook c, nf, pkg.projectName
         # check for nim script builders
         for p in mitems c.plugins.builderPatterns:
-          let f = p[0] % projectName(pkg)
+          let f = p[0] % pkg.projectName
           if fileExists(f):
-            runNimScriptBuilder c, p, projectName pkg
+            runNimScriptBuilder c, p, pkg.projectName
 
 proc solve*(c: var AtlasContext; g: var DepGraph; f: Formular) =
   var s = newSeq[BindingKind](g.idgen)
@@ -300,10 +299,10 @@ proc solve*(c: var AtlasContext; g: var DepGraph; f: Formular) =
         let idx = findDependencyForDep(g, m.pkg)
         g.nodes[idx].active = true
         g.nodes[idx].activeVersion = m.index
-        debug c, projectName(m.pkg), "package satisfiable"
+        debug c, m.pkg.projectName, "package satisfiable"
         if m.commit != "":
           withDir c, g.nodes[idx].ondisk:
-            checkoutGitCommit(c, projectName(m.pkg), m.commit, FullClones in c.flags)
+            checkoutGitCommit(c, m.pkg.projectName, m.commit, FullClones in c.flags)
 
     if NoExec notin c.flags:
       runBuildSteps(c, g)
@@ -315,9 +314,9 @@ proc solve*(c: var AtlasContext; g: var DepGraph; f: Formular) =
         for v in mitems(g.nodes[i].versions):
           let item = g.mapping[v.v]
           if s[int v.v] == setToTrue:
-            info c, projectName(item.pkg), "[x] " & toString item
+            info c, item.pkg.projectName, "[x] " & toString item
           else:
-            info c, projectName(item.pkg), "[ ] " & toString item
+            info c, item.pkg.projectName, "[ ] " & toString item
       info c, "../resolve", "end of selection"
   else:
     error c, c.workspace, "version conflict; for more information use --showGraph"
@@ -328,7 +327,7 @@ proc solve*(c: var AtlasContext; g: var DepGraph; f: Formular) =
       if usedVersions > 1:
         for ver in mvalidVersions p:
           if s[ver.v.int] == setToTrue:
-            error c, projectName(p.pkg), string(ver.version) & " required"
+            error c, p.pkg.projectName, string(ver.version) & " required"
 
 proc expandWithoutClone*(c: var AtlasContext; g: var DepGraph; nc: NimbleContext) =
   ## Expand the graph by adding all dependencies.

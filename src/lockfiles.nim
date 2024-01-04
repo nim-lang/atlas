@@ -83,8 +83,8 @@ proc fromPrefixedPath*(c: var AtlasContext, path: string): string =
     return c.depsDir / path
 
 proc genLockEntry(c: var AtlasContext; lf: var LockFile; w: Dependency) =
-  lf.items[projectName(w.pkg)] = LockFileEntry(
-    dir: c.prefixedPath(w.ondisk), url: w.pkg.string, commit: getCurrentCommit(), version: "")
+  lf.items[w.pkg.projectName] = LockFileEntry(
+    dir: c.prefixedPath(w.ondisk), url: w.pkg.url, commit: getCurrentCommit(), version: "")
 
 when false:
   proc genLockEntriesForDir(c: var AtlasContext; lf: var LockFile; dir: string) =
@@ -138,13 +138,12 @@ proc genLockEntry(c: var AtlasContext;
   let nimbleFile = findNimbleFile(c, "", amb)
   let info = extractRequiresInfo(nimbleFile)
   let commit = getCurrentCommit()
-  let name = projectName w.pkg
-  infoNow c, name, "calculating nimble checksum"
-  let chk = c.nimbleChecksum(name, w.ondisk)
-  lf.packages[name] = NimbleLockFileEntry(
+  infoNow c, w.pkg.projectName, "calculating nimble checksum"
+  let chk = c.nimbleChecksum(w.pkg.projectName, w.ondisk)
+  lf.packages[w.pkg.projectName] = NimbleLockFileEntry(
     version: info.version,
     vcsRevision: commit,
-    url: w.pkg.string,
+    url: w.pkg.url,
     downloadMethod: "git",
     dependencies: deps.mapIt(it),
     checksums: {"sha1": chk}.toTable
@@ -176,11 +175,10 @@ proc pinGraph*(c: var AtlasContext; g: var DepGraph; lockFilePath: string; expor
       else:
         # handle exports for Nimble; these require looking up a bit more info
         for nx in directDependencies(g, w):
-          nimbleDeps.mgetOrPut(projectName(w.pkg),
-                              initHashSet[string]()).incl(projectName nx.pkg)
-        let name = projectName w.pkg
-        trace c, w.pkg.string, "exporting nimble " & name
-        let deps = nimbleDeps.getOrDefault(name)
+          nimbleDeps.mgetOrPut(w.pkg.projectName,
+                              initHashSet[string]()).incl(nx.pkg.projectName)
+        trace c, w.pkg.projectName, "exporting nimble " & w.pkg.url
+        let deps = nimbleDeps.getOrDefault(w.pkg.projectName)
         genLockEntry c, nlf, w, getCfgPath(g, w), deps
 
   let nimcfgPath = c.currentDir / NimCfg
@@ -211,7 +209,7 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string, exportNimble = false
   ##
   info c, "pin", "pinning project"
 
-  var g = createGraph(c, PkgUrl c.currentDir)
+  var g = createGraph(c, createUrl c.currentDir)
   var nc = createNimbleContext(c, c.depsDir)
   expandWithoutClone c, g, nc
   pinGraph c, g, lockFilePath
@@ -240,11 +238,12 @@ proc convertNimbleLock*(c: var AtlasContext; nimblePath: string): LockFile =
       # lookup package using url
       let pkgurl = info["url"].getStr
       info c, name, " imported "
-      let dir = c.depsDir / projectName(PkgUrl pkgurl)
+      let u = createUrl pkgurl
+      let dir = c.depsDir / u.projectName
       result.items[name] = LockFileEntry(
         dir: dir.relativePath(c.projectDir),
         url: pkgurl,
-        commit: info["vcsRevision"].getStr,
+        commit: info["vcsRevision"].getStr
       )
 
 
@@ -322,7 +321,7 @@ proc replay*(c: var AtlasContext; lockFilePath: string) =
     trace c, "replay", "replaying: " & v.repr
     let dir = c.fromPrefixedPath(v.dir)
     if not dirExists(dir):
-      let (status, err) = c.cloneUrl(PkgUrl v.url, dir, false)
+      let (status, err) = c.cloneUrl(createUrl v.url, dir, false)
       if status != Ok:
         error c, lockFilePath, err
         continue

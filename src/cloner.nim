@@ -38,7 +38,7 @@ proc cloneUrl*(c: var AtlasContext,
   ## Returns an error message on error or else "".
   assert not dest.contains("://")
 
-  var modurl = url.string
+  var modurl = url.url
   if modurl.startsWith(GitProtocol):
     modurl =
       if cloneusinghttps:
@@ -50,31 +50,30 @@ proc cloneUrl*(c: var AtlasContext,
     # github + https + trailing url slash causes a
     # checkout/ls-remote to fail with repository not found
     setLen modurl, modurl.len - 1
-  let repo = toRepo(modurl).string
-  infoNow c, repo, "Cloning url: " & modurl
+  infoNow c, url.projectName, "Cloning url: " & modurl
 
   # Checking repo with git
   let gitCmdStr = "git ls-remote --quiet --tags " & modurl
   var success = execCmdEx(gitCmdStr)[1] == QuitSuccess
   if not success and isGitHub:
     # retry multiple times to avoid annoying GitHub timeouts:
-    success = retryUrl(gitCmdStr, modurl, c, repo, false)
+    success = retryUrl(gitCmdStr, modurl, c, url.projectName, false)
 
   if not success:
     if isGitHub:
       (NotFound, "Unable to identify url: " & modurl)
     else:
       # Checking repo with Mercurial
-      if retryUrl("hg identify " & modurl, modurl, c, repo, true):
+      if retryUrl("hg identify " & modurl, modurl, c, url.projectName, true):
         (NotFound, "Unable to identify url: " & modurl)
       else:
         let hgCmdStr = "hg clone " & modurl & " " & dest
-        if retryUrl(hgCmdStr, modurl, c, repo, true):
+        if retryUrl(hgCmdStr, modurl, c, url.projectName, true):
           (Ok, "")
         else:
           (OtherError, "exernal program failed: " & hgCmdStr)
   else:
-    if gitops.clone(c, url.string, dest): # gitops.clone has buit-in retrying
+    if gitops.clone(c, url.url, dest): # gitops.clone has buit-in retrying
       (Ok, "")
     else:
       (OtherError, "exernal program failed: " & $GitClone)
@@ -104,51 +103,52 @@ when false:
                           url: url)
         c.urlMapping["name:" & pkg.name.string] = pkg
 
-proc dependencyDir*(c: var AtlasContext; pkg: Package): PackageDir =
-  template checkDir(dir: string) =
-    if dir.len > 0 and dirExists(dir):
-      debug c, pkg, "dependencyDir: found: " & dir
-      return PackageDir dir
-    else:
-      debug c, pkg, "dependencyDir: not found: " & dir
-
-  debug c, pkg, "dependencyDir: check: pth: " & pkg.path.string & " cd: " & getCurrentDir() & " ws: " & c.workspace
-  if pkg.exists:
-    debug c, pkg, "dependencyDir: exists: " & pkg.path.string
-    return PackageDir pkg.path.string.absolutePath
-  if c.workspace.lastPathComponent == pkg.repo.string:
-    debug c, pkg, "dependencyDir: workspace: " & c.workspace
-    return PackageDir c.workspace
-
-  if pkg.path.string.len > 0:
-    checkDir pkg.path.string
-    checkDir c.workspace / pkg.path.string
-    checkDir c.depsDir / pkg.path.string
-
-  checkDir c.workspace / pkg.repo.string
-  checkDir c.depsDir / pkg.repo.string
-  checkDir c.workspace / pkg.name.string
-  checkDir c.depsDir / pkg.name.string
-  result = PackageDir c.depsDir / pkg.repo.string
-  trace c, pkg, "dependency not found using default"
-
-proc findNimbleFile*(c: var AtlasContext; pkg: Package; depDir = PackageDir""): string =
-  let dir = if depDir.string.len == 0: dependencyDir(c, pkg).string
-            else: depDir.string
-  result = dir / (pkg.name.string & ".nimble")
-  debug c, pkg, "findNimbleFile: searching: " & pkg.repo.string & " path: " & pkg.path.string & " dir: " & dir & " curr: " & result
-  if not fileExists(result):
-    debug c, pkg, "findNimbleFile: not found: " & result
-    result = ""
-    for file in walkFiles(dir / "*.nimble"):
-      if result.len == 0:
-        result = file
-        trace c, pkg, "nimble file found " & result
+when false:
+  proc dependencyDir*(c: var AtlasContext; pkg: Package): PackageDir =
+    template checkDir(dir: string) =
+      if dir.len > 0 and dirExists(dir):
+        debug c, pkg, "dependencyDir: found: " & dir
+        return PackageDir dir
       else:
-        error c, pkg, "ambiguous .nimble file " & result
-        return ""
-  else:
-    trace c, pkg, "nimble file found " & result
+        debug c, pkg, "dependencyDir: not found: " & dir
+
+    debug c, pkg, "dependencyDir: check: pth: " & pkg.path.string & " cd: " & getCurrentDir() & " ws: " & c.workspace
+    if pkg.exists:
+      debug c, pkg, "dependencyDir: exists: " & pkg.path.string
+      return PackageDir pkg.path.string.absolutePath
+    if c.workspace.lastPathComponent == pkg.repo.string:
+      debug c, pkg, "dependencyDir: workspace: " & c.workspace
+      return PackageDir c.workspace
+
+    if pkg.path.string.len > 0:
+      checkDir pkg.path.string
+      checkDir c.workspace / pkg.path.string
+      checkDir c.depsDir / pkg.path.string
+
+    checkDir c.workspace / pkg.repo.string
+    checkDir c.depsDir / pkg.repo.string
+    checkDir c.workspace / pkg.name.string
+    checkDir c.depsDir / pkg.name.string
+    result = PackageDir c.depsDir / pkg.repo.string
+    trace c, pkg, "dependency not found using default"
+
+  proc findNimbleFile*(c: var AtlasContext; pkg: Package; depDir = PackageDir""): string =
+    let dir = if depDir.string.len == 0: dependencyDir(c, pkg).string
+              else: depDir.string
+    result = dir / (pkg.name.string & ".nimble")
+    debug c, pkg, "findNimbleFile: searching: " & pkg.repo.string & " path: " & pkg.path.string & " dir: " & dir & " curr: " & result
+    if not fileExists(result):
+      debug c, pkg, "findNimbleFile: not found: " & result
+      result = ""
+      for file in walkFiles(dir / "*.nimble"):
+        if result.len == 0:
+          result = file
+          trace c, pkg, "nimble file found " & result
+        else:
+          error c, pkg, "ambiguous .nimble file " & result
+          return ""
+    else:
+      trace c, pkg, "nimble file found " & result
 
 when false:
   proc resolvePackageUrl(c: var AtlasContext; url: string, checkOverrides = true): Package =

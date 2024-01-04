@@ -40,20 +40,6 @@ type
   CloneStatus* = enum
     Ok, NotFound, OtherError
 
-  PackageName* = distinct string
-  PackageDir* = distinct string
-  PackageNimble* = distinct string
-  PackageRepo* = distinct string
-
-  Package* = ref object
-    name*: PackageName
-    repo*: PackageRepo
-    url*: PackageUrl
-    path*: PackageDir
-    inPackages*: bool
-    exists*: bool
-    nimble*: PackageNimble
-
   Flag* = enum
     KeepCommits
     CfgHere
@@ -75,109 +61,26 @@ type
     defaultAlgo*: ResolutionAlgorithm
     plugins*: PluginInfo
 
-proc nimble*(a: Package): PackageNimble =
-  assert a.exists == true
-  a.nimble
-
 
 proc `==`*(a, b: CfgPath): bool {.borrow.}
 
-proc `==`*(a, b: PackageName): bool {.borrow.}
-proc `==`*(a, b: PackageRepo): bool {.borrow.}
-proc `==`*(a, b: PackageDir): bool {.borrow.}
-proc `==`*(a, b: PackageNimble): bool {.borrow.}
-
-proc hash*(a: PackageName): Hash {.borrow.}
-proc hash*(a: PackageRepo): Hash {.borrow.}
-proc hash*(a: PackageDir): Hash {.borrow.}
-proc hash*(a: PackageNimble): Hash {.borrow.}
-
-proc hash*(a: Package): Hash =
-  result = 0
-  result = result !& hash a.name
-  result = result !& hash a.repo
-  result = result !& hash a.url
-
-proc `$`*(a: PackageName): string {.borrow.}
-proc `$`*(a: PackageRepo): string {.borrow.}
-proc `$`*(a: PackageDir): string {.borrow.}
-proc `$`*(a: PackageNimble): string {.borrow.}
-
-proc `$`*(a: Package): string =
-  result = "Package("
-  result &= "name:"
-  result &= a.name.string
-  result &= ", repo:"
-  result &= a.repo.string
-  result &= ", url:"
-  result &= $(a.url)
-  result &= ", p:"
-  result &= a.path.string
-  result &= ", x:"
-  result &= $(a.exists)
-  result &= ", nbl:"
-  if a.exists:
-    result &= $(a.nimble.string)
-  result &= ")"
-
-proc displayName(c: AtlasContext; p: PackageRepo): string =
-  if p.string == c.workspace:
-    p.string.absolutePath
-  elif c.depsDir != "" and p.string.isRelativeTo(c.depsDir):
-    p.string.relativePath(c.depsDir)
-  elif p.string.isRelativeTo(c.workspace):
-    p.string.relativePath(c.workspace)
+proc displayName(c: AtlasContext; p: string): string =
+  if p == c.workspace:
+    p.absolutePath
+  elif c.depsDir != "" and p.isRelativeTo(c.depsDir):
+    p.relativePath(c.depsDir)
+  elif p.isRelativeTo(c.workspace):
+    p.relativePath(c.workspace)
   else:
-    p.string
+    p
 
-proc warn*(c: var AtlasContext; p: Package; arg: string) =
-  c.warn(displayName(c, p.repo), arg)
-
-proc error*(c: var AtlasContext; p: Package; arg: string) =
-  c.error(displayName(c, p.repo), arg)
-
-proc info*(c: var AtlasContext; p: Package; arg: string) =
-  c.info(displayName(c, p.repo), arg)
-
-proc trace*(c: var AtlasContext; p: Package; arg: string) =
-  c.trace(displayName(c, p.repo), arg)
-
-proc debug*(c: var AtlasContext; p: Package; arg: string) =
-  c.debug(displayName(c, p.repo), arg)
-
-proc infoNow*(c: var AtlasContext; p: Package; arg: string) =
-  infoNow c, displayName(c, p.repo), arg
-
-# proc toRepo*(p: PackageUrl): PackageRepo =
-#   result = PackageRepo(lastPathComponent($p))
-#   result.string.removeSuffix(".git")
-
-proc toRepo*(p: string): PackageRepo =
-  if p.contains("://"):
-    result = toRepo lastPathComponent($getUrl(p))
-  else:
-    result = PackageRepo p
-
-proc toRepo*(p: Package): PackageRepo =
-  result = p.repo
-
-proc toRepo*(p: PackageDir): PackageRepo =
-  result = PackageRepo p.string
-
-template projectFromCurrentDir*(): PackageRepo =
-  PackageRepo(c.currentDir.absolutePath())
-
-proc toDestDir*(pkg: Package): PackageDir =
-  pkg.path
-
-template toDir(pkg: Package): string = pkg.path.string
-template toDir(dir: string): string = dir
+template projectFromCurrentDir*(): untyped = c.currentDir.absolutePath
 
 template withDir*(c: var AtlasContext; dir: string; body: untyped) =
   let oldDir = getCurrentDir()
-  debug c, toDir(dir), "Current directory is now: " & dir.toDir()
+  debug c, dir, "Current directory is now: " & dir
   try:
-    setCurrentDir(dir.toDir())
+    setCurrentDir(dir)
     body
   finally:
     setCurrentDir(oldDir)
@@ -185,9 +88,9 @@ template withDir*(c: var AtlasContext; dir: string; body: untyped) =
 template tryWithDir*(c: var AtlasContext; dir: string; body: untyped) =
   let oldDir = getCurrentDir()
   try:
-    if dirExists(dir.toDir()):
-      setCurrentDir(dir.toDir())
-      debug c, toDir(dir), "Current directory is now: " & dir.toDir()
+    if dirExists(dir):
+      setCurrentDir(dir)
+      debug c, dir, "Current directory is now: " & dir
       body
   finally:
     setCurrentDir(oldDir)

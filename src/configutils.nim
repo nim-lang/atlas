@@ -15,12 +15,12 @@ const
   configPatternBegin = "############# begin Atlas config section ##########\n"
   configPatternEnd =   "############# end Atlas config section   ##########\n"
 
-proc parseNimble*(c: var AtlasContext; nimble: PackageNimble): NimbleFileInfo =
-  result = extractRequiresInfo(nimble.string)
+proc parseNimble*(c: var AtlasContext; nimble: string): NimbleFileInfo =
+  result = extractRequiresInfo(nimble)
 
 proc findCfgDir*(c: var AtlasContext): CfgPath =
   for nimbleFile in walkPattern(c.currentDir / "*.nimble"):
-    let nimbleInfo = parseNimble(c, PackageNimble nimbleFile)
+    let nimbleInfo = parseNimble(c, nimbleFile)
     return CfgPath c.currentDir / nimbleInfo.srcDir
   return CfgPath c.currentDir
 
@@ -41,7 +41,7 @@ proc patchNimCfg*(c: var AtlasContext; deps: seq[CfgPath]; cfgPath: CfgPath) =
     error(c, c.projectDir, "could not write the nim.cfg")
   elif not fileExists(cfg):
     writeFile(cfg, cfgContent)
-    info(c, projectFromCurrentDir().string, "created: " & cfg.readableFile)
+    info(c, projectFromCurrentDir(), "created: " & cfg.readableFile)
   else:
     let content = readFile(cfg)
     let start = content.find(configPatternBegin)
@@ -56,4 +56,4 @@ proc patchNimCfg*(c: var AtlasContext; deps: seq[CfgPath]; cfgPath: CfgPath) =
       # do not touch the file if nothing changed
       # (preserves the file date information):
       writeFile(cfg, cfgContent)
-      info(c, projectFromCurrentDir().string, "updated: " & cfg.readableFile)
+      info(c, projectFromCurrentDir(), "updated: " & cfg.readableFile)

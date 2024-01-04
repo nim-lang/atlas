@@ -7,12 +7,7 @@
 #
 
 import std / [hashes, strutils]
-
-type
-  PkgUrl* = distinct string
-
-proc `==`*(a, b: PkgUrl): bool {.borrow.}
-proc hash*(a: PkgUrl): Hash {.borrow.}
+from std / os import `/`
 
 const
   GitSuffix = ".git"
@@ -26,6 +21,18 @@ proc projectNameImpl(s: string): string =
   if result.endsWith(GitSuffix):
     result.setLen result.len - len(GitSuffix)
 
-proc projectName*(s: PkgUrl): string = projectNameImpl(s.string)
+type
+  PkgUrl* = object
+    projectName*: string
+    u: string
 
-proc isFileProtocol*(s: PkgUrl): bool = s.string.startsWith("file://")
+proc createUrl*(u: sink string): PkgUrl =
+  assert "://" in u
+  PkgUrl(projectName: projectNameImpl(u), u: u)
+
+template url*(p: PkgUrl): string = p.u
+
+proc `==`*(a, b: PkgUrl): bool {.inline.} = a.u == b.u
+proc hash*(a: PkgUrl): Hash {.inline.} = hash(a.u)
+
+proc isFileProtocol*(s: PkgUrl): bool = s.u.startsWith("file://")
