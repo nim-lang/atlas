@@ -80,7 +80,7 @@ Options:
   --autoinit            auto initialize a workspace
   --colors=on|off       turn on|off colored output
   --resolver=minver|semver|maxver
-                        which resolution algorithm to use, default is minver
+                        which resolution algorithm to use, default is semver
   --showGraph           show the dependency graph
   --list                list all available and installed versions
   --version             show the version
@@ -245,10 +245,11 @@ proc autoWorkspace(currentDir: string): string =
 
 proc createWorkspaceIn(c: var AtlasContext) =
   if not fileExists(c.workspace / AtlasWorkspace):
-    writeFile c.workspace / AtlasWorkspace, "deps=\"$#\"\nresolver=\"MaxVer\"\n" % escape(c.depsDir, "", "")
-    info c, c.workspace, "created workspace file"
-  createDir absoluteDepsDir(c.workspace, c.depsDir)
-  info c, c.depsDir, "created deps dir"
+    writeDefaultConfigFile c
+    info c, c.workspace, "created atlas.workspace"
+  if c.workspace != c.depsDir and c.depsDir != "":
+    createDir absoluteDepsDir(c.workspace, c.depsDir)
+    info c, c.depsDir, "created deps dir"
 
 proc listOutdated(c: var AtlasContext; dir: string) =
   var updateable = 0

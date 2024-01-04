@@ -8,7 +8,7 @@
 
 ## Configuration handling.
 
-import std / [strutils, os, streams, parsecfg]
+import std / [strutils, os, streams, json]
 import context, osutils, reporters
 
 proc parseOverridesFile(c: var AtlasContext; filename: string) =
@@ -43,37 +43,39 @@ proc readPluginsDir(c: var AtlasContext; dir: string) =
     if k == pcFile and f.endsWith(".nims"):
       extractPluginInfo f, c.plugins
 
+type
+  JsonConfig = object
+    deps: string
+    overrides: string
+    plugins: string
+    resolver: string
+    graph: JsonNode
+
+proc writeDefaultConfigFile*(c: var AtlasContext) =
+  let config = JsonConfig(resolver: "semver", graph: newJNull())
+  let configFile = c.workspace / AtlasWorkspace
+  writeFile(configFile, pretty %*config)
+
 proc readConfig*(c: var AtlasContext) =
   let configFile = c.workspace / AtlasWorkspace
   var f = newFileStream(configFile, fmRead)
   if f == nil:
     error c, configFile, "cannot open: " & configFile
     return
-  var p: CfgParser
-  open(p, f, configFile)
-  while true:
-    var e = next(p)
-    case e.kind
-    of cfgEof: break
-    of cfgSectionStart:
-      discard "who cares about sections"
-    of cfgKeyValuePair:
-      case e.key.normalize
-      of "deps":
-        c.depsDir = absoluteDepsDir(c.workspace, e.value)
-      of "overrides":
-        parseOverridesFile(c, e.value)
-      of "resolver":
-        try:
-          c.defaultAlgo = parseEnum[ResolutionAlgorithm](e.value)
-        except ValueError:
-          warn c, configFile, "ignored unknown resolver: " & e.key
-      of "plugins":
-        readPluginsDir(c, e.value)
-      else:
-        warn c, configFile, "ignored unknown setting: " & e.key
-    of cfgOption:
-      discard "who cares about options"
-    of cfgError:
-      error c, configFile, e.msg
-  close(p)
+
+  let j = parseJson(f, configFile)
+  try:
+    let m = j.to(JsonConfig)
+    if m.deps.len > 0:
+      c.depsDir = absoluteDepsDir(c.workspace, m.deps)
+    if m.overrides.len > 0:
+      parseOverridesFile(c, m.overrides)
+    if m.resolver.len > 0:
+      try:
+        c.defaultAlgo = parseEnum[ResolutionAlgorithm](m.resolver)
+      except ValueError:
+        warn c, configFile, "ignored unknown resolver: " & m.resolver
+    if m.plugins.len > 0:
+      readPluginsDir(c, m.plugins)
+  finally:
+    close f
