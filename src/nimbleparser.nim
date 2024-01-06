@@ -7,14 +7,14 @@
 #
 
 import std / [os, strutils, tables, unicode]
-import versions, sat, pkgurls, packagesjson, reporters, gitops, parse_requires
+import versions, sat, packagesjson, reporters, gitops, parse_requires
 
 type
   DependencyStatus* = enum
     Normal, HasBrokenNimbleFile, HasUnknownNimbleFile, HasBrokenDep
 
   Requirements* = ref object
-    deps*: seq[(PkgUrl, VersionInterval)]
+    deps*: seq[(string, VersionInterval)]
     hasInstallHooks*: bool
     srcDir*: string
     nimVersion*: Version
@@ -87,7 +87,7 @@ proc parseNimbleFile*(c: NimbleContext; nimbleFile: string): Requirements =
           if v != Version"":
             result.nimVersion = v
         else:
-          result.deps.add (createUrl u, query)
+          result.deps.add (u, query)
 
 proc findNimbleFile*(c: var Reporter; dir: string; ambiguous: var bool): string =
   result = ""
@@ -113,7 +113,7 @@ proc patchNimbleFile*(c: var NimbleContext; r: var Reporter; nimbleFile, name: s
   let req = parseNimbleFile(c, nimbleFile)
   # see if we have this requirement already listed. If so, do nothing:
   for d in req.deps:
-    if d[0] == createUrl u:
+    if d[0] == u:
       info(r, nimbleFile, "up to date")
       return
 

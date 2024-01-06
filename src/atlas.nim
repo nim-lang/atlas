@@ -119,7 +119,7 @@ proc generateDepGraph(c: var AtlasContext; g: DepGraph) =
   for n in allNodes(g):
     dotGraph.addf("\"$1\" [label=\"$2\"];\n", [n.repr, if n.active: "" else: "unused"])
   for n in allNodes(g):
-    for child in directDependencies(g, n):
+    for child in directDependencies(g, c, n):
       dotGraph.addf("\"$1\" -> \"$2\";\n", [n.repr, child.repr])
   let dotFile = c.currentDir / "deps.dot"
   writeFile(dotFile, "digraph deps {\n$1}\n" % dotGraph)
@@ -181,14 +181,14 @@ proc traverseLoop(c: var AtlasContext; g: var DepGraph): seq[CfgPath] =
   result = @[]
   var nc = createNimbleContext(c, c.depsDir)
   expand c, g, nc, TraversalMode.AllReleases
-  let f = toFormular(g, c.defaultAlgo)
+  let f = toFormular(c, g, c.defaultAlgo)
   solve c, g, f
   for w in allActiveNodes(g):
     result.add CfgPath(toDestDir(g, w) / getCfgPath(g, w).string)
 
 proc traverse(c: var AtlasContext; start: string): seq[CfgPath] =
   # returns the list of paths for the nim.cfg file.
-  let u = createUrl start
+  let u = createUrl(start, c.overrides)
   var g = c.createGraph(u)
 
   #if $pkg.url == "":
@@ -208,7 +208,7 @@ proc installDependencies(c: var AtlasContext; nimbleFile: string) =
   # 2. install deps from .nimble
   let (dir, pkgname, _) = splitFile(nimbleFile)
   info c, pkgname, "installing dependencies for " & pkgname & ".nimble"
-  var g = createGraph(c, createUrl("file://" & dir.absolutePath))
+  var g = createGraph(c, createUrl(dir, c.overrides))
   let paths = traverseLoop(c, g)
   let cfgPath = if CfgHere in c.flags: CfgPath c.currentDir else: findCfgDir(c)
   patchNimCfg(c, paths, cfgPath)

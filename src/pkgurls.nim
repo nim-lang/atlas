@@ -7,7 +7,8 @@
 #
 
 import std / [hashes, strutils]
-from std / os import `/`
+from std / os import `/`, dirExists
+import compiledpatterns, gitops
 
 const
   GitSuffix = ".git"
@@ -26,9 +27,21 @@ type
     projectName*: string
     u: string
 
-proc createUrl*(u: sink string): PkgUrl =
-  assert "://" in u
-  PkgUrl(projectName: projectNameImpl(u), u: u)
+proc createUrl*(u: string; p: Patterns): PkgUrl =
+  var didReplace = false
+  let x = substitute(p, u, didReplace)
+  if not didReplace:
+    if "://" notin x:
+      if dirExists(x):
+        let u2 = if isGitDir(x): getRemoteUrl(x) else: ("file://" & x)
+        result = PkgUrl(projectName: projectNameImpl(x), u: u2)
+      else:
+        raise newException(ValueError, "Invalid name or URL: " & u)
+    else:
+      result = PkgUrl(projectName: projectNameImpl(x), u: x)
+  else:
+    result = PkgUrl(projectName: projectNameImpl(x), u: x)
+
 
 template url*(p: PkgUrl): string = p.u
 

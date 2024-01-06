@@ -174,7 +174,7 @@ proc pinGraph*(c: var AtlasContext; g: var DepGraph; lockFilePath: string; expor
         genLockEntry c, lf, w
       else:
         # handle exports for Nimble; these require looking up a bit more info
-        for nx in directDependencies(g, w):
+        for nx in directDependencies(g, c, w):
           nimbleDeps.mgetOrPut(w.pkg.projectName,
                               initHashSet[string]()).incl(nx.pkg.projectName)
         trace c, w.pkg.projectName, "exporting nimble " & w.pkg.url
@@ -209,7 +209,7 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string, exportNimble = false
   ##
   info c, "pin", "pinning project"
 
-  var g = createGraph(c, createUrl c.currentDir)
+  var g = createGraph(c, createUrl(c.currentDir, c.overrides))
   var nc = createNimbleContext(c, c.depsDir)
   expandWithoutClone c, g, nc
   pinGraph c, g, lockFilePath
@@ -238,7 +238,7 @@ proc convertNimbleLock*(c: var AtlasContext; nimblePath: string): LockFile =
       # lookup package using url
       let pkgurl = info["url"].getStr
       info c, name, " imported "
-      let u = createUrl pkgurl
+      let u = createUrl(pkgurl, c.overrides)
       let dir = c.depsDir / u.projectName
       result.items[name] = LockFileEntry(
         dir: dir.relativePath(c.projectDir),
@@ -321,7 +321,7 @@ proc replay*(c: var AtlasContext; lockFilePath: string) =
     trace c, "replay", "replaying: " & v.repr
     let dir = c.fromPrefixedPath(v.dir)
     if not dirExists(dir):
-      let (status, err) = c.cloneUrl(createUrl v.url, dir, false)
+      let (status, err) = c.cloneUrl(createUrl(v.url, c.overrides), dir, false)
       if status != Ok:
         error c, lockFilePath, err
         continue

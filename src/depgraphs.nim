@@ -111,7 +111,8 @@ proc traverseDependency(c: var AtlasContext; nc: NimbleContext; g: var DepGraph;
         lastNimbleContents = ensureMove nimbleContents
 
       if pv.req.status == Normal:
-        for dep, _ in items(pv.req.deps):
+        for d, _ in items(pv.req.deps):
+          let dep = createUrl(d, c.overrides)
           if not processed.contains(dep):
             g.packageToDependency[dep] = g.nodes.len
             g.nodes.add Dependency(pkg: dep, versions: @[])
@@ -182,7 +183,7 @@ iterator mvalidVersions*(p: var Dependency): var DependencyVersion =
   for v in mitems p.versions:
     if v.req.status == Normal: yield v
 
-proc toFormular*(g: var DepGraph; algo: ResolutionAlgorithm): Formular =
+proc toFormular*(c: var AtlasContext; g: var DepGraph; algo: ResolutionAlgorithm): Formular =
   # Key idea: use a SAT variable for every `Requirements` object, which are
   # shared.
   var b = Builder()
@@ -230,7 +231,7 @@ proc toFormular*(g: var DepGraph; algo: ResolutionAlgorithm): Formular =
         b.openOpr(ExactlyOneOfForm)
         let q = if algo == SemVer: toSemVer(query) else: query
         let commit = extractSpecificCommit(q)
-        let av = g.nodes[findDependencyForDep(g, dep)]
+        let av = g.nodes[findDependencyForDep(g, createUrl(dep, c.overrides))]
         if commit.len > 0:
           var v = Version("#" & commit)
           for j in countup(0, av.versions.len-1):
@@ -354,11 +355,11 @@ iterator allActiveNodes*(g: DepGraph): lent Dependency =
 iterator toposorted*(g: DepGraph): lent Dependency =
   for i in countdown(g.nodes.len-1, 0): yield g.nodes[i]
 
-iterator directDependencies*(g: DepGraph; d: Dependency): lent Dependency =
+iterator directDependencies*(g: DepGraph; c: var AtlasContext; d: Dependency): lent Dependency =
   if d.activeVersion < d.versions.len:
     let deps {.cursor.} = d.versions[d.activeVersion].req.deps
     for dep in deps:
-      let idx = findDependencyForDep(g, dep[0])
+      let idx = findDependencyForDep(g, createUrl(dep[0], c.overrides))
       yield g.nodes[idx]
 
 proc getCfgPath*(g: DepGraph; d: Dependency): lent CfgPath =

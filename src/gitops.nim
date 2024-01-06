@@ -222,9 +222,6 @@ when false:
     elif isShortCommitHash(w.commit): shortToCommit(c, w.commit)
     else: w.commit
 
-proc getRemoteUrl*(): string =
-  execProcess("git config --get remote.origin.url").strip()
-
 proc getCurrentCommit*(): string =
   result = execProcess("git log -1 --pretty=format:%H").strip()
 
@@ -268,6 +265,21 @@ template withDir*(c: var Reporter; dir: string; body: untyped) =
     body
   finally:
     setCurrentDir(oldDir)
+
+template withDir*(dir: string; body: untyped) =
+  let oldDir = getCurrentDir()
+  try:
+    setCurrentDir(dir)
+    body
+  finally:
+    setCurrentDir(oldDir)
+
+proc getRemoteUrl*(): string =
+  execProcess("git config --get remote.origin.url").strip()
+
+proc getRemoteUrl*(x: string): string =
+  withDir x:
+    result = getRemoteUrl()
 
 proc updateDir*(c: var Reporter; file, filter: string) =
   withDir c, file:
