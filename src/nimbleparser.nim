@@ -104,6 +104,8 @@ proc findNimbleFile*(c: var Reporter; dir: string; ambiguous: var bool): string 
 #    warn c, dir, "cannot determine `.nimble` file; there are multiple to choose from"
 #    result = ""
 
+proc genRequiresLine*(u: string): string = "requires \"$1\"\n" % u.escape("", "")
+
 proc patchNimbleFile*(c: var NimbleContext; r: var Reporter; nimbleFile, name: string) =
   let u = (if name.isUrl: name else: c.nameToUrl.getOrDefault(unicode.toLower name, ""))
   if u.len == 0:
@@ -117,8 +119,7 @@ proc patchNimbleFile*(c: var NimbleContext; r: var Reporter; nimbleFile, name: s
       info(r, nimbleFile, "up to date")
       return
 
-  let line = "requires \"$1\"\n" % u.escape("", "")
-
+  let line = genRequiresLine(u)
   var f = open(nimbleFile, fmAppend)
   try:
     f.writeLine line

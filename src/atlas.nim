@@ -445,7 +445,10 @@ proc main(c: var AtlasContext) =
     singleArg()
     #fillPackageLookupTable(c.nimbleContext, c, )
     var amb = false
-    let nimbleFile = findNimbleFile(c, args[0], amb)
+    var nimbleFile = findNimbleFile(c, args[0], amb)
+    if nimbleFile.len == 0:
+      nimbleFile = c.workspace / extractProjectName(c.workspace) & ".nimble"
+      writeFile(nimbleFile, genRequiresLine(args[0]))
     if nimbleFile.len > 0 and not amb:
       installDependencies(c, nimbleFile)
     elif amb:

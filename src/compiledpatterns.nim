@@ -225,6 +225,7 @@ proc substitute*(p: Patterns; input: string; didReplace: var bool): string =
       if m.m >= 0:
         didReplace = true
         return translate(m, p.s[i][1], input)
+    return input
 
 proc substitute*(p: Patterns; input: string): string =
   var ignored = false
