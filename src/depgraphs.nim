@@ -107,12 +107,11 @@ proc traverseDependency(c: var AtlasContext; nc: NimbleContext; g: var DepGraph;
       if lastNimbleContents == nimbleContents:
         pv.req = g.nodes[idx].versions[^1].req
       else:
-        pv.req = parseNimbleFile(nc, nimbleFile)
+        pv.req = parseNimbleFile(nc, nimbleFile, c.overrides)
         lastNimbleContents = ensureMove nimbleContents
 
       if pv.req.status == Normal:
-        for d, _ in items(pv.req.deps):
-          let dep = createUrl(d, c.overrides)
+        for dep, _ in items(pv.req.deps):
           if not processed.contains(dep):
             g.packageToDependency[dep] = g.nodes.len
             g.nodes.add Dependency(pkg: dep, versions: @[])
@@ -231,7 +230,7 @@ proc toFormular*(c: var AtlasContext; g: var DepGraph; algo: ResolutionAlgorithm
         b.openOpr(ExactlyOneOfForm)
         let q = if algo == SemVer: toSemVer(query) else: query
         let commit = extractSpecificCommit(q)
-        let av = g.nodes[findDependencyForDep(g, createUrl(dep, c.overrides))]
+        let av = g.nodes[findDependencyForDep(g, dep)]
         if commit.len > 0:
           var v = Version("#" & commit)
           for j in countup(0, av.versions.len-1):
@@ -359,7 +358,7 @@ iterator directDependencies*(g: DepGraph; c: var AtlasContext; d: Dependency): l
   if d.activeVersion < d.versions.len:
     let deps {.cursor.} = d.versions[d.activeVersion].req.deps
     for dep in deps:
-      let idx = findDependencyForDep(g, createUrl(dep[0], c.overrides))
+      let idx = findDependencyForDep(g, dep[0])
       yield g.nodes[idx]
 
 proc getCfgPath*(g: DepGraph; d: Dependency): lent CfgPath =

@@ -406,6 +406,7 @@ proc main(c: var AtlasContext) =
 
   if c.workspace.len > 0:
     if not dirExists(c.workspace): fatal "Workspace directory '" & c.workspace & "' not found."
+    readConfig c
   elif action != "init":
     if GlobalWorkspace in c.flags:
       c.workspace = detectWorkspace(getHomeDir() / ".atlas")

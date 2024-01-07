@@ -9,7 +9,7 @@
 ## Resolves package names and turn them to URLs.
 
 import std / [os, strutils, osproc]
-import context, osutils, gitops, reporters, pkgurls
+import context, gitops, reporters, pkgurls
 
 proc retryUrl(cmd, urlstr: string; c: var AtlasContext; displayName: string;
               tryBeforeSleep = true): bool =

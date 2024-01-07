@@ -250,3 +250,6 @@ when isMainModule:
 
   echo translate(m, "https://gitlab.cross.de/$1", realInput)
 
+  var pat = initPatterns()
+  discard pat.addPattern("$+", "file://./source/$#")
+  echo substitute(pat, "proj_a")

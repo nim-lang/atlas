@@ -7,14 +7,14 @@
 #
 
 import std / [os, strutils, tables, unicode]
-import versions, sat, packagesjson, reporters, gitops, parse_requires
+import versions, sat, packagesjson, reporters, gitops, parse_requires, pkgurls, compiledpatterns
 
 type
   DependencyStatus* = enum
     Normal, HasBrokenNimbleFile, HasUnknownNimbleFile, HasBrokenDep
 
   Requirements* = ref object
-    deps*: seq[(string, VersionInterval)]
+    deps*: seq[(PkgUrl, VersionInterval)]
     hasInstallHooks*: bool
     srcDir*: string
     nimVersion*: Version
@@ -56,7 +56,7 @@ proc addError*(err: var string; nimbleFile: string; msg: string) =
 
 proc isUrl(s: string): bool {.inline.} = s.len > 5 and s.contains "://"
 
-proc parseNimbleFile*(c: NimbleContext; nimbleFile: string): Requirements =
+proc parseNimbleFile*(c: NimbleContext; nimbleFile: string; p: Patterns): Requirements =
   let nimbleInfo = extractRequiresInfo(nimbleFile)
 
   result = Requirements(
@@ -69,7 +69,11 @@ proc parseNimbleFile*(c: NimbleContext; nimbleFile: string): Requirements =
     while i < r.len and r[i] notin {'#', '<', '=', '>'} + Whitespace: inc i
     let name = r.substr(0, i-1)
 
-    let u = (if name.isUrl: name else: c.nameToUrl.getOrDefault(unicode.toLower name, ""))
+    var didReplace = false
+    var u = substitute(p, name, didReplace)
+    if not didReplace:
+      u = (if name.isUrl: name else: c.nameToUrl.getOrDefault(unicode.toLower name, ""))
+
     if u.len == 0:
       result.status = HasBrokenDep
       result.err.addError nimbleFile, "cannot resolve package name: " & name
@@ -87,7 +91,7 @@ proc parseNimbleFile*(c: NimbleContext; nimbleFile: string): Requirements =
           if v != Version"":
             result.nimVersion = v
         else:
-          result.deps.add (u, query)
+          result.deps.add (createUrlSkipPatterns(u), query)
 
 proc findNimbleFile*(c: var Reporter; dir: string; ambiguous: var bool): string =
   result = ""
@@ -106,16 +110,16 @@ proc findNimbleFile*(c: var Reporter; dir: string; ambiguous: var bool): string 
 
 proc genRequiresLine*(u: string): string = "requires \"$1\"\n" % u.escape("", "")
 
-proc patchNimbleFile*(c: var NimbleContext; r: var Reporter; nimbleFile, name: string) =
+proc patchNimbleFile*(c: var NimbleContext; r: var Reporter; p: Patterns; nimbleFile, name: string) =
   let u = (if name.isUrl: name else: c.nameToUrl.getOrDefault(unicode.toLower name, ""))
   if u.len == 0:
     error r, name, "cannot resolve package name"
     return
 
-  let req = parseNimbleFile(c, nimbleFile)
+  let req = parseNimbleFile(c, nimbleFile, p)
   # see if we have this requirement already listed. If so, do nothing:
   for d in req.deps:
-    if d[0] == u:
+    if d[0].url == u:
       info(r, nimbleFile, "up to date")
       return
 
