@@ -22,6 +22,7 @@ type
     versions*: seq[DependencyVersion]
     v: VarId
     active*: bool
+    isRoot*: bool
     activeVersion*: int
     status: CloneStatus
     ondisk*: string
@@ -43,13 +44,13 @@ proc createGraph*(c: var AtlasContext; startSet: openArray[PkgUrl]): DepGraph =
   result = DepGraph(nodes: @[], idgen: 0'i32, startNodesLen: startSet.len)
   for s in startSet:
     result.packageToDependency[s] = result.nodes.len
-    result.nodes.add Dependency(pkg: s, versions: @[], v: VarId(result.idgen))
+    result.nodes.add Dependency(pkg: s, versions: @[], v: VarId(result.idgen), isRoot: true)
     inc result.idgen
 
 proc createGraph*(c: var AtlasContext; s: PkgUrl): DepGraph =
   result = DepGraph(nodes: @[], idgen: 0'i32, startNodesLen: 1)
   result.packageToDependency[s] = result.nodes.len
-  result.nodes.add Dependency(pkg: s, versions: @[], v: VarId(result.idgen))
+  result.nodes.add Dependency(pkg: s, versions: @[], v: VarId(result.idgen), isRoot: true)
   inc result.idgen
 
 proc createGraphFromWorkspace*(c: var AtlasContext): DepGraph =
@@ -140,10 +141,11 @@ type
   PackageAction = enum
     DoNothing, DoClone
 
-proc pkgUrlToDirname(g: var DepGraph; u: PkgUrl): (string, PackageAction) =
+proc pkgUrlToDirname(c: var AtlasContext; g: var DepGraph; d: Dependency): (string, string, PackageAction) =
   # XXX implement namespace support here
-  let n = u.projectName
-  result = (n, if dirExists(n): DoNothing else: DoClone)
+  let depsDir = if d.isRoot: "" else: c.depsDir
+  let dest = depsDir / d.pkg.projectName
+  result = (d.pkg.dir, dest, if dirExists(dest): DoNothing else: DoClone)
 
 proc toDestDir*(g: DepGraph; d: Dependency): string =
   # XXX Use lookup table here
@@ -155,22 +157,19 @@ proc expand*(c: var AtlasContext; g: var DepGraph; nc: NimbleContext; m: Travers
   var i = 0
   while i < g.nodes.len:
     let w {.cursor.} = g.nodes[i]
-
     if not processed.containsOrIncl(w.pkg):
-      let (dirName, todo) = pkgUrlToDirname(g, w.pkg)
+      let (src, dest, todo) = pkgUrlToDirname(c, g, w)
       if todo == DoClone:
-        let depsDir = if i < g.startNodesLen: c.workspace else: c.depsDir
-        info(c, dirName, "cloning: " & w.pkg.url)
-        g.nodes[i].ondisk = depsDir / dirName
+        info(c, dest, "cloning: " & src)
+        g.nodes[i].ondisk = dest
         let (status, _) =
           if w.pkg.isFileProtocol:
             copyFromDisk(c, w, g.nodes[i].ondisk)
           else:
             cloneUrl(c, w.pkg, g.nodes[i].ondisk, false)
-
         g.nodes[i].status = status
 
-      withDir c, dirName:
+      withDir c, dest:
         traverseDependency(c, nc, g, i, processed, m)
     inc i
 
@@ -337,9 +336,9 @@ proc expandWithoutClone*(c: var AtlasContext; g: var DepGraph; nc: NimbleContext
     let w {.cursor.} = g.nodes[i]
 
     if not processed.containsOrIncl(w.pkg):
-      let (dirName, todo) = pkgUrlToDirname(g, w.pkg)
+      let (_, dest, todo) = pkgUrlToDirname(c, g, w)
       if todo == DoNothing:
-        withDir c, dirName:
+        withDir c, dest:
           traverseDependency(c, nc, g, i, processed, CurrentCommit)
     inc i
 

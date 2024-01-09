@@ -208,7 +208,7 @@ proc installDependencies(c: var AtlasContext; nimbleFile: string) =
   # 2. install deps from .nimble
   let (dir, pkgname, _) = splitFile(nimbleFile)
   info c, pkgname, "installing dependencies for " & pkgname & ".nimble"
-  var g = createGraph(c, createUrl(dir, c.overrides))
+  var g = createGraph(c, createUrlSkipPatterns(dir))
   let paths = traverseLoop(c, g)
   let cfgPath = if CfgHere in c.flags: CfgPath c.currentDir else: findCfgDir(c)
   patchNimCfg(c, paths, cfgPath)
