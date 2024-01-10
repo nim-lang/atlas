@@ -60,6 +60,8 @@ type
     overrides*: Patterns
     defaultAlgo*: ResolutionAlgorithm
     plugins*: PluginInfo
+    overridesFile*: string
+    pluginsFile*: string
 
 
 proc `==`*(a, b: CfgPath): bool {.borrow.}

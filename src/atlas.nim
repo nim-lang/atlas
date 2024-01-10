@@ -132,6 +132,8 @@ proc generateDepGraph(c: var AtlasContext; g: DepGraph) =
     discard execShellCmd("dot -Tpng -odeps.png " & quoteShell(dotFile))
 
 proc afterGraphActions(c: var AtlasContext; g: DepGraph) =
+  writeConfig c, toJson(g)
+
   if ShowGraph in c.flags:
     generateDepGraph c, g
   if AutoEnv in c.flags:

@@ -13,7 +13,7 @@ type
   DependencyStatus* = enum
     Normal, HasBrokenNimbleFile, HasUnknownNimbleFile, HasBrokenDep
 
-  Requirements* = ref object
+  Requirements* = object
     deps*: seq[(PkgUrl, VersionInterval)]
     hasInstallHooks*: bool
     srcDir*: string

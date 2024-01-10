@@ -69,6 +69,7 @@ proc readConfig*(c: var AtlasContext) =
     if m.deps.len > 0:
       c.depsDir = absoluteDepsDir(c.workspace, m.deps)
     if m.overrides.len > 0:
+      c.overridesFile = m.overrides
       parseOverridesFile(c, m.overrides)
     if m.resolver.len > 0:
       try:
@@ -76,6 +77,14 @@ proc readConfig*(c: var AtlasContext) =
       except ValueError:
         warn c, configFile, "ignored unknown resolver: " & m.resolver
     if m.plugins.len > 0:
+      c.pluginsFile = m.plugins
       readPluginsDir(c, m.plugins)
   finally:
     close f
+
+proc writeConfig*(c: AtlasContext; graph: JsonNode) =
+  let config = JsonConfig(deps: c.depsDir, overrides: c.overridesFile,
+    plugins: c.pluginsFile, resolver: $c.defaultAlgo,
+    graph: graph)
+  let configFile = c.workspace / AtlasWorkspace
+  writeFile(configFile, pretty %*config)
