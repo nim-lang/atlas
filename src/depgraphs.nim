@@ -114,7 +114,7 @@ proc traverseDependency(c: var AtlasContext; nc: NimbleContext; g: var DepGraph;
 
       if pv.req.status == Normal:
         for dep, _ in items(pv.req.deps):
-          if not processed.contains(dep):
+          if not g.packageToDependency.hasKey(dep):
             g.packageToDependency[dep] = g.nodes.len
             g.nodes.add Dependency(pkg: dep, versions: @[])
 
@@ -301,8 +301,8 @@ proc solve*(c: var AtlasContext; g: var DepGraph; f: Formular) =
         g.nodes[idx].active = true
         g.nodes[idx].activeVersion = m.index
         debug c, m.pkg.projectName, "package satisfiable"
-        if m.commit != "" and g.nodes[i].status == Ok:
-          assert g.nodes[idx].ondisk.len > 0, $g.nodes[idx].pkg
+        if m.commit != "" and g.nodes[idx].status == Ok:
+          assert g.nodes[idx].ondisk.len > 0, $(g.nodes[idx].pkg, idx)
           withDir c, g.nodes[idx].ondisk:
             checkoutGitCommit(c, m.pkg.projectName, m.commit)
 
