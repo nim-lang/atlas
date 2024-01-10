@@ -334,7 +334,7 @@ proc replay*(c: var AtlasContext; lockFilePath: string) =
         else:
           error c, v.dir, "remote URL has been compromised: got: " &
             url & " but wanted: " & v.url
-      checkoutGitCommit(c, dir, v.commit, FullClones in c.flags)
+      checkoutGitCommitFull(c, dir, v.commit, FullClones in c.flags)
 
       if genCfg:
         paths.add c.findCfgDir(dir)

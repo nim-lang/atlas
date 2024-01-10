@@ -41,12 +41,13 @@ proc nimbleChecksum*(c: var Reporter; name, path: string): string =
   ##
   ## Useful for exporting a Nimble sync file.
   ##
-  var files = c.listFiles(path)
-  if files.len == 0:
-    error c, path, "couldn't list files"
-  else:
-    sort(files)
-    var checksum = newSha1State()
-    for file in files:
-      checksum.updateSecureHash(c, name, file)
-    result = toLowerAscii($SecureHash(checksum.finalize()))
+  withDir path:
+    var files = c.listFiles()
+    if files.len == 0:
+      error c, path, "couldn't list files"
+    else:
+      sort(files)
+      var checksum = newSha1State()
+      for file in files:
+        checksum.updateSecureHash(c, name, file)
+      result = toLowerAscii($SecureHash(checksum.finalize()))

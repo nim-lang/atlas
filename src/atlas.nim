@@ -170,9 +170,9 @@ proc checkoutLaterCommit(c: var AtlasContext; g: var DepGraph; w: Dependency) =
             if status == 0 and (mergeBase == currentCommit or mergeBase == requiredCommit):
               # conflict resolution: pick the later commit:
               if mergeBase == currentCommit:
-                checkoutGitCommit(c, w.ondisk, requiredCommit, FullClones in c.flags)
+                checkoutGitCommit(c, w.ondisk, requiredCommit)
             else:
-              checkoutGitCommit(c, w.ondisk, requiredCommit, FullClones in c.flags)
+              checkoutGitCommit(c, w.ondisk, requiredCommit)
               when false:
                 warn c, w.pkg.projectName, "do not know which commit is more recent:",
                   currentCommit, "(current) or", w.commit, " =", requiredCommit, "(required)"

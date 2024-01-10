@@ -23,8 +23,9 @@ type
     v: VarId
     active*: bool
     isRoot*: bool
-    activeVersion*: int
+    isTopLevel*: bool
     status: CloneStatus
+    activeVersion*: int
     ondisk*: string
 
   SatVarInfo* = object # attached information for a SAT variable
@@ -50,7 +51,7 @@ proc createGraph*(c: var AtlasContext; startSet: openArray[PkgUrl]): DepGraph =
 proc createGraph*(c: var AtlasContext; s: PkgUrl): DepGraph =
   result = DepGraph(nodes: @[], idgen: 0'i32, startNodesLen: 1)
   result.packageToDependency[s] = result.nodes.len
-  result.nodes.add Dependency(pkg: s, versions: @[], v: VarId(result.idgen), isRoot: true)
+  result.nodes.add Dependency(pkg: s, versions: @[], v: VarId(result.idgen), isRoot: true, isTopLevel: true)
   inc result.idgen
 
 proc createGraphFromWorkspace*(c: var AtlasContext): DepGraph =
@@ -70,7 +71,7 @@ iterator releases(c: var AtlasContext; m: TraversalMode): Commit =
         let tags = collectTaggedVersions(c)
         for t in tags:
           let (_, status) = exec(c, GitCheckout, [t.h])
-          if status != 0:
+          if status == 0:
             yield t
       finally:
         discard exec(c, GitCheckout, [cc])
@@ -143,7 +144,7 @@ type
 
 proc pkgUrlToDirname(c: var AtlasContext; g: var DepGraph; d: Dependency): (string, string, PackageAction) =
   # XXX implement namespace support here
-  let depsDir = if d.isRoot: "" else: c.depsDir
+  let depsDir = if d.isTopLevel: "" elif d.isRoot: c.workspace else: c.depsDir
   let dest = depsDir / d.pkg.projectName
   result = (d.pkg.dir, dest, if dirExists(dest): DoNothing else: DoClone)
 
@@ -159,9 +160,9 @@ proc expand*(c: var AtlasContext; g: var DepGraph; nc: NimbleContext; m: Travers
     let w {.cursor.} = g.nodes[i]
     if not processed.containsOrIncl(w.pkg):
       let (src, dest, todo) = pkgUrlToDirname(c, g, w)
+      g.nodes[i].ondisk = dest
       if todo == DoClone:
         info(c, dest, "cloning: " & src)
-        g.nodes[i].ondisk = dest
         let (status, _) =
           if w.pkg.isFileProtocol:
             copyFromDisk(c, w, g.nodes[i].ondisk)
@@ -169,8 +170,9 @@ proc expand*(c: var AtlasContext; g: var DepGraph; nc: NimbleContext; m: Travers
             cloneUrl(c, w.pkg, g.nodes[i].ondisk, false)
         g.nodes[i].status = status
 
-      withDir c, dest:
-        traverseDependency(c, nc, g, i, processed, m)
+      if g.nodes[i].status == Ok:
+        withDir c, dest:
+          traverseDependency(c, nc, g, i, processed, m)
     inc i
 
 proc findDependencyForDep(g: DepGraph; dep: PkgUrl): int {.inline.} =
@@ -299,9 +301,10 @@ proc solve*(c: var AtlasContext; g: var DepGraph; f: Formular) =
         g.nodes[idx].active = true
         g.nodes[idx].activeVersion = m.index
         debug c, m.pkg.projectName, "package satisfiable"
-        if m.commit != "":
+        if m.commit != "" and g.nodes[i].status == Ok:
+          assert g.nodes[idx].ondisk.len > 0, $g.nodes[idx].pkg
           withDir c, g.nodes[idx].ondisk:
-            checkoutGitCommit(c, m.pkg.projectName, m.commit, FullClones in c.flags)
+            checkoutGitCommit(c, m.pkg.projectName, m.commit)
 
     if NoExec notin c.flags:
       runBuildSteps(c, g)

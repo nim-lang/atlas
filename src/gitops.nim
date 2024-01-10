@@ -52,10 +52,10 @@ proc extractVersion*(s: string): string =
 
 proc exec*(c: var Reporter;
            cmd: Command;
-           args: openArray[string],
-           execDir = ""): (string, int) =
-  let cmd = if execDir.len == 0: $cmd else: $(cmd) % [execDir]
-  if isGitDir(if execDir.len == 0: getCurrentDir() else: execDir):
+           args: openArray[string]): (string, int) =
+  let cmd = $cmd
+  #if execDir.len == 0: $cmd else: $(cmd) % [execDir]
+  if isGitDir(getCurrentDir()):
     result = silentExec(cmd, args)
   else:
     result = ("not a git repository", 1)
@@ -120,14 +120,21 @@ proc shortToCommit*(c: var Reporter; short: string): string =
   let (cc, status) = exec(c, GitRevParse, [short])
   result = if status == 0: strutils.strip(cc) else: ""
 
-proc listFiles*(c: var Reporter; pkgPath: string): seq[string] =
-  let (outp, status) = exec(c, GitLsFiles, [], pkgPath)
+proc listFiles*(c: var Reporter): seq[string] =
+  let (outp, status) = exec(c, GitLsFiles, [])
   if status == 0:
     result = outp.splitLines().mapIt(it.strip())
   else:
     result = @[]
 
-proc checkoutGitCommit*(c: var Reporter; p, commit: string; fullClones: bool) =
+proc checkoutGitCommit*(c: var Reporter; p, commit: string) =
+  let (_, status) = exec(c, GitCheckout, [commit])
+  if status != 0:
+    error(c, p, "could not checkout commit " & commit)
+  else:
+    info(c, p, "updated package to " & commit)
+
+proc checkoutGitCommitFull*(c: var Reporter; p, commit: string; fullClones: bool) =
   var smExtraArgs: seq[string] = @[]
 
   if not fullClones and commit.len == 40:
