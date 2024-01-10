@@ -67,7 +67,9 @@ proc readConfig*(c: var AtlasContext) =
   try:
     let m = j.to(JsonConfig)
     if m.deps.len > 0:
-      c.depsDir = absoluteDepsDir(c.workspace, m.deps)
+      c.depsDir = m.deps
+      c.origDepsDir = m.deps
+      #absoluteDepsDir(c.workspace, m.deps)
     if m.overrides.len > 0:
       c.overridesFile = m.overrides
       parseOverridesFile(c, m.overrides)
@@ -83,7 +85,7 @@ proc readConfig*(c: var AtlasContext) =
     close f
 
 proc writeConfig*(c: AtlasContext; graph: JsonNode) =
-  let config = JsonConfig(deps: c.depsDir, overrides: c.overridesFile,
+  let config = JsonConfig(deps: c.origDepsDir, overrides: c.overridesFile,
     plugins: c.pluginsFile, resolver: $c.defaultAlgo,
     graph: graph)
   let configFile = c.workspace / AtlasWorkspace

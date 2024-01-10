@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [sets, tables, os, strutils, json, jsonutils]
+import std / [sets, tables, os, strutils, streams, json, jsonutils]
 
 import context, sat, gitops, runners, reporters, nimbleparser, pkgurls, cloner
 
@@ -28,18 +28,11 @@ type
     activeVersion*: int
     ondisk*: string
 
-  SatVarInfo* = object # attached information for a SAT variable
-    pkg: PkgUrl
-    commit: string
-    version: Version
-    index: int
-
   DepGraph* = object
     nodes: seq[Dependency]
     reqs: seq[Requirements]
     idgen: int32
     startNodesLen: int
-    mapping: Table[VarId, SatVarInfo]
     packageToDependency: Table[PkgUrl, int]
 
 const
@@ -50,15 +43,17 @@ proc defaultReqs(): seq[Requirements] =
   @[Requirements(deps: @[], v: NoVar), Requirements(status: HasUnknownNimbleFile)]
 
 proc createGraph*(c: var AtlasContext; startSet: openArray[PkgUrl]): DepGraph =
-  result = DepGraph(nodes: @[], idgen: 0'i32, startNodesLen: startSet.len,
-                    reqs: defaultReqs())
+  result = DepGraph(nodes: @[], idgen: 0'i32,
+    startNodesLen: startSet.len,
+    reqs: defaultReqs())
   for s in startSet:
     result.packageToDependency[s] = result.nodes.len
     result.nodes.add Dependency(pkg: s, versions: @[], v: VarId(result.idgen), isRoot: true)
     inc result.idgen
 
 proc createGraph*(c: var AtlasContext; s: PkgUrl): DepGraph =
-  result = DepGraph(nodes: @[], idgen: 0'i32, startNodesLen: 1,
+  result = DepGraph(nodes: @[], idgen: 0'i32,
+    startNodesLen: 1,
     reqs: defaultReqs())
   result.packageToDependency[s] = result.nodes.len
   result.nodes.add Dependency(pkg: s, versions: @[], v: VarId(result.idgen), isRoot: true, isTopLevel: true)
@@ -71,6 +66,24 @@ proc toJson*(d: DepGraph): JsonNode =
 
 proc createGraphFromWorkspace*(c: var AtlasContext): DepGraph =
   result = DepGraph(nodes: @[], idgen: 0'i32, startNodesLen: 0, reqs: defaultReqs())
+  let configFile = c.workspace / AtlasWorkspace
+  var f = newFileStream(configFile, fmRead)
+  if f == nil:
+    error c, configFile, "cannot open: " & configFile
+    return
+
+  try:
+    let j = parseJson(f, configFile)
+    let g = j["graphs"]
+
+    result.nodes = jsonTo(g["nodes"], typeof(result.nodes))
+    result.reqs = jsonTo(g["reqs"], typeof(result.reqs))
+
+    for i, n in mpairs(result.nodes):
+      result.packageToDependency[n.pkg] = i
+      if n.isRoot: result.startNodesLen = i + 1
+  except:
+    error c, configFile, "cannot read: " & configFile
 
 
 type
@@ -200,9 +213,21 @@ iterator mvalidVersions*(p: var Dependency; g: var DepGraph): var DependencyVers
   for v in mitems p.versions:
     if g.reqs[v.req].status == Normal: yield v
 
-proc toFormular*(c: var AtlasContext; g: var DepGraph; algo: ResolutionAlgorithm): Formular =
+type
+  SatVarInfo* = object # attached information for a SAT variable
+    pkg: PkgUrl
+    commit: string
+    version: Version
+    index: int
+
+  Form* = object
+    f: Formular
+    mapping: Table[VarId, SatVarInfo]
+
+proc toFormular*(c: var AtlasContext; g: var DepGraph; algo: ResolutionAlgorithm): Form =
   # Key idea: use a SAT variable for every `Requirements` object, which are
   # shared.
+  result = Form()
   var b = Builder()
   b.openOpr(AndForm)
 
@@ -222,7 +247,7 @@ proc toFormular*(c: var AtlasContext; g: var DepGraph; algo: ResolutionAlgorithm
     var i = 0
     for ver in mitems p.versions:
       ver.v = VarId(g.idgen)
-      g.mapping[ver.v] = SatVarInfo(pkg: p.pkg, commit: ver.commit, version: ver.version, index: i)
+      result.mapping[ver.v] = SatVarInfo(pkg: p.pkg, commit: ver.commit, version: ver.version, index: i)
 
       inc g.idgen
       b.add ver.v
@@ -280,7 +305,7 @@ proc toFormular*(c: var AtlasContext; g: var DepGraph; algo: ResolutionAlgorithm
         b.closeOpr # OrForm
 
   b.closeOpr
-  result = toForm(b)
+  result.f = toForm(b)
 
 proc toString(x: SatVarInfo): string =
   "(" & x.pkg.projectName & ", " & $x.version & ")"
@@ -306,14 +331,14 @@ proc runBuildSteps(c: var AtlasContext; g: var DepGraph) =
           if fileExists(f):
             runNimScriptBuilder c, p, pkg.projectName
 
-proc solve*(c: var AtlasContext; g: var DepGraph; f: Formular) =
+proc solve*(c: var AtlasContext; g: var DepGraph; f: Form) =
   var s = newSeq[BindingKind](g.idgen)
-  if satisfiable(f, s):
+  if satisfiable(f.f, s):
     for i in 0 ..< g.startNodesLen:
       g.nodes[i].active = true
     for i in 0 ..< s.len:
-      if s[i] == setToTrue and g.mapping.hasKey(VarId i):
-        let m = g.mapping[VarId i]
+      if s[i] == setToTrue and f.mapping.hasKey(VarId i):
+        let m = f.mapping[VarId i]
         let idx = findDependencyForDep(g, m.pkg)
         g.nodes[idx].active = true
         g.nodes[idx].activeVersion = m.index
@@ -331,7 +356,7 @@ proc solve*(c: var AtlasContext; g: var DepGraph; f: Formular) =
       info c, "../resolve", "selected:"
       for i in g.startNodesLen ..< g.nodes.len:
         for v in mitems(g.nodes[i].versions):
-          let item = g.mapping[v.v]
+          let item = f.mapping[v.v]
           if s[int v.v] == setToTrue:
             info c, item.pkg.projectName, "[x] " & toString item
           else:
