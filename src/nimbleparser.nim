@@ -108,12 +108,16 @@ proc findNimbleFile*(c: var Reporter; dir: string; ambiguous: var bool): string 
 #    warn c, dir, "cannot determine `.nimble` file; there are multiple to choose from"
 #    result = ""
 
-proc genRequiresLine*(u: string): string = "requires \"$1\"\n" % u.escape("", "")
+proc genRequiresLine(u: string): string = "requires \"$1\"\n" % u.escape("", "")
 
 proc patchNimbleFile*(c: var NimbleContext; r: var Reporter; p: Patterns; nimbleFile, name: string) =
-  let u = (if name.isUrl: name else: c.nameToUrl.getOrDefault(unicode.toLower name, ""))
+  var didReplace = false
+  var u = substitute(p, name, didReplace)
+  if not didReplace:
+    u = (if name.isUrl: name else: c.nameToUrl.getOrDefault(unicode.toLower name, ""))
+
   if u.len == 0:
-    error r, name, "cannot resolve package name"
+    error r, name, "cannot resolve package name: " & name
     return
 
   let req = parseNimbleFile(c, nimbleFile, p)
@@ -123,7 +127,7 @@ proc patchNimbleFile*(c: var NimbleContext; r: var Reporter; p: Patterns; nimble
       info(r, nimbleFile, "up to date")
       return
 
-  let line = genRequiresLine(u)
+  let line = genRequiresLine(if didReplace: name else: u)
   var f = open(nimbleFile, fmAppend)
   try:
     f.writeLine line

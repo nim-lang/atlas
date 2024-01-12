@@ -180,16 +180,15 @@ proc checkoutLaterCommit(c: var AtlasContext; g: var DepGraph; w: Dependency) =
                 warn c, w.pkg.projectName, "do not know which commit is more recent:",
                   currentCommit, "(current) or", w.commit, " =", requiredCommit, "(required)"
 
-proc traverseLoop(c: var AtlasContext; g: var DepGraph): seq[CfgPath] =
+proc traverseLoop(c: var AtlasContext; nc: var NimbleContext; g: var DepGraph): seq[CfgPath] =
   result = @[]
-  var nc = createNimbleContext(c, c.depsDir)
   expand c, g, nc, TraversalMode.AllReleases
   let f = toFormular(c, g, c.defaultAlgo)
   solve c, g, f
   for w in allActiveNodes(g):
     result.add CfgPath(toDestDir(g, w) / getCfgPath(g, w).string)
 
-proc traverse(c: var AtlasContext; start: string): seq[CfgPath] =
+proc traverse(c: var AtlasContext; nc: var NimbleContext; start: string): seq[CfgPath] =
   # returns the list of paths for the nim.cfg file.
   let u = createUrl(start, c.overrides)
   var g = c.createGraph(u)
@@ -202,17 +201,17 @@ proc traverse(c: var AtlasContext; start: string): seq[CfgPath] =
     c.projectDir = n.ondisk
     break
 
-  result = traverseLoop(c, g)
+  result = traverseLoop(c, nc, g)
   afterGraphActions c, g
 
 
-proc installDependencies(c: var AtlasContext; nimbleFile: string) =
+proc installDependencies(c: var AtlasContext; nc: var NimbleContext; nimbleFile: string) =
   # 1. find .nimble file in CWD
   # 2. install deps from .nimble
   let (dir, pkgname, _) = splitFile(nimbleFile)
   info c, pkgname, "installing dependencies for " & pkgname & ".nimble"
   var g = createGraph(c, createUrlSkipPatterns(dir))
-  let paths = traverseLoop(c, g)
+  let paths = traverseLoop(c, nc, g)
   let cfgPath = if CfgHere in c.flags: CfgPath c.currentDir else: findCfgDir(c)
   patchNimCfg(c, paths, cfgPath)
   afterGraphActions c, g
@@ -441,7 +440,8 @@ proc main(c: var AtlasContext) =
     createWorkspaceIn c
   of "clone", "update":
     singleArg()
-    let deps = traverse(c, args[0])
+    var nc = createNimbleContext(c, c.depsDir)
+    let deps = traverse(c, nc, args[0])
     let cfgPath = if CfgHere in c.flags: CfgPath c.currentDir
                   else: findCfgDir(c)
     patchNimCfg c, deps, cfgPath
@@ -450,11 +450,15 @@ proc main(c: var AtlasContext) =
     #fillPackageLookupTable(c.nimbleContext, c, )
     var amb = false
     var nimbleFile = findNimbleFile(c, c.workspace, amb)
+    var nc = createNimbleContext(c, c.depsDir)
+
     if nimbleFile.len == 0:
       nimbleFile = c.workspace / extractProjectName(c.workspace) & ".nimble"
-      writeFile(nimbleFile, genRequiresLine(args[0]))
+      writeFile(nimbleFile, "")
+    patchNimbleFile(nc, c, c.overrides, nimbleFile, args[0])
+
     if nimbleFile.len > 0 and not amb:
-      installDependencies(c, nimbleFile)
+      installDependencies(c, nc, nimbleFile)
     elif amb:
       error c, args[0], "ambiguous .nimble file"
     else:
@@ -491,7 +495,8 @@ proc main(c: var AtlasContext) =
     if nimbleFile.len == 0:
       fatal "could not find a .nimble file"
     else:
-      installDependencies(c, nimbleFile)
+      var nc = createNimbleContext(c, c.depsDir)
+      installDependencies(c, nc, nimbleFile)
   of "refresh":
     noArgs()
     updatePackages(c, c.depsDir)

@@ -32,7 +32,6 @@ type
     nodes: seq[Dependency]
     reqs: seq[Requirements]
     idgen: int32
-    startNodesLen: int
     packageToDependency: Table[PkgUrl, int]
     ondisk: OrderedTable[string, string] # URL -> dirname mapping
 
@@ -51,20 +50,21 @@ proc readOnDisk(c: var AtlasContext; result: var DepGraph) =
   try:
     let j = parseJson(f, configFile)
     let g = j["graph"]
-
-    let nodes = jsonTo(g["nodes"], typeof(result.nodes))
+    let n = g.getOrDefault("nodes")
+    if n.isNil: return
+    let nodes = jsonTo(n, typeof(result.nodes))
     for n in nodes:
       result.ondisk[n.pkg.url] = n.ondisk
-      if n.isRoot:
-        if not result.packageToDependency.hasKey(n.pkg):
-          result.packageToDependency[n.pkg] = result.nodes.len
-          result.nodes.add n
+      if dirExists(n.ondisk):
+        if n.isRoot:
+          if not result.packageToDependency.hasKey(n.pkg):
+            result.packageToDependency[n.pkg] = result.nodes.len
+            result.nodes.add n
   except:
     error c, configFile, "cannot read: " & configFile
 
 proc createGraph*(c: var AtlasContext; s: PkgUrl): DepGraph =
   result = DepGraph(nodes: @[], idgen: 0'i32,
-    startNodesLen: 1,
     reqs: defaultReqs())
   result.packageToDependency[s] = result.nodes.len
   result.nodes.add Dependency(pkg: s, versions: @[], v: VarId(result.idgen), isRoot: true, isTopLevel: true)
@@ -77,7 +77,7 @@ proc toJson*(d: DepGraph): JsonNode =
   result["reqs"] = toJson(d.reqs)
 
 proc createGraphFromWorkspace*(c: var AtlasContext): DepGraph =
-  result = DepGraph(nodes: @[], idgen: 0'i32, startNodesLen: 0, reqs: defaultReqs())
+  result = DepGraph(nodes: @[], idgen: 0'i32, reqs: defaultReqs())
   let configFile = c.workspace / AtlasWorkspace
   var f = newFileStream(configFile, fmRead)
   if f == nil:
@@ -93,7 +93,6 @@ proc createGraphFromWorkspace*(c: var AtlasContext): DepGraph =
 
     for i, n in mpairs(result.nodes):
       result.packageToDependency[n.pkg] = i
-      if n.isRoot: result.startNodesLen = i + 1
   except:
     error c, configFile, "cannot read: " & configFile
 
@@ -156,9 +155,14 @@ proc traverseDependency(c: var AtlasContext; nc: NimbleContext; g: var DepGraph;
 
       if g.reqs[pv.req].status == Normal:
         for dep, _ in items(g.reqs[pv.req].deps):
-          if not g.packageToDependency.hasKey(dep):
+          let didx = g.packageToDependency.getOrDefault(dep, -1)
+          if didx == -1:
             g.packageToDependency[dep] = g.nodes.len
             g.nodes.add Dependency(pkg: dep, versions: @[])
+            #, isRoot: idx == 0)
+          #elif not g.nodes[didx].isRoot:
+          #  g.nodes[didx].isRoot = idx == 0
+          #  echo "B came here for ", g.nodes[didx].pkg.url
 
     g.nodes[idx].versions.add ensureMove pv
 
@@ -173,6 +177,7 @@ proc copyFromDisk(c: var AtlasContext; w: Dependency; destDir: string): (CloneSt
 
   #let dir = selectDir(u & "@" & w.commit, u)
   if dirExists(dir):
+    info c, destDir, "cloning: " & dir
     copyDir(dir, destDir)
     result = (Ok, "")
   else:
@@ -184,13 +189,13 @@ type
   PackageAction = enum
     DoNothing, DoClone
 
-proc pkgUrlToDirname(c: var AtlasContext; g: var DepGraph; d: Dependency): (string, string, PackageAction) =
+proc pkgUrlToDirname(c: var AtlasContext; g: var DepGraph; d: Dependency): (string, PackageAction) =
   # XXX implement namespace support here
   var dest = g.ondisk.getOrDefault(d.pkg.url)
   if dest.len == 0:
     let depsDir = if d.isTopLevel: "" elif d.isRoot: c.workspace else: c.depsDir
     dest = depsDir / d.pkg.projectName
-  result = (d.pkg.dir, dest, if dirExists(dest): DoNothing else: DoClone)
+  result = (dest, if dirExists(dest): DoNothing else: DoClone)
 
 proc toDestDir*(g: DepGraph; d: Dependency): string =
   result = d.ondisk
@@ -202,10 +207,9 @@ proc expand*(c: var AtlasContext; g: var DepGraph; nc: NimbleContext; m: Travers
   while i < g.nodes.len:
     let w {.cursor.} = g.nodes[i]
     if not processed.containsOrIncl(w.pkg):
-      let (src, dest, todo) = pkgUrlToDirname(c, g, w)
+      let (dest, todo) = pkgUrlToDirname(c, g, w)
       g.nodes[i].ondisk = dest
       if todo == DoClone:
-        info(c, dest, "cloning: " & src)
         let (status, _) =
           if w.pkg.isFileProtocol:
             copyFromDisk(c, w, dest)
@@ -245,8 +249,8 @@ proc toFormular*(c: var AtlasContext; g: var DepGraph; algo: ResolutionAlgorithm
   b.openOpr(AndForm)
 
   # all active nodes must be true:
-  for i in 0 ..< g.startNodesLen:
-    b.add g.nodes[i].v
+  for n in g.nodes:
+    if n.isRoot: b.add n.v
 
   for p in mitems(g.nodes):
     # if Package p is installed, pick one of its concrete versions, but not versions
@@ -347,8 +351,8 @@ proc runBuildSteps(c: var AtlasContext; g: var DepGraph) =
 proc solve*(c: var AtlasContext; g: var DepGraph; f: Form) =
   var s = newSeq[BindingKind](g.idgen)
   if satisfiable(f.f, s):
-    for i in 0 ..< g.startNodesLen:
-      g.nodes[i].active = true
+    for n in mitems g.nodes:
+      if n.isRoot: n.active = true
     for i in 0 ..< s.len:
       if s[i] == setToTrue and f.mapping.hasKey(VarId i):
         let m = f.mapping[VarId i]
@@ -367,13 +371,14 @@ proc solve*(c: var AtlasContext; g: var DepGraph; f: Form) =
 
     if ListVersions in c.flags:
       info c, "../resolve", "selected:"
-      for i in g.startNodesLen ..< g.nodes.len:
-        for v in mitems(g.nodes[i].versions):
-          let item = f.mapping[v.v]
-          if s[int v.v] == setToTrue:
-            info c, item.pkg.projectName, "[x] " & toString item
-          else:
-            info c, item.pkg.projectName, "[ ] " & toString item
+      for n in items g.nodes:
+        if not n.isTopLevel:
+          for v in items(n.versions):
+            let item = f.mapping[v.v]
+            if s[int v.v] == setToTrue:
+              info c, item.pkg.projectName, "[x] " & toString item
+            else:
+              info c, item.pkg.projectName, "[ ] " & toString item
       info c, "../resolve", "end of selection"
   else:
     error c, c.workspace, "version conflict; for more information use --showGraph"
@@ -394,7 +399,7 @@ proc expandWithoutClone*(c: var AtlasContext; g: var DepGraph; nc: NimbleContext
     let w {.cursor.} = g.nodes[i]
 
     if not processed.containsOrIncl(w.pkg):
-      let (_, dest, todo) = pkgUrlToDirname(c, g, w)
+      let (dest, todo) = pkgUrlToDirname(c, g, w)
       if todo == DoNothing:
         withDir c, dest:
           traverseDependency(c, nc, g, i, processed, CurrentCommit)
