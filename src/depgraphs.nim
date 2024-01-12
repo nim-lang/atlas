@@ -34,6 +34,7 @@ type
     idgen: int32
     startNodesLen: int
     packageToDependency: Table[PkgUrl, int]
+    ondisk: OrderedTable[string, string] # URL -> dirname mapping
 
 const
   EmptyReqs = 0
@@ -41,6 +42,22 @@ const
 
 proc defaultReqs(): seq[Requirements] =
   @[Requirements(deps: @[], v: NoVar), Requirements(status: HasUnknownNimbleFile)]
+
+proc readOnDisk(c: var AtlasContext; result: var DepGraph) =
+  let configFile = c.workspace / AtlasWorkspace
+  var f = newFileStream(configFile, fmRead)
+  if f == nil:
+    return
+  try:
+    let j = parseJson(f, configFile)
+    let g = j["graph"]
+
+    let nodes = jsonTo(g["nodes"], typeof(result.nodes))
+    for n in nodes:
+      result.ondisk[n.pkg.url] = n.ondisk
+  except:
+    echo getCurrentExceptionMsg()
+    error c, configFile, "cannot read: " & configFile
 
 proc createGraph*(c: var AtlasContext; startSet: openArray[PkgUrl]): DepGraph =
   result = DepGraph(nodes: @[], idgen: 0'i32,
@@ -50,6 +67,7 @@ proc createGraph*(c: var AtlasContext; startSet: openArray[PkgUrl]): DepGraph =
     result.packageToDependency[s] = result.nodes.len
     result.nodes.add Dependency(pkg: s, versions: @[], v: VarId(result.idgen), isRoot: true)
     inc result.idgen
+  readOnDisk(c, result)
 
 proc createGraph*(c: var AtlasContext; s: PkgUrl): DepGraph =
   result = DepGraph(nodes: @[], idgen: 0'i32,
@@ -58,6 +76,7 @@ proc createGraph*(c: var AtlasContext; s: PkgUrl): DepGraph =
   result.packageToDependency[s] = result.nodes.len
   result.nodes.add Dependency(pkg: s, versions: @[], v: VarId(result.idgen), isRoot: true, isTopLevel: true)
   inc result.idgen
+  readOnDisk(c, result)
 
 proc toJson*(d: DepGraph): JsonNode =
   result = newJObject()
@@ -74,7 +93,7 @@ proc createGraphFromWorkspace*(c: var AtlasContext): DepGraph =
 
   try:
     let j = parseJson(f, configFile)
-    let g = j["graphs"]
+    let g = j["graph"]
 
     result.nodes = jsonTo(g["nodes"], typeof(result.nodes))
     result.reqs = jsonTo(g["reqs"], typeof(result.reqs))
@@ -174,13 +193,14 @@ type
 
 proc pkgUrlToDirname(c: var AtlasContext; g: var DepGraph; d: Dependency): (string, string, PackageAction) =
   # XXX implement namespace support here
-  let depsDir = if d.isTopLevel: "" elif d.isRoot: c.workspace else: c.depsDir
-  let dest = depsDir / d.pkg.projectName
+  var dest = g.ondisk.getOrDefault(d.pkg.url)
+  if dest.len == 0:
+    let depsDir = if d.isTopLevel: "" elif d.isRoot: c.workspace else: c.depsDir
+    dest = depsDir / d.pkg.projectName
   result = (d.pkg.dir, dest, if dirExists(dest): DoNothing else: DoClone)
 
 proc toDestDir*(g: DepGraph; d: Dependency): string =
-  # XXX Use lookup table here
-  result = d.pkg.projectName
+  result = d.ondisk
 
 proc expand*(c: var AtlasContext; g: var DepGraph; nc: NimbleContext; m: TraversalMode) =
   ## Expand the graph by adding all dependencies.
@@ -195,9 +215,9 @@ proc expand*(c: var AtlasContext; g: var DepGraph; nc: NimbleContext; m: Travers
         info(c, dest, "cloning: " & src)
         let (status, _) =
           if w.pkg.isFileProtocol:
-            copyFromDisk(c, w, g.nodes[i].ondisk)
+            copyFromDisk(c, w, dest)
           else:
-            cloneUrl(c, w.pkg, g.nodes[i].ondisk, false)
+            cloneUrl(c, w.pkg, dest, false)
         g.nodes[i].status = status
 
       if g.nodes[i].status == Ok:

@@ -128,8 +128,11 @@ proc listFiles*(c: var Reporter): seq[string] =
     result = @[]
 
 proc checkoutGitCommit*(c: var Reporter; p, commit: string) =
-  let (_, status) = exec(c, GitCheckout, [commit])
-  if status != 0:
+  let (currentCommit, statusA) = exec(c, GitCurrentCommit, [])
+  if statusA == 0 and currentCommit.strip() == commit: return
+
+  let (_, statusB) = exec(c, GitCheckout, [commit])
+  if statusB != 0:
     error(c, p, "could not checkout commit " & commit)
   else:
     info(c, p, "updated package to " & commit)
