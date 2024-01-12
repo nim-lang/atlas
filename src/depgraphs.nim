@@ -31,7 +31,6 @@ type
   DepGraph* = object
     nodes: seq[Dependency]
     reqs: seq[Requirements]
-    idgen: int32
     packageToDependency: Table[PkgUrl, int]
     ondisk: OrderedTable[string, string] # URL -> dirname mapping
 
@@ -64,11 +63,10 @@ proc readOnDisk(c: var AtlasContext; result: var DepGraph) =
     error c, configFile, "cannot read: " & configFile
 
 proc createGraph*(c: var AtlasContext; s: PkgUrl): DepGraph =
-  result = DepGraph(nodes: @[], idgen: 0'i32,
+  result = DepGraph(nodes: @[],
     reqs: defaultReqs())
   result.packageToDependency[s] = result.nodes.len
-  result.nodes.add Dependency(pkg: s, versions: @[], v: VarId(result.idgen), isRoot: true, isTopLevel: true)
-  inc result.idgen
+  result.nodes.add Dependency(pkg: s, versions: @[], isRoot: true, isTopLevel: true)
   readOnDisk(c, result)
 
 proc toJson*(d: DepGraph): JsonNode =
@@ -77,7 +75,7 @@ proc toJson*(d: DepGraph): JsonNode =
   result["reqs"] = toJson(d.reqs)
 
 proc createGraphFromWorkspace*(c: var AtlasContext): DepGraph =
-  result = DepGraph(nodes: @[], idgen: 0'i32, reqs: defaultReqs())
+  result = DepGraph(nodes: @[], reqs: defaultReqs())
   let configFile = c.workspace / AtlasWorkspace
   var f = newFileStream(configFile, fmRead)
   if f == nil:
@@ -158,11 +156,9 @@ proc traverseDependency(c: var AtlasContext; nc: NimbleContext; g: var DepGraph;
           let didx = g.packageToDependency.getOrDefault(dep, -1)
           if didx == -1:
             g.packageToDependency[dep] = g.nodes.len
-            g.nodes.add Dependency(pkg: dep, versions: @[])
-            #, isRoot: idx == 0)
-          #elif not g.nodes[didx].isRoot:
-          #  g.nodes[didx].isRoot = idx == 0
-          #  echo "B came here for ", g.nodes[didx].pkg.url
+            g.nodes.add Dependency(pkg: dep, versions: @[], isRoot: idx == 0)
+          elif not g.nodes[didx].isRoot:
+            g.nodes[didx].isRoot = idx == 0
 
     g.nodes[idx].versions.add ensureMove pv
 
@@ -240,6 +236,7 @@ type
   Form* = object
     f: Formular
     mapping: Table[VarId, SatVarInfo]
+    idgen: int32
 
 proc toFormular*(c: var AtlasContext; g: var DepGraph; algo: ResolutionAlgorithm): Form =
   # Key idea: use a SAT variable for every `Requirements` object, which are
@@ -248,9 +245,15 @@ proc toFormular*(c: var AtlasContext; g: var DepGraph; algo: ResolutionAlgorithm
   var b = Builder()
   b.openOpr(AndForm)
 
-  # all active nodes must be true:
-  for n in g.nodes:
+  for n in mitems g.nodes:
+    n.v = VarId(result.idgen)
+    inc result.idgen
+    # all root nodes must be true:
     if n.isRoot: b.add n.v
+    # all broken nodes must not be true:
+    if n.status != Ok:
+      b.addNegated n.v
+      echo "did that for ", n.pkg.url
 
   for p in mitems(g.nodes):
     # if Package p is installed, pick one of its concrete versions, but not versions
@@ -263,10 +266,10 @@ proc toFormular*(c: var AtlasContext; g: var DepGraph; algo: ResolutionAlgorithm
     b.openOpr(ExactlyOneOfForm)
     var i = 0
     for ver in mitems p.versions:
-      ver.v = VarId(g.idgen)
+      ver.v = VarId(result.idgen)
       result.mapping[ver.v] = SatVarInfo(pkg: p.pkg, commit: ver.commit, version: ver.version, index: i)
 
-      inc g.idgen
+      inc result.idgen
       b.add ver.v
       inc i
 
@@ -279,8 +282,8 @@ proc toFormular*(c: var AtlasContext; g: var DepGraph; algo: ResolutionAlgorithm
       if isValid(g.reqs[ver.req].v):
         # already covered this sub-formula (ref semantics!)
         continue
-      g.reqs[ver.req].v = VarId(g.idgen)
-      inc g.idgen
+      g.reqs[ver.req].v = VarId(result.idgen)
+      inc result.idgen
 
       b.openOpr(EqForm)
       b.add g.reqs[ver.req].v
@@ -349,7 +352,7 @@ proc runBuildSteps(c: var AtlasContext; g: var DepGraph) =
             runNimScriptBuilder c, p, pkg.projectName
 
 proc solve*(c: var AtlasContext; g: var DepGraph; f: Form) =
-  var s = newSeq[BindingKind](g.idgen)
+  var s = newSeq[BindingKind](f.idgen)
   if satisfiable(f.f, s):
     for n in mitems g.nodes:
       if n.isRoot: n.active = true
@@ -381,6 +384,13 @@ proc solve*(c: var AtlasContext; g: var DepGraph; f: Form) =
               info c, item.pkg.projectName, "[ ] " & toString item
       info c, "../resolve", "end of selection"
   else:
+    #echo "FORM: ", f.f
+    var notFound = 0
+    for p in mitems(g.nodes):
+      if p.isRoot and p.status != Ok:
+        error c, c.workspace, "cannot find package: " & p.pkg.projectName
+        inc notFound
+    if notFound > 0: return
     error c, c.workspace, "version conflict; for more information use --showGraph"
     for p in mitems(g.nodes):
       var usedVersions = 0
