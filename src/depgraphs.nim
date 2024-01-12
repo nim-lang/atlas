@@ -253,7 +253,6 @@ proc toFormular*(c: var AtlasContext; g: var DepGraph; algo: ResolutionAlgorithm
     # all broken nodes must not be true:
     if n.status != Ok:
       b.addNegated n.v
-      echo "did that for ", n.pkg.url
 
   for p in mitems(g.nodes):
     # if Package p is installed, pick one of its concrete versions, but not versions
