@@ -58,7 +58,7 @@ proc readOnDisk(c: var AtlasContext; result: var DepGraph) =
         if n.isRoot:
           if not result.packageToDependency.hasKey(n.pkg):
             result.packageToDependency[n.pkg] = result.nodes.len
-            result.nodes.add Dependency(pkg: n.pkg, versions: @[], isRoot: true, isTopLevel: n.isTopLevel)
+            result.nodes.add Dependency(pkg: n.pkg, versions: @[], isRoot: true, isTopLevel: n.isTopLevel, activeVersion: -1)
   except:
     error c, configFile, "cannot read: " & configFile
 
@@ -66,7 +66,7 @@ proc createGraph*(c: var AtlasContext; s: PkgUrl): DepGraph =
   result = DepGraph(nodes: @[],
     reqs: defaultReqs())
   result.packageToDependency[s] = result.nodes.len
-  result.nodes.add Dependency(pkg: s, versions: @[], isRoot: true, isTopLevel: true)
+  result.nodes.add Dependency(pkg: s, versions: @[], isRoot: true, isTopLevel: true, activeVersion: -1)
   readOnDisk(c, result)
 
 proc toJson*(d: DepGraph): JsonNode =
@@ -156,7 +156,7 @@ proc traverseDependency(c: var AtlasContext; nc: NimbleContext; g: var DepGraph;
           let didx = g.packageToDependency.getOrDefault(dep, -1)
           if didx == -1:
             g.packageToDependency[dep] = g.nodes.len
-            g.nodes.add Dependency(pkg: dep, versions: @[], isRoot: idx == 0)
+            g.nodes.add Dependency(pkg: dep, versions: @[], isRoot: idx == 0, activeVersion: -1)
           elif not g.nodes[didx].isRoot:
             g.nodes[didx].isRoot = idx == 0
 
@@ -381,6 +381,7 @@ proc solve*(c: var AtlasContext; g: var DepGraph; f: Form) =
         let idx = findDependencyForDep(g, m.pkg)
         #echo "setting ", idx, " to active ", g.nodes[idx].pkg.url
         g.nodes[idx].active = true
+        assert g.nodes[idx].activeVersion == -1, "too bad: " & g.nodes[idx].pkg.url
         g.nodes[idx].activeVersion = m.index
         debug c, m.pkg.projectName, "package satisfiable"
         if m.commit != "" and g.nodes[idx].status == Ok:
@@ -445,7 +446,7 @@ iterator toposorted*(g: DepGraph): lent Dependency =
   for i in countdown(g.nodes.len-1, 0): yield g.nodes[i]
 
 iterator directDependencies*(g: DepGraph; c: var AtlasContext; d: Dependency): lent Dependency =
-  if d.activeVersion < d.versions.len:
+  if d.activeVersion >= 0 and d.activeVersion < d.versions.len:
     let deps {.cursor.} = g.reqs[d.versions[d.activeVersion].req].deps
     for dep in deps:
       let idx = findDependencyForDep(g, dep[0])
@@ -456,7 +457,7 @@ proc getCfgPath*(g: DepGraph; d: Dependency): lent CfgPath =
 
 proc commit*(d: Dependency): string =
   result =
-    if d.activeVersion < d.versions.len: d.versions[d.activeVersion].commit
+    if d.activeVersion >= 0 and d.activeVersion < d.versions.len: d.versions[d.activeVersion].commit
     else: ""
 
 proc bestNimVersion*(g: DepGraph): Version =

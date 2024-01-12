@@ -339,9 +339,110 @@ proc satisfiable*(f: Formular; s: var Solution): bool =
           result = true
         else:
           result = satisfiable(trueGuess, s)
-          if not result:
+          #if not result:
             # heuristic that provides a solution that comes closest to the "real" conflict:
-            s[v.int] = if trueGuess.len <= falseGuess.len: setToFalse else: setToTrue
+          #  s[v.int] = if trueGuess.len <= falseGuess.len: setToFalse else: setToTrue
+  if not result and v != NoVar:
+    echo "could not satisfy: v", v.int
+
+proc eval(f: Formular; n: FormPos; s: seq[BindingKind]): bool =
+  assert n.int >= 0
+  assert n.int < f.len
+  case f[n.int].kind
+  of FalseForm: result = false
+  of TrueForm: result = true
+  of VarForm:
+    let v = varId(f[n.int]).int
+    result = s[v] == setToTrue
+  else:
+    case f[n.int].kind
+    of AndForm:
+      for child in sonsReadonly(f, n):
+        if not eval(f, child, s): return false
+      return true
+    of OrForm:
+      for child in sonsReadonly(f, n):
+        if eval(f, child, s): return true
+      return false
+    of ExactlyOneOfForm:
+      var conds = 0
+      for child in sonsReadonly(f, n):
+        if eval(f, child, s): inc conds
+      result = conds == 1
+    of NotForm:
+      for child in sonsReadonly(f, n):
+        if not eval(f, child, s): return true
+      return false
+    of EqForm:
+      var last = -1
+      for child in sonsReadonly(f, n):
+        if last == -1:
+          last = ord(eval(f, child, s))
+        else:
+          let now = ord(eval(f, child, s))
+          return last == now
+      return false
+    else: assert false, "cannot happen"
+
+proc eval*(f: Formular; s: seq[BindingKind]): bool =
+  eval(f, FormPos(0), s)
+
+import std / [strutils, parseutils]
+
+proc parseFormular*(s: string; i: int; b: var Builder): int
+
+proc parseOpr(s: string; i: int; b: var Builder; kind: FormKind; opr: string): int =
+  result = i
+  if not continuesWith(s, opr, result):
+    quit "expected: " & opr
+  inc result, opr.len
+  b.openOpr kind
+  while result < s.len and s[result] != ')':
+    result = parseFormular(s, result, b)
+  b.closeOpr
+  if result < s.len and s[result] == ')':
+    inc result
+  else:
+    quit "exptected: )"
+
+proc parseFormular(s: string; i: int; b: var Builder): int =
+  result = i
+  while result < s.len and s[result] in Whitespace: inc result
+  if s[result] == 'v':
+    var number = 0
+    inc result
+    let span = parseInt(s, number, result)
+    if span == 0: quit "invalid variable name"
+    inc result, span
+    b.add VarId(number)
+  elif s[result] == 'T':
+    b.add trueLit()
+    inc result
+  elif s[result] == 'F':
+    b.add falseLit()
+    inc result
+  elif s[result] == '(':
+    inc result
+    case s[result]
+    of '~':
+      inc result
+      b.openOpr NotForm
+      result = parseFormular(s, result, b)
+      b.closeOpr
+      if s[result] == ')': inc result
+      else: quit ") expected"
+    of '<':
+      result = parseOpr(s, result, b, EqForm, "<->")
+    of '|':
+      result = parseOpr(s, result, b, OrForm, "|")
+    of '&':
+      result = parseOpr(s, result, b, AndForm, "&")
+    of '1':
+      result = parseOpr(s, result, b, ExactlyOneOfForm, "1==")
+    else:
+      quit "unknown operator: " & s[result]
+  else:
+    quit "( expected, but got: " & s[result]
 
 when isMainModule:
   proc main =
@@ -420,3 +521,51 @@ when isMainModule:
 
   main()
   main2()
+
+  const
+    myFormularU = """(&v0 v1 (~v5) (<->v0 (1==v6)) (<->v1 (1==v7 v8)) (<->v2 (1==v9 v10)) (<->v3 (1==v11)) (<->v4 (1==v12 v13)) (<->v14 (1==v8 v7)) (<->v15 (1==v9)) (<->v16 (1==v10 v9)) (<->v17 (1==v11)) (<->v18 (1==v11)) (<->v19 (1==v13)) (|(~v6) v14) (|(~v7) v15) (|(~v8) v16) (|(~v9) v17) (|(~v10) v18) (|(~v11) v19) (|(~v12) v20))"""
+    myFormular = """(&v0 v1 (~v5) (|(~v0) (1==v6)) (|(~v1) (1==v7 v8)) (|(~v2) (1==v9 v10)) (|(~v3) (1==v11)) (|(~v4) (1==v12 v13)) (<->v14 (1==v8 v7)) (<->v15 (1==v9)) (<->v16 (1==v10 v9)) (<->v17 (1==v11)) (<->v18 (1==v11)) (<->v19 (1==v13)) (|(~v6) v14) (|(~v7) v15) (|(~v8) v16) (|(~v9) v17) (|(~v10) v18) (|(~v11) v19) (|(~v12) v20))"""
+
+    mySol = @[
+      setToTrue, #v0
+      setToTrue, #v1
+      setToFalse, #v2
+      setToFalse, #v3
+      setToFalse, #v4
+      setToFalse, #v5
+      setToTrue,
+      setToFalse,
+      setToTrue,
+      setToFalse,
+      setToTrue,
+      setToTrue,
+      setToFalse, # v12
+      setToTrue, # v13
+      setToTrue,
+      setToFalse,
+      setToTrue,
+      setToTrue,
+      setToTrue,
+      setToTrue,
+      setToTrue
+    ]
+
+  proc main3() =
+    var b: Builder
+
+    discard parseFormular(myFormular, 0, b)
+
+    let f = toForm(b)
+    echo "original: "
+    echo f
+
+    var s: Solution
+    echo "is solvable? ", satisfiable(f, s)
+    echo "solution"
+    for i in 0..<s.len:
+      echo "v", i, " ", s[i]
+
+    echo f.eval(FormPos(0), mySol)
+
+  main3()
+
