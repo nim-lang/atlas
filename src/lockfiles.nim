@@ -8,7 +8,7 @@
 
 ## Lockfile implementation.
 
-import std / [sequtils, strutils, tables, os, json, jsonutils]
+import std / [sequtils, strutils, tables, sets, os, json, jsonutils]
 import context, gitops, nimblechecksums, compilerversions,
   configutils, depgraphs, reporters, nimbleparser, pkgurls, cloner
 
@@ -290,6 +290,11 @@ proc listChanged*(c: var AtlasContext; lockFilePath: string) =
     compareVersion c, "gcc", lf.gccVersion, detectGccVersion()
     compareVersion c, "clang", lf.clangVersion, detectClangVersion()
 
+proc withoutSuffix(s, suffix: string): string =
+  result = s
+  if result.endsWith(suffix):
+    result.setLen result.len - suffix.len
+
 proc replay*(c: var AtlasContext; lockFilePath: string) =
   ## replays the given lockfile by cloning and updating all the deps
   ##
@@ -327,7 +332,7 @@ proc replay*(c: var AtlasContext; lockFilePath: string) =
         continue
     withDir c, dir:
       let url = $getRemoteUrl()
-      if $v.url.getUrl() != url:
+      if url.withoutSuffix(".git") != url:
         if IgnoreUrls in c.flags:
           warn c, v.dir, "remote URL differs from expected: got: " &
             url & " but expected: " & v.url

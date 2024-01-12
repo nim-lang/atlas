@@ -8,7 +8,7 @@
 
 import std / [sets, tables, os, strutils, streams, json, jsonutils]
 
-import context, sat, gitops, runners, reporters, nimbleparser, pkgurls, cloner
+import context, sat, gitops, runners, reporters, nimbleparser, pkgurls, cloner, versions
 
 type
   DependencyVersion* = object  # Represents a specific version of a project.
@@ -55,19 +55,12 @@ proc readOnDisk(c: var AtlasContext; result: var DepGraph) =
     let nodes = jsonTo(g["nodes"], typeof(result.nodes))
     for n in nodes:
       result.ondisk[n.pkg.url] = n.ondisk
+      if n.isRoot:
+        if not result.packageToDependency.hasKey(n.pkg):
+          result.packageToDependency[n.pkg] = result.nodes.len
+          result.nodes.add n
   except:
-    echo getCurrentExceptionMsg()
     error c, configFile, "cannot read: " & configFile
-
-proc createGraph*(c: var AtlasContext; startSet: openArray[PkgUrl]): DepGraph =
-  result = DepGraph(nodes: @[], idgen: 0'i32,
-    startNodesLen: startSet.len,
-    reqs: defaultReqs())
-  for s in startSet:
-    result.packageToDependency[s] = result.nodes.len
-    result.nodes.add Dependency(pkg: s, versions: @[], v: VarId(result.idgen), isRoot: true)
-    inc result.idgen
-  readOnDisk(c, result)
 
 proc createGraph*(c: var AtlasContext; s: PkgUrl): DepGraph =
   result = DepGraph(nodes: @[], idgen: 0'i32,

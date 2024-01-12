@@ -6,11 +6,8 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [strutils, os, tables, sets, json, hashes, uri]
-import versions, parse_requires, compiledpatterns, osutils, reporters
-
-export tables, sets, json
-export versions, parse_requires, compiledpatterns
+import std / [os]
+import versions, parse_requires, compiledpatterns, reporters
 
 const
   UnitTests* = defined(atlasUnitTests)
@@ -18,18 +15,6 @@ const
 
 const
   AtlasWorkspace* = "atlas.workspace"
-
-proc getUrl*(input: string): PackageUrl =
-  try:
-    var input = input
-    input.removeSuffix(".git")
-    let u = PackageUrl(parseUri(input))
-    if u.scheme in ["git", "https", "http", "hg", "file"]:
-      result = u
-  except UriParseError:
-    discard
-
-export uri.`$`, uri.`/`, uri.UriParseError
 
 type
   CfgPath* = distinct string # put into a config `--path:"../x"`

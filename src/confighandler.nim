@@ -9,7 +9,7 @@
 ## Configuration handling.
 
 import std / [strutils, os, streams, json]
-import context, reporters
+import versions, context, reporters, compiledpatterns, parse_requires
 
 proc parseOverridesFile(c: var AtlasContext; filename: string) =
   const Separator = " -> "

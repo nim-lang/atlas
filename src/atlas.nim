@@ -10,7 +10,7 @@
 ## a Nimble dependency and its dependencies recursively.
 
 import std / [parseopt, strutils, os, osproc, tables, sets, json, jsonutils]
-import context, osutils, packagesjson, sat, gitops, nimenv, lockfiles,
+import versions, context, osutils, packagesjson, sat, gitops, nimenv, lockfiles,
   depgraphs, confighandler, configutils, cloner, nimblechecksums, reporters,
   nimbleparser, pkgurls
 
@@ -132,11 +132,12 @@ proc generateDepGraph(c: var AtlasContext; g: DepGraph) =
     discard execShellCmd("dot -Tpng -odeps.png " & quoteShell(dotFile))
 
 proc afterGraphActions(c: var AtlasContext; g: DepGraph) =
-  writeConfig c, toJson(g)
+  if c.errors == 0:
+    writeConfig c, toJson(g)
 
   if ShowGraph in c.flags:
     generateDepGraph c, g
-  if AutoEnv in c.flags:
+  if c.errors == 0 and AutoEnv in c.flags:
     let v = g.bestNimVersion
     if v != Version"":
       setupNimEnv c, c.workspace, v.string, Keep in c.flags
@@ -448,7 +449,7 @@ proc main(c: var AtlasContext) =
     singleArg()
     #fillPackageLookupTable(c.nimbleContext, c, )
     var amb = false
-    var nimbleFile = findNimbleFile(c, args[0], amb)
+    var nimbleFile = findNimbleFile(c, c.workspace, amb)
     if nimbleFile.len == 0:
       nimbleFile = c.workspace / extractProjectName(c.workspace) & ".nimble"
       writeFile(nimbleFile, genRequiresLine(args[0]))

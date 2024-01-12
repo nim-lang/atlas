@@ -32,7 +32,8 @@ proc patchNimCfg*(c: var AtlasContext; deps: seq[CfgPath]; cfgPath: CfgPath) =
   var paths = "--noNimblePath\n"
   for d in deps:
     let x = relativePath(d.string, cfgPath.string, '/')
-    paths.add "--path:\"" & x & "\"\n"
+    if x.len > 0 and x != ".":
+      paths.add "--path:\"" & x & "\"\n"
   var cfgContent = configPatternBegin & paths & configPatternEnd
 
   let cfg = cfgPath.string / "nim.cfg"
