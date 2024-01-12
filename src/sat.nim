@@ -111,10 +111,12 @@ proc toString(dest: var string; f: Formular; n: FormPos; varRepr: proc (dest: va
     of EqForm:
       dest.add "(<->"
     else: assert false, "cannot happen"
+    var i = 0
     for child in sonsReadonly(f, n):
+      if i > 0: dest.add ' '
       toString(dest, f, child, varRepr)
-      dest.add ' '
-    dest[^1] = ')'
+      inc i
+    dest.add ')'
 
 proc `$`*(f: Formular): string =
   assert f.len > 0
@@ -153,6 +155,11 @@ proc addNegated*(b: var Builder; a: VarId) =
   b.f.add newVar(a)
   b.closeOpr
 
+proc getPatchPos*(b: Builder): PatchPos =
+  PatchPos b.f.len
+
+proc resetToPatchPos*(b: var Builder; p: PatchPos) =
+  b.f.setLen p.int
 
 proc deleteLastNode*(b: var Builder) =
   b.f.setLen b.f.len - 1

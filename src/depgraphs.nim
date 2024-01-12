@@ -39,7 +39,7 @@ const
   UnknownReqs = 1
 
 proc defaultReqs(): seq[Requirements] =
-  @[Requirements(deps: @[], v: NoVar), Requirements(status: HasUnknownNimbleFile)]
+  @[Requirements(deps: @[], v: NoVar), Requirements(status: HasUnknownNimbleFile, v: NoVar)]
 
 proc readOnDisk(c: var AtlasContext; result: var DepGraph) =
   let configFile = c.workspace / AtlasWorkspace
@@ -283,15 +283,22 @@ proc toFormular*(c: var AtlasContext; g: var DepGraph; algo: ResolutionAlgorithm
       g.reqs[ver.req].v = VarId(result.idgen)
       inc result.idgen
 
+      if g.reqs[ver.req].deps.len == 0: continue
+
+      let beforeEq = b.getPatchPos()
+
       b.openOpr(EqForm)
       b.add g.reqs[ver.req].v
-      b.openOpr(AndForm)
-
+      if g.reqs[ver.req].deps.len > 1: b.openOpr(AndForm)
+      var elements = 0
       for dep, query in items g.reqs[ver.req].deps:
-        b.openOpr(ExactlyOneOfForm)
         let q = if algo == SemVer: toSemVer(query) else: query
         let commit = extractSpecificCommit(q)
         let av = g.nodes[findDependencyForDep(g, dep)]
+        if av.versions.len == 0: continue
+        b.openOpr(ExactlyOneOfForm)
+        inc elements
+
         if commit.len > 0:
           var v = Version("#" & commit)
           for j in countup(0, av.versions.len-1):
@@ -310,8 +317,10 @@ proc toFormular*(c: var AtlasContext; g: var DepGraph; algo: ResolutionAlgorithm
               b.add av.versions[j].v
         b.closeOpr # ExactlyOneOfForm
 
-      b.closeOpr # AndForm
+      if g.reqs[ver.req].deps.len > 1: b.closeOpr # AndForm
       b.closeOpr # EqForm
+      if elements == 0:
+        b.resetToPatchPos beforeEq
 
   # Model the dependency graph:
   for p in mitems(g.nodes):
@@ -349,10 +358,21 @@ proc runBuildSteps(c: var AtlasContext; g: var DepGraph) =
           if fileExists(f):
             runNimScriptBuilder c, p, pkg.projectName
 
+proc debugFormular(c: var AtlasContext; g: var DepGraph; f: Form; s: seq[BindingKind]) =
+  echo "FORM: ", f.f
+  for n in g.nodes:
+    echo "v", n.v.int, " ", n.pkg.url
+  for k, v in pairs(f.mapping):
+    echo "v", k.int, ": ", v
+  for i in 0 ..< s.len:
+    if s[i] == setToTrue:
+      echo "v", i, ": T"
+
 proc solve*(c: var AtlasContext; g: var DepGraph; f: Form) =
   var s = newSeq[BindingKind](f.idgen)
+  #debugFormular c, g, f, s
+
   if satisfiable(f.f, s):
-    #echo "FORM: ", f.f
     for n in mitems g.nodes:
       if n.isRoot: n.active = true
     for i in 0 ..< s.len:
@@ -406,10 +426,8 @@ proc expandWithoutClone*(c: var AtlasContext; g: var DepGraph; nc: NimbleContext
   var processed = initHashSet[PkgUrl]()
   var i = 0
   while i < g.nodes.len:
-    let w {.cursor.} = g.nodes[i]
-
-    if not processed.containsOrIncl(w.pkg):
-      let (dest, todo) = pkgUrlToDirname(c, g, w)
+    if not processed.containsOrIncl(g.nodes[i].pkg):
+      let (dest, todo) = pkgUrlToDirname(c, g, g.nodes[i])
       if todo == DoNothing:
         withDir c, dest:
           traverseDependency(c, nc, g, i, processed, CurrentCommit)

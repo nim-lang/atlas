@@ -27,6 +27,8 @@ type
     projectName*: string
     u: string
 
+proc `$`*(u: PkgUrl): string = u.u
+
 proc createUrlSkipPatterns*(x: string): PkgUrl =
   if "://" notin x:
     if dirExists(x):
