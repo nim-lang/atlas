@@ -58,7 +58,7 @@ proc readOnDisk(c: var AtlasContext; result: var DepGraph) =
         if n.isRoot:
           if not result.packageToDependency.hasKey(n.pkg):
             result.packageToDependency[n.pkg] = result.nodes.len
-            result.nodes.add n
+            result.nodes.add Dependency(pkg: n.pkg, versions: @[], isRoot: true, isTopLevel: n.isTopLevel)
   except:
     error c, configFile, "cannot read: " & configFile
 
@@ -201,16 +201,15 @@ proc expand*(c: var AtlasContext; g: var DepGraph; nc: NimbleContext; m: Travers
   var processed = initHashSet[PkgUrl]()
   var i = 0
   while i < g.nodes.len:
-    let w {.cursor.} = g.nodes[i]
-    if not processed.containsOrIncl(w.pkg):
-      let (dest, todo) = pkgUrlToDirname(c, g, w)
+    if not processed.containsOrIncl(g.nodes[i].pkg):
+      let (dest, todo) = pkgUrlToDirname(c, g, g.nodes[i])
       g.nodes[i].ondisk = dest
       if todo == DoClone:
         let (status, _) =
-          if w.pkg.isFileProtocol:
-            copyFromDisk(c, w, dest)
+          if g.nodes[i].pkg.isFileProtocol:
+            copyFromDisk(c, g.nodes[i], dest)
           else:
-            cloneUrl(c, w.pkg, dest, false)
+            cloneUrl(c, g.nodes[i].pkg, dest, false)
         g.nodes[i].status = status
 
       if g.nodes[i].status == Ok:
@@ -323,7 +322,7 @@ proc toFormular*(c: var AtlasContext; g: var DepGraph; algo: ResolutionAlgorithm
         b.add g.reqs[ver.req].v
         b.closeOpr # OrForm
 
-  b.closeOpr
+  b.closeOpr # AndForm
   result.f = toForm(b)
 
 proc toString(x: SatVarInfo): string =
@@ -353,12 +352,14 @@ proc runBuildSteps(c: var AtlasContext; g: var DepGraph) =
 proc solve*(c: var AtlasContext; g: var DepGraph; f: Form) =
   var s = newSeq[BindingKind](f.idgen)
   if satisfiable(f.f, s):
+    #echo "FORM: ", f.f
     for n in mitems g.nodes:
       if n.isRoot: n.active = true
     for i in 0 ..< s.len:
       if s[i] == setToTrue and f.mapping.hasKey(VarId i):
         let m = f.mapping[VarId i]
         let idx = findDependencyForDep(g, m.pkg)
+        #echo "setting ", idx, " to active ", g.nodes[idx].pkg.url
         g.nodes[idx].active = true
         g.nodes[idx].activeVersion = m.index
         debug c, m.pkg.projectName, "package satisfiable"
