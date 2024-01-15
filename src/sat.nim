@@ -319,7 +319,8 @@ proc satisfiable*(f: Formular; s: var Solution): bool =
     # Construct the two guesses.
     # Return whether either one of them works.
     if v.int >= s.len: s.setLen v.int+1
-    # try `setToFalse` first so that we don't end up with unnecessary dependencies:
+
+    let prevValue = s[v.int]
     s[v.int] = setToFalse
 
     var falseGuess: Formular
@@ -339,11 +340,17 @@ proc satisfiable*(f: Formular; s: var Solution): bool =
           result = true
         else:
           result = satisfiable(trueGuess, s)
-          #if not result:
-            # heuristic that provides a solution that comes closest to the "real" conflict:
-          #  s[v.int] = if trueGuess.len <= falseGuess.len: setToFalse else: setToTrue
-  if not result and v != NoVar:
-    echo "could not satisfy: v", v.int
+          if not result:
+            # Revert the assignment after trying the second option
+            s[v.int] = prevValue
+
+proc appender(dest: var string; x: int) =
+  dest.add 'v'
+  dest.addInt x
+
+proc tos(f: Formular; n: FormPos): string =
+  result = ""
+  toString(result, f, n, appender)
 
 proc eval(f: Formular; n: FormPos; s: seq[BindingKind]): bool =
   assert n.int >= 0
@@ -353,7 +360,7 @@ proc eval(f: Formular; n: FormPos; s: seq[BindingKind]): bool =
   of TrueForm: result = true
   of VarForm:
     let v = varId(f[n.int]).int
-    result = s[v] == setToTrue
+    result = v.int < s.len and s[v] == setToTrue
   else:
     case f[n.int].kind
     of AndForm:
@@ -524,30 +531,33 @@ when isMainModule:
 
   const
     myFormularU = """(&v0 v1 (~v5) (<->v0 (1==v6)) (<->v1 (1==v7 v8)) (<->v2 (1==v9 v10)) (<->v3 (1==v11)) (<->v4 (1==v12 v13)) (<->v14 (1==v8 v7)) (<->v15 (1==v9)) (<->v16 (1==v10 v9)) (<->v17 (1==v11)) (<->v18 (1==v11)) (<->v19 (1==v13)) (|(~v6) v14) (|(~v7) v15) (|(~v8) v16) (|(~v9) v17) (|(~v10) v18) (|(~v11) v19) (|(~v12) v20))"""
-    myFormular = """(&v0 v1 (~v5) (|(~v0) (1==v6)) (|(~v1) (1==v7 v8)) (|(~v2) (1==v9 v10)) (|(~v3) (1==v11)) (|(~v4) (1==v12 v13)) (<->v14 (1==v8 v7)) (<->v15 (1==v9)) (<->v16 (1==v10 v9)) (<->v17 (1==v11)) (<->v18 (1==v11)) (<->v19 (1==v13)) (|(~v6) v14) (|(~v7) v15) (|(~v8) v16) (|(~v9) v17) (|(~v10) v18) (|(~v11) v19) (|(~v12) v20))"""
+    myFormular = """(&(1==v0) (1==v1 v2) (|(1==v3 v4) (&(~v3) (~v4))) (|(1==v5)
+(&(~v5))) (|(1==v6 v7) (&(~v6) (~v7))) (|(~v8) (1==v2 v1)) (|(~v9) (1==v3))
+(|(~v10) (1==v4 v3)) (|(~v11) (1==v5)) (|(~v12) (1==v5)) (|(~v13) (1==v7))
+(|(~v0) v8) (|(~v1) v9) (|(~v2) v10) (|(~v3) v11) (|(~v4) v12) (|(~v5) v13) (|(~v6) v14))"""
 
     mySol = @[
       setToTrue, #v0
-      setToTrue, #v1
-      setToFalse, #v2
+      setToFalse, #v1
+      setToTrue, #v2
       setToFalse, #v3
-      setToFalse, #v4
-      setToFalse, #v5
-      setToTrue,
-      setToFalse,
-      setToTrue,
-      setToFalse,
-      setToTrue,
-      setToTrue,
-      setToFalse, # v12
+      setToTrue, #v4
+      setToTrue, #v5
+      setToFalse, #v6
+      setToTrue, #v7
+      setToTrue, #v8
+      setToFalse, #v9
+      setToTrue, # v10
+      setToFalse, # v11
+      setToTrue, # v12
       setToTrue, # v13
-      setToTrue,
       setToFalse,
-      setToTrue,
-      setToTrue,
-      setToTrue,
-      setToTrue,
-      setToTrue
+      setToFalse,
+      setToFalse,
+      setToFalse,
+      setToFalse,
+      setToFalse,
+      setToFalse
     ]
 
   proc main3() =
@@ -561,11 +571,10 @@ when isMainModule:
 
     var s: Solution
     echo "is solvable? ", satisfiable(f, s)
-    echo "solution"
-    for i in 0..<s.len:
-      echo "v", i, " ", s[i]
 
-    echo f.eval(FormPos(0), mySol)
+
+    echo f.eval(s)
+    echo f.eval(mySol)
 
   main3()
 

@@ -20,7 +20,7 @@ type
   Dependency* = object
     pkg*: PkgUrl
     versions*: seq[DependencyVersion]
-    v: VarId
+    #v: VarId
     active*: bool
     isRoot*: bool
     isTopLevel*: bool
@@ -244,35 +244,53 @@ proc toFormular*(c: var AtlasContext; g: var DepGraph; algo: ResolutionAlgorithm
   var b = Builder()
   b.openOpr(AndForm)
 
-  for n in mitems g.nodes:
-    n.v = VarId(result.idgen)
-    inc result.idgen
-    # all root nodes must be true:
-    if n.isRoot: b.add n.v
-    # all broken nodes must not be true:
-    if n.status != Ok:
-      b.addNegated n.v
+  when false:
+    for n in mitems g.nodes:
+      n.v = VarId(result.idgen)
+      inc result.idgen
+      # all root nodes must be true:
+      if n.isRoot: b.add n.v
+      # all broken nodes must not be true:
+      if n.status != Ok:
+        b.addNegated n.v
 
   for p in mitems(g.nodes):
     # if Package p is installed, pick one of its concrete versions, but not versions
     # that are errornous:
     # A -> (exactly one of: A1, A2, A3)
     if p.versions.len == 0: continue
-    b.openOpr(OrForm)
-    b.addNegated p.v
 
-    b.openOpr(ExactlyOneOfForm)
     var i = 0
     for ver in mitems p.versions:
       ver.v = VarId(result.idgen)
       result.mapping[ver.v] = SatVarInfo(pkg: p.pkg, commit: ver.commit, version: ver.version, index: i)
 
       inc result.idgen
-      b.add ver.v
       inc i
 
-    b.closeOpr # ExactlyOneOfForm
-    b.closeOpr # OrForm
+    if p.status != Ok:
+      # all of its versions must be `false`
+      b.openOpr(AndForm)
+      for ver in mitems p.versions: b.addNegated ver.v
+      b.closeOpr # AndForm
+    elif p.isRoot:
+      b.openOpr(ExactlyOneOfForm)
+      for ver in mitems p.versions: b.add ver.v
+      b.closeOpr # ExactlyOneOfForm
+    else:
+      # Either one version is selected or none:
+      b.openOpr(OrForm)
+
+      b.openOpr(ExactlyOneOfForm)
+      for ver in mitems p.versions: b.add ver.v
+      b.closeOpr # ExactlyOneOfForm
+
+      b.openOpr(AndForm)
+      for ver in mitems p.versions:
+        b.addNegated ver.v
+      b.closeOpr # AndForm
+
+      b.closeOpr # OrForm
 
   # Model the dependency graph:
   for p in mitems(g.nodes):
@@ -280,15 +298,16 @@ proc toFormular*(c: var AtlasContext; g: var DepGraph; algo: ResolutionAlgorithm
       if isValid(g.reqs[ver.req].v):
         # already covered this sub-formula (ref semantics!)
         continue
-      g.reqs[ver.req].v = VarId(result.idgen)
+      let eqVar = VarId(result.idgen)
+      g.reqs[ver.req].v = eqVar
       inc result.idgen
 
       if g.reqs[ver.req].deps.len == 0: continue
 
       let beforeEq = b.getPatchPos()
 
-      b.openOpr(EqForm)
-      b.add g.reqs[ver.req].v
+      b.openOpr(OrForm)
+      b.addNegated eqVar
       if g.reqs[ver.req].deps.len > 1: b.openOpr(AndForm)
       var elements = 0
       for dep, query in items g.reqs[ver.req].deps:
@@ -360,8 +379,8 @@ proc runBuildSteps(c: var AtlasContext; g: var DepGraph) =
 
 proc debugFormular(c: var AtlasContext; g: var DepGraph; f: Form; s: seq[BindingKind]) =
   echo "FORM: ", f.f
-  for n in g.nodes:
-    echo "v", n.v.int, " ", n.pkg.url
+  #for n in g.nodes:
+  #  echo "v", n.v.int, " ", n.pkg.url
   for k, v in pairs(f.mapping):
     echo "v", k.int, ": ", v
   for i in 0 ..< s.len:
