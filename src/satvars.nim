@@ -50,7 +50,7 @@ proc isTrue*(b: Solution; v: VarId): bool {.inline.} =
   b.getVar(v) == SetToTrue
 
 const
-  oddBits = 0b0101_0101_0101_0101_0101_0101_0101_0101_0101_0101_0101_0101_0101_0101_0101_0101_0101_0101_0101_0101_0101_0101_0101_0101_0101_0101_0101_0101_0101_0101_0101_0101'u64
+  oddBits = 0b01010101_01010101_01010101_01010101_01010101_01010101_01010101_01010101'u64
 
 proc containsInvalid(x: uint64): bool {.inline.} =
   var y = (x and oddBits) shl 1
