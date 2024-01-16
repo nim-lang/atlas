@@ -239,7 +239,15 @@ proc matches(pattern: VersionReq; v: Version): bool =
   of verLt:
     result = v < pattern.v
   of verEq, verSpecial:
-    result = pattern.v == v
+    if pattern.v.string.startsWith('#'):
+      if v.string.startsWith('#'):
+        result = pattern.v == v
+      else:
+        result = pattern.v.string.substr(1) == v.string
+    elif v.string.startsWith('#'):
+      result = pattern.v.string == v.string.substr(1)
+    else:
+      result = pattern.v == v
   of verAny:
     result = true
 

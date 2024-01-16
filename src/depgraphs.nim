@@ -106,7 +106,6 @@ iterator releases(c: var AtlasContext; m: TraversalMode; versions: seq[Dependenc
     case m
     of AllReleases:
       try:
-        let tags = collectTaggedVersions(c)
         var produced = 0
         for v in versions:
           if v.version == Version"" and v.commit.len > 0:
@@ -114,6 +113,7 @@ iterator releases(c: var AtlasContext; m: TraversalMode; versions: seq[Dependenc
             if status == 0:
               yield Commit(h: v.commit, v: Version"")
               inc produced
+        let tags = collectTaggedVersions(c)
         for t in tags:
           let (_, status) = exec(c, GitCheckout, [t.h])
           if status == 0:
@@ -371,6 +371,7 @@ proc toFormular*(c: var AtlasContext; g: var DepGraph; algo: ResolutionAlgorithm
         if matchCounter == 0:
           b.resetToPatchPos beforeExactlyOneOf
           b.add falseLit()
+          #echo "FOUND nothing for ", q, " ", dep
 
       if g.reqs[ver.req].deps.len > 1: b.closeOpr # AndForm
       b.closeOpr # EqForm
