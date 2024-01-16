@@ -349,10 +349,8 @@ proc toFormular*(c: var AtlasContext; g: var DepGraph; algo: ResolutionAlgorithm
         var matchCounter = 0
 
         if commit.len > 0:
-          var v = Version("#" & commit)
           for j in countup(0, av.versions.len-1):
-            if q.matches(av.versions[j].version):
-              v = av.versions[j].version
+            if q.matches(av.versions[j].version) or commit == av.versions[j].commit:
               b.add av.versions[j].v
               inc matchCounter
               break
