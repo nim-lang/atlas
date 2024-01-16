@@ -381,6 +381,95 @@ proc eval(f: Formular; n: FormPos; s: Solution): bool =
 proc eval*(f: Formular; s: Solution): bool =
   eval(f, FormPos(0), s)
 
+type
+  Space = seq[Solution]
+
+proc mul(a, b: Space): Space =
+  result = @[]
+  for i in 0..<a.len:
+    if not a[i].invalid:
+      for j in 0..<b.len:
+        if not b[j].invalid:
+          result.add a[i]
+          combine result[^1], b[j]
+
+proc solutionSpace(f: Formular; n: FormPos; maxVar: int; wanted: uint64): Space =
+  assert n.int >= 0
+  assert n.int < f.len
+  result = @[]
+  case f[n.int].kind
+  #of FalseForm:
+  #  # We want `true` but got `false`:
+  #  if wanted == setToTrue:
+  #    s.s[s.current].invalid = true
+  #of TrueForm:
+  #  # We want `false` but got `true`:
+  #  if wanted == setToFalse:
+  #    s.s[s.current].invalid = true
+  of VarForm:
+    if wanted == DontCare: return result
+    result.add createSolution(maxVar)
+    let v = varId(f[n.int])
+    result[0].setVar(v, wanted)
+
+  of AndForm:
+    case wanted
+    of SetToFalse:
+      assert false, "not yet implemented: ~(& ...)"
+    of SetToTrue:
+      result.add createSolution(maxVar)
+      for child in sonsReadonly(f, n):
+        let inner = solutionSpace(f, child, maxVar, SetToTrue)
+        result = mul(result, inner)
+    else:
+      discard "well we don't care about the value for the AND expression"
+
+  of OrForm:
+    case wanted
+    of SetToFalse:
+      # ~(A | B) == ~A & ~B
+      # all children must be false:
+      result.add createSolution(maxVar)
+      for child in sonsReadonly(f, n):
+        let inner = solutionSpace(f, child, maxVar, SetToFalse)
+        result = mul(result, inner)
+    of SetToTrue:
+      # any of the children need to be true:
+      for child in sonsReadonly(f, n):
+        let inner = solutionSpace(f, child, maxVar, SetToTrue)
+        for a in inner: result.add a
+    else:
+      discard "well we don't care about the value for the OR expression"
+
+  of ExactlyOneOfForm:
+    if wanted == DontCare: return
+    assert wanted == SetToTrue
+    var children: seq[FormPos] = @[]
+    for child in sonsReadonly(f, n): children.add child
+    for i in 0..<children.len:
+      # child[i] must be true all others must be false:
+      result.add createSolution(maxVar)
+
+      for child in sonsReadonly(f, n):
+        # child[i] must be true all others must be false:
+        let k = if child.int == children[i].int: SetToTrue else: SetToFalse
+        let inner = solutionSpace(f, child, maxVar, k)
+        for a in inner:
+          combine(result[result.len-1], a)
+
+  of NotForm:
+    case wanted
+    of SetToFalse:
+      for child in sonsReadonly(f, n):
+        return solutionSpace(f, child, maxVar, SetToTrue)
+    of SetToTrue:
+      for child in sonsReadonly(f, n):
+        return solutionSpace(f, child, maxVar, SetToFalse)
+    else:
+      discard "well we don't care about the value for the NOT expression"
+  else: assert false, "not implemented"
+
+
 import std / [strutils, parseutils]
 
 proc parseFormular*(s: string; i: int; b: var Builder): int
