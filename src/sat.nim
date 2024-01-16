@@ -27,8 +27,8 @@ proc newVar*(val: VarId): Atom {.inline.} =
 proc newOperation(k: FormKind; val: BaseType): Atom {.inline.} =
   Atom((val shl KindBits) or BaseType(k))
 
-proc trueLit(): Atom {.inline.} = Atom(TrueForm)
-proc falseLit(): Atom {.inline.} = Atom(FalseForm)
+proc trueLit*(): Atom {.inline.} = Atom(TrueForm)
+proc falseLit*(): Atom {.inline.} = Atom(FalseForm)
 
 proc lit(k: FormKind): Atom {.inline.} = Atom(k)
 
@@ -398,14 +398,16 @@ proc solutionSpace(f: Formular; n: FormPos; maxVar: int; wanted: uint64): Space 
   assert n.int < f.len
   result = @[]
   case f[n.int].kind
-  #of FalseForm:
-  #  # We want `true` but got `false`:
-  #  if wanted == setToTrue:
-  #    s.s[s.current].invalid = true
-  #of TrueForm:
-  #  # We want `false` but got `true`:
-  #  if wanted == setToFalse:
-  #    s.s[s.current].invalid = true
+  of FalseForm:
+    # We want `true` but got `false`:
+    if wanted == SetToTrue:
+      result.add createSolution(maxVar)
+      result[0].invalid = true
+  of TrueForm:
+    # We want `false` but got `true`:
+    if wanted == SetToFalse:
+      result.add createSolution(maxVar)
+      result[0].invalid = true
   of VarForm:
     if wanted == DontCare: return result
     result.add createSolution(maxVar)

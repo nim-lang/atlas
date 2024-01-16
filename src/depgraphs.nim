@@ -100,17 +100,28 @@ type
     AllReleases,
     CurrentCommit
 
-iterator releases(c: var AtlasContext; m: TraversalMode): Commit =
+iterator releases(c: var AtlasContext; m: TraversalMode; versions: seq[DependencyVersion]): Commit =
   let (cc, status) = exec(c, GitCurrentCommit, [])
   if status == 0:
     case m
     of AllReleases:
       try:
         let tags = collectTaggedVersions(c)
+        var produced = 0
+        for v in versions:
+          if v.version == Version"" and v.commit.len > 0:
+            let (_, status) = exec(c, GitCheckout, [v.commit])
+            if status == 0:
+              yield Commit(h: v.commit, v: Version"")
+              inc produced
         for t in tags:
           let (_, status) = exec(c, GitCheckout, [t.h])
           if status == 0:
             yield t
+            inc produced
+        if produced == 0:
+          yield Commit(h: "", v: Version"#head")
+
       finally:
         discard exec(c, GitCheckout, [cc])
     of CurrentCommit:
@@ -129,17 +140,26 @@ proc findNimbleFile(g: DepGraph; idx: int): (string, int) =
       inc found
   result = (ensureMove nimbleFile, found)
 
+proc enrichVersionsViaExplicitHash(versions: var seq[DependencyVersion]; x: VersionInterval) =
+  let commit = extractSpecificCommit(x)
+  if commit.len > 0:
+    for v in versions:
+      if v.commit == commit: return
+    versions.add DependencyVersion(version: Version"",
+      commit: commit, req: EmptyReqs, v: NoVar)
+
 proc traverseDependency(c: var AtlasContext; nc: NimbleContext; g: var DepGraph; idx: int;
                         processed: var HashSet[PkgUrl];
                         m: TraversalMode) =
   var lastNimbleContents = "<invalid content>"
 
-  for r in releases(c, m):
+  let versions = move g.nodes[idx].versions
+  for r in releases(c, m, versions):
     let (nimbleFile, found) = findNimbleFile(g, idx)
     var pv = DependencyVersion(
       version: r.v,
       commit: r.h,
-      req: EmptyReqs)
+      req: EmptyReqs, v: NoVar)
     if found != 1:
       pv.req = UnknownReqs
     else:
@@ -152,13 +172,15 @@ proc traverseDependency(c: var AtlasContext; nc: NimbleContext; g: var DepGraph;
         lastNimbleContents = ensureMove nimbleContents
 
       if g.reqs[pv.req].status == Normal:
-        for dep, _ in items(g.reqs[pv.req].deps):
+        for dep, interval in items(g.reqs[pv.req].deps):
           let didx = g.packageToDependency.getOrDefault(dep, -1)
           if didx == -1:
             g.packageToDependency[dep] = g.nodes.len
             g.nodes.add Dependency(pkg: dep, versions: @[], isRoot: idx == 0, activeVersion: -1)
-          elif not g.nodes[didx].isRoot:
-            g.nodes[didx].isRoot = idx == 0
+            enrichVersionsViaExplicitHash g.nodes[g.nodes.len-1].versions, interval
+          else:
+            g.nodes[didx].isRoot = g.nodes[didx].isRoot or idx == 0
+            enrichVersionsViaExplicitHash g.nodes[didx].versions, interval
 
     g.nodes[idx].versions.add ensureMove pv
 
@@ -172,7 +194,9 @@ proc copyFromDisk(c: var AtlasContext; w: Dependency; destDir: string): (CloneSt
   #  if dirExists(a): a else: b
 
   #let dir = selectDir(u & "@" & w.commit, u)
-  if dirExists(dir):
+  if w.isTopLevel:
+    result = (Ok, "")
+  elif dirExists(dir):
     info c, destDir, "cloning: " & dir
     copyDir(dir, destDir)
     result = (Ok, "")
@@ -189,8 +213,11 @@ proc pkgUrlToDirname(c: var AtlasContext; g: var DepGraph; d: Dependency): (stri
   # XXX implement namespace support here
   var dest = g.ondisk.getOrDefault(d.pkg.url)
   if dest.len == 0:
-    let depsDir = if d.isTopLevel: "" elif d.isRoot: c.workspace else: c.depsDir
-    dest = depsDir / d.pkg.projectName
+    if d.isTopLevel:
+      dest = c.workspace
+    else:
+      let depsDir = if d.isRoot: c.workspace else: c.depsDir
+      dest = depsDir / d.pkg.projectName
   result = (dest, if dirExists(dest): DoNothing else: DoClone)
 
 proc toDestDir*(g: DepGraph; d: Dependency): string =
@@ -315,8 +342,11 @@ proc toFormular*(c: var AtlasContext; g: var DepGraph; algo: ResolutionAlgorithm
         let commit = extractSpecificCommit(q)
         let av = g.nodes[findDependencyForDep(g, dep)]
         if av.versions.len == 0: continue
+
+        let beforeExactlyOneOf = b.getPatchPos()
         b.openOpr(ExactlyOneOfForm)
         inc elements
+        var matchCounter = 0
 
         if commit.len > 0:
           var v = Version("#" & commit)
@@ -324,17 +354,23 @@ proc toFormular*(c: var AtlasContext; g: var DepGraph; algo: ResolutionAlgorithm
             if q.matches(av.versions[j].version):
               v = av.versions[j].version
               b.add av.versions[j].v
+              inc matchCounter
               break
           #mapping.add (g.nodes[i].pkg, commit, v)
         elif algo == MinVer:
           for j in countup(0, av.versions.len-1):
             if q.matches(av.versions[j].version):
               b.add av.versions[j].v
+              inc matchCounter
         else:
           for j in countdown(av.versions.len-1, 0):
             if q.matches(av.versions[j].version):
               b.add av.versions[j].v
+              inc matchCounter
         b.closeOpr # ExactlyOneOfForm
+        if matchCounter == 0:
+          b.resetToPatchPos beforeExactlyOneOf
+          b.add falseLit()
 
       if g.reqs[ver.req].deps.len > 1: b.closeOpr # AndForm
       b.closeOpr # EqForm
@@ -367,7 +403,8 @@ proc runBuildSteps(c: var AtlasContext; g: var DepGraph) =
       tryWithDir c, g.nodes[i].ondisk:
         # check for install hooks
         let activeVersion = g.nodes[i].activeVersion
-        if g.reqs[g.nodes[i].versions[activeVersion].req].hasInstallHooks:
+        let r = if g.nodes[i].versions.len == 0: -1 else: g.nodes[i].versions[activeVersion].req
+        if r >= 0 and r < g.reqs.len and g.reqs[r].hasInstallHooks:
           let (nf, found) = findNimbleFile(g, i)
           if found == 1:
             runNimScriptInstallHook c, nf, pkg.projectName
