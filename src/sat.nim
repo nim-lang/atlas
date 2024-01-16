@@ -562,7 +562,7 @@ when isMainModule:
     echo "is solvable? ", satisfiable(f, s)
     echo "solution"
     for i in 0..<m:
-      echo "v", i, " ", s.getVar(VarId(m))
+      echo "v", i, " ", s.getVar(VarId(i))
 
   proc main2 =
     var b: Builder
@@ -602,7 +602,7 @@ when isMainModule:
     echo "is solvable? ", satisfiable(f, s)
     echo "solution"
     for i in 0..<m:
-      echo "v", i, " ", s.getVar(VarId(m))
+      echo "v", i, " ", s.getVar(VarId(i))
 
   main()
   main2()

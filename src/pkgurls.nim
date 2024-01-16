@@ -13,11 +13,14 @@ import compiledpatterns, gitops
 const
   GitSuffix = ".git"
 
+proc isSep(c: char): bool {.inline.} =
+  when defined(windows): c == '/' or c == '\\' else: c == '/'
+
 proc extractProjectName*(s: string): string =
   var last = s.len - 1
-  while last >= 0 and s[last] == '/': dec last
+  while last >= 0 and s[last].isSep: dec last
   var first = last - 1
-  while first >= 0 and s[first] != '/': dec first
+  while first >= 0 and not s[first].isSep: dec first
   result = s.substr(first+1, last)
   if result.endsWith(GitSuffix):
     result.setLen result.len - len(GitSuffix)
