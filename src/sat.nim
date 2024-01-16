@@ -10,7 +10,7 @@ import satvars
 
 type
   FormKind* = enum
-    FalseForm, TrueForm, VarForm, NotForm, AndForm, OrForm, ExactlyOneOfForm, EqForm # 8 so the last 3 bits
+    FalseForm, TrueForm, VarForm, NotForm, AndForm, OrForm, ExactlyOneOfForm, ZeroOrOneOfForm # 8 so the last 3 bits
   Atom = distinct BaseType
   Formular* = seq[Atom] # linear storage
 
@@ -103,8 +103,8 @@ proc toString(dest: var string; f: Formular; n: FormPos; varRepr: proc (dest: va
       dest.add "(1=="
     of NotForm:
       dest.add "(~"
-    of EqForm:
-      dest.add "(<->"
+    of ZeroOrOneOfForm:
+      dest.add "(1<="
     else: assert false, "cannot happen"
     var i = 0
     for child in sonsReadonly(f, n):
@@ -130,7 +130,7 @@ type
     toPatch: seq[PatchPos]
 
 proc isEmpty*(b: Builder): bool {.inline.} =
-  b.f.len == 0 or b.f.len == 1 and b.f[0].kind in {NotForm, AndForm, OrForm, ExactlyOneOfForm, EqForm}
+  b.f.len == 0 or b.f.len == 1 and b.f[0].kind in {NotForm, AndForm, OrForm, ExactlyOneOfForm, ZeroOrOneOfForm}
 
 proc openOpr*(b: var Builder; k: FormKind) =
   b.toPatch.add PatchPos b.f.len
@@ -249,27 +249,35 @@ proc simplify(dest: var Formular; source: Formular; n: FormPos; sol: Solution): 
       setLen dest, initialLen
       result = tForm
       dest.add lit(result)
-  of EqForm:
-    let oldLen = dest.len
-    var inner: FormKind
+  of ZeroOrOneOfForm:
+    let initialLen = dest.len
     var childCount = 0
-    var interestingChild = FormPos(n.int+1)
+    var couldEval = 0
     for child in sons(dest, source, n):
-      inner = simplify(dest, source, child, sol)
-      if inner notin {TrueForm, FalseForm}:
-        interestingChild = child
-      inc childCount
+      let oldLen = dest.len
 
-    assert childCount == 2, "EqForm must have exactly 2 children"
-    # simplify: `T == x` to `x` and `F == x` to `not x`:
-    if inner == TrueForm:
-      setLen dest, oldLen
-      copyTree dest, source, interestingChild
-    elif inner == FalseForm:
-      setLen dest, oldLen
-      let pp = prepare(dest, NotForm)
-      copyTree dest, source, interestingChild
-      dest.patch pp
+      let inner = simplify(dest, source, child, sol)
+      # ignore 'ZeroOrOneOf F' subexpressions:
+      if inner == FalseForm:
+        setLen dest, oldLen
+      else:
+        if inner == TrueForm:
+          inc couldEval
+        inc childCount
+
+    if couldEval == childCount:
+      setLen dest, initialLen
+      if couldEval <= 1:
+        dest.add lit TrueForm
+        result = TrueForm
+      else:
+        dest.add lit FalseForm
+        result = FalseForm
+    elif childCount == 1:
+      setLen dest, initialLen
+      dest.add lit TrueForm
+      result = TrueForm
+
   of ExactlyOneOfForm:
     let initialLen = dest.len
     var childCount = 0
@@ -290,8 +298,10 @@ proc simplify(dest: var Formular; source: Formular; n: FormPos; sol: Solution): 
       setLen dest, initialLen
       if couldEval != 1:
         dest.add lit FalseForm
+        result = FalseForm
       else:
         dest.add lit TrueForm
+        result = TrueForm
     elif childCount == 1:
       for i in initialLen..<dest.len-1:
         dest[i] = dest[i+1]
@@ -367,15 +377,11 @@ proc eval(f: Formular; n: FormPos; s: Solution): bool =
       for child in sonsReadonly(f, n):
         if not eval(f, child, s): return true
       return false
-    of EqForm:
-      var last = -1
+    of ZeroOrOneOfForm:
+      var conds = 0
       for child in sonsReadonly(f, n):
-        if last == -1:
-          last = ord(eval(f, child, s))
-        else:
-          let now = ord(eval(f, child, s))
-          return last == now
-      return false
+        if eval(f, child, s): inc conds
+      result = conds <= 1
     else: assert false, "cannot happen"
 
 proc eval*(f: Formular; s: Solution): bool =
@@ -459,6 +465,29 @@ proc solutionSpace(f: Formular; n: FormPos; maxVar: int; wanted: uint64): Space 
         for a in inner:
           combine(result[result.len-1], a)
 
+  of ZeroOrOneOfForm:
+    if wanted == DontCare: return
+    assert wanted == SetToTrue
+    # all children must be false:
+    result.add createSolution(maxVar)
+    for child in sonsReadonly(f, n):
+      let inner = solutionSpace(f, child, maxVar, SetToFalse)
+      result = mul(result, inner)
+
+    # or exactly one must be true:
+    var children: seq[FormPos] = @[]
+    for child in sonsReadonly(f, n): children.add child
+    for i in 0..<children.len:
+      # child[i] must be true all others must be false:
+      result.add createSolution(maxVar)
+
+      for child in sonsReadonly(f, n):
+        # child[i] must be true all others must be false:
+        let k = if child.int == children[i].int: SetToTrue else: SetToFalse
+        let inner = solutionSpace(f, child, maxVar, k)
+        for a in inner:
+          combine(result[result.len-1], a)
+
   of NotForm:
     case wanted
     of SetToFalse:
@@ -471,6 +500,13 @@ proc solutionSpace(f: Formular; n: FormPos; maxVar: int; wanted: uint64): Space 
       discard "well we don't care about the value for the NOT expression"
   else: assert false, "not implemented"
 
+proc satisfiableSlow*(f: Formular; s: var Solution): bool =
+  let space = solutionSpace(f, FormPos(0), maxVariable(f), SetToTrue)
+  for candidate in space:
+    if not candidate.invalid:
+      s = candidate
+      return true
+  return false
 
 import std / [strutils, parseutils]
 
@@ -516,14 +552,15 @@ proc parseFormular(s: string; i: int; b: var Builder): int =
       b.closeOpr
       if s[result] == ')': inc result
       else: quit ") expected"
-    of '<':
-      result = parseOpr(s, result, b, EqForm, "<->")
     of '|':
       result = parseOpr(s, result, b, OrForm, "|")
     of '&':
       result = parseOpr(s, result, b, AndForm, "&")
     of '1':
-      result = parseOpr(s, result, b, ExactlyOneOfForm, "1==")
+      if continuesWith(s, "1==", result):
+        result = parseOpr(s, result, b, ExactlyOneOfForm, "1==")
+      else:
+        result = parseOpr(s, result, b, ZeroOrOneOfForm, "1<=")
     else:
       quit "unknown operator: " & s[result]
   else:
@@ -570,7 +607,7 @@ when isMainModule:
     var b: Builder
     b.openOpr(AndForm)
 
-    b.openOpr(EqForm)
+    b.openOpr(OrForm)
     b.add newVar(VarId 9)
 
     b.openOpr(OrForm)
@@ -579,7 +616,7 @@ when isMainModule:
     b.add newVar(VarId 3)
     b.add newVar(VarId 4)
     b.closeOpr # OrForm
-    b.closeOpr # EqForm
+    b.closeOpr # OrForm
 
     b.openOpr(ExactlyOneOfForm)
     b.add newVar(VarId 5)

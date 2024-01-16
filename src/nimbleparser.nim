@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [os, strutils, tables, unicode]
+import std / [os, strutils, tables, unicode, hashes]
 import versions, satvars, packagesjson, reporters, gitops, parse_requires, pkgurls, compiledpatterns
 
 type
@@ -25,6 +25,14 @@ type
   NimbleContext* = object
     hasPackageList: bool
     nameToUrl: Table[string, string]
+
+proc hash*(r: Requirements): Hash =
+  var h: Hash = 0
+  h = h !& hash(r.deps)
+  result = !$h
+
+proc `==`*(a, b: Requirements): bool =
+  result = a.deps == b.deps
 
 proc updatePackages*(c: var Reporter; depsDir: string) =
   if dirExists(depsDir / DefaultPackagesSubDir):

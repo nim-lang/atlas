@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [strutils, parseutils, algorithm]
+import std / [strutils, parseutils, algorithm, hashes]
 
 type
   Version* = distinct string
@@ -122,6 +122,11 @@ proc `==`*(a, b: Version): bool =
     result = a.string == b.string
   else:
     result = eq(a.string, b.string)
+
+proc hash*(a: Version): Hash {.borrow.}
+
+proc `==`*(a, b: VersionInterval): bool {.inline.} = system.`==`(a, b)
+proc hash*(a: VersionInterval): Hash {.inline.} = hashes.hash(a)
 
 proc parseVer(s: string; start: var int): Version =
   if start < s.len and s[start] == '#':

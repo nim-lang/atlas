@@ -33,6 +33,7 @@ type
     reqs: seq[Requirements]
     packageToDependency: Table[PkgUrl, int]
     ondisk: OrderedTable[string, string] # URL -> dirname mapping
+    reqsByDeps: Table[Requirements, int]
 
 const
   EmptyReqs = 0
@@ -167,8 +168,15 @@ proc traverseDependency(c: var AtlasContext; nc: NimbleContext; g: var DepGraph;
       if lastNimbleContents == nimbleContents:
         pv.req = g.nodes[idx].versions[^1].req
       else:
-        pv.req = g.reqs.len
-        g.reqs.add parseNimbleFile(nc, nimbleFile, c.overrides)
+        let r = parseNimbleFile(nc, nimbleFile, c.overrides)
+        let ridx = g.reqsByDeps.getOrDefault(r, -1) # hasKey(r)
+        if ridx == -1:
+          pv.req = g.reqs.len
+          g.reqsByDeps[r] = pv.req
+          g.reqs.add r
+        else:
+          pv.req = ridx
+
         lastNimbleContents = ensureMove nimbleContents
 
       if g.reqs[pv.req].status == Normal:
@@ -306,18 +314,9 @@ proc toFormular*(c: var AtlasContext; g: var DepGraph; algo: ResolutionAlgorithm
       b.closeOpr # ExactlyOneOfForm
     else:
       # Either one version is selected or none:
-      b.openOpr(OrForm)
-
-      b.openOpr(ExactlyOneOfForm)
+      b.openOpr(ZeroOrOneOfForm)
       for ver in mitems p.versions: b.add ver.v
       b.closeOpr # ExactlyOneOfForm
-
-      b.openOpr(AndForm)
-      for ver in mitems p.versions:
-        b.addNegated ver.v
-      b.closeOpr # AndForm
-
-      b.closeOpr # OrForm
 
   # Model the dependency graph:
   for p in mitems(g.nodes):
