@@ -6,18 +6,13 @@
 ## Formulars as packed ASTs, no pointers no cry. Solves formulars with many
 ## thousands of variables in no time.
 
-import std / hashes
+import satvars
 
 type
   FormKind* = enum
     FalseForm, TrueForm, VarForm, NotForm, AndForm, OrForm, ExactlyOneOfForm, EqForm # 8 so the last 3 bits
-  BaseType = int32
   Atom = distinct BaseType
-  VarId* = distinct BaseType
   Formular* = seq[Atom] # linear storage
-
-proc `==`*(a, b: VarId): bool {.borrow.}
-proc hash*(a: VarId): Hash {.borrow.}
 
 const
   KindBits = 3
@@ -174,11 +169,6 @@ proc toForm*(b: var Builder): Formular =
   assert b.toPatch.len == 0, "missing `closeOpr` calls"
   result = move b.f
 
-# Code from the blog translated into Nim and into our representation
-
-const
-  NoVar* = VarId(-1)
-
 proc isValid*(v: VarId): bool {.inline.} = v.int32 >= 0
 
 proc freeVariable(f: Formular): VarId =
@@ -187,12 +177,14 @@ proc freeVariable(f: Formular): VarId =
     if f[i].kind == VarForm: return varId(f[i])
   return NoVar
 
-type
-  BindingKind* = enum
-    dontCare,
-    setToFalse,
-    setToTrue
-  Solution* = seq[BindingKind]
+proc maxVariable*(f: Formular): int =
+  result = -1
+  for i in 0..<f.len:
+    if f[i].kind == VarForm: result = max(result, int varId(f[i]))
+  inc result
+
+proc createSolution*(f: Formular): Solution =
+  satvars.createSolution(maxVariable f)
 
 proc simplify(dest: var Formular; source: Formular; n: FormPos; sol: Solution): FormKind =
   ## Returns either a Const constructor or a simplified expression;
@@ -205,17 +197,14 @@ proc simplify(dest: var Formular; source: Formular; n: FormPos; sol: Solution): 
     # nothing interesting to do:
     dest.add s
   of VarForm:
-    let v = varId(s).int
-    if v < sol.len:
-      case sol[v]
-      of dontCare:
-        dest.add s
-      of setToFalse:
-        dest.add falseLit()
-        result = FalseForm
-      of setToTrue:
-        dest.add trueLit()
-        result = TrueForm
+    let v = sol.getVar(varId(s))
+    case v
+    of SetToFalse:
+      dest.add falseLit()
+      result = FalseForm
+    of SetToTrue:
+      dest.add trueLit()
+      result = TrueForm
     else:
       dest.add s
   of NotForm:
@@ -318,10 +307,8 @@ proc satisfiable*(f: Formular; s: var Solution): bool =
     # We have a variable to guess.
     # Construct the two guesses.
     # Return whether either one of them works.
-    if v.int >= s.len: s.setLen v.int+1
-
-    let prevValue = s[v.int]
-    s[v.int] = setToFalse
+    let prevValue = s.getVar(v)
+    s.setVar(v, SetToFalse)
 
     var falseGuess: Formular
     let res = simplify(falseGuess, f, FormPos 0, s)
@@ -331,7 +318,7 @@ proc satisfiable*(f: Formular; s: var Solution): bool =
     else:
       result = satisfiable(falseGuess, s)
       if not result:
-        s[v.int] = setToTrue
+        s.setVar(v, SetToTrue)
 
         var trueGuess: Formular
         let res = simplify(trueGuess, f, FormPos 0, s)
@@ -342,7 +329,7 @@ proc satisfiable*(f: Formular; s: var Solution): bool =
           result = satisfiable(trueGuess, s)
           if not result:
             # Revert the assignment after trying the second option
-            s[v.int] = prevValue
+            s.setVar(v, prevValue)
 
 proc appender(dest: var string; x: int) =
   dest.add 'v'
@@ -352,15 +339,15 @@ proc tos(f: Formular; n: FormPos): string =
   result = ""
   toString(result, f, n, appender)
 
-proc eval(f: Formular; n: FormPos; s: seq[BindingKind]): bool =
+proc eval(f: Formular; n: FormPos; s: Solution): bool =
   assert n.int >= 0
   assert n.int < f.len
   case f[n.int].kind
   of FalseForm: result = false
   of TrueForm: result = true
   of VarForm:
-    let v = varId(f[n.int]).int
-    result = v.int < s.len and s[v] == setToTrue
+    let v = varId(f[n.int])
+    result = s.isTrue(v)
   else:
     case f[n.int].kind
     of AndForm:
@@ -391,7 +378,7 @@ proc eval(f: Formular; n: FormPos; s: seq[BindingKind]): bool =
       return false
     else: assert false, "cannot happen"
 
-proc eval*(f: Formular; s: seq[BindingKind]): bool =
+proc eval*(f: Formular; s: Solution): bool =
   eval(f, FormPos(0), s)
 
 import std / [strutils, parseutils]
@@ -481,11 +468,12 @@ when isMainModule:
     echo "original: "
     echo f
 
-    var s: Solution
+    let m = maxVariable(f)
+    var s = createSolution(m)
     echo "is solvable? ", satisfiable(f, s)
     echo "solution"
-    for i in 0..<s.len:
-      echo "v", i, " ", s[i]
+    for i in 0..<m:
+      echo "v", i, " ", s.getVar(VarId(m))
 
   proc main2 =
     var b: Builder
@@ -520,11 +508,12 @@ when isMainModule:
     echo "original: "
     echo f
 
-    var s: Solution
+    let m = maxVariable(f)
+    var s = createSolution(m)
     echo "is solvable? ", satisfiable(f, s)
     echo "solution"
-    for i in 0..<s.len:
-      echo "v", i, " ", s[i]
+    for i in 0..<m:
+      echo "v", i, " ", s.getVar(VarId(m))
 
   main()
   main2()
@@ -537,27 +526,27 @@ when isMainModule:
 (|(~v0) v8) (|(~v1) v9) (|(~v2) v10) (|(~v3) v11) (|(~v4) v12) (|(~v5) v13) (|(~v6) v14))"""
 
     mySol = @[
-      setToTrue, #v0
-      setToFalse, #v1
-      setToTrue, #v2
-      setToFalse, #v3
-      setToTrue, #v4
-      setToTrue, #v5
-      setToFalse, #v6
-      setToTrue, #v7
-      setToTrue, #v8
-      setToFalse, #v9
-      setToTrue, # v10
-      setToFalse, # v11
-      setToTrue, # v12
-      setToTrue, # v13
-      setToFalse,
-      setToFalse,
-      setToFalse,
-      setToFalse,
-      setToFalse,
-      setToFalse,
-      setToFalse
+      SetToTrue, #v0
+      SetToFalse, #v1
+      SetToTrue, #v2
+      SetToFalse, #v3
+      SetToTrue, #v4
+      SetToTrue, #v5
+      SetToFalse, #v6
+      SetToTrue, #v7
+      SetToTrue, #v8
+      SetToFalse, #v9
+      SetToTrue, # v10
+      SetToFalse, # v11
+      SetToTrue, # v12
+      SetToTrue, # v13
+      SetToFalse,
+      SetToFalse,
+      SetToFalse,
+      SetToFalse,
+      SetToFalse,
+      SetToFalse,
+      SetToFalse
     ]
 
   proc main3() =
@@ -569,12 +558,16 @@ when isMainModule:
     echo "original: "
     echo f
 
-    var s: Solution
+    var s = createSolution(f)
     echo "is solvable? ", satisfiable(f, s)
 
 
     echo f.eval(s)
-    echo f.eval(mySol)
+
+    var mx = createSolution(mySol.len)
+    for i in 0..<mySol.len:
+      mx.setVar VarId(i), mySol[i]
+    echo f.eval(mx)
 
   main3()
 

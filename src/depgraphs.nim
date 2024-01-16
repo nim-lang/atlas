@@ -8,7 +8,7 @@
 
 import std / [sets, tables, os, strutils, streams, json, jsonutils]
 
-import context, sat, gitops, runners, reporters, nimbleparser, pkgurls, cloner, versions
+import context, satvars, sat, gitops, runners, reporters, nimbleparser, pkgurls, cloner, versions
 
 type
   DependencyVersion* = object  # Represents a specific version of a project.
@@ -377,25 +377,27 @@ proc runBuildSteps(c: var AtlasContext; g: var DepGraph) =
           if fileExists(f):
             runNimScriptBuilder c, p, pkg.projectName
 
-proc debugFormular(c: var AtlasContext; g: var DepGraph; f: Form; s: seq[BindingKind]) =
+proc debugFormular(c: var AtlasContext; g: var DepGraph; f: Form; s: Solution) =
   echo "FORM: ", f.f
   #for n in g.nodes:
   #  echo "v", n.v.int, " ", n.pkg.url
   for k, v in pairs(f.mapping):
     echo "v", k.int, ": ", v
-  for i in 0 ..< s.len:
-    if s[i] == setToTrue:
+  let m = maxVariable(f.f)
+  for i in 0 ..< m:
+    if s.isTrue(VarId(i)):
       echo "v", i, ": T"
 
 proc solve*(c: var AtlasContext; g: var DepGraph; f: Form) =
-  var s = newSeq[BindingKind](f.idgen)
+  let m = f.idgen
+  var s = createSolution(m)
   #debugFormular c, g, f, s
 
   if satisfiable(f.f, s):
     for n in mitems g.nodes:
       if n.isRoot: n.active = true
-    for i in 0 ..< s.len:
-      if s[i] == setToTrue and f.mapping.hasKey(VarId i):
+    for i in 0 ..< m:
+      if s.isTrue(VarId(i)) and f.mapping.hasKey(VarId i):
         let m = f.mapping[VarId i]
         let idx = findDependencyForDep(g, m.pkg)
         #echo "setting ", idx, " to active ", g.nodes[idx].pkg.url
@@ -418,7 +420,7 @@ proc solve*(c: var AtlasContext; g: var DepGraph; f: Form) =
         if not n.isTopLevel:
           for v in items(n.versions):
             let item = f.mapping[v.v]
-            if s[int v.v] == setToTrue:
+            if s.isTrue(v.v):
               info c, item.pkg.projectName, "[x] " & toString item
             else:
               info c, item.pkg.projectName, "[ ] " & toString item
@@ -435,10 +437,10 @@ proc solve*(c: var AtlasContext; g: var DepGraph; f: Form) =
     for p in mitems(g.nodes):
       var usedVersions = 0
       for ver in mvalidVersions(p, g):
-        if s[ver.v.int] == setToTrue: inc usedVersions
+        if s.isTrue(ver.v): inc usedVersions
       if usedVersions > 1:
         for ver in mvalidVersions(p, g):
-          if s[ver.v.int] == setToTrue:
+          if s.isTrue(ver.v):
             error c, p.pkg.projectName, string(ver.version) & " required"
 
 proc expandWithoutClone*(c: var AtlasContext; g: var DepGraph; nc: NimbleContext) =
