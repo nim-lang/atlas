@@ -456,8 +456,9 @@ proc main(c: var AtlasContext) =
       nimbleFile = c.workspace / extractProjectName(c.workspace) & ".nimble"
       writeFile(nimbleFile, "")
     patchNimbleFile(nc, c, c.overrides, nimbleFile, args[0])
-
-    if nimbleFile.len > 0 and not amb:
+    if c.errors > 0:
+      discard "don't continue for 'cannot resolve'"
+    elif nimbleFile.len > 0 and not amb:
       installDependencies(c, nc, nimbleFile)
     elif amb:
       error c, args[0], "ambiguous .nimble file"

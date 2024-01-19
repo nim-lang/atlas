@@ -111,7 +111,7 @@ proc toString(dest: var string; f: Formular; n: FormPos; varRepr: proc (dest: va
     of NotForm:
       dest.add "(~"
     of ZeroOrOneOfForm:
-      dest.add "(1<="
+      dest.add "(1>="
     else: assert false, "cannot happen"
     var i = 0
     for child in sonsReadonly(f, n):
@@ -259,7 +259,7 @@ proc simplify(dest: var Formular; source: Formular; n: FormPos; sol: Solution): 
   of ZeroOrOneOfForm:
     let initialLen = dest.len
     var childCount = 0
-    var couldEval = 0
+    var trueCount = 0
     for child in sons(dest, source, n):
       let oldLen = dest.len
 
@@ -269,12 +269,16 @@ proc simplify(dest: var Formular; source: Formular; n: FormPos; sol: Solution): 
         setLen dest, oldLen
       else:
         if inner == TrueForm:
-          inc couldEval
+          inc trueCount
         inc childCount
 
-    if couldEval == childCount:
+    if trueCount >= 2:
       setLen dest, initialLen
-      if couldEval <= 1:
+      dest.add lit FalseForm
+      result = FalseForm
+    elif trueCount == childCount:
+      setLen dest, initialLen
+      if trueCount <= 1:
         dest.add lit TrueForm
         result = TrueForm
       else:
@@ -288,7 +292,7 @@ proc simplify(dest: var Formular; source: Formular; n: FormPos; sol: Solution): 
   of ExactlyOneOfForm:
     let initialLen = dest.len
     var childCount = 0
-    var couldEval = 0
+    var trueCount = 0
     for child in sons(dest, source, n):
       let oldLen = dest.len
 
@@ -298,12 +302,16 @@ proc simplify(dest: var Formular; source: Formular; n: FormPos; sol: Solution): 
         setLen dest, oldLen
       else:
         if inner == TrueForm:
-          inc couldEval
+          inc trueCount
         inc childCount
 
-    if couldEval == childCount:
+    if trueCount >= 2:
       setLen dest, initialLen
-      if couldEval != 1:
+      dest.add lit FalseForm
+      result = FalseForm
+    elif trueCount == childCount:
+      setLen dest, initialLen
+      if trueCount != 1:
         dest.add lit FalseForm
         result = FalseForm
       else:
@@ -380,8 +388,21 @@ proc trivialVars(f: Formular; n: FormPos; val: uint64; sol: var Solution) =
     if val == SetToTrue:
       for child in sonsReadonly(f, n):
         trivialVars(f, child, val, sol)
-  of ZeroOrOneOfForm, ExactlyOneOfForm:
-    discard "too complex to analyse"
+  of ExactlyOneOfForm, ZeroOrOneOfForm:
+    if val == SetToTrue:
+      var trueAt = -1
+      for ch in sonsReadonly(f, n):
+        if f[ch.int].kind == VarForm:
+          let v = varId(f[ch.int])
+          if sol.getVar(v) == SetToTrue:
+            trueAt = ch.int
+      if trueAt >= 0:
+        # All others must be false:
+        for ch in sonsReadonly(f, n):
+          if f[ch.int].kind == VarForm:
+            let v = varId(f[ch.int])
+            if ch.int != trueAt:
+              sol.setVar(v, SetToFalse or sol.getVar(v))
 
 proc satisfiable*(f: Formular; sout: var Solution): bool =
   let v = freeVariable(f)
@@ -597,7 +618,7 @@ proc parseFormular(s: string; i: int; b: var Builder): int =
       if continuesWith(s, "1==", result):
         result = parseOpr(s, result, b, ExactlyOneOfForm, "1==")
       else:
-        result = parseOpr(s, result, b, ZeroOrOneOfForm, "1<=")
+        result = parseOpr(s, result, b, ZeroOrOneOfForm, "1>=")
     else:
       quit "unknown operator: " & s[result]
   else:
@@ -685,16 +706,16 @@ when isMainModule:
 
   const
     myFormularU = """(&v0 v1 (~v5) (<->v0 (1==v6)) (<->v1 (1==v7 v8)) (<->v2 (1==v9 v10)) (<->v3 (1==v11)) (<->v4 (1==v12 v13)) (<->v14 (1==v8 v7)) (<->v15 (1==v9)) (<->v16 (1==v10 v9)) (<->v17 (1==v11)) (<->v18 (1==v11)) (<->v19 (1==v13)) (|(~v6) v14) (|(~v7) v15) (|(~v8) v16) (|(~v9) v17) (|(~v10) v18) (|(~v11) v19) (|(~v12) v20))"""
-    myFormular = """(&(1==v0) (1==v1) (1<=v2 v3 v4 v5 v6 v7 v8 v9 v10 v11 v12 v13)
-(1<=v14 v15 v16 v17 v18 v19 v20 v21 v22 v23 v24 v25 v26 v27 v28)
-(1<=v29 v30 v31) (1<=v32)
-(1<=v33 v34 v35 v36 v37 v38 v39 v40 v41 v42 v43 v44 v45 v46 v47 v48 v49 v50 v51 v52 v53 v54 v55 v56 v57 v58)
-(1<=v59 v60 v61 v62)
-(1<=v63 v64 v65 v66 v67 v68 v69 v70 v71 v72 v73 v74) (1<=v75) (1<=v76 v77)
-(1<=v78 v79 v80 v81 v82 v83 v84 v85 v86 v87 v88 v89 v90 v91 v92 v93 v94 v95 v96 v97 v98 v99 v100 v101 v102 v103 v104 v105 v106 v107 v108 v109 v110 v111 v112 v113 v114 v115 v116 v117 v118 v119 v120 v121 v122 v123 v124 v125 v126 v127 v128 v129 v130 v131 v132 v133 v134 v135 v136 v137 v138 v139 v140 v141 v142 v143 v144 v145 v146 v147 v148 v149 v150 v151 v152 v153 v154 v155) (1<=v156 v157 v158 v159 v160 v161 v162 v163 v164 v165 v166 v167 v168 v169 v170 v171 v172) (1<=v173 v174 v175 v176 v177 v178 v179 v180 v181 v182 v183 v184 v185 v186 v187 v188)
-(1<=v189) (1<=v190)
-(1<=v191 v192 v193 v194 v195 v196 v197 v198 v199 v200 v201 v202)
-(1<=v203 v204 v205 v206 v207 v208 v209)
+    myFormular = """(&(1==v0) (1==v1) (1>=v2 v3 v4 v5 v6 v7 v8 v9 v10 v11 v12 v13)
+(1>=v14 v15 v16 v17 v18 v19 v20 v21 v22 v23 v24 v25 v26 v27 v28)
+(1>=v29 v30 v31) (1>=v32)
+(1>=v33 v34 v35 v36 v37 v38 v39 v40 v41 v42 v43 v44 v45 v46 v47 v48 v49 v50 v51 v52 v53 v54 v55 v56 v57 v58)
+(1>=v59 v60 v61 v62)
+(1>=v63 v64 v65 v66 v67 v68 v69 v70 v71 v72 v73 v74) (1>=v75) (1>=v76 v77)
+(1>=v78 v79 v80 v81 v82 v83 v84 v85 v86 v87 v88 v89 v90 v91 v92 v93 v94 v95 v96 v97 v98 v99 v100 v101 v102 v103 v104 v105 v106 v107 v108 v109 v110 v111 v112 v113 v114 v115 v116 v117 v118 v119 v120 v121 v122 v123 v124 v125 v126 v127 v128 v129 v130 v131 v132 v133 v134 v135 v136 v137 v138 v139 v140 v141 v142 v143 v144 v145 v146 v147 v148 v149 v150 v151 v152 v153 v154 v155) (1>=v156 v157 v158 v159 v160 v161 v162 v163 v164 v165 v166 v167 v168 v169 v170 v171 v172) (1>=v173 v174 v175 v176 v177 v178 v179 v180 v181 v182 v183 v184 v185 v186 v187 v188)
+(1>=v189) (1>=v190)
+(1>=v191 v192 v193 v194 v195 v196 v197 v198 v199 v200 v201 v202)
+(1>=v203 v204 v205 v206 v207 v208 v209)
 (|(~v210) (1==v1)) (|(~v211) (&(1==v2) (1==v14) (1==v29) (1==v32) (1==v33) (1==v59)
 (1==v63) (1==v75) (1==v76) (1==v78) (1==v156) (1==v173))) (|(~v212) (1==v189))
 (|(~v214) (1==v190)) (|(~v215) (&(1==v202 v201 v200 v199 v198 v197 v196 v195 v194 v193 v192 v191)
