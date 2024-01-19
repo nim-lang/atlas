@@ -44,6 +44,8 @@ type
   PatchPos = distinct int
   FormPos = distinct int
 
+template firstSon(n: FormPos): FormPos = FormPos(n.int+1)
+
 proc prepare(dest: var Formular; source: Formular; sourcePos: FormPos): PatchPos =
   result = PatchPos dest.len
   dest.add source[sourcePos.int]
@@ -62,6 +64,11 @@ proc patch(f: var Formular; pos: PatchPos) =
 proc nextChild(f: Formular; pos: var int) {.inline.} =
   let x = f[int pos]
   pos += (if x.kind <= VarForm: 1 else: int(intVal(x)))
+
+proc sons2(f: Formular; n: FormPos): (FormPos, FormPos) {.inline.} =
+  var p = n.int + 1
+  nextChild(f, p)
+  result = (n.firstSon, FormPos(p))
 
 iterator sonsReadonly(f: Formular; n: FormPos): FormPos =
   var pos = n.int
@@ -308,39 +315,6 @@ proc simplify(dest: var Formular; source: Formular; n: FormPos; sol: Solution): 
       setLen dest, dest.len-1
       result = dest[initialLen].kind
 
-proc satisfiable*(f: Formular; s: var Solution): bool =
-  let v = freeVariable(f)
-  if v == NoVar:
-    result = f[0].kind == TrueForm
-  else:
-    result = false
-    # We have a variable to guess.
-    # Construct the two guesses.
-    # Return whether either one of them works.
-    let prevValue = s.getVar(v)
-    s.setVar(v, SetToFalse)
-
-    var falseGuess: Formular
-    let res = simplify(falseGuess, f, FormPos 0, s)
-
-    if res == TrueForm:
-      result = true
-    else:
-      result = satisfiable(falseGuess, s)
-      if not result:
-        s.setVar(v, SetToTrue)
-
-        var trueGuess: Formular
-        let res = simplify(trueGuess, f, FormPos 0, s)
-
-        if res == TrueForm:
-          result = true
-        else:
-          result = satisfiable(trueGuess, s)
-          if not result:
-            # Revert the assignment after trying the second option
-            s.setVar(v, prevValue)
-
 proc appender(dest: var string; x: int) =
   dest.add 'v'
   dest.addInt x
@@ -386,6 +360,69 @@ proc eval(f: Formular; n: FormPos; s: Solution): bool =
 
 proc eval*(f: Formular; s: Solution): bool =
   eval(f, FormPos(0), s)
+
+proc trivialVars(f: Formular; n: FormPos; val: uint64; sol: var Solution) =
+  case f[n.int].kind
+  of FalseForm, TrueForm: discard
+  of VarForm:
+    let v = varId(f[n.int])
+    sol.setVar(v, val or sol.getVar(v))
+  of NotForm:
+    let newVal = if val == SetToFalse: SetToTrue else: SetToFalse
+    trivialVars(f, n.firstSon, newVal, sol)
+  of OrForm:
+    if val == SetToTrue:
+      # XXX We assume here that it's an implication. We should test that instead:
+      let (a, b) = sons2(f, n)
+      if eval(f, a.firstSon, sol):
+        trivialVars(f, b, SetToTrue, sol)
+  of AndForm:
+    if val == SetToTrue:
+      for child in sonsReadonly(f, n):
+        trivialVars(f, child, val, sol)
+  of ZeroOrOneOfForm, ExactlyOneOfForm:
+    discard "too complex to analyse"
+
+proc satisfiable*(f: Formular; sout: var Solution): bool =
+  let v = freeVariable(f)
+  if v == NoVar:
+    result = f[0].kind == TrueForm
+  else:
+    var s = sout
+    trivialVars(f, FormPos(0), SetToTrue, s)
+    if containsInvalid(s):
+      sout = s
+      return false
+
+    result = false
+    # We have a variable to guess.
+    # Construct the two guesses.
+    # Return whether either one of them works.
+    let prevValue = s.getVar(v)
+    s.setVar(v, SetToFalse)
+
+    var falseGuess: Formular
+    let res = simplify(falseGuess, f, FormPos 0, s)
+
+    if res == TrueForm:
+      result = true
+    else:
+      result = satisfiable(falseGuess, s)
+      if not result:
+        s.setVar(v, SetToTrue)
+
+        var trueGuess: Formular
+        let res = simplify(trueGuess, f, FormPos 0, s)
+
+        if res == TrueForm:
+          result = true
+        else:
+          result = satisfiable(trueGuess, s)
+          #if not result:
+          # Revert the assignment after trying the second option
+          #  s.setVar(v, prevValue)
+    if result:
+      sout = s
 
 type
   Space = seq[Solution]
@@ -648,10 +685,24 @@ when isMainModule:
 
   const
     myFormularU = """(&v0 v1 (~v5) (<->v0 (1==v6)) (<->v1 (1==v7 v8)) (<->v2 (1==v9 v10)) (<->v3 (1==v11)) (<->v4 (1==v12 v13)) (<->v14 (1==v8 v7)) (<->v15 (1==v9)) (<->v16 (1==v10 v9)) (<->v17 (1==v11)) (<->v18 (1==v11)) (<->v19 (1==v13)) (|(~v6) v14) (|(~v7) v15) (|(~v8) v16) (|(~v9) v17) (|(~v10) v18) (|(~v11) v19) (|(~v12) v20))"""
-    myFormular = """(&(1==v0) (1==v1 v2) (|(1==v3 v4) (&(~v3) (~v4))) (|(1==v5)
-(&(~v5))) (|(1==v6 v7) (&(~v6) (~v7))) (|(~v8) (1==v2 v1)) (|(~v9) (1==v3))
-(|(~v10) (1==v4 v3)) (|(~v11) (1==v5)) (|(~v12) (1==v5)) (|(~v13) (1==v7))
-(|(~v0) v8) (|(~v1) v9) (|(~v2) v10) (|(~v3) v11) (|(~v4) v12) (|(~v5) v13) (|(~v6) v14))"""
+    myFormular = """(&(1==v0) (1==v1) (1<=v2 v3 v4 v5 v6 v7 v8 v9 v10 v11 v12 v13)
+(1<=v14 v15 v16 v17 v18 v19 v20 v21 v22 v23 v24 v25 v26 v27 v28)
+(1<=v29 v30 v31) (1<=v32)
+(1<=v33 v34 v35 v36 v37 v38 v39 v40 v41 v42 v43 v44 v45 v46 v47 v48 v49 v50 v51 v52 v53 v54 v55 v56 v57 v58)
+(1<=v59 v60 v61 v62)
+(1<=v63 v64 v65 v66 v67 v68 v69 v70 v71 v72 v73 v74) (1<=v75) (1<=v76 v77)
+(1<=v78 v79 v80 v81 v82 v83 v84 v85 v86 v87 v88 v89 v90 v91 v92 v93 v94 v95 v96 v97 v98 v99 v100 v101 v102 v103 v104 v105 v106 v107 v108 v109 v110 v111 v112 v113 v114 v115 v116 v117 v118 v119 v120 v121 v122 v123 v124 v125 v126 v127 v128 v129 v130 v131 v132 v133 v134 v135 v136 v137 v138 v139 v140 v141 v142 v143 v144 v145 v146 v147 v148 v149 v150 v151 v152 v153 v154 v155) (1<=v156 v157 v158 v159 v160 v161 v162 v163 v164 v165 v166 v167 v168 v169 v170 v171 v172) (1<=v173 v174 v175 v176 v177 v178 v179 v180 v181 v182 v183 v184 v185 v186 v187 v188)
+(1<=v189) (1<=v190)
+(1<=v191 v192 v193 v194 v195 v196 v197 v198 v199 v200 v201 v202)
+(1<=v203 v204 v205 v206 v207 v208 v209)
+(|(~v210) (1==v1)) (|(~v211) (&(1==v2) (1==v14) (1==v29) (1==v32) (1==v33) (1==v59)
+(1==v63) (1==v75) (1==v76) (1==v78) (1==v156) (1==v173))) (|(~v212) (1==v189))
+(|(~v214) (1==v190)) (|(~v215) (&(1==v202 v201 v200 v199 v198 v197 v196 v195 v194 v193 v192 v191)
+(1==v204 v203))) (|(~v216) (&(1==v202 v201 v200 v199 v198 v197 v196 v195 v194 v193 v192 v191)
+(1==v209 v208 v207 v206 v205 v204 v203))) (|(~v217) (1==v76)) (|(~v0) v210) (|(~v1) v211)
+(|(~v2) v212) (|(~v4) v212) (|(~v5) v212) (|(~v6) v212) (|(~v7) v214) (|(~v8) v214)
+(|(~v9) v214) (|(~v14) v215) (|(~v15) v215) (|(~v16) v215) (|(~v17) v215) (|(~v18) v215)
+(|(~v19) v215) (|(~v20) v215) (|(~v21) v216) (|(~v22) v216) (|(~v75) v217))"""
 
     mySol = @[
       SetToTrue, #v0
@@ -689,13 +740,21 @@ when isMainModule:
     var s = createSolution(f)
     echo "is solvable? ", satisfiable(f, s)
 
+    echo "SOLUTION"
+    let max = maxVariable(f)
+    for i in 0..<max:
+      if s.getVar(VarId(i)) == SetToTrue:
+        echo "v", i
 
-    echo f.eval(s)
+    echo "REALLY? ", eval(f, s)
 
-    var mx = createSolution(mySol.len)
-    for i in 0..<mySol.len:
-      mx.setVar VarId(i), mySol[i]
-    echo f.eval(mx)
+    when false:
+      echo f.eval(s)
+
+      var mx = createSolution(mySol.len)
+      for i in 0..<mySol.len:
+        mx.setVar VarId(i), mySol[i]
+      echo f.eval(mx)
 
   main3()
 

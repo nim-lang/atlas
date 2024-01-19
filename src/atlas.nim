@@ -282,13 +282,13 @@ proc newProject(c: var AtlasContext; projectName: string) =
     if n.len > 0 and n[0] in IdentStartChars:
       for i, c in n:
         case c
-        of Letters + Digits: continue # fine
+        of Letters + Digits: discard "fine"
         of '-', '_':
           if i > 0 and n[i-1] in {'-', '_'}: return false
-          else: continue # fine
+          else: discard "fine"
         else: return false
-      true
-    else: false
+      return true
+    else: return false
 
   let name = projectName.strip()
   if not (isValidFilename(name) and isValidProjectName(name)):

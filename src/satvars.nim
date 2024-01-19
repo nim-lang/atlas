@@ -66,6 +66,11 @@ proc combine*(dest: var Solution; other: Solution) =
       dest.invalid = true
       # break: no `break` here hoping for vectorization.
 
+proc containsInvalid*(s: Solution): bool =
+  for i in 0..<s.x.len:
+    if containsInvalid(s.x[i]): return true
+  return false
+
 when isMainModule:
   import std / random
 
