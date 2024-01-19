@@ -29,10 +29,14 @@ type
 proc hash*(r: Requirements): Hash =
   var h: Hash = 0
   h = h !& hash(r.deps)
+  h = h !& hash(r.hasInstallHooks)
+  h = h !& hash(r.srcDir)
+  h = h !& hash(r.nimVersion)
   result = !$h
 
 proc `==`*(a, b: Requirements): bool =
-  result = a.deps == b.deps
+  result = a.deps == b.deps and a.hasInstallHooks == b.hasInstallHooks and
+      a.srcDir == b.srcDir and a.nimVersion == b.nimVersion
 
 proc updatePackages*(c: var Reporter; depsDir: string) =
   if dirExists(depsDir / DefaultPackagesSubDir):

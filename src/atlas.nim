@@ -82,6 +82,7 @@ Options:
   --resolver=minver|semver|maxver
                         which resolution algorithm to use, default is semver
   --showGraph           show the dependency graph
+  --keepWorkspace       do not update/overwrite `atlas.workspace`
   --list                list all available and installed versions
   --version             show the version
   --ignoreUrls          don't error on mismatching urls
@@ -132,7 +133,7 @@ proc generateDepGraph(c: var AtlasContext; g: DepGraph) =
     discard execShellCmd("dot -Tpng -odeps.png " & quoteShell(dotFile))
 
 proc afterGraphActions(c: var AtlasContext; g: DepGraph) =
-  if c.errors == 0:
+  if c.errors == 0 and KeepWorkspace notin c.flags:
     writeConfig c, toJson(g)
 
   if ShowGraph in c.flags:
@@ -381,6 +382,7 @@ proc main(c: var AtlasContext) =
       of "autoinit": autoinit = true
       of "showgraph": c.flags.incl ShowGraph
       of "ignoreurls": c.flags.incl IgnoreUrls
+      of "keepworkspace": c.flags.incl KeepWorkspace
       of "keep": c.flags.incl Keep
       of "autoenv": c.flags.incl AutoEnv
       of "noexec": c.flags.incl NoExec

@@ -30,6 +30,7 @@ type
     CfgHere
     UsesOverrides
     Keep
+    KeepWorkspace
     ShowGraph
     AutoEnv
     NoExec
