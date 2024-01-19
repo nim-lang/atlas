@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import context
+import reporters
 
 import std / [strutils, os, osproc]
 
@@ -60,7 +60,7 @@ include $1
 
 """
 
-proc runNimScript*(c: var AtlasContext; scriptContent: string; name: Package) =
+proc runNimScript*(c: var Reporter; scriptContent: string; name: string) =
   var buildNims = "atlas_build_0.nims"
   var i = 1
   while fileExists(buildNims):
@@ -78,29 +78,10 @@ proc runNimScript*(c: var AtlasContext; scriptContent: string; name: Package) =
   else:
     removeFile buildNims
 
-proc runNimScriptInstallHook*(c: var AtlasContext; nimble: PackageNimble; name: Package) =
+proc runNimScriptInstallHook*(c: var Reporter; nimbleFile, name: string) =
   infoNow c, name, "running install hooks"
-  runNimScript c, InstallHookTemplate % [nimble.string.escape], name
+  runNimScript c, InstallHookTemplate % [nimbleFile.escape], name
 
-proc runNimScriptBuilder*(c: var AtlasContext; p: (string, string); name: Package) =
+proc runNimScriptBuilder*(c: var Reporter; p: (string, string); name: string) =
   infoNow c, name, "running nimble build scripts"
   runNimScript c, BuilderScriptTemplate % [p[0].escape, p[1].escape], name
-
-proc runBuildSteps*(c: var AtlasContext; g: var DepGraph) =
-  ## execute build steps for the dependency graph
-  ## 
-  ## `countdown` suffices to give us some kind of topological sort:
-  ## 
-  for i in countdown(g.nodes.len-1, 0):
-    if g.nodes[i].active:
-      let pkg = g.nodes[i].pkg
-      tryWithDir c, pkg:
-        # check for install hooks
-        if g.nodes[i].hasInstallHooks:
-          let nf = pkg.nimble
-          runNimScriptInstallHook c, nf, pkg
-        # check for nim script builders
-        for p in mitems c.plugins.builderPatterns:
-          let f = p[0] % pkg.repo.string
-          if fileExists(f):
-            runNimScriptBuilder c, p, pkg

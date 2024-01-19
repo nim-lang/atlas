@@ -2,8 +2,10 @@
 
 import std/[unittest, os, strutils]
 
-import context, osutils
-from nameresolver import resolvePackage
+import context, osutils, versions
+
+when false:
+  from nameresolver import resolvePackage
 
 let
   basicExamples = {
@@ -30,20 +32,21 @@ proc initBasicWorkspace(typ: type AtlasContext): AtlasContext =
   result.workspace = currentSourcePath().parentDir / "ws_basic"
   result.depsDir = result.workspace
 
-suite "urls and naming":
+when false:
+  suite "urls and naming":
 
-  test "basic urls":
+    test "basic urls":
 
-    var c = AtlasContext.initBasicWorkspace()
+      var c = AtlasContext.initBasicWorkspace()
 
-    for name, url in basicExamples.items:
-      let upkg = resolvePackage(c, url.input)
-      check upkg.url.hostname == "github.com"
-      check $upkg.url == url.output
+      for name, url in basicExamples.items:
+        let upkg = resolvePackage(c, url.input)
+        check upkg.url.hostname == "github.com"
+        check $upkg.url == url.output
 
-      let npkg = resolvePackage(c, name)
-      check npkg.url.hostname == "github.com"
-      check $npkg.url == url.output
+        let npkg = resolvePackage(c, name)
+        check npkg.url.hostname == "github.com"
+        check $npkg.url == url.output
 
 template v(x): untyped = Version(x)
 

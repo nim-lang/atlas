@@ -1,5 +1,5 @@
 # Package
-version = "0.6.3"
+version = "0.8.0"
 author = "Araq"
 description = "Atlas is a simple package cloner tool. It manages an isolated workspace."
 license = "MIT"
@@ -9,7 +9,7 @@ bin = @["atlas"]
 
 # Dependencies
 
-requires "nim >= 1.6.0"
+requires "nim >= 2.0.0"
 
 task docs, "build Atlas's docs":
   exec "nim rst2html --putenv:atlasversion=$1 doc/atlas.md" % version
