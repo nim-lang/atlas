@@ -32,10 +32,12 @@ proc sameDirContents(expected, given: string): bool =
 const
   SemVerExpectedResult = """
 [Info] (../resolve) selected:
-[Info] (proj_a) [ ] (proj_a, 1.0.0)
-[Info] (proj_a) [x] (proj_a, 1.1.0)
-[Info] (proj_b) [x] (proj_b, 1.1.0)
+[Info] (proj_a) [ ] (proj_a, 1.1.0)
+[Info] (proj_a) [x] (proj_a, 1.0.0)
+[Info] (proj_b) [ ] (proj_b, 1.1.0)
+[Info] (proj_b) [x] (proj_b, 1.0.0)
 [Info] (proj_c) [x] (proj_c, 1.2.0)
+[Info] (proj_d) [ ] (proj_d, 2.0.0)
 [Info] (proj_d) [x] (proj_d, 1.0.0)
 [Info] (../resolve) end of selection
 """
