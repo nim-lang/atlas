@@ -217,13 +217,19 @@ proc addPattern*(p: var Patterns; inputPattern, outputPattern: string): string =
       p.s.add (code, outputPattern)
       result = ""
 
-proc substitute*(p: Patterns; input: string): string =
+proc substitute*(p: Patterns; input: string; didReplace: var bool): string =
   result = p.t.getOrDefault(input)
   if result.len == 0:
     for i in 0..<p.s.len:
       let m = p.s[i][0].matches(p.strings, input)
       if m.m >= 0:
+        didReplace = true
         return translate(m, p.s[i][1], input)
+    return input
+
+proc substitute*(p: Patterns; input: string): string =
+  var ignored = false
+  substitute(p, input, ignored)
 
 proc replacePattern*(inputPattern, outputPattern, input: string): string =
   var strings: seq[string] = @[]
@@ -244,3 +250,6 @@ when isMainModule:
 
   echo translate(m, "https://gitlab.cross.de/$1", realInput)
 
+  var pat = initPatterns()
+  discard pat.addPattern("$+", "file://./source/$#")
+  echo substitute(pat, "proj_a")

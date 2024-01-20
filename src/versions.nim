@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [strutils, parseutils, algorithm]
+import std / [strutils, parseutils, algorithm, hashes]
 
 type
   Version* = distinct string
@@ -28,6 +28,12 @@ type
     a: VersionReq
     b: VersionReq
     isInterval: bool
+
+  ResolutionAlgorithm* = enum
+    MinVer, SemVer, MaxVer
+
+const
+  InvalidCommit* = "#head" #"<invalid commit>"
 
 template versionKey*(i: VersionInterval): string = i.a.v.string
 
@@ -116,6 +122,11 @@ proc `==`*(a, b: Version): bool =
     result = a.string == b.string
   else:
     result = eq(a.string, b.string)
+
+proc hash*(a: Version): Hash {.borrow.}
+
+proc `==`*(a, b: VersionInterval): bool {.inline.} = system.`==`(a, b)
+proc hash*(a: VersionInterval): Hash {.inline.} = hashes.hash(a)
 
 proc parseVer(s: string; start: var int): Version =
   if start < s.len and s[start] == '#':
@@ -233,7 +244,15 @@ proc matches(pattern: VersionReq; v: Version): bool =
   of verLt:
     result = v < pattern.v
   of verEq, verSpecial:
-    result = pattern.v == v
+    if pattern.v.string.startsWith('#'):
+      if v.string.startsWith('#'):
+        result = pattern.v == v
+      else:
+        result = pattern.v.string.substr(1) == v.string
+    elif v.string.startsWith('#'):
+      result = pattern.v.string == v.string.substr(1)
+    else:
+      result = pattern.v == v
   of verAny:
     result = true
 
