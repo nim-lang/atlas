@@ -14,6 +14,8 @@ import versions, context, osutils, packagesjson, sat, gitops, nimenv, lockfiles,
   depgraphs, confighandler, configutils, cloner, nimblechecksums, reporters,
   nimbleparser, pkgurls
 
+from std/terminal import isatty
+
 const
   AtlasVersion =
     block:
@@ -341,6 +343,8 @@ proc main(c: var AtlasContext) =
   var autoinit = false
   var explicitProjectOverride = false
   var explicitDepsDirOverride = false
+  if existsEnv("NO_COLOR") or not isatty(stdout) or (getEnv("TERM") == "dumb"):
+    c.noColors = true
   for kind, key, val in getopt():
     case kind
     of cmdArgument:
