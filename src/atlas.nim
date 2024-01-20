@@ -227,19 +227,19 @@ proc updateDir(c: var AtlasContext; dir, filter: string) =
 
 
 proc detectWorkspace(currentDir: string): string =
-  ## find workspace by checking `currentDir` and its parents
-  ##
-  ## failing that it will subdirs of the `currentDir`
-  ##
+  ## find workspace by checking `currentDir` and its parents.
   result = currentDir
   while result.len > 0:
     if fileExists(result / AtlasWorkspace):
       return result
     result = result.parentDir()
-  # alternatively check for "sub-directory" workspace
-  for kind, file in walkDir(currentDir):
-    if kind == pcDir and fileExists(file / AtlasWorkspace):
-      return file
+  when false:
+    # That is a bad idea and I know no other tool (git etc.) that
+    # does such shenanigans.
+    # alternatively check for "sub-directory" workspace
+    for kind, file in walkDir(currentDir):
+      if kind == pcDir and fileExists(file / AtlasWorkspace):
+        return file
 
 proc autoWorkspace(currentDir: string): string =
   result = currentDir
@@ -411,7 +411,7 @@ proc main(c: var AtlasContext) =
   if c.workspace.len > 0:
     if not dirExists(c.workspace): fatal "Workspace directory '" & c.workspace & "' not found."
     readConfig c
-  elif action != "init":
+  elif action notin ["init", "tag"]:
     if GlobalWorkspace in c.flags:
       c.workspace = detectWorkspace(getHomeDir() / ".atlas")
       warn c, c.workspace, "using global workspace"
@@ -423,12 +423,13 @@ proc main(c: var AtlasContext) =
     elif autoinit:
       c.workspace = autoWorkspace(c.currentDir)
       createWorkspaceIn c
-    elif action notin ["search", "list", "tag"]:
+    elif action notin ["search", "list"]:
       fatal "No workspace found. Run `atlas init` if you want this current directory to be your workspace."
 
-  if not explicitDepsDirOverride and action != "init" and c.depsDir.len() == 0:
+  if not explicitDepsDirOverride and action notin ["init", "tag"] and c.depsDir.len == 0:
     c.depsDir = c.workspace
-  createDir(c.depsDir)
+  if action != "tag":
+    createDir(c.depsDir)
 
   case action
   of "":
