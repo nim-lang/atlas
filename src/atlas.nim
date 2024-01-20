@@ -344,7 +344,7 @@ proc main(c: var AtlasContext) =
   var explicitProjectOverride = false
   var explicitDepsDirOverride = false
   if existsEnv("NO_COLOR") or not isatty(stdout) or (getEnv("TERM") == "dumb"):
-    c.flags.incl NoColors
+    c.noColors = true
   for kind, key, val in getopt():
     case kind
     of cmdArgument:
