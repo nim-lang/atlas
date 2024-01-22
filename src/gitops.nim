@@ -25,7 +25,8 @@ type
     GitPull = "git pull",
     GitCurrentCommit = "git log -n 1 --format=%H"
     GitMergeBase = "git merge-base"
-    GitLsFiles = "git -C $1 ls-files",
+    GitLsFiles = "git -C $1 ls-files"
+    GitLog = "git log --format=%H"
 
 proc isGitDir*(path: string): bool =
   let gitPath = path / ".git"

@@ -148,6 +148,15 @@ proc parseVersion*(s: string; start: int): Version =
   if i < s.len and s[i] == 'v': inc i
   result = parseVer(s, i)
 
+proc parseExplicitVersion*(s: string): Version =
+  const start = 0
+  if start < s.len and s[start] in Digits:
+    var i = start
+    while i < s.len and s[i] in Digits+{'.'}: inc i
+    result = Version s.substr(start, i-1)
+  else:
+    result = Version""
+
 proc parseSuffix(s: string; start: int; result: var VersionInterval; err: var bool) =
   # >= 1.5 & <= 1.8
   #        ^ we are here
