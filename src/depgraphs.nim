@@ -101,8 +101,11 @@ type
     AllReleases,
     CurrentCommit
 
+  CommitOrigin = enum
+    FromHead, FromGitTag, FromDep, FromNimbleFile
+
 iterator releases(c: var AtlasContext; m: TraversalMode; versions: seq[DependencyVersion];
-                  nimbleCommits: seq[string]): Commit =
+                  nimbleCommits: seq[string]): (CommitOrigin, Commit) =
   let (cc, status) = exec(c, GitCurrentCommit, [])
   if status == 0:
     case m
@@ -114,31 +117,31 @@ iterator releases(c: var AtlasContext; m: TraversalMode; versions: seq[Dependenc
           if v.version == Version"" and v.commit.len > 0 and not uniqueCommits.containsOrIncl(v.commit):
             let (_, status) = exec(c, GitCheckout, [v.commit])
             if status == 0:
-              yield Commit(h: v.commit, v: Version"")
+              yield (FromDep, Commit(h: v.commit, v: Version""))
               inc produced
         let tags = collectTaggedVersions(c)
         for t in tags:
           if not uniqueCommits.containsOrIncl(t.h):
             let (_, status) = exec(c, GitCheckout, [t.h])
             if status == 0:
-              yield t
+              yield (FromGitTag, t)
               inc produced
         for h in nimbleCommits:
           if not uniqueCommits.containsOrIncl(h):
             let (_, status) = exec(c, GitCheckout, [h])
             if status == 0:
-              yield Commit(h: h, v: Version"")
-              inc produced
+              yield (FromNimbleFile, Commit(h: h, v: Version""))
+              #inc produced
 
         if produced == 0:
-          yield Commit(h: "", v: Version"#head")
+          yield (FromHead, Commit(h: "", v: Version"#head"))
 
       finally:
         discard exec(c, GitCheckout, [cc])
     of CurrentCommit:
-      yield Commit(h: cc, v: Version"#head")
+      yield (FromHead, Commit(h: "", v: Version"#head"))
   else:
-    yield Commit(h: "", v: Version"#head")
+    yield (FromHead, Commit(h: "", v: Version"#head"))
 
 proc findNimbleFile(g: DepGraph; idx: int): (string, int) =
   var nimbleFile = g.nodes[idx].pkg.projectName & ".nimble"
@@ -166,11 +169,11 @@ proc collectNimbleVersions*(c: var AtlasContext; nc: NimbleContext; g: var DepGr
     let (outp, status) = exec(c, GitLog, [outerNimbleFile])
     if status == 0:
       for line in splitLines(outp):
-        if not line.endsWith("^{}"):
+        if line.len > 0 and not line.endsWith("^{}"):
           result.add line
 
 proc traverseRelease(c: var AtlasContext; nc: NimbleContext; g: var DepGraph; idx: int;
-                     r: Commit; lastNimbleContents: var string) =
+                     origin: CommitOrigin; r: Commit; lastNimbleContents: var string) =
   let (nimbleFile, found) = findNimbleFile(g, idx)
   var pv = DependencyVersion(
     version: r.v,
@@ -184,7 +187,8 @@ proc traverseRelease(c: var AtlasContext; nc: NimbleContext; g: var DepGraph; id
       pv.req = g.nodes[idx].versions[^1].req
     else:
       let r = parseNimbleFile(nc, nimbleFile, c.overrides)
-      if pv.version == Version"": pv.version = r.version
+      if origin == FromNimbleFile and pv.version == Version"":
+        pv.version = r.version
       let ridx = g.reqsByDeps.getOrDefault(r, -1) # hasKey(r)
       if ridx == -1:
         pv.req = g.reqs.len
@@ -206,7 +210,10 @@ proc traverseRelease(c: var AtlasContext; nc: NimbleContext; g: var DepGraph; id
           g.nodes[didx].isRoot = g.nodes[didx].isRoot or idx == 0
           enrichVersionsViaExplicitHash g.nodes[didx].versions, interval
 
-  g.nodes[idx].versions.add ensureMove pv
+  if origin == FromNimbleFile and pv.version == Version"":
+    discard "not a version"
+  else:
+    g.nodes[idx].versions.add ensureMove pv
 
 proc traverseDependency(c: var AtlasContext; nc: NimbleContext; g: var DepGraph; idx: int;
                         m: TraversalMode) =
@@ -215,8 +222,8 @@ proc traverseDependency(c: var AtlasContext; nc: NimbleContext; g: var DepGraph;
   let versions = move g.nodes[idx].versions
   let nimbleVersions = collectNimbleVersions(c, nc, g, idx)
 
-  for r in releases(c, m, versions, nimbleVersions):
-    traverseRelease c, nc, g, idx, r, lastNimbleContents
+  for (origin, r) in releases(c, m, versions, nimbleVersions):
+    traverseRelease c, nc, g, idx, origin, r, lastNimbleContents
 
 const
   FileWorkspace = "file://./"
