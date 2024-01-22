@@ -12,6 +12,7 @@ type
     version*: string
     tasks*: seq[(string, string)]
     hasInstallHooks*: bool
+    hasErrors*: bool
 
 proc eqIdent(a, b: string): bool {.inline.} =
   cmpIgnoreCase(a, b) == 0 and a[0] == b[0]
@@ -32,6 +33,7 @@ proc extract(n: PNode; conf: ConfigRef; result: var NimbleFileInfo) =
             result.requires.add ch.strVal
           else:
             localError(conf, ch.info, "'requires' takes string literals")
+            result.hasErrors = true
       of "task":
         if n.len >= 3 and n[1].kind == nkIdent and n[2].kind in {nkStrLit..nkTripleStrLit}:
           result.tasks.add((n[1].ident.s, n[2].strVal))
@@ -53,11 +55,13 @@ proc extract(n: PNode; conf: ConfigRef; result: var NimbleFileInfo) =
         result.srcDir = n[1].strVal
       else:
         localError(conf, n[1].info, "assignments to 'srcDir' must be string literals")
+        result.hasErrors = true
     elif n[0].kind == nkIdent and eqIdent(n[0].ident.s, "version"):
       if n[1].kind in {nkStrLit..nkTripleStrLit}:
         result.version = n[1].strVal
       else:
         localError(conf, n[1].info, "assignments to 'version' must be string literals")
+        result.hasErrors = true
   else:
     discard
 
@@ -71,12 +75,14 @@ proc extractRequiresInfo*(nimbleFile: string): NimbleFileInfo =
   conf.foreignPackageNotes = {}
   conf.notes = {}
   conf.mainPackageNotes = {}
+  conf.errorMax = high(int)
 
   let fileIdx = fileInfoIdx(conf, AbsoluteFile nimbleFile)
   var parser: Parser
   if setupParser(parser, fileIdx, newIdentCache(), conf):
     extract(parseAll(parser), conf, result)
     closeParser(parser)
+  result.hasErrors = result.hasErrors or conf.errorCounter > 0
 
 type
   PluginInfo* = object

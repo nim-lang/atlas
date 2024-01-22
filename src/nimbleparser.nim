@@ -77,7 +77,7 @@ proc parseNimbleFile*(c: NimbleContext; nimbleFile: string; p: Patterns): Requir
   result = Requirements(
     hasInstallHooks: nimbleInfo.hasInstallHooks,
     srcDir: nimbleInfo.srcDir,
-    status: Normal,
+    status: if nimbleInfo.hasErrors: HasBrokenNimbleFile else: Normal,
     v: NoVar,
     version: parseExplicitVersion(nimbleInfo.version)
   )

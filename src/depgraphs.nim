@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [sets, tables, os, strutils, streams, json, jsonutils]
+import std / [sets, tables, os, strutils, streams, json, jsonutils, algorithm]
 
 import context, satvars, sat, gitops, runners, reporters, nimbleparser, pkgurls, cloner, versions
 
@@ -171,6 +171,7 @@ proc collectNimbleVersions*(c: var AtlasContext; nc: NimbleContext; g: var DepGr
       for line in splitLines(outp):
         if line.len > 0 and not line.endsWith("^{}"):
           result.add line
+    result.reverse()
 
 proc traverseRelease(c: var AtlasContext; nc: NimbleContext; g: var DepGraph; idx: int;
                      origin: CommitOrigin; r: Commit; lastNimbleContents: var string) =
@@ -179,6 +180,7 @@ proc traverseRelease(c: var AtlasContext; nc: NimbleContext; g: var DepGraph; id
     version: r.v,
     commit: r.h,
     req: EmptyReqs, v: NoVar)
+  var badNimbleFile = false
   if found != 1:
     pv.req = UnknownReqs
   else:
@@ -209,9 +211,11 @@ proc traverseRelease(c: var AtlasContext; nc: NimbleContext; g: var DepGraph; id
         else:
           g.nodes[didx].isRoot = g.nodes[didx].isRoot or idx == 0
           enrichVersionsViaExplicitHash g.nodes[didx].versions, interval
+    else:
+      badNimbleFile = true
 
-  if origin == FromNimbleFile and pv.version == Version"":
-    discard "not a version"
+  if origin == FromNimbleFile and (pv.version == Version"" or badNimbleFile):
+    discard "not a version we model in the dependency graph"
   else:
     g.nodes[idx].versions.add ensureMove pv
 
@@ -327,6 +331,11 @@ proc toFormular*(c: var AtlasContext; g: var DepGraph; algo: ResolutionAlgorithm
     # that are errornous:
     # A -> (exactly one of: A1, A2, A3)
     if p.versions.len == 0: continue
+
+    p.versions.sort proc (a, b: DependencyVersion): int =
+      (if a.version < b.version: 1
+      elif a.version == b.version: 0
+      else: -1)
 
     var i = 0
     for ver in mitems p.versions:
