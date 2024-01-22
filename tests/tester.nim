@@ -42,6 +42,23 @@ const
 [Info] (../resolve) end of selection
 """
 
+  SemVerExpectedResultNoGitTags = """
+[Info] (../resolve) selected:
+[Info] (proj_a) [ ] (proj_a, #head)
+[Info] (proj_a) [ ] (proj_a, 1.1.0)
+[Info] (proj_a) [x] (proj_a, 1.0.0)
+[Info] (proj_b) [ ] (proj_b, #head)
+[Info] (proj_b) [ ] (proj_b, 1.1.0)
+[Info] (proj_b) [x] (proj_b, 1.0.0)
+[Info] (proj_c) [ ] (proj_c, #head)
+[Info] (proj_c) [x] (proj_c, 1.2.0)
+[Info] (proj_c) [ ] (proj_c, 1.0.0)
+[Info] (proj_d) [ ] (proj_d, #head)
+[Info] (proj_d) [ ] (proj_d, 2.0.0)
+[Info] (proj_d) [x] (proj_d, 1.0.0)
+[Info] (../resolve) end of selection
+"""
+
   MinVerExpectedResult = """selected:
 [ ] (proj_a, 1.1.0)
 [x] (proj_a, 1.0.0)
@@ -53,17 +70,16 @@ const
 end of selection
 """
 
-proc testSemVer2() =
-  buildGraph()
+proc testSemVer2(expected: string) =
   createDir "semproject"
   withDir "semproject":
     let cmd = atlasExe & " --full --keepWorkspace --resolver=SemVer --colors:off --list use proj_a"
     let (outp, status) = execCmdEx(cmd)
     if status == 0:
-      if outp.contains SemVerExpectedResult:
+      if outp.contains expected:
         discard "fine"
       else:
-        echo "expected ", SemVerExpectedResult, " but got ", outp
+        echo "expected ", expected, " but got ", outp
         raise newException(AssertionDefect, "Test failed!")
     else:
       echo "\n\n<<<<<<<<<<<<<<<< failed "
@@ -89,7 +105,22 @@ proc testMinVer() =
 
 withDir "tests/ws_semver2":
   try:
-    testSemVer2()
+    buildGraph()
+    testSemVer2(SemVerExpectedResult)
+  finally:
+    removeDir "does_not_exist"
+    removeDir "semproject"
+    removeDir "minproject"
+    removeDir "source"
+    removeDir "proj_a"
+    removeDir "proj_b"
+    removeDir "proj_c"
+    removeDir "proj_d"
+
+withDir "tests/ws_semver2":
+  try:
+    buildGraphNoGitTags()
+    testSemVer2(SemVerExpectedResultNoGitTags)
   finally:
     removeDir "does_not_exist"
     removeDir "semproject"
@@ -129,11 +160,12 @@ proc cleanupIntegrationTest() =
   removeFile "nim.cfg"
   removeFile "ws_integration.nimble"
 
-withDir "tests/ws_integration":
-  try:
-    integrationTest()
-  finally:
-    when not defined(keepTestDirs):
-      cleanupIntegrationTest()
+when not defined(quick):
+  withDir "tests/ws_integration":
+    try:
+      integrationTest()
+    finally:
+      when not defined(keepTestDirs):
+        cleanupIntegrationTest()
 
 if failures > 0: quit($failures & " failures occurred.")
