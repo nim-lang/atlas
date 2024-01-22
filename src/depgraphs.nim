@@ -101,25 +101,35 @@ type
     AllReleases,
     CurrentCommit
 
-iterator releases(c: var AtlasContext; m: TraversalMode; versions: seq[DependencyVersion]): Commit =
+iterator releases(c: var AtlasContext; m: TraversalMode; versions: seq[DependencyVersion];
+                  nimbleCommits: seq[string]): Commit =
   let (cc, status) = exec(c, GitCurrentCommit, [])
   if status == 0:
     case m
     of AllReleases:
       try:
         var produced = 0
+        var uniqueCommits = initHashSet[string]()
         for v in versions:
-          if v.version == Version"" and v.commit.len > 0:
+          if v.version == Version"" and v.commit.len > 0 and not uniqueCommits.containsOrIncl(v.commit):
             let (_, status) = exec(c, GitCheckout, [v.commit])
             if status == 0:
               yield Commit(h: v.commit, v: Version"")
               inc produced
         let tags = collectTaggedVersions(c)
         for t in tags:
-          let (_, status) = exec(c, GitCheckout, [t.h])
-          if status == 0:
-            yield t
-            inc produced
+          if not uniqueCommits.containsOrIncl(t.h):
+            let (_, status) = exec(c, GitCheckout, [t.h])
+            if status == 0:
+              yield t
+              inc produced
+        for h in nimbleCommits:
+          if not uniqueCommits.containsOrIncl(h):
+            let (_, status) = exec(c, GitCheckout, [h])
+            if status == 0:
+              yield Commit(h: h, v: Version"")
+              inc produced
+
         if produced == 0:
           yield Commit(h: "", v: Version"#head")
 
@@ -149,48 +159,64 @@ proc enrichVersionsViaExplicitHash(versions: var seq[DependencyVersion]; x: Vers
     versions.add DependencyVersion(version: Version"",
       commit: commit, req: EmptyReqs, v: NoVar)
 
+proc collectNimbleVersions*(c: var AtlasContext; nc: NimbleContext; g: var DepGraph; idx: int): seq[string] =
+  let (outerNimbleFile, found) = findNimbleFile(g, idx)
+  result = @[]
+  if found == 1:
+    let (outp, status) = exec(c, GitLog, [outerNimbleFile])
+    if status == 0:
+      for line in splitLines(outp):
+        if not line.endsWith("^{}"):
+          result.add line
+
+proc traverseRelease(c: var AtlasContext; nc: NimbleContext; g: var DepGraph; idx: int;
+                     r: Commit; lastNimbleContents: var string) =
+  let (nimbleFile, found) = findNimbleFile(g, idx)
+  var pv = DependencyVersion(
+    version: r.v,
+    commit: r.h,
+    req: EmptyReqs, v: NoVar)
+  if found != 1:
+    pv.req = UnknownReqs
+  else:
+    let nimbleContents = readFile(nimbleFile)
+    if lastNimbleContents == nimbleContents:
+      pv.req = g.nodes[idx].versions[^1].req
+    else:
+      let r = parseNimbleFile(nc, nimbleFile, c.overrides)
+      if pv.version == Version"": pv.version = r.version
+      let ridx = g.reqsByDeps.getOrDefault(r, -1) # hasKey(r)
+      if ridx == -1:
+        pv.req = g.reqs.len
+        g.reqsByDeps[r] = pv.req
+        g.reqs.add r
+      else:
+        pv.req = ridx
+
+      lastNimbleContents = ensureMove nimbleContents
+
+    if g.reqs[pv.req].status == Normal:
+      for dep, interval in items(g.reqs[pv.req].deps):
+        let didx = g.packageToDependency.getOrDefault(dep, -1)
+        if didx == -1:
+          g.packageToDependency[dep] = g.nodes.len
+          g.nodes.add Dependency(pkg: dep, versions: @[], isRoot: idx == 0, activeVersion: -1)
+          enrichVersionsViaExplicitHash g.nodes[g.nodes.len-1].versions, interval
+        else:
+          g.nodes[didx].isRoot = g.nodes[didx].isRoot or idx == 0
+          enrichVersionsViaExplicitHash g.nodes[didx].versions, interval
+
+  g.nodes[idx].versions.add ensureMove pv
+
 proc traverseDependency(c: var AtlasContext; nc: NimbleContext; g: var DepGraph; idx: int;
-                        processed: var HashSet[PkgUrl];
                         m: TraversalMode) =
   var lastNimbleContents = "<invalid content>"
 
   let versions = move g.nodes[idx].versions
-  for r in releases(c, m, versions):
-    let (nimbleFile, found) = findNimbleFile(g, idx)
-    var pv = DependencyVersion(
-      version: r.v,
-      commit: r.h,
-      req: EmptyReqs, v: NoVar)
-    if found != 1:
-      pv.req = UnknownReqs
-    else:
-      let nimbleContents = readFile(nimbleFile)
-      if lastNimbleContents == nimbleContents:
-        pv.req = g.nodes[idx].versions[^1].req
-      else:
-        let r = parseNimbleFile(nc, nimbleFile, c.overrides)
-        let ridx = g.reqsByDeps.getOrDefault(r, -1) # hasKey(r)
-        if ridx == -1:
-          pv.req = g.reqs.len
-          g.reqsByDeps[r] = pv.req
-          g.reqs.add r
-        else:
-          pv.req = ridx
+  let nimbleVersions = collectNimbleVersions(c, nc, g, idx)
 
-        lastNimbleContents = ensureMove nimbleContents
-
-      if g.reqs[pv.req].status == Normal:
-        for dep, interval in items(g.reqs[pv.req].deps):
-          let didx = g.packageToDependency.getOrDefault(dep, -1)
-          if didx == -1:
-            g.packageToDependency[dep] = g.nodes.len
-            g.nodes.add Dependency(pkg: dep, versions: @[], isRoot: idx == 0, activeVersion: -1)
-            enrichVersionsViaExplicitHash g.nodes[g.nodes.len-1].versions, interval
-          else:
-            g.nodes[didx].isRoot = g.nodes[didx].isRoot or idx == 0
-            enrichVersionsViaExplicitHash g.nodes[didx].versions, interval
-
-    g.nodes[idx].versions.add ensureMove pv
+  for r in releases(c, m, versions, nimbleVersions):
+    traverseRelease c, nc, g, idx, r, lastNimbleContents
 
 const
   FileWorkspace = "file://./"
@@ -249,7 +275,7 @@ proc expand*(c: var AtlasContext; g: var DepGraph; nc: NimbleContext; m: Travers
 
       if g.nodes[i].status == Ok:
         withDir c, dest:
-          traverseDependency(c, nc, g, i, processed, m)
+          traverseDependency(c, nc, g, i, m)
     inc i
 
 proc findDependencyForDep(g: DepGraph; dep: PkgUrl): int {.inline.} =
@@ -487,7 +513,7 @@ proc expandWithoutClone*(c: var AtlasContext; g: var DepGraph; nc: NimbleContext
       let (dest, todo) = pkgUrlToDirname(c, g, g.nodes[i])
       if todo == DoNothing:
         withDir c, dest:
-          traverseDependency(c, nc, g, i, processed, CurrentCommit)
+          traverseDependency(c, nc, g, i, CurrentCommit)
     inc i
 
 iterator allNodes*(g: DepGraph): lent Dependency =

@@ -17,6 +17,7 @@ type
     deps*: seq[(PkgUrl, VersionInterval)]
     hasInstallHooks*: bool
     srcDir*: string
+    version*: Version
     nimVersion*: Version
     v*: VarId
     status*: DependencyStatus
@@ -31,12 +32,14 @@ proc hash*(r: Requirements): Hash =
   h = h !& hash(r.deps)
   h = h !& hash(r.hasInstallHooks)
   h = h !& hash(r.srcDir)
+  #h = h !& hash(r.version)
   h = h !& hash(r.nimVersion)
   result = !$h
 
 proc `==`*(a, b: Requirements): bool =
   result = a.deps == b.deps and a.hasInstallHooks == b.hasInstallHooks and
       a.srcDir == b.srcDir and a.nimVersion == b.nimVersion
+  #and a.version == b.version
 
 proc updatePackages*(c: var Reporter; depsDir: string) =
   if dirExists(depsDir / DefaultPackagesSubDir):
@@ -75,7 +78,8 @@ proc parseNimbleFile*(c: NimbleContext; nimbleFile: string; p: Patterns): Requir
     hasInstallHooks: nimbleInfo.hasInstallHooks,
     srcDir: nimbleInfo.srcDir,
     status: Normal,
-    v: NoVar
+    v: NoVar,
+    version: parseExplicitVersion(nimbleInfo.version)
   )
   for r in nimbleInfo.requires:
     var i = 0

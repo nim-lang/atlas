@@ -13,6 +13,9 @@ type
     tasks*: seq[(string, string)]
     hasInstallHooks*: bool
 
+proc eqIdent(a, b: string): bool {.inline.} =
+  cmpIgnoreCase(a, b) == 0 and a[0] == b[0]
+
 proc extract(n: PNode; conf: ConfigRef; result: var NimbleFileInfo) =
   case n.kind
   of nkStmtList, nkStmtListExpr:
@@ -45,12 +48,12 @@ proc extract(n: PNode; conf: ConfigRef; result: var NimbleFileInfo) =
           result.hasInstallHooks = true
       else: discard
   of nkAsgn, nkFastAsgn:
-    if n[0].kind == nkIdent and cmpIgnoreCase(n[0].ident.s, "srcDir") == 0:
+    if n[0].kind == nkIdent and eqIdent(n[0].ident.s, "srcDir"):
       if n[1].kind in {nkStrLit..nkTripleStrLit}:
         result.srcDir = n[1].strVal
       else:
         localError(conf, n[1].info, "assignments to 'srcDir' must be string literals")
-    elif n[0].kind == nkIdent and cmpIgnoreCase(n[0].ident.s, "version") == 0:
+    elif n[0].kind == nkIdent and eqIdent(n[0].ident.s, "version"):
       if n[1].kind in {nkStrLit..nkTripleStrLit}:
         result.version = n[1].strVal
       else:
