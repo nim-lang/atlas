@@ -322,6 +322,7 @@ proc newProject(c: var AtlasContext; projectName: string) =
 proc main(c: var AtlasContext) =
   var action = ""
   var args: seq[string] = @[]
+
   template singleArg() =
     if args.len != 1:
       fatal action & " command takes a single package name"
@@ -342,6 +343,26 @@ proc main(c: var AtlasContext) =
     if c.projectDir == c.workspace or c.projectDir == c.depsDir:
       fatal action & " command must be executed in a project, not in the workspace"
 
+  template setWorkspaceDir(val: string) =
+    if val == ".":
+      c.workspace = getCurrentDir()
+      createWorkspaceIn c
+    elif val.len > 0:
+      c.workspace = val
+      if not explicitProjectOverride:
+        c.currentDir = val
+      createDir(val)
+      createWorkspaceIn c
+    else:
+      writeHelp()
+
+  template setProjectDir(val: string) =
+    explicitProjectOverride = true
+    if isAbsolute(val):
+      c.currentDir = val
+    else:
+      c.currentDir = getCurrentDir() / val
+
   proc findCurrentNimble(): string =
     for x in walkPattern("*.nimble"):
       return x
@@ -353,8 +374,13 @@ proc main(c: var AtlasContext) =
     explicitProjCmd = false
     explicitWorkspaceCmd = false
 
+  # process cli environment variables
   if existsEnv("NO_COLOR") or not isatty(stdout) or (getEnv("TERM") == "dumb"):
     c.noColors = true
+  if existsEnv("ATLAS_WORKSPACE"):
+    setWorkspaceDir(getEnv("ATLAS_WORKSPACE"))
+  if existsEnv("ATLAS_PROJECT"):
+    setWorkspaceDir(getEnv("ATLAS_PROJECT"))
 
   # process cli option flags
   for kind, key, val in getopt():
@@ -372,23 +398,9 @@ proc main(c: var AtlasContext) =
       of "w": explicitWorkspaceCmd = true
       of "keepcommits": c.flags.incl KeepCommits
       of "workspace", "d":
-        if val == ".":
-          c.workspace = getCurrentDir()
-          createWorkspaceIn c
-        elif val.len > 0:
-          c.workspace = val
-          if not explicitProjectOverride:
-            c.currentDir = val
-          createDir(val)
-          createWorkspaceIn c
-        else:
-          writeHelp()
+        setWorkspaceDir(val)
       of "project":
-        explicitProjectOverride = true
-        if isAbsolute(val):
-          c.currentDir = val
-        else:
-          c.currentDir = getCurrentDir() / val
+        setProjectDir(val)
       of "deps":
         if val.len > 0:
           c.depsDir = val
