@@ -69,6 +69,10 @@ Command:
   env <nimversion>      setup a Nim virtual environment
     --keep              keep the c_code subdirectory
 
+Command type options:
+  -p                    interperate command as a project command
+  -w                    interperate command as a workspace command
+
 Options:
   --keepCommits         do not perform any `git checkouts`
   --full                perform full checkouts rather than the default shallow
