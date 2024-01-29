@@ -78,7 +78,8 @@ Options:
   --full                perform full checkouts rather than the default shallow
   --cfgHere             also create/maintain a nim.cfg in the current
                         working directory
-  --workspace=DIR       use DIR as workspace
+  --workspace=DIR / -d=DIR
+                        use DIR as workspace
   --project=DIR         use DIR as the current project
   --noexec              do not perform any action that may run arbitrary code
   --autoenv             detect the minimal Nim $version and setup a
@@ -230,7 +231,6 @@ proc updateDir(c: var AtlasContext; dir, filter: string) =
     if kind == pcDir and isGitDir(file):
       trace c, file, "updating directory"
       gitops.updateDir(c, file, filter)
-
 
 proc detectWorkspace(currentDir: string): string =
   ## find workspace by checking `currentDir` and its parents.
