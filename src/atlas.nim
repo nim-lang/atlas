@@ -86,12 +86,12 @@ Options:
   --showGraph           show the dependency graph
   --keepWorkspace       do not update/overwrite `atlas.workspace`
   --list                list all available and installed versions
-  --version             show the version
+  --version / -v        show the version
   --ignoreUrls          don't error on mismatching urls
   --verbosity=normal|trace|debug
                         set verbosity level to normal, trace, debug
-  --global              use global workspace in ~/.atlas
-  --help                show this help
+  --global / -g         use global workspace in ~/.atlas
+  --help / -h           show this help
 """
 
 proc writeHelp() =
@@ -340,11 +340,16 @@ proc main(c: var AtlasContext) =
     for x in walkPattern("*.nimble"):
       return x
 
-  var autoinit = false
-  var explicitProjectOverride = false
-  var explicitDepsDirOverride = false
+  var
+    autoinit = false
+    explicitProjectOverride = false
+    explicitDepsDirOverride = false
+    explicitProjCmd = false
+    explicitWorkspaceCmd = false
+
   if existsEnv("NO_COLOR") or not isatty(stdout) or (getEnv("TERM") == "dumb"):
     c.noColors = true
+
   for kind, key, val in getopt():
     case kind
     of cmdArgument:
@@ -356,8 +361,10 @@ proc main(c: var AtlasContext) =
       case normalize(key)
       of "help", "h": writeHelp()
       of "version", "v": writeVersion()
+      of "p": explicitProjCmd = true
+      of "w": explicitWorkspaceCmd = true
       of "keepcommits": c.flags.incl KeepCommits
-      of "workspace":
+      of "workspace", "d":
         if val == ".":
           c.workspace = getCurrentDir()
           createWorkspaceIn c
