@@ -8,7 +8,7 @@
 
 ## Configuration handling.
 
-import std / [strutils, os, streams, json]
+import std / [strutils, os, streams, json, options]
 import versions, context, reporters, compiledpatterns, parse_requires
 
 proc parseOverridesFile(c: var AtlasContext; filename: string) =
@@ -49,6 +49,7 @@ type
     overrides: string
     plugins: string
     resolver: string
+    requires: Option[seq[string]]
     graph: JsonNode
 
 proc writeDefaultConfigFile*(c: var AtlasContext) =
