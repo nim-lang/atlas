@@ -333,6 +333,8 @@ proc main(c: var AtlasContext) =
       fatal action & " command takes no arguments"
 
   template projectCmd() =
+    if explicitWorkspaceCmd:
+      fatal action & " command cannot be executed as a workspace command"
     if c.projectDir == c.workspace or c.projectDir == c.depsDir:
       fatal action & " command must be executed in a project, not in the workspace"
 
