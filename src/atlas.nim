@@ -356,6 +356,7 @@ proc main(c: var AtlasContext) =
   if existsEnv("NO_COLOR") or not isatty(stdout) or (getEnv("TERM") == "dumb"):
     c.noColors = true
 
+  # process cli option flags
   for kind, key, val in getopt():
     case kind
     of cmdArgument:
@@ -448,6 +449,10 @@ proc main(c: var AtlasContext) =
   if action != "tag":
     createDir(c.depsDir)
 
+  if explicitProjCmd and explicitWorkspaceCmd:
+      fatal "Cannot specify both -w and -p flags together since they conflict with each other."
+
+  # process cli command 
   case action
   of "":
     fatal "No action."
@@ -487,7 +492,7 @@ proc main(c: var AtlasContext) =
 
   of "pin":
     optSingleArg(LockFileName)
-    if c.projectDir == c.workspace or c.projectDir == c.depsDir:
+    if explicitWorkspaceCmd or c.projectDir == c.workspace or c.projectDir == c.depsDir:
       pinWorkspace c, args[0]
     else:
       let exportNimble = args[0] == NimbleLockFileName
@@ -566,12 +571,6 @@ proc main(c: var AtlasContext) =
     setupNimEnv c, c.workspace, args[0], Keep in c.flags
   of "outdated":
     listOutdated(c)
-  #of "checksum":
-  #  singleArg()
-  #  let pkg = resolvePackage(c, args[0])
-  #  let cfg = findCfgDir(c, pkg)
-  #  let sha = nimbleChecksum(c, pkg, cfg)
-  #  info c, pkg, "SHA1Digest: " & sha
   of "new":
     singleArg()
     newProject(c, args[0])
