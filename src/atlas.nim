@@ -78,7 +78,7 @@ Options:
   --full                perform full checkouts rather than the default shallow
   --cfgHere             also create/maintain a nim.cfg in the current
                         working directory
-  --workspace=DIR | -d=DIR
+  --workspace=DIR, -d=DIR
                         use DIR as workspace
   --project=DIR         use DIR as the current project
   --noexec              do not perform any action that may run arbitrary code
@@ -91,12 +91,12 @@ Options:
   --showGraph           show the dependency graph
   --keepWorkspace       do not update/overwrite `atlas.workspace`
   --list                list all available and installed versions
-  --version | -v        show the version
+  --version, -v         show the version
   --ignoreUrls          don't error on mismatching urls
   --verbosity=normal|trace|debug
                         set verbosity level to normal, trace, debug
-  --global | -g         use global workspace in ~/.atlas
-  --help | -h           show this help
+  --global, -g          use global workspace in ~/.atlas
+  --help, -h           show this help
 """
 
 proc writeHelp() =
