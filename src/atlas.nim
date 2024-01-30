@@ -239,13 +239,7 @@ proc detectWorkspace(currentDir: string): string =
     if fileExists(result / AtlasWorkspace):
       return result
     result = result.parentDir()
-  when false:
-    # That is a bad idea and I know no other tool (git etc.) that
-    # does such shenanigans.
-    # alternatively check for "sub-directory" workspace
-    for kind, file in walkDir(currentDir):
-      if kind == pcDir and fileExists(file / AtlasWorkspace):
-        return file
+  ## TODO: implement possible better default workspace option
 
 proc autoWorkspace(currentDir: string): string =
   result = currentDir
