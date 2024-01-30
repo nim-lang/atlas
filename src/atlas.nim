@@ -458,7 +458,7 @@ proc main(c: var AtlasContext) =
   if explicitProjCmd and explicitWorkspaceCmd:
       fatal "Cannot specify both -w and -p flags together since they conflict with each other."
 
-  # process cli command 
+  # process cli command
   case action
   of "":
     fatal "No action."
