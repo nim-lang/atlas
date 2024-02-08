@@ -184,7 +184,12 @@ proc traverseRelease(c: var AtlasContext; nc: NimbleContext; g: var DepGraph; id
   if found != 1:
     pv.req = UnknownReqs
   else:
-    let nimbleContents = readFile(nimbleFile)
+    when (NimMajor, NimMinor, NimPatch) == (2, 0, 0):
+      # bug #110; make it compatible with Nim 2.0.0
+      # ensureMove requires mutable places when version < 2.0.2
+      var nimbleContents = readFile(nimbleFile)
+    else:
+      let nimbleContents = readFile(nimbleFile)
     if lastNimbleContents == nimbleContents:
       pv.req = g.nodes[idx].versions[^1].req
     else:
