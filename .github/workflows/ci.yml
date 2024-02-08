@@ -62,7 +62,7 @@ jobs:
       - name: Restore MinGW-W64 (Windows) from cache
         if: runner.os == 'Windows'
         id: windows-mingw-cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: external/mingw-${{ matrix.target.cpu }}
           key: 'mingw-${{ matrix.target.cpu }}'
@@ -70,7 +70,7 @@ jobs:
       - name: Restore Nim DLLs dependencies (Windows) from cache
         if: runner.os == 'Windows'
         id: windows-dlls-cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: external/dlls-${{ matrix.target.cpu }}
           key: 'dlls-${{ matrix.target.cpu }}'
