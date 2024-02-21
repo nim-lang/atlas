@@ -3,7 +3,7 @@
 
 import std / strutils
 
-import compiler / [ast, idents, msgs, syntaxes, options, pathutils]
+import compiler / [ast, idents, msgs, syntaxes, options, pathutils, lineinfos]
 
 type
   NimbleFileInfo* = object
@@ -76,6 +76,9 @@ proc extractRequiresInfo*(nimbleFile: string): NimbleFileInfo =
   conf.notes = {}
   conf.mainPackageNotes = {}
   conf.errorMax = high(int)
+  conf.structuredErrorHook = proc (config: ConfigRef; info: TLineInfo; msg: string;
+                                severity: Severity) {.gcsafe.} =
+    localError(config, info, warnUser, msg)
 
   let fileIdx = fileInfoIdx(conf, AbsoluteFile nimbleFile)
   var parser: Parser
