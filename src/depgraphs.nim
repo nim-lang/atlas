@@ -8,7 +8,10 @@
 
 import std / [sets, tables, os, strutils, streams, json, jsonutils, algorithm]
 
-import context, satvars, sat, gitops, runners, reporters, nimbleparser, pkgurls, cloner, versions
+import context, gitops, runners, reporters, nimbleparser, pkgurls, cloner, versions
+
+import ../dist/sat/src/sat/[sat, satvars]
+
 
 type
   DependencyVersion* = object  # Represents a specific version of a project.

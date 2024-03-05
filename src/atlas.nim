@@ -10,11 +10,13 @@
 ## a Nimble dependency and its dependencies recursively.
 
 import std / [parseopt, strutils, os, osproc, tables, sets, json, jsonutils]
-import versions, context, osutils, packagesjson, sat, gitops, nimenv, lockfiles,
+import versions, context, osutils, packagesjson, gitops, nimenv, lockfiles,
   depgraphs, confighandler, configutils, cloner, nimblechecksums, reporters,
   nimbleparser, pkgurls
 
 from std/terminal import isatty
+
+import ../dist/sat/src/sat/sat
 
 const
   AtlasVersion =
