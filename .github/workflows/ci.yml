@@ -131,6 +131,7 @@ jobs:
       - name: Run tests
         run: |
           cd atlas
+          nim cloneDeps
           nim c -r tests/tester.nim
 
       - name: Test install with Nimble
