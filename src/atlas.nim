@@ -16,7 +16,10 @@ import versions, context, osutils, packagesjson, gitops, nimenv, lockfiles,
 
 from std/terminal import isatty
 
-import ../dist/sat/src/sat/sat
+when defined(nimAtlasBootstrap):
+  import ../dist/sat/src/sat/sat
+else:
+  import sat/sat
 
 const
   AtlasVersion =

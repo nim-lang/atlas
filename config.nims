@@ -8,11 +8,8 @@ task unitTests, "Runs unit tests":
 task tester, "Runs integration tests":
   exec "nim c -d:debug -r tests/tester.nim"
 
-task cloneDeps, "clone Atlas deps":
-  exec "nim r src/private/clone.nim"
-
 task buildRelease, "Build release":
-  exec "nim r src/private/clone.nim"
+  exec "nimble install -y"
   when defined(macosx):
     let x86Args = "\"-target x86_64-apple-macos11 -arch x86_64 -DARCH=x86_64\""
     exec "nim c -d:release --passC:" & x86args & " --passL:" & x86args & " -o:./atlas_x86_64 src/atlas.nim"
