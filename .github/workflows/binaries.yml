@@ -92,7 +92,7 @@ jobs:
           makeLatest: true
 
       - name: Delete artefacts
-        uses: geekyeggo/delete-artifact@v4
+        uses: geekyeggo/delete-artifact@v5
         with:
           failOnError: false
           name: "atlas-*"
