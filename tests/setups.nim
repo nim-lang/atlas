@@ -13,6 +13,20 @@ template withDir*(dir: string; body: untyped) =
   finally:
     setCurrentDir(old)
 
+const removeTempDirs {.booldefine.} = true
+
+template withTempTestDir*(name: string, blk: untyped) =
+  let old = getCurrentDir()
+  let dir {.inject.} = createTempDir("atlas_test_", "_" & name)
+  echo "Creating temp test directory: ", dir
+  try:
+    setCurrentDir(dir)
+    `blk`
+  finally:
+    setCurrentDir(old)
+    if removeTempDirs:
+      removeDir(dir)
+
 proc buildGraph* =
   createDir "source"
   withDir "source":
