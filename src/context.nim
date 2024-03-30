@@ -67,7 +67,7 @@ template projectFromCurrentDir*(): untyped = c.currentDir.absolutePath
 
 template withDir*(c: var AtlasContext; dir: string; body: untyped) =
   let oldDir = getCurrentDir()
-  debug c, dir, "Current directory is now: " & dir
+  debug c, dir.relativePath(c.workspace), "Current directory is now: " & dir
   try:
     setCurrentDir(dir)
     body

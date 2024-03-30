@@ -219,9 +219,12 @@ proc installDependencies(c: var AtlasContext; nc: var NimbleContext; nimbleFile:
   let (dir, pkgname, _) = splitFile(nimbleFile)
   info c, pkgname, "installing dependencies for " & pkgname & ".nimble"
   var g = createGraph(c, createUrlSkipPatterns(dir))
+  trace c, pkgname, "traversing depency loop"
   let paths = traverseLoop(c, nc, g)
+  trace c, pkgname, "done traversing depencies"
   let cfgPath = if CfgHere in c.flags: CfgPath c.currentDir else: findCfgDir(c)
   patchNimCfg(c, paths, cfgPath)
+  trace c, pkgname, "executing post install actions"
   afterGraphActions c, g
 
 proc updateDir(c: var AtlasContext; dir, filter: string) =
@@ -341,10 +344,6 @@ proc main(c: var AtlasContext) =
     if c.projectDir == c.workspace or c.projectDir == c.depsDir:
       fatal action & " command must be executed in a project, not in the workspace"
 
-  proc findCurrentNimble(): string =
-    for x in walkPattern("*.nimble"):
-      return x
-
   var autoinit = false
   var explicitProjectOverride = false
   var explicitDepsDirOverride = false
@@ -459,23 +458,21 @@ proc main(c: var AtlasContext) =
     patchNimCfg c, deps, cfgPath
   of "use":
     singleArg()
-    #fillPackageLookupTable(c.nimbleContext, c, )
-    var amb = false
-    var nimbleFile = findNimbleFile(c, c.workspace, amb)
+    var nimbleFile = findNimbleFile(c, c.workspace)
     var nc = createNimbleContext(c, c.depsDir)
 
-    if nimbleFile.len == 0:
-      nimbleFile = c.workspace / extractProjectName(c.workspace) & ".nimble"
-      writeFile(nimbleFile, "")
-    patchNimbleFile(nc, c, c.overrides, nimbleFile, args[0])
+    if nimbleFile.isNone:
+      trace c, getCurrentDir().relativePath(c.workspace), "no nimble file found for project"
+      nimbleFile = some c.workspace / extractProjectName(c.workspace) & ".nimble"
+      writeFile(nimbleFile.get, "")
+      nimbleFile = findNimbleFile(c, c.workspace)
+      trace c, getCurrentDir().relativePath(c.workspace), "wrote new nimble file"
+
+    patchNimbleFile(nc, c, c.overrides, nimbleFile.get(), args[0])
     if c.errors > 0:
       discard "don't continue for 'cannot resolve'"
-    elif nimbleFile.len > 0 and not amb:
-      installDependencies(c, nc, nimbleFile)
-    elif amb:
-      error c, args[0], "ambiguous .nimble file"
     else:
-      error c, args[0], "cannot find .nimble file"
+      installDependencies(c, nc, nimbleFile.get())
 
   of "pin":
     optSingleArg(LockFileName)
@@ -500,16 +497,16 @@ proc main(c: var AtlasContext) =
     # projectCmd()
     if args.len > 1:
       fatal "install command takes a single argument"
-    var nimbleFile = ""
+    var nimbleFile: Option[string]
     if args.len == 1:
-      nimbleFile = args[0]
+      nimbleFile = some args[0]
     else:
-      nimbleFile = findCurrentNimble()
-    if nimbleFile.len == 0:
+      nimbleFile = findNimbleFile(c, getCurrentDir())
+    if nimbleFile.isNone:
       fatal "could not find a .nimble file"
     else:
       var nc = createNimbleContext(c, c.depsDir)
-      installDependencies(c, nc, nimbleFile)
+      installDependencies(c, nc, nimbleFile.get())
   of "refresh":
     noArgs()
     updatePackages(c, c.depsDir)

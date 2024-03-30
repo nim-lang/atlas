@@ -1,5 +1,8 @@
 
 import std / os
+import std / tempfiles
+export tempfiles
+export os
 
 proc exec*(cmd: string) =
   if execShellCmd(cmd) != 0:
@@ -12,6 +15,38 @@ template withDir*(dir: string; body: untyped) =
     body
   finally:
     setCurrentDir(old)
+
+const removeTempDirs {.booldefine.} = true
+
+template withTempTestDirFull*(name: string, remove: bool, blk: untyped) =
+  ## creates test dir and optionally remove dir afterwords
+  let old = getCurrentDir()
+  let dir {.inject.} = createTempDir("atlas_test_", "_" & name)
+  echo "Creating temp test directory: ", dir
+  try:
+    setCurrentDir(dir)
+    `blk`
+  finally:
+    setCurrentDir(old)
+    if remove:
+      removeDir(dir)
+
+template withTempTestDir*(name: string, blk: untyped) =
+  withTempTestDirFull(name, removeTempDirs, blk)
+
+template withTempTestDirFrom*(name: string, src: string, blk: untyped) =
+  ## creates test dir by copying from a template folder
+  let old = getCurrentDir()
+  let dir {.inject.} = genTempPath("atlas_test_", "_" & name)
+  echo "Creating temp test directory: ", dir
+  copyDir(src, dir)
+  try:
+    setCurrentDir(dir)
+    `blk`
+  finally:
+    setCurrentDir(old)
+    if removeTempDirs:
+      removeDir(dir)
 
 proc buildGraph* =
   createDir "source"

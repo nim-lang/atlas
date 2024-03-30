@@ -52,7 +52,11 @@ type
     graph: JsonNode
 
 proc writeDefaultConfigFile*(c: var AtlasContext) =
-  let config = JsonConfig(resolver: $SemVer, graph: newJNull())
+  let config = JsonConfig(
+    resolver: $SemVer,
+    graph: newJNull(),
+    deps: c.depsDir
+  )
   let configFile = c.workspace / AtlasWorkspace
   writeFile(configFile, pretty %*config)
 

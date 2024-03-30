@@ -6,8 +6,10 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [os, strutils, tables, unicode, hashes]
+import std / [os, strutils, tables, unicode, hashes, options]
 import versions, packagesjson, reporters, gitops, parse_requires, pkgurls, compiledpatterns
+
+export options
 
 when defined(nimAtlasBootstrap):
   import ../dist/sat/src/sat/satvars
@@ -49,9 +51,13 @@ proc `==`*(a, b: Requirements): bool =
 proc updatePackages*(c: var Reporter; depsDir: string) =
   if dirExists(depsDir / DefaultPackagesSubDir):
     withDir(c, depsDir / DefaultPackagesSubDir):
+      trace c, getCurrentDir(), "updating packages"
+      echo "TRY UPDATING PACKAGES"
       gitPull(c, DefaultPackagesSubDir)
   else:
     withDir c, depsDir:
+      trace c, getCurrentDir(), "cloning packages"
+      echo "TRY CLONING PACKAGES"
       let success = clone(c, "https://github.com/nim-lang/packages", DefaultPackagesSubDir)
       if not success:
         error c, DefaultPackagesSubDir, "cannot clone packages repo"
@@ -115,20 +121,43 @@ proc parseNimbleFile*(c: NimbleContext; nimbleFile: string; p: Patterns): Requir
         else:
           result.deps.add (createUrlSkipPatterns(u), query)
 
-proc findNimbleFile*(c: var Reporter; dir: string; ambiguous: var bool): string =
-  result = ""
-  var counter = 0
-  for x in walkFiles(dir / "*.nimble"):
-    inc counter
-    if result.len == 0:
-      result = x
-  if counter > 1:
-    ambiguous = true
-    result = ""
+proc findNimbleFile*(c: var Reporter, dir: string): Option[string] =
+  ## Search the given directory for a Nimble file.
+  ##
+  ## An error is reported if there are multiple Nimble files 
+  ## which results in an ambiguity.
+  var nimbleFile = ""
+  var found = 0
 
-#  if counter > 1:
-#    warn c, dir, "cannot determine `.nimble` file; there are multiple to choose from"
-#    result = ""
+  for file in walkFiles(dir / "*.nimble"):
+    nimbleFile = file
+    found.inc
+  
+  if found > 1:
+    error c, dir, "ambiguous .nimble files; found: " & $found & " options"
+    result = string.none()
+  elif found == 0:
+    warn c, dir, "no nimble file found"
+    result = string.none()
+  else:
+    result = some(nimbleFile.absolutePath())
+  debug c, dir, "findNimbleFile: found: " & nimbleFile
+
+proc findNimbleFile*(c: var Reporter, pkg: PkgUrl, dir: string): Option[string] =
+  ## Search the given directory for a Nimble file starting with the 
+  ## name from the package's URL.
+  ##
+  ## An error is reported if there are multiple Nimble files 
+  ## which results in an ambiguity.
+  var nimbleFile = pkg.projectName & ".nimble"
+  debug c, pkg.projectName, "findNimbleFile: searching: " & pkg.projectName &
+                                                " path: " & dir
+  assert dir != ""
+  if fileExists(dir / nimbleFile):
+    debug c, pkg.projectName, "findNimbleFile: found: " & nimbleFile
+    some((dir / nimbleFile).absolutePath())
+  else:
+    findNimbleFile(c, dir)
 
 proc genRequiresLine(u: string): string = "requires \"$1\"\n" % u.escape("", "")
 

@@ -84,7 +84,7 @@ proc fromPrefixedPath*(c: var AtlasContext, path: string): string =
 
 proc genLockEntry(c: var AtlasContext; lf: var LockFile; w: Dependency) =
   lf.items[w.pkg.projectName] = LockFileEntry(
-    dir: c.prefixedPath(w.ondisk), url: w.pkg.url, commit: getCurrentCommit(), version: "")
+    dir: c.prefixedPath(w.ondisk), url: w.pkg.url, commit: c.getCurrentCommit().get(), version: "")
 
 when false:
   proc genLockEntriesForDir(c: var AtlasContext; lf: var LockFile; dir: string) =
@@ -134,10 +134,12 @@ proc genLockEntry(c: var AtlasContext;
                   w: Dependency,
                   cfg: CfgPath,
                   deps: HashSet[string]) =
-  var amb = false
-  let nimbleFile = findNimbleFile(c, "", amb)
-  let info = extractRequiresInfo(nimbleFile)
-  let commit = getCurrentCommit()
+  let nimbleFile = findNimbleFile(c, getCurrentDir())
+  if nimbleFile.isNone:
+    error c, getCurrentDir(), "error finding nimble file"
+    return
+  let info = extractRequiresInfo(nimbleFile.get())
+  let commit = c.getCurrentCommit().get()
   infoNow c, w.pkg.projectName, "calculating nimble checksum"
   let chk = c.nimbleChecksum(w.pkg.projectName, w.ondisk)
   lf.packages[w.pkg.projectName] = NimbleLockFileEntry(
@@ -185,12 +187,11 @@ proc pinGraph*(c: var AtlasContext; g: var DepGraph; lockFilePath: string; expor
   if fileExists(nimcfgPath):
     lf.nimcfg = readFile(nimcfgPath).splitLines()
 
-  var amb = false
-  let nimblePath = findNimbleFile(c, startPkg, amb)
-  if not amb and nimblePath.len > 0 and nimblePath.fileExists():
+  let nimblePath = findNimbleFile(c, startPkg)
+  if nimblePath.isSome:
     lf.nimbleFile = LockedNimbleFile(
-      filename: nimblePath.relativePath(c.currentDir),
-      content: readFile(nimblePath).splitLines())
+      filename: nimblePath.get().relativePath(c.currentDir),
+      content: readFile(nimblePath.get()).splitLines())
 
   if not exportNimble:
     write lf, lockFilePath
@@ -278,7 +279,7 @@ proc listChanged*(c: var AtlasContext; lockFilePath: string) =
                        " found: " & url &
                        " lockfile has: " & v.url
 
-      let commit = gitops.getCurrentCommit()
+      let commit = c.getCurrentCommit().get()
       if commit != v.commit:
         #let info = parseNimble(c, pkg.nimble)
         warn c, dir, "commit differs;" &
