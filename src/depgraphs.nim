@@ -153,17 +153,6 @@ iterator releases(c: var AtlasContext;
 
         if produced == 0:
           yield (FromHead, Commit(h: "", v: Version"#head"))
-
-      except Exception as err:
-        echo "Atlas traverseDependency error: "
-        error c, pkg.projectName, "error: " & $err.msg
-      except Defect as err:
-        echo "Atlas traverseDependency Defect: "
-        error c, pkg.projectName, "error: " & $err.msg
-      except CatchableError as err:
-        echo "Atlas traverseDependency catchable error: "
-        error c, pkg.projectName, "error: " & $err.msg
-
       finally:
         # discard exec(c, GitCheckout, [cc.get()])
         trace c, pkg.projectName, "attempt to checkout out " & cc.get()
