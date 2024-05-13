@@ -76,7 +76,7 @@ Command:
 
 Command type options:
   -p                    interpret command as a project command
-  -w                    interperate command as a workspace command
+  -w                    interpret command as a workspace command
 
 Options:
   --keepCommits         do not perform any `git checkouts`
