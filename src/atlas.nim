@@ -464,7 +464,7 @@ proc main(c: var AtlasContext) =
     createDir(c.depsDir)
 
   if explicitProjCmd and explicitWorkspaceCmd:
-      fatal "Cannot specify both -w and -p flags together since they conflict with each other."
+    fatal "Cannot specify both -w and -p flags together since they conflict with each other."
 
   # process cli command
   case action
