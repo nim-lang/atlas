@@ -32,7 +32,7 @@ proc extract(n: PNode; conf: ConfigRef; result: var NimbleFileInfo) =
           if ch.kind in {nkStrLit..nkTripleStrLit}:
             result.requires.add ch.strVal
           else:
-            localError(conf, ch.info, "'requires' takes string literals")
+            localError(conf, ch.info, warnUser, "'requires' takes string literals")
             result.hasErrors = true
       of "task":
         if n.len >= 3 and n[1].kind == nkIdent and n[2].kind in {nkStrLit..nkTripleStrLit}:
@@ -54,13 +54,13 @@ proc extract(n: PNode; conf: ConfigRef; result: var NimbleFileInfo) =
       if n[1].kind in {nkStrLit..nkTripleStrLit}:
         result.srcDir = n[1].strVal
       else:
-        localError(conf, n[1].info, "assignments to 'srcDir' must be string literals")
+        localError(conf, n[1].info, warnUser, "assignments to 'srcDir' must be string literals")
         result.hasErrors = true
     elif n[0].kind == nkIdent and eqIdent(n[0].ident.s, "version"):
       if n[1].kind in {nkStrLit..nkTripleStrLit}:
         result.version = n[1].strVal
       else:
-        localError(conf, n[1].info, "assignments to 'version' must be string literals")
+        localError(conf, n[1].info, warnUser, "assignments to 'version' must be string literals")
         result.hasErrors = true
   else:
     discard

@@ -74,12 +74,17 @@ Command:
   env <nimversion>      setup a Nim virtual environment
     --keep              keep the c_code subdirectory
 
+Command type options:
+  -p                    interpret command as a project command
+  -w                    interpret command as a workspace command
+
 Options:
   --keepCommits         do not perform any `git checkouts`
   --full                perform full checkouts rather than the default shallow
   --cfgHere             also create/maintain a nim.cfg in the current
                         working directory
-  --workspace=DIR       use DIR as workspace
+  --workspace=DIR, -d=DIR
+                        use DIR as workspace
   --project=DIR         use DIR as the current project
   --noexec              do not perform any action that may run arbitrary code
   --autoenv             detect the minimal Nim $version and setup a
@@ -91,12 +96,12 @@ Options:
   --showGraph           show the dependency graph
   --keepWorkspace       do not update/overwrite `atlas.workspace`
   --list                list all available and installed versions
-  --version             show the version
+  --version, -v         show the version
   --ignoreUrls          don't error on mismatching urls
   --verbosity=normal|trace|debug
                         set verbosity level to normal, trace, debug
-  --global              use global workspace in ~/.atlas
-  --help                show this help
+  --global, -g          use global workspace in ~/.atlas
+  --help, -h           show this help
 """
 
 proc writeHelp() =
@@ -219,9 +224,12 @@ proc installDependencies(c: var AtlasContext; nc: var NimbleContext; nimbleFile:
   let (dir, pkgname, _) = splitFile(nimbleFile)
   info c, pkgname, "installing dependencies for " & pkgname & ".nimble"
   var g = createGraph(c, createUrlSkipPatterns(dir))
+  trace c, pkgname, "traversing depency loop"
   let paths = traverseLoop(c, nc, g)
+  trace c, pkgname, "done traversing depencies"
   let cfgPath = if CfgHere in c.flags: CfgPath c.currentDir else: findCfgDir(c)
   patchNimCfg(c, paths, cfgPath)
+  trace c, pkgname, "executing post install actions"
   afterGraphActions c, g
 
 proc updateDir(c: var AtlasContext; dir, filter: string) =
@@ -232,7 +240,6 @@ proc updateDir(c: var AtlasContext; dir, filter: string) =
       trace c, file, "updating directory"
       gitops.updateDir(c, file, filter)
 
-
 proc detectWorkspace(currentDir: string): string =
   ## find workspace by checking `currentDir` and its parents.
   result = currentDir
@@ -240,13 +247,7 @@ proc detectWorkspace(currentDir: string): string =
     if fileExists(result / AtlasWorkspace):
       return result
     result = result.parentDir()
-  when false:
-    # That is a bad idea and I know no other tool (git etc.) that
-    # does such shenanigans.
-    # alternatively check for "sub-directory" workspace
-    for kind, file in walkDir(currentDir):
-      if kind == pcDir and fileExists(file / AtlasWorkspace):
-        return file
+  ## TODO: implement possible better default workspace option
 
 proc autoWorkspace(currentDir: string): string =
   result = currentDir
@@ -323,6 +324,7 @@ proc newProject(c: var AtlasContext; projectName: string) =
 proc main(c: var AtlasContext) =
   var action = ""
   var args: seq[string] = @[]
+
   template singleArg() =
     if args.len != 1:
       fatal action & " command takes a single package name"
@@ -338,18 +340,51 @@ proc main(c: var AtlasContext) =
       fatal action & " command takes no arguments"
 
   template projectCmd() =
+    if explicitWorkspaceCmd:
+      fatal action & " command cannot be executed as a workspace command"
     if c.projectDir == c.workspace or c.projectDir == c.depsDir:
       fatal action & " command must be executed in a project, not in the workspace"
+
+  template setWorkspaceDir(val: string) =
+    if val == ".":
+      c.workspace = getCurrentDir()
+      createWorkspaceIn c
+    elif val.len > 0:
+      c.workspace = val
+      if not explicitProjectOverride:
+        c.currentDir = val
+      createDir(val)
+      createWorkspaceIn c
+    else:
+      writeHelp()
+
+  template setProjectDir(val: string) =
+    explicitProjectOverride = true
+    if isAbsolute(val):
+      c.currentDir = val
+    else:
+      c.currentDir = getCurrentDir() / val
 
   proc findCurrentNimble(): string =
     for x in walkPattern("*.nimble"):
       return x
 
-  var autoinit = false
-  var explicitProjectOverride = false
-  var explicitDepsDirOverride = false
+  var
+    autoinit = false
+    explicitProjectOverride = false
+    explicitDepsDirOverride = false
+    explicitProjCmd = false
+    explicitWorkspaceCmd = false
+
+  # process cli environment variables
   if existsEnv("NO_COLOR") or not isatty(stdout) or (getEnv("TERM") == "dumb"):
     c.noColors = true
+  if existsEnv("ATLAS_WORKSPACE"):
+    setWorkspaceDir(getEnv("ATLAS_WORKSPACE"))
+  if existsEnv("ATLAS_PROJECT"):
+    setWorkspaceDir(getEnv("ATLAS_PROJECT"))
+
+  # process cli option flags
   for kind, key, val in getopt():
     case kind
     of cmdArgument:
@@ -361,25 +396,13 @@ proc main(c: var AtlasContext) =
       case normalize(key)
       of "help", "h": writeHelp()
       of "version", "v": writeVersion()
+      of "p": explicitProjCmd = true
+      of "w": explicitWorkspaceCmd = true
       of "keepcommits": c.flags.incl KeepCommits
-      of "workspace":
-        if val == ".":
-          c.workspace = getCurrentDir()
-          createWorkspaceIn c
-        elif val.len > 0:
-          c.workspace = val
-          if not explicitProjectOverride:
-            c.currentDir = val
-          createDir(val)
-          createWorkspaceIn c
-        else:
-          writeHelp()
+      of "workspace", "d":
+        setWorkspaceDir(val)
       of "project":
-        explicitProjectOverride = true
-        if isAbsolute(val):
-          c.currentDir = val
-        else:
-          c.currentDir = getCurrentDir() / val
+        setProjectDir(val)
       of "deps":
         if val.len > 0:
           c.depsDir = val
@@ -440,6 +463,10 @@ proc main(c: var AtlasContext) =
   if action != "tag":
     createDir(c.depsDir)
 
+  if explicitProjCmd and explicitWorkspaceCmd:
+    fatal "Cannot specify both -w and -p flags together since they conflict with each other."
+
+  # process cli command
   case action
   of "":
     fatal "No action."
@@ -459,27 +486,25 @@ proc main(c: var AtlasContext) =
     patchNimCfg c, deps, cfgPath
   of "use":
     singleArg()
-    #fillPackageLookupTable(c.nimbleContext, c, )
-    var amb = false
-    var nimbleFile = findNimbleFile(c, c.workspace, amb)
+    var nimbleFile = findNimbleFile(c, c.workspace)
     var nc = createNimbleContext(c, c.depsDir)
 
-    if nimbleFile.len == 0:
-      nimbleFile = c.workspace / extractProjectName(c.workspace) & ".nimble"
-      writeFile(nimbleFile, "")
-    patchNimbleFile(nc, c, c.overrides, nimbleFile, args[0])
+    if nimbleFile.isNone:
+      trace c, getCurrentDir().relativePath(c.workspace), "no nimble file found for project"
+      nimbleFile = some c.workspace / extractProjectName(c.workspace) & ".nimble"
+      writeFile(nimbleFile.get, "")
+      nimbleFile = findNimbleFile(c, c.workspace)
+      trace c, getCurrentDir().relativePath(c.workspace), "wrote new nimble file"
+
+    patchNimbleFile(nc, c, c.overrides, nimbleFile.get(), args[0])
     if c.errors > 0:
       discard "don't continue for 'cannot resolve'"
-    elif nimbleFile.len > 0 and not amb:
-      installDependencies(c, nc, nimbleFile)
-    elif amb:
-      error c, args[0], "ambiguous .nimble file"
     else:
-      error c, args[0], "cannot find .nimble file"
+      installDependencies(c, nc, nimbleFile.get())
 
   of "pin":
     optSingleArg(LockFileName)
-    if c.projectDir == c.workspace or c.projectDir == c.depsDir:
+    if explicitWorkspaceCmd or c.projectDir == c.workspace or c.projectDir == c.depsDir:
       pinWorkspace c, args[0]
     else:
       let exportNimble = args[0] == NimbleLockFileName
@@ -500,16 +525,16 @@ proc main(c: var AtlasContext) =
     # projectCmd()
     if args.len > 1:
       fatal "install command takes a single argument"
-    var nimbleFile = ""
+    var nimbleFile: Option[string]
     if args.len == 1:
-      nimbleFile = args[0]
+      nimbleFile = some args[0]
     else:
-      nimbleFile = findCurrentNimble()
-    if nimbleFile.len == 0:
+      nimbleFile = findNimbleFile(c, getCurrentDir())
+    if nimbleFile.isNone:
       fatal "could not find a .nimble file"
     else:
       var nc = createNimbleContext(c, c.depsDir)
-      installDependencies(c, nc, nimbleFile)
+      installDependencies(c, nc, nimbleFile.get())
   of "refresh":
     noArgs()
     updatePackages(c, c.depsDir)
@@ -558,12 +583,6 @@ proc main(c: var AtlasContext) =
     setupNimEnv c, c.workspace, args[0], Keep in c.flags
   of "outdated":
     listOutdated(c)
-  #of "checksum":
-  #  singleArg()
-  #  let pkg = resolvePackage(c, args[0])
-  #  let cfg = findCfgDir(c, pkg)
-  #  let sha = nimbleChecksum(c, pkg, cfg)
-  #  info c, pkg, "SHA1Digest: " & sha
   of "new":
     singleArg()
     newProject(c, args[0])

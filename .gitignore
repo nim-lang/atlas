@@ -10,3 +10,4 @@ tests/*
 !tests/*.*
 atlas
 deps.png
+nim.cfg
