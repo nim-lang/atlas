@@ -124,8 +124,6 @@ proc parseNimbleFile*(c: NimbleContext; nimbleFile: string; p: Patterns): Requir
 proc findNimbleFile*(c: var Reporter, dir: string): Option[string] =
   ## Search the given directory for a Nimble file.
   ##
-  ## An error is reported if there are multiple Nimble files 
-  ## which results in an ambiguity.
   var nimbleFile = ""
   var found = 0
 
@@ -134,7 +132,7 @@ proc findNimbleFile*(c: var Reporter, dir: string): Option[string] =
     found.inc
   
   if found > 1:
-    error c, dir, "ambiguous .nimble files; found: " & $found & " options"
+    warn c, dir, "ambiguous .nimble files; found: " & $found & " options"
     result = string.none()
   elif found == 0:
     warn c, dir, "no nimble file found"
