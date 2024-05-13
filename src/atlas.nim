@@ -75,7 +75,7 @@ Command:
     --keep              keep the c_code subdirectory
 
 Command type options:
-  -p                    interperate command as a project command
+  -p                    interpret command as a project command
   -w                    interperate command as a workspace command
 
 Options:
