@@ -14,7 +14,7 @@ nim c src/atlas.nim
 
 # Documentation
 
-Read the [full documantation](./doc/atlas.md) or go through the following tutorial.
+Read the [full documentation](./doc/atlas.md) or go through the following tutorial.
 
 ## Tutorial
 
