@@ -56,9 +56,3 @@ proc `==`*(a, b: PkgUrl): bool {.inline.} = a.u == b.u
 proc hash*(a: PkgUrl): Hash {.inline.} = hash(a.u)
 
 proc isFileProtocol*(s: PkgUrl): bool = s.u.startsWith("file://")
-
-proc dir*(s: PkgUrl): string =
-  if isFileProtocol(s):
-    result = substr(s.u, len("file://"))
-  else:
-    result = s.projectName

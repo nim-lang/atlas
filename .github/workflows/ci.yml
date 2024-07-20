@@ -15,19 +15,19 @@ jobs:
         target:
           - os: linux
             cpu: amd64
-            nim_branch: devel
+            nim_branch: version-2-0
           # - os: linux
           #   cpu: i386
           #   nim_branch: devel
           - os: macos
             cpu: amd64
-            nim_branch: devel
+            nim_branch: version-2-0
           - os: windows
             cpu: amd64
-            nim_branch: devel
+            nim_branch: version-2-0
           - os: windows
             cpu: i386
-            nim_branch: devel
+            nim_branch: version-2-0
         include:
           - target:
               os: linux
@@ -52,6 +52,7 @@ jobs:
           git config --global init.defaultBranch master
           git config --global user.email "atlasbot@nimlang.com"
           git config --global user.name "atlasbot"
+          git config --global gc.auto 0
 
       - name: Checkout atlas
         uses: actions/checkout@v4
@@ -127,6 +128,10 @@ jobs:
           path: 'nim'
           version: ${{ matrix.target.nim_branch }}
           architecture: ${{ matrix.target.cpu }}
+
+      - name: Nim Version
+        run: |
+          nim -v
 
       - name: Run tests
         run: |

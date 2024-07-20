@@ -9,10 +9,9 @@ if execShellCmd("nim c -d:debug -r tests/unittests.nim") != 0:
 
 var failures = 0
 
-let atlasExe = absolutePath("bin" / "atlas".addFileExt(ExeExt))
-if execShellCmd("nim c -o:$# -d:release src/atlas.nim" % [atlasExe]) != 0:
+var atlasExe = absolutePath("bin" / "atlas".addFileExt(ExeExt))
+if execShellCmd("nim c -o:$# -d:debug src/atlas.nim" % [atlasExe]) != 0:
   quit("FAILURE: compilation of atlas failed")
-
 
 proc sameDirContents(expected, given: string): bool =
   result = true
@@ -70,24 +69,31 @@ const
 end of selection
 """
 
+template withTestDir(dir: string, desc: string, blk: untyped) =
+  echo "\n# Running test ", desc, " in dir: ", dir, "\n"
+  withDir dir:
+    `blk`
+  echo "\n## Finished running test in dir: ", dir, "\n"
+
 proc testSemVer2(expected: string) =
   createDir "semproject"
   withDir "semproject":
-    let cmd = atlasExe & " --full --keepWorkspace --resolver=SemVer --colors:off --list use proj_a"
+    echo "## Running test in subdir `semproject`"
+    let cmd = atlasExe & " --verbosity:trace --full --keepWorkspace --resolver=SemVer --colors:off --list use proj_a"
     let (outp, status) = execCmdEx(cmd)
-    if status == 0:
-      if outp.contains expected:
-        discard "fine"
-      else:
-        echo "expected ", expected, " but got ", outp
-        raise newException(AssertionDefect, "Test failed!")
+    if outp.contains expected:
+      echo "# Test success"
+      echo outp
     else:
-      echo "\n\n<<<<<<<<<<<<<<<< failed "
-      echo "testSemVer2:command: ", cmd
-      echo "testSemVer2:pwd: ", getCurrentDir()
-      echo "testSemVer2:failed command:\n", outp
-      echo ">>>>>>>>>>>>>>>> failed\n"
-      assert false, "testSemVer2"
+      echo ""
+      echo "# Failure error code: ", status
+      echo "## Expected:\n", expected
+      echo ""
+      echo "## Actual:\n", outp
+      echo ""
+      echo ""
+      raise newException(AssertionDefect, "Test failed!")
+  echo "### Done Running test in subdir `semproject`"
 
 proc testMinVer() =
   buildGraph()
@@ -103,7 +109,7 @@ proc testMinVer() =
     else:
       assert false, outp
 
-withDir "tests/ws_semver2":
+withTestDir "tests/ws_semver2", "semver2 plain":
   try:
     buildGraph()
     testSemVer2(SemVerExpectedResult)
@@ -117,7 +123,7 @@ withDir "tests/ws_semver2":
     removeDir "proj_c"
     removeDir "proj_d"
 
-withDir "tests/ws_semver2":
+withTestDir "tests/ws_semver2", "semver2 no git tags":
   try:
     buildGraphNoGitTags()
     testSemVer2(SemVerExpectedResultNoGitTags)
