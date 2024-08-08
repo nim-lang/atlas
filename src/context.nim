@@ -40,7 +40,7 @@ type
     IgnoreUrls
 
   AtlasContext* = object of Reporter
-    projectDir*, workspace*, depsDir*, currentDir*: string
+    projectDir*, workspace*, origDepsDir*, currentDir*: string
     flags*: set[Flag]
     #urlMapping*: Table[string, Package] # name -> url mapping
     overrides*: Patterns
@@ -48,10 +48,17 @@ type
     plugins*: PluginInfo
     overridesFile*: string
     pluginsFile*: string
-    origDepsDir*: string
 
 
 proc `==`*(a, b: CfgPath): bool {.borrow.}
+
+proc depsDir*(c: AtlasContext): string =
+  if c.origDepsDir == "":
+    c.workspace
+  elif c.origDepsDir.isAbsolute:
+    c.origDepsDir
+  else:
+    (c.workspace / c.origDepsDir).absolutePath
 
 proc displayName(c: AtlasContext; p: string): string =
   if p == c.workspace:
