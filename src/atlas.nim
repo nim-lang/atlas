@@ -435,7 +435,7 @@ proc main(c: var AtlasContext) =
     elif action notin ["search", "list"]:
       fatal "No workspace found. Run `atlas init` if you want this current directory to be your workspace."
 
-  if not explicitDepsDirOverride and action notin ["init", "tag"] and c.depsDir.len == 0:
+  if not explicitDepsDirOverride and action notin ["init", "tag"] and c.origDepsDir.len == 0:
     c.origDepsDir = ""
   if action != "tag":
     createDir(c.depsDir)
