@@ -382,7 +382,7 @@ proc main(c: var AtlasContext) =
           c.currentDir = getCurrentDir() / val
       of "deps":
         if val.len > 0:
-          c.depsDir = val
+          c.origDepsDir = val
           explicitDepsDirOverride = true
         else:
           writeHelp()
@@ -435,8 +435,8 @@ proc main(c: var AtlasContext) =
     elif action notin ["search", "list"]:
       fatal "No workspace found. Run `atlas init` if you want this current directory to be your workspace."
 
-  if not explicitDepsDirOverride and action notin ["init", "tag"] and c.depsDir.len == 0:
-    c.depsDir = c.workspace
+  if not explicitDepsDirOverride and action notin ["init", "tag"] and c.origDepsDir.len == 0:
+    c.origDepsDir = ""
   if action != "tag":
     createDir(c.depsDir)
 

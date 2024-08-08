@@ -271,8 +271,7 @@ proc pkgUrlToDirname(c: var AtlasContext; g: var DepGraph; d: Dependency): (stri
     if d.isTopLevel:
       dest = c.workspace
     else:
-      let depsDir = if d.isRoot: c.workspace else: c.depsDir
-      dest = depsDir / d.pkg.projectName
+      dest = c.depsDir / d.pkg.projectName
   result = (dest, if dirExists(dest): DoNothing else: DoClone)
 
 proc toDestDir*(g: DepGraph; d: Dependency): string =
