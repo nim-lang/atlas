@@ -216,7 +216,9 @@ proc traverse(c: var AtlasContext; nc: var NimbleContext; start: string): seq[Cf
 proc installDependencies(c: var AtlasContext; nc: var NimbleContext; nimbleFile: string) =
   # 1. find .nimble file in CWD
   # 2. install deps from .nimble
-  let (dir, pkgname, _) = splitFile(nimbleFile)
+  var (dir, pkgname, _) = splitFile(nimbleFile)
+  if dir == "":
+    dir = "."
   info c, pkgname, "installing dependencies for " & pkgname & ".nimble"
   var g = createGraph(c, createUrlSkipPatterns(dir))
   let paths = traverseLoop(c, nc, g)
