@@ -49,7 +49,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - uses: jiro4989/setup-nim-action@v2.1.0
+      - uses: jiro4989/setup-nim-action@v2.2.0
         with:
           nim-version: "stable"
 
