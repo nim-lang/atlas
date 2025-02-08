@@ -52,3 +52,14 @@ proc fillPackageLookupTable(c: var NimbleContext; r: var Reporter; depsdir: stri
 proc createNimbleContext*(r: var Reporter; depsdir: string): NimbleContext =
   result = NimbleContext()
   fillPackageLookupTable(result, r, depsdir)
+
+proc collectNimbleVersions*(c: var AtlasContext; nc: NimbleContext; g: var DepGraph; idx: int): seq[string] =
+  let (outerNimbleFile, found) = findNimbleFile(g, idx)
+  result = @[]
+  if found == 1:
+    let (outp, status) = exec(c, GitLog, [outerNimbleFile])
+    if status == 0:
+      for line in splitLines(outp):
+        if line.len > 0 and not line.endsWith("^{}"):
+          result.add line
+    result.reverse()
