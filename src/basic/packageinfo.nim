@@ -11,7 +11,6 @@ import context, reporters
 
 const
   UnitTests = defined(atlasUnitTests)
-  DefaultPackagesSubDir* = "packages"
 
 when UnitTests:
   proc findAtlasDir*(): string =
@@ -59,19 +58,6 @@ proc fromJson*(obj: JSonNode): PackageInfo =
     result.tags.add(t.str)
   result.description = obj.requiredField("description")
   result.web = obj.optionalField("web")
-
-proc getPackageInfos*(depsDir: string): seq[PackageInfo] =
-  result = @[]
-  var uniqueNames = initHashSet[string]()
-  var jsonFiles = 0
-  for kind, path in walkDir(depsDir / DefaultPackagesSubDir):
-    if kind == pcFile and path.endsWith(".json"):
-      inc jsonFiles
-      let packages = json.parseFile(path)
-      for p in packages:
-        let pkg = p.fromJson()
-        if pkg != nil and not uniqueNames.containsOrIncl(pkg.name):
-          result.add(pkg)
 
 proc `$`*(pkg: PackageInfo): string =
   result = pkg.name & ":\n"
