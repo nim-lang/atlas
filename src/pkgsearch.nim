@@ -11,18 +11,28 @@ import context, reporters
 
 const DefaultPackagesSubDir* = "packages"
 
-proc getPackageInfos*(depsDir: string): seq[PackageInfo] =
-  result = @[]
-  var uniqueNames = initHashSet[string]()
-  var jsonFiles = 0
-  for kind, path in walkDir(depsDir / DefaultPackagesSubDir):
-    if kind == pcFile and path.endsWith(".json"):
-      inc jsonFiles
-      let packages = json.parseFile(path)
-      for p in packages:
-        let pkg = p.fromJson()
-        if pkg != nil and not uniqueNames.containsOrIncl(pkg.name):
-          result.add(pkg)
+type PkgCandidates* = array[3, seq[PackageInfo]]
+
+proc determineCandidates*(pkgList: seq[PackageInfo];
+                         terms: seq[string]): PkgCandidates =
+  result[0] = @[]
+  result[1] = @[]
+  result[2] = @[]
+  for pkg in pkgList:
+    block termLoop:
+      for term in terms:
+        let word = term.toLower
+        if word == pkg.name.toLower:
+          result[0].add pkg
+          break termLoop
+        elif word in pkg.name.toLower:
+          result[1].add pkg
+          break termLoop
+        else:
+          for tag in pkg.tags:
+            if word in tag.toLower:
+              result[2].add pkg
+              break termLoop
 
 proc singleGithubSearch(c: var Reporter; term: string, fullSearch = false): JsonNode =
   when UnitTests:
