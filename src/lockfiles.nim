@@ -106,6 +106,18 @@ proc genLockEntry(c: var AtlasContext;
 const
   NimCfg = "nim.cfg"
 
+proc expandWithoutClone*(c: var AtlasContext; g: var DepGraph; nc: NimbleContext) =
+  ## Expand the graph by adding all dependencies.
+  var processed = initHashSet[PkgUrl]()
+  var i = 0
+  while i < g.nodes.len:
+    if not processed.containsOrIncl(g.nodes[i].pkg):
+      let (dest, todo) = pkgUrlToDirname(c, g, g.nodes[i])
+      if todo == DoNothing:
+        withDir c, dest:
+          traverseDependency(c, nc, g, i, CurrentCommit)
+    inc i
+
 proc pinGraph*(c: var AtlasContext; g: var DepGraph; lockFilePath: string; exportNimble = false) =
   info c, "pin", "pinning project"
   var lf = newLockFile()

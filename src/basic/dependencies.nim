@@ -58,3 +58,36 @@ proc enrichVersionsViaExplicitHash*(versions: var seq[DependencyVersion]; x: Ver
       if v.commit == commit: return
     versions.add DependencyVersion(version: Version"",
       commit: commit, req: EmptyReqs, v: NoVar)
+
+iterator allNodes*(g: DepGraph): lent Dependency =
+  for i in 0 ..< g.nodes.len: yield g.nodes[i]
+
+iterator allActiveNodes*(g: DepGraph): lent Dependency =
+  for i in 0 ..< g.nodes.len:
+    if g.nodes[i].active:
+      yield g.nodes[i]
+
+iterator toposorted*(g: DepGraph): lent Dependency =
+  for i in countdown(g.nodes.len-1, 0): yield g.nodes[i]
+
+iterator directDependencies*(g: DepGraph; c: var AtlasContext; d: Dependency): lent Dependency =
+  if d.activeVersion >= 0 and d.activeVersion < d.versions.len:
+    let deps {.cursor.} = g.reqs[d.versions[d.activeVersion].req].deps
+    for dep in deps:
+      let idx = findDependencyForDep(g, dep[0])
+      yield g.nodes[idx]
+
+proc getCfgPath*(g: DepGraph; d: Dependency): lent CfgPath =
+  result = CfgPath g.reqs[d.versions[d.activeVersion].req].srcDir
+
+proc commit*(d: Dependency): string =
+  result =
+    if d.activeVersion >= 0 and d.activeVersion < d.versions.len: d.versions[d.activeVersion].commit
+    else: ""
+
+proc bestNimVersion*(g: DepGraph): Version =
+  result = Version""
+  for n in allNodes(g):
+    if n.active and g.reqs[n.versions[n.activeVersion].req].nimVersion != Version"":
+      let v = g.reqs[n.versions[n.activeVersion].req].nimVersion
+      if v > result: result = v
