@@ -6,6 +6,8 @@ bin/
 src/atlas.exe
 src/*
 !src/*.*
+!src/basic
+src/basic/*
 !src/basic/*.*
 tests/*
 !tests/*.*
