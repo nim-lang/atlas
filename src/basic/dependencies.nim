@@ -91,3 +91,51 @@ proc bestNimVersion*(g: DepGraph): Version =
     if n.active and g.reqs[n.versions[n.activeVersion].req].nimVersion != Version"":
       let v = g.reqs[n.versions[n.activeVersion].req].nimVersion
       if v > result: result = v
+
+proc readOnDisk(c: var AtlasContext; result: var DepGraph) =
+  let configFile = c.workspace / AtlasWorkspace
+  var f = newFileStream(configFile, fmRead)
+  if f == nil:
+    return
+  try:
+    let j = parseJson(f, configFile)
+    let g = j["graph"]
+    let n = g.getOrDefault("nodes")
+    if n.isNil: return
+    let nodes = jsonTo(n, typeof(result.nodes))
+    for n in nodes:
+      result.ondisk[n.pkg.url] = n.ondisk
+      if dirExists(n.ondisk):
+        if n.isRoot:
+          if not result.packageToDependency.hasKey(n.pkg):
+            result.packageToDependency[n.pkg] = result.nodes.len
+            result.nodes.add Dependency(pkg: n.pkg, versions: @[], isRoot: true, isTopLevel: n.isTopLevel, activeVersion: -1)
+  except:
+    error c, configFile, "cannot read: " & configFile
+
+proc createGraph*(c: var AtlasContext; s: PkgUrl): DepGraph =
+  result = DepGraph(nodes: @[],
+    reqs: defaultReqs())
+  result.packageToDependency[s] = result.nodes.len
+  result.nodes.add Dependency(pkg: s, versions: @[], isRoot: true, isTopLevel: true, activeVersion: -1)
+  readOnDisk(c, result)
+
+proc createGraphFromWorkspace*(c: var AtlasContext): DepGraph =
+  result = DepGraph(nodes: @[], reqs: defaultReqs())
+  let configFile = c.workspace / AtlasWorkspace
+  var f = newFileStream(configFile, fmRead)
+  if f == nil:
+    error c, configFile, "cannot open: " & configFile
+    return
+
+  try:
+    let j = parseJson(f, configFile)
+    let g = j["graph"]
+
+    result.nodes = jsonTo(g["nodes"], typeof(result.nodes))
+    result.reqs = jsonTo(g["reqs"], typeof(result.reqs))
+
+    for i, n in mpairs(result.nodes):
+      result.packageToDependency[n.pkg] = i
+  except:
+    error c, configFile, "cannot read: " & configFile
