@@ -145,24 +145,6 @@ proc copyFromDisk(c: var AtlasContext; w: Dependency; destDir: string): (CloneSt
   #writeFile destDir / ThisVersion, w.commit
   #echo "WRITTEN ", destDir / ThisVersion
 
-type
-  PackageAction = enum
-    DoNothing, DoClone
-
-proc pkgUrlToDirname(c: var AtlasContext; g: var DepGraph; d: Dependency): (string, PackageAction) =
-  # XXX implement namespace support here
-  var dest = g.ondisk.getOrDefault(d.pkg.url)
-  if dest.len == 0:
-    if d.isTopLevel:
-      dest = c.workspace
-    else:
-      let depsDir = if d.isRoot: c.workspace else: c.depsDir
-      dest = depsDir / d.pkg.projectName
-  result = (dest, if dirExists(dest): DoNothing else: DoClone)
-
-proc toDestDir*(g: DepGraph; d: Dependency): string =
-  result = d.ondisk
-
 proc expand*(c: var AtlasContext; g: var DepGraph; nc: NimbleContext; m: TraversalMode) =
   ## Expand the graph by adding all dependencies.
   var processed = initHashSet[PkgUrl]()
