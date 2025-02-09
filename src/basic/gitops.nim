@@ -79,7 +79,8 @@ proc clone*(c: var AtlasContext; url, dest: string; retries = 5; fullClones=fals
 
   # retry multiple times to avoid annoying github timeouts:
   let extraArgs =
-    if not fullClones: "--depth=1"
+    if c.proxy.hostname == "localhost" and c.proxy.port == "4242": ""
+    elif not fullClones: "--depth=1"
     else: ""
 
   var url = url.parseUri()
@@ -254,8 +255,8 @@ proc isOutdated*(c: var Reporter; displayName: string): bool =
   info c, displayName, "checking is package is up to date..."
 
   # TODO: does --update-shallow fetch tags on a shallow repo?
-  # let (outp, status) = exec(c, GitFetch, ["--update-shallow", "--tags"])
-  let (outp, status) = exec(c, GitFetch, ["--tags"])
+  let (outp, status) = exec(c, GitFetch, ["--update-shallow", "--tags"])
+  # let (outp, status) = exec(c, GitFetch, ["--tags"])
 
   if status == 0:
     let (cc, status) = exec(c, GitLastTaggedRef, [])
