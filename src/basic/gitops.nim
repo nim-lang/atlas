@@ -79,7 +79,7 @@ proc clone*(c: var AtlasContext; url, dest: string; retries = 5; fullClones=fals
 
   # retry multiple times to avoid annoying github timeouts:
   let extraArgs =
-    if $c.proxy != "" and c.proxy.dumbProxy: ""
+    if $c.proxy != "" and c.dumbProxy: ""
     elif not fullClones: "--depth=1"
     else: ""
 
