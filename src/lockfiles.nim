@@ -11,7 +11,7 @@
 import std / [sequtils, strutils, tables, sets, os, json, jsonutils]
 import basic/[lockfiletypes, context, gitops, nimblechecksums, compilerversions,
   configutils, depgraphtypes, reporters, nimbleparser, pkgurls]
-import cloner
+import cloner, depgraphs, pkgcache
 
 const
   NimbleLockFileName* = "nimble.lock"

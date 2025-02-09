@@ -10,10 +10,10 @@
 ## a Nimble dependency and its dependencies recursively.
 
 import std / [parseopt, strutils, os, osproc, tables, sets, json, jsonutils]
-import basic / [versions, context, osutils, packageinfo,
+import basic / [versions, context, osutils, packageinfos,
                 configutils, nimblechecksums, reporters,
                 nimbleparser, gitops, pkgurls]
-import cloner, depgraphs, nimenv, lockfiles, confighandler
+import cloner, depgraphs, nimenv, lockfiles, confighandler, pkgcache, pkgsearch
 
 from std/terminal import isatty
 

@@ -35,7 +35,7 @@ proc convertKeyToArray(jsonTree: var JsonNode, path: varargs[string]) =
       contents.add(% line)
     parent[path[^1]] = contents
 
-proc readLockFile(filename: string): LockFile =
+proc readLockFile*(filename: string): LockFile =
   let jsonAsStr = readFile(filename)
   var jsonTree = parseJson(jsonAsStr)
 
@@ -45,5 +45,5 @@ proc readLockFile(filename: string): LockFile =
   result = jsonTo(jsonTree, LockFile,
     Joptions(allowExtraKeys: true, allowMissingKeys: true))
 
-proc write(lock: LockFile; lockFilePath: string) =
+proc write*(lock: LockFile; lockFilePath: string) =
   writeFile lockFilePath, toJson(lock).pretty

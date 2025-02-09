@@ -7,7 +7,7 @@
 #
 
 import std / [json, os, sets, strutils, httpclient, uri]
-import context, reporters
+import basic/[context, reporters, packageinfos]
 
 const DefaultPackagesSubDir* = "packages"
 
@@ -130,26 +130,3 @@ proc search*(c: var Reporter; pkgList: seq[PackageInfo]; terms: seq[string]) =
   githubSearch c, seen, terms
   if seen.len == 0 and terms.len > 0:
     echo("No PackageInfo found.")
-
-type PkgCandidates* = array[3, seq[PackageInfo]]
-
-proc determineCandidates*(pkgList: seq[PackageInfo];
-                         terms: seq[string]): PkgCandidates =
-  result[0] = @[]
-  result[1] = @[]
-  result[2] = @[]
-  for pkg in pkgList:
-    block termLoop:
-      for term in terms:
-        let word = term.toLower
-        if word == pkg.name.toLower:
-          result[0].add pkg
-          break termLoop
-        elif word in pkg.name.toLower:
-          result[1].add pkg
-          break termLoop
-        else:
-          for tag in pkg.tags:
-            if word in tag.toLower:
-              result[2].add pkg
-              break termLoop

@@ -68,7 +68,7 @@ proc `$`*(pkg: PackageInfo): string =
   if pkg.web.len > 0:
     result &= "  website:     " & pkg.web & "\n"
 
-proc toTags(j: JsonNode): seq[string] =
+proc toTags*(j: JsonNode): seq[string] =
   result = @[]
   if j.kind == JArray:
     for elem in items j:
