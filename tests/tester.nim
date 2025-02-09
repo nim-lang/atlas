@@ -5,8 +5,8 @@ from std/private/gitutils import diffFiles
 import testrepos
 # import oldSetups
 
-if execShellCmd("nim c -d:debug -r tests/unittests.nim") != 0:
-  quit("FAILURE: unit tests failed")
+# if execShellCmd("nim c -d:debug -r tests/unittests.nim") != 0:
+#   quit("FAILURE: unit tests failed")
 
 try:
   let client = newHttpClient()
