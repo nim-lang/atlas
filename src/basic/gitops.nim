@@ -254,7 +254,8 @@ proc isOutdated*(c: var Reporter; displayName: string): bool =
   info c, displayName, "checking is package is up to date..."
 
   # TODO: does --update-shallow fetch tags on a shallow repo?
-  let (outp, status) = exec(c, GitFetch, ["--update-shallow", "--tags"])
+  # let (outp, status) = exec(c, GitFetch, ["--update-shallow", "--tags"])
+  let (outp, status) = exec(c, GitFetch, ["--tags"])
 
   if status == 0:
     let (cc, status) = exec(c, GitLastTaggedRef, [])
