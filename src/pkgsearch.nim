@@ -109,7 +109,7 @@ proc getUrlFromGithub*(c: var Reporter; term: string): string =
 proc search*(c: var Reporter; pkgList: seq[PackageInfo]; terms: seq[string]) =
   var seen = initHashSet[string]()
   template onFound =
-    echo pkg
+    info c, "Found package", $pkg
     seen.incl pkg.url
     break forPackage
 
@@ -126,7 +126,7 @@ proc search*(c: var Reporter; pkgList: seq[PackageInfo]; terms: seq[string]) =
             if word in tag.toLower:
               onFound()
     else:
-      echo(pkg)
+      info(c, "Using package", $pkg)
   githubSearch c, seen, terms
   if seen.len == 0 and terms.len > 0:
-    echo("No PackageInfo found.")
+    info(c, "No PackageInfo found", $terms)
