@@ -114,7 +114,7 @@ proc traverseRelease(c: var AtlasContext; nc: NimbleContext; g: var DepGraph; id
   else:
     g.nodes[idx].versions.add ensureMove pv
 
-proc traverseDependency(c: var AtlasContext; nc: NimbleContext; g: var DepGraph; idx: int;
+proc traverseDependency*(c: var AtlasContext; nc: NimbleContext; g: var DepGraph; idx: int;
                         m: TraversalMode) =
   var lastNimbleContents = "<invalid content>"
 
@@ -123,27 +123,6 @@ proc traverseDependency(c: var AtlasContext; nc: NimbleContext; g: var DepGraph;
 
   for (origin, r) in releases(c, m, versions, nimbleVersions):
     traverseRelease c, nc, g, idx, origin, r, lastNimbleContents
-
-const
-  FileWorkspace = "file://./"
-
-proc copyFromDisk(c: var AtlasContext; w: Dependency; destDir: string): (CloneStatus, string) =
-  var dir = w.pkg.url
-  if dir.startsWith(FileWorkspace): dir = c.workspace / dir.substr(FileWorkspace.len)
-  #template selectDir(a, b: string): string =
-  #  if dirExists(a): a else: b
-
-  #let dir = selectDir(u & "@" & w.commit, u)
-  if w.isTopLevel:
-    result = (Ok, "")
-  elif dirExists(dir):
-    info c, destDir, "cloning: " & dir
-    copyDir(dir, destDir)
-    result = (Ok, "")
-  else:
-    result = (NotFound, dir)
-  #writeFile destDir / ThisVersion, w.commit
-  #echo "WRITTEN ", destDir / ThisVersion
 
 proc expand*(c: var AtlasContext; g: var DepGraph; nc: NimbleContext; m: TraversalMode) =
   ## Expand the graph by adding all dependencies.

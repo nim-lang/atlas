@@ -31,6 +31,8 @@ type
 const
   EmptyReqs* = 0
   UnknownReqs* = 1
+  FileWorkspace* = "file://./"
+
 
 proc defaultReqs(): seq[Requirements] =
   @[Requirements(deps: @[], v: NoVar), Requirements(status: HasUnknownNimbleFile, v: NoVar)]
@@ -52,10 +54,10 @@ proc findNimbleFile*(g: DepGraph; idx: int): (string, int) =
   result = (ensureMove nimbleFile, found)
 
 type
-  PackageAction = enum
+  PackageAction* = enum
     DoNothing, DoClone
 
-proc pkgUrlToDirname(c: var AtlasContext; g: var DepGraph; d: Dependency): (string, PackageAction) =
+proc pkgUrlToDirname*(c: var AtlasContext; g: var DepGraph; d: Dependency): (string, PackageAction) =
   # XXX implement namespace support here
   var dest = g.ondisk.getOrDefault(d.pkg.url)
   if dest.len == 0:
@@ -161,3 +163,21 @@ proc createGraphFromWorkspace*(c: var AtlasContext): DepGraph =
       result.packageToDependency[n.pkg] = i
   except:
     error c, configFile, "cannot read: " & configFile
+
+proc copyFromDisk*(c: var AtlasContext; w: Dependency; destDir: string): (CloneStatus, string) =
+  var dir = w.pkg.url
+  if dir.startsWith(FileWorkspace): dir = c.workspace / dir.substr(FileWorkspace.len)
+  #template selectDir(a, b: string): string =
+  #  if dirExists(a): a else: b
+
+  #let dir = selectDir(u & "@" & w.commit, u)
+  if w.isTopLevel:
+    result = (Ok, "")
+  elif dirExists(dir):
+    info c, destDir, "cloning: " & dir
+    copyDir(dir, destDir)
+    result = (Ok, "")
+  else:
+    result = (NotFound, dir)
+  #writeFile destDir / ThisVersion, w.commit
+  #echo "WRITTEN ", destDir / ThisVersion
