@@ -16,7 +16,7 @@ try:
 except CatchableError:
   quit "Error accessing githttp server.\n" &
        "Check that tests/githttp server is running on port 4242.\n" &
-       "To start it run:\n" &
+       "To start it run in another terminal:\n" &
        "  nim c -r tests/githttp test-repos"
 
 var failures = 0
