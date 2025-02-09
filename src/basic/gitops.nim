@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std/[os, osproc, sequtils, strutils]
+import std/[os, osproc, sequtils, strutils, uri]
 import reporters, osutils, versions, context
 
 type
@@ -82,12 +82,12 @@ proc clone*(c: var AtlasContext; url, dest: string; retries = 5; fullClones=fals
     if not fullClones: "--depth=1"
     else: ""
 
-  var url = url
+  var url = url.parseUri()
   if $c.proxy != "":
-    echo "GIT CLONE proxy: ", c.proxy
+    echo "GIT CLONE proxy: ", c.proxy.repr
     echo "GIT CLONE URL: ", url.repr
 
-  let cmd = $GitClone & " " & extraArgs & " " & quoteShell(url) & " " & dest
+  let cmd = $GitClone & " " & extraArgs & " " & quoteShell($url) & " " & dest
   for i in 1..retries:
     if execShellCmd(cmd) == 0:
       return true
