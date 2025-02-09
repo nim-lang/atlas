@@ -28,13 +28,20 @@ proc findDir(org, repo, files: string): string =
       return findDir(org, repo & ".git", files)
 
 proc handleRequest(req: Request) {.async.} =
+  echo "http request: ", req.reqMethod, " url: ", req.url.path
+
   let arg = req.url.path.strip(chars={'/'})
-  let dirs = arg.split('/')
-  let org = dirs[0]
-  let repo = dirs[1]
-  let files = dirs[2..^1].join($DirSep)
-  let path = findDir(org, repo, files)
-  echo "http request: ", req.reqMethod, " repo: ", repo, " path: ", path
+  var path: string
+  try:
+    let dirs = arg.split('/')
+    let org = dirs[0]
+    let repo = dirs[1]
+    let files = dirs[2..^1].join($DirSep)
+    path = findDir(org, repo, files)
+    echo "http repo: ", " repo: ", repo, " path: ", path
+  except IndexDefect:
+    {.cast(gcsafe).}:
+      path = searchDirs[0] / arg
 
   # Serve static files if not a git request
   if fileExists(path):
@@ -59,5 +66,6 @@ when isMainModule:
     if dirExists(arg):
       searchDirs.add(arg.absolutePath)
 
+  doAssert searchDirs.len() >= 1, "must provide at least one directory to serve repos from"
   echo "Starting server on port ", port
   waitFor server.serve(Port(port), handleRequest)

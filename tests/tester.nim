@@ -1,12 +1,23 @@
 # Small program that runs the test cases
 
-import std / [strutils, os, osproc, sequtils, strformat]
+import std / [strutils, os, osproc, sequtils, strformat, httpclient]
 from std/private/gitutils import diffFiles
 import testrepos
 # import oldSetups
 
 if execShellCmd("nim c -d:debug -r tests/unittests.nim") != 0:
   quit("FAILURE: unit tests failed")
+
+try:
+  let client = newHttpClient()
+  let response = client.get("http://localhost:4242/readme.md")
+  echo "HTTP: ", response.body
+  # doAssert response.body == readFile("test-repo/readme.md"), "Check that tests/githttp server is running on port 4242"
+except CatchableError:
+  quit "Error accessing githttp server.\n" &
+       "Check that tests/githttp server is running on port 4242.\n" &
+       "To start it run:\n" &
+       "  nim c -r tests/githttp test-repos"
 
 var failures = 0
 
