@@ -7,7 +7,7 @@
 #
 
 import std / [os]
-import versions, parse_requires, compiledpatterns, reporters
+import basic/[versions, parserequires, compiledpatterns, reporters]
 
 const
   UnitTests* = defined(atlasUnitTests)
