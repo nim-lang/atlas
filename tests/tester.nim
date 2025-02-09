@@ -17,7 +17,7 @@ except CatchableError:
   quit "Error accessing git-http server.\n" &
        "Check that tests/githttpserver server is running on port 4242.\n" &
        "To start it run in another terminal:\n" &
-       "  nim c -r tests/githttpserver test-repos"
+       "  nim c -r tests/githttpserver test-repos/generated"
 
 var failures = 0
 
@@ -173,7 +173,7 @@ proc cleanupIntegrationTest() =
   removeFile "nim.cfg"
   removeFile "ws_integration.nimble"
 
-when false and not defined(quick):
+when not defined(quick):
   withDir "tests/ws_integration":
     try:
       integrationTest()
