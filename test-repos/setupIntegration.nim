@@ -24,7 +24,7 @@ proc setupWsIntegration() =
     createDir(org)
     withDir(org):
       if not dirExists(name):
-        exec &"git clone {repo}"
+        exec &"git clone --mirror {repo}"
 
 when isMainModule:
   withDir("test-repos"):
