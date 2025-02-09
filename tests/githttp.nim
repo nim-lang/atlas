@@ -14,11 +14,13 @@ proc findDir(org, repo, files: string): string =
     # search for org matches first
     for dir in searchDirs:
       result = dir / org / repo / files
+      echo "searching: ", result
       if dirExists(dir / org / repo):
         return
     # otherwise try without org in the searchdir
     for dir in searchDirs:
       result = dir / repo / files
+      echo "searching: ", result
       if dirExists(dir / repo):
         return
     
