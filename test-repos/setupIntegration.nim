@@ -26,11 +26,16 @@ proc setupWsIntegration() =
       if not dirExists(name):
         exec &"git clone --mirror {repo}"
 
+        withDir(name & ".git"):
+          moveFile "hooks"/"post-update.sample", "hooks"/"post-update"
+          setFilePermissions("hooks"/"post-update", getFilePermissions("hooks"/"post-update") + {fpUserExec})
+          exec "git update-server-info"
+
 when isMainModule:
   withDir("test-repos"):
-    # removeDir("working-integration")
-    createDir "working-integration"
-    withDir("working-integration"):
+    # removeDir("ws_integration")
+    createDir "ws_integration"
+    withDir("ws_integration"):
       setupWsIntegration()
 
     var repos: seq[tuple[org: string, name: string]]
@@ -43,29 +48,29 @@ when isMainModule:
         echo "GIT REPO: ", repo
         repos.add(repo)
 
-    for org in walkDir("working-integration"):
-      echo "ORG: ", org
-      for item in walkDir(org.path):
-        findRepo(item)
+    # for org in walkDir("ws_integration"):
+    #   echo "ORG: ", org
+    #   for item in walkDir(org.path):
+    #     findRepo(item)
 
-    echo "Setup bare gits"
-    for repo in repos:
-      echo "git repo: ", repo
-    removeDir("ws_integration")
-    createDir("ws_integration")
-    withDir("ws_integration"):
-      for repo in repos:
-        createDir(repo.org)
-      for repo in repos:
-        echo "REPO: ", repo
-        withDir(repo.org):
-          let orig = ".." / ".." / "working-integration" / repo.org / repo.name
-          echo "CLONING: ", " cwd: ", getCurrentDir()
-          exec &"git clone --mirror {orig}"
-          withDir(repo.name & ".git"):
-            moveFile "hooks"/"post-update.sample", "hooks"/"post-update"
-            setFilePermissions("hooks"/"post-update", getFilePermissions("hooks"/"post-update") + {fpUserExec})
-            exec "git update-server-info"
+    # echo "============= Setup bare gits ============="
+    # for repo in repos:
+    #   echo "git repo: ", repo
+    # removeDir("ws_integration")
+    # createDir("ws_integration")
+    # withDir("ws_integration"):
+    #   for repo in repos:
+    #     createDir(repo.org)
+    #   for repo in repos:
+    #     echo "REPO: ", repo
+    #     withDir(repo.org):
+    #       let orig = ".." / ".." / "ws_integration" / repo.org / repo.name
+    #       echo "CLONING: ", " cwd: ", getCurrentDir()
+    #       exec &"git clone --mirror {orig}"
+    #       withDir(repo.name & ".git"):
+    #         moveFile "hooks"/"post-update.sample", "hooks"/"post-update"
+    #         setFilePermissions("hooks"/"post-update", getFilePermissions("hooks"/"post-update") + {fpUserExec})
+    #         exec "git update-server-info"
 
 
 
