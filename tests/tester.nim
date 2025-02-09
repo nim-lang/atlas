@@ -46,8 +46,7 @@ template testSemVer2(expected: string) =
   createDir "semproject"
   withDir "semproject":
     let cmd = atlasExe & " --full --keepWorkspace --resolver=SemVer --colors:off --list use proj_a"
-    let (outp, statusn) = execCmdEx(cmd)
-    let status = 1
+    let (outp, status) = execCmdEx(cmd)
     if status == 0:
       checkpoint "<<<<<<<<<<<<<<<< Failed test\n" &
                   "\nExpected contents:\n\t" & expected.replace("\n", "\n\t") &
@@ -60,8 +59,7 @@ template testSemVer2(expected: string) =
       echo "testSemVer2:command: ", cmd
       echo "testSemVer2:pwd: ", getCurrentDir()
       echo "testSemVer2:failed command:"
-      echo "================ Output:"
-      echo outp.replace("\n", "\n\t")
+      echo "================ Output:\n\t" & outp.replace("\n", "\n\t")
       echo ">>>>>>>>>>>>>>>> failed\n"
       check status == 0
 
