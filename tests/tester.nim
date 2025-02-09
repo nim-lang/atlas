@@ -84,6 +84,16 @@ template testMinVer(expected: string) =
       echo ">>>>>>>>>>>>>>>> failed\n"
       check status == 0
 
+template removeDirs() =
+  removeDir "does_not_exist"
+  removeDir "semproject"
+  removeDir "minproject"
+  removeDir "source"
+  removeDir "proj_a"
+  removeDir "proj_b"
+  removeDir "proj_c"
+  removeDir "proj_d"
+
 suite "basic repo tests":
   test "tests/ws_semver2":
     withDir "tests/ws_semver2":
@@ -102,14 +112,7 @@ suite "basic repo tests":
         """
         testSemVer2(semVerExpectedResult)
       finally:
-        removeDir "does_not_exist"
-        removeDir "semproject"
-        removeDir "minproject"
-        removeDir "source"
-        removeDir "proj_a"
-        removeDir "proj_b"
-        removeDir "proj_c"
-        removeDir "proj_d"
+        removeDirs()
 
   test "tests/ws_semver2":
     withDir "tests/ws_semver2":
@@ -133,14 +136,7 @@ suite "basic repo tests":
         """
         testSemVer2(semVerExpectedResultNoGitTags)
       finally:
-        removeDir "does_not_exist"
-        removeDir "semproject"
-        removeDir "minproject"
-        removeDir "source"
-        removeDir "proj_a"
-        removeDir "proj_b"
-        removeDir "proj_c"
-        removeDir "proj_d"
+        removeDirs()
 
   test "tests/ws_semver2":
       withDir "tests/ws_semver2":
@@ -159,14 +155,7 @@ suite "basic repo tests":
           """
           testMinVer(minVerExpectedResult)
         finally:
-          removeDir "does_not_exist"
-          removeDir "semproject"
-          removeDir "minproject"
-          removeDir "source"
-          removeDir "proj_a"
-          removeDir "proj_b"
-          removeDir "proj_c"
-          removeDir "proj_d"
+          removeDirs()
 
 proc integrationTest() =
   # Test installation of some "important_packages" which we are sure
