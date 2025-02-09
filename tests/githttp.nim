@@ -23,7 +23,6 @@ proc handleRequest(req: Request) {.async.} =
   let repo = dirs[1]
   let files = dirs[2..^1].join($DirSep)
   let path = findDir(org, repo, files)
-
   echo "http request: ", req.reqMethod, " repo: ", repo, " path: ", path
 
   # Serve static files if not a git request
