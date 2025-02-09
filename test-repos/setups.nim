@@ -9,13 +9,14 @@ template withDir*(dir: string; body: untyped) =
   let old = getCurrentDir()
   try:
     setCurrentDir(dir)
+    echo "WITHDIR: ", dir, " at: ", getCurrentDir()
     body
   finally:
     setCurrentDir(old)
 
 proc buildGraph* =
-  createDir "source"
-  withDir "source":
+  createDir "buildGraph"
+  withDir "buildGraph":
 
     createDir "proj_a"
     withDir "proj_a":
@@ -66,8 +67,8 @@ proc buildGraph* =
       exec "git tag v2.0.0"
 
 proc buildGraphNoGitTags* =
-  createDir "source"
-  withDir "source":
+  createDir "buildGraphNoGitTags"
+  withDir "buildGraphNoGitTags":
 
     createDir "proj_a"
     withDir "proj_a":
@@ -110,4 +111,6 @@ proc buildGraphNoGitTags* =
       exec "git commit -m " & quoteShell("broken version of package D")
 
 when isMainModule:
+  setCurrentDir("test-repos")
   buildGraph()
+  buildGraphNoGitTags()

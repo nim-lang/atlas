@@ -34,3 +34,5 @@ task test, "Runs all tests":
   testerTask()
 
 --path:"$nim"
+
+--path:"../sat/src/"

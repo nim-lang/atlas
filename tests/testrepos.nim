@@ -9,6 +9,7 @@ template withDir*(dir: string; body: untyped) =
   let old = getCurrentDir()
   try:
     setCurrentDir(dir)
+    echo "WITHDIR: ", dir, " at: ", getCurrentDir()
     body
   finally:
     setCurrentDir(old)
