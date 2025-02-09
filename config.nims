@@ -30,7 +30,7 @@ task buildRelease, "Build release":
       exec "nim c -d:release -o:./atlas src/atlas.nim"
 
 task test, "Runs all tests":
-  # unitTestsTask() # tester runs both
+  unitTestsTask() # tester runs both
   testerTask()
 
 --path:"$nim"
