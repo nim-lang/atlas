@@ -145,6 +145,7 @@ when isMainModule:
         withDir(repo.name & ".git"):
           moveFile "hooks"/"post-update.sample", "hooks"/"post-update"
           setFilePermissions("hooks"/"post-update", getFilePermissions("hooks"/"post-update") + {fpUserExec})
+          exec "git update-server-info"
 
 
 
