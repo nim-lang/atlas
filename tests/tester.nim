@@ -3,6 +3,7 @@
 import std / [strutils, os, osproc, sequtils, strformat]
 from std/private/gitutils import diffFiles
 import testrepos
+# import setups
 
 if execShellCmd("nim c -d:debug -r tests/unittests.nim") != 0:
   quit("FAILURE: unit tests failed")
@@ -117,32 +118,32 @@ withDir "tests/ws_semver2":
     removeDir "proj_c"
     removeDir "proj_d"
 
-# withDir "tests/ws_semver2":
-#   try:
-#     buildGraphNoGitTags()
-#     testSemVer2(SemVerExpectedResultNoGitTags)
-#   finally:
-#     removeDir "does_not_exist"
-#     removeDir "semproject"
-#     removeDir "minproject"
-#     removeDir "source"
-#     removeDir "proj_a"
-#     removeDir "proj_b"
-#     removeDir "proj_c"
-#     removeDir "proj_d"
+withDir "tests/ws_semver2":
+  try:
+    buildGraphNoGitTags()
+    testSemVer2(SemVerExpectedResultNoGitTags)
+  finally:
+    removeDir "does_not_exist"
+    removeDir "semproject"
+    removeDir "minproject"
+    removeDir "source"
+    removeDir "proj_a"
+    removeDir "proj_b"
+    removeDir "proj_c"
+    removeDir "proj_d"
 
-# when false: # withDir "tests/ws_semver2":
-#   try:
-#     testMinVer()
-#   finally:
-#     removeDir "does_not_exist"
-#     removeDir "semproject"
-#     removeDir "minproject"
-#     removeDir "source"
-#     removeDir "proj_a"
-#     removeDir "proj_b"
-#     removeDir "proj_c"
-#     removeDir "proj_d"
+when false: # withDir "tests/ws_semver2":
+  try:
+    testMinVer()
+  finally:
+    removeDir "does_not_exist"
+    removeDir "semproject"
+    removeDir "minproject"
+    removeDir "source"
+    removeDir "proj_a"
+    removeDir "proj_b"
+    removeDir "proj_c"
+    removeDir "proj_d"
 
 proc integrationTest() =
   # Test installation of some "important_packages" which we are sure
@@ -170,5 +171,9 @@ when false and not defined(quick):
 
 if failures > 0: quit($failures & " failures occurred.")
 
-# mocks: nim c -r   1.48s user 0.45s system 67% cpu 2.881 total
+# creating git repos
+# nim c -r   1.80s user 0.71s system 60% cpu 4.178 total
 # integration: nim c -r   30.74s user 23.58s system 42% cpu 2:06.64 total
+
+# cloning git repos
+# nim c -r   1.59s user 0.60s system 88% cpu 2.472 total
