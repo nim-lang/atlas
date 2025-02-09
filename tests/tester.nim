@@ -1,6 +1,6 @@
 # Small program that runs the test cases
 
-import std / [strutils, os, osproc, sequtils, strformat, httpclient]
+import std / [strutils, os, osproc, sequtils, strformat, httpclient, unittest]
 from std/private/gitutils import diffFiles
 import testrepos
 # import oldSetups
@@ -41,47 +41,6 @@ proc sameDirContents(expected, given: string): bool =
       inc failures
       result = false
 
-const
-  SemVerExpectedResult = """
-[Info] (../resolve) selected:
-[Info] (proj_a) [ ] (proj_a, 1.1.0)
-[Info] (proj_a) [x] (proj_a, 1.0.0)
-[Info] (proj_b) [ ] (proj_b, 1.1.0)
-[Info] (proj_b) [x] (proj_b, 1.0.0)
-[Info] (proj_c) [x] (proj_c, 1.2.0)
-[Info] (proj_d) [ ] (proj_d, 2.0.0)
-[Info] (proj_d) [x] (proj_d, 1.0.0)
-[Info] (../resolve) end of selection
-"""
-
-  SemVerExpectedResultNoGitTags = """
-[Info] (../resolve) selected:
-[Info] (proj_a) [ ] (proj_a, #head)
-[Info] (proj_a) [ ] (proj_a, 1.1.0)
-[Info] (proj_a) [x] (proj_a, 1.0.0)
-[Info] (proj_b) [ ] (proj_b, #head)
-[Info] (proj_b) [ ] (proj_b, 1.1.0)
-[Info] (proj_b) [x] (proj_b, 1.0.0)
-[Info] (proj_c) [ ] (proj_c, #head)
-[Info] (proj_c) [x] (proj_c, 1.2.0)
-[Info] (proj_c) [ ] (proj_c, 1.0.0)
-[Info] (proj_d) [ ] (proj_d, #head)
-[Info] (proj_d) [ ] (proj_d, 2.0.0)
-[Info] (proj_d) [x] (proj_d, 1.0.0)
-[Info] (../resolve) end of selection
-"""
-
-  MinVerExpectedResult = """selected:
-[ ] (proj_a, 1.1.0)
-[x] (proj_a, 1.0.0)
-[ ] (proj_b, 1.1.0)
-[x] (proj_b, 1.0.0)
-[x] (proj_c, 1.2.0)
-[ ] (proj_d, 2.0.0)
-[x] (proj_d, 1.0.0)
-end of selection
-"""
-
 proc testSemVer2(expected: string) =
   createDir "semproject"
   withDir "semproject":
@@ -101,60 +60,101 @@ proc testSemVer2(expected: string) =
       echo ">>>>>>>>>>>>>>>> failed\n"
       assert false, "testSemVer2"
 
-proc testMinVer() =
+proc testMinVer(minVerExpectedResult: string) =
   buildGraph()
   createDir "minproject"
   withDir "minproject":
     let (outp, status) = execCmdEx(atlasExe & " --keepWorkspace --resolver=MinVer --list use proj_a")
     if status == 0:
-      if outp.contains MinVerExpectedResult:
+      if outp.contains minVerExpectedResult:
         discard "fine"
       else:
-        echo "expected ", MinVerExpectedResult, " but got ", outp
+        echo "expected ", minVerExpectedResult, " but got ", outp
         raise newException(AssertionDefect, "Test failed!")
     else:
       assert false, outp
 
-withDir "tests/ws_semver2":
-  try:
-    buildGraph()
-    testSemVer2(SemVerExpectedResult)
-  finally:
-    removeDir "does_not_exist"
-    removeDir "semproject"
-    removeDir "minproject"
-    removeDir "source"
-    removeDir "proj_a"
-    removeDir "proj_b"
-    removeDir "proj_c"
-    removeDir "proj_d"
+suite "basic repo tests":
+  test "tests/ws_semver2":
+    withDir "tests/ws_semver2":
+      try:
+        buildGraph()
+        let semVerExpectedResult = dedent"""
+        [Info] (../resolve) selected:
+        [Info] (proj_a) [ ] (proj_a, 1.1.0)
+        [Info] (proj_a) [x] (proj_a, 1.0.0)
+        [Info] (proj_b) [ ] (proj_b, 1.1.0)
+        [Info] (proj_b) [x] (proj_b, 1.0.0)
+        [Info] (proj_c) [x] (proj_c, 1.2.0)
+        [Info] (proj_d) [ ] (proj_d, 2.0.0)
+        [Info] (proj_d) [x] (proj_d, 1.0.0)
+        [Info] (../resolve) end of selection
+        """
+        testSemVer2(semVerExpectedResult)
+      finally:
+        removeDir "does_not_exist"
+        removeDir "semproject"
+        removeDir "minproject"
+        removeDir "source"
+        removeDir "proj_a"
+        removeDir "proj_b"
+        removeDir "proj_c"
+        removeDir "proj_d"
 
-withDir "tests/ws_semver2":
-  try:
-    buildGraphNoGitTags()
-    testSemVer2(SemVerExpectedResultNoGitTags)
-  finally:
-    removeDir "does_not_exist"
-    removeDir "semproject"
-    removeDir "minproject"
-    removeDir "source"
-    removeDir "proj_a"
-    removeDir "proj_b"
-    removeDir "proj_c"
-    removeDir "proj_d"
+  test "tests/ws_semver2":
+    withDir "tests/ws_semver2":
+      try:
+        buildGraphNoGitTags()
+        let semVerExpectedResultNoGitTags = dedent"""
+        [Info] (../resolve) selected:
+        [Info] (proj_a) [ ] (proj_a, #head)
+        [Info] (proj_a) [ ] (proj_a, 1.1.0)
+        [Info] (proj_a) [x] (proj_a, 1.0.0)
+        [Info] (proj_b) [ ] (proj_b, #head)
+        [Info] (proj_b) [ ] (proj_b, 1.1.0)
+        [Info] (proj_b) [x] (proj_b, 1.0.0)
+        [Info] (proj_c) [ ] (proj_c, #head)
+        [Info] (proj_c) [x] (proj_c, 1.2.0)
+        [Info] (proj_c) [ ] (proj_c, 1.0.0)
+        [Info] (proj_d) [ ] (proj_d, #head)
+        [Info] (proj_d) [ ] (proj_d, 2.0.0)
+        [Info] (proj_d) [x] (proj_d, 1.0.0)
+        [Info] (../resolve) end of selection
+        """
+        testSemVer2(semVerExpectedResultNoGitTags)
+      finally:
+        removeDir "does_not_exist"
+        removeDir "semproject"
+        removeDir "minproject"
+        removeDir "source"
+        removeDir "proj_a"
+        removeDir "proj_b"
+        removeDir "proj_c"
+        removeDir "proj_d"
 
-when false: # withDir "tests/ws_semver2":
-  try:
-    testMinVer()
-  finally:
-    removeDir "does_not_exist"
-    removeDir "semproject"
-    removeDir "minproject"
-    removeDir "source"
-    removeDir "proj_a"
-    removeDir "proj_b"
-    removeDir "proj_c"
-    removeDir "proj_d"
+    when false: # withDir "tests/ws_semver2":
+      try:
+        let minVerExpectedResult = dedent"""
+        selected:
+        [ ] (proj_a, 1.1.0)
+        [x] (proj_a, 1.0.0)
+        [ ] (proj_b, 1.1.0)
+        [x] (proj_b, 1.0.0)
+        [x] (proj_c, 1.2.0)
+        [ ] (proj_d, 2.0.0)
+        [x] (proj_d, 1.0.0)
+        end of selection
+        """
+        testMinVer(minVerExpectedResult )
+      finally:
+        removeDir "does_not_exist"
+        removeDir "semproject"
+        removeDir "minproject"
+        removeDir "source"
+        removeDir "proj_a"
+        removeDir "proj_b"
+        removeDir "proj_c"
+        removeDir "proj_d"
 
 proc integrationTest() =
   # Test installation of some "important_packages" which we are sure
