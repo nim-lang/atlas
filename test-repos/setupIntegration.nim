@@ -14,13 +14,11 @@ template withDir*(dir: string; body: untyped) =
   finally:
     setCurrentDir(old)
 
-proc getRepos(): seq[string]
+proc getRepoUrls(): seq[string]
 
 proc setupWsIntegration() =
-  createDir "ws_integration"
-  withDir "ws_integration":
-    for repo in getRepos():
-      echo "REPO: ", "`" & repo & "`"
+  for repo in getRepoUrls():
+    echo "REPO: ", "`" & repo & "`"
 
 
 when isMainModule:
@@ -30,10 +28,9 @@ when isMainModule:
     withDir("working-integration"):
       setupWsIntegration()
 
-    quit 1
     var repos: seq[tuple[org: string, name: string]]
     template findRepo(item) =
-      if item.kind == pcDir:
+      if item.kind == pcDir and dirExists(item.path / ".git"):
         # echo "GIT REPO: ", item
         let paths = item.path.split(DirSep)
         let repo = (org: paths[1], name: paths[2])
@@ -66,7 +63,7 @@ when isMainModule:
 
 # test-repos/setups  0.36s user 0.31s system 28% cpu 2.361 total
 
-proc getRepos(): seq[string] =
+proc getRepoUrls(): seq[string] =
   let repos = dedent"""
   https://github.com/timotheecour/asynctools
   https://github.com/disruptek/bump
@@ -140,4 +137,4 @@ proc getRepos(): seq[string] =
   https://github.com/treeform/ws
   https://github.com/guzba/zippy
   """
-  repos.splitLines()
+  repos.strip(chars={'\n'}).splitLines()
