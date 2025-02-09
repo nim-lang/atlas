@@ -161,7 +161,7 @@ proc integrationTest() =
   # Test installation of some "important_packages" which we are sure
   # won't disappear in the near or far future. Turns out `nitter` has
   # quite some dependencies so it suffices:
-  # exec atlasExe & " --force-proxy=http://localhost:4242/ --full --verbosity:trace --keepWorkspace use https://github.com/zedeus/nitter"
+  # exec atlasExe & " --proxy=http://localhost:4242/ --dumbproxy --full --verbosity:trace --keepWorkspace use https://github.com/zedeus/nitter"
   exec atlasExe & " --verbosity:trace --keepWorkspace use https://github.com/zedeus/nitter"
   sameDirContents("expected", ".")
 
