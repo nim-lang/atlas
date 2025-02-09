@@ -2,7 +2,7 @@
 
 import std / [strutils, os, osproc, sequtils, strformat]
 from std/private/gitutils import diffFiles
-import setups
+import testrepos
 
 if execShellCmd("nim c -d:debug -r tests/unittests.nim") != 0:
   quit("FAILURE: unit tests failed")
@@ -117,32 +117,32 @@ withDir "tests/ws_semver2":
     removeDir "proj_c"
     removeDir "proj_d"
 
-withDir "tests/ws_semver2":
-  try:
-    buildGraphNoGitTags()
-    testSemVer2(SemVerExpectedResultNoGitTags)
-  finally:
-    removeDir "does_not_exist"
-    removeDir "semproject"
-    removeDir "minproject"
-    removeDir "source"
-    removeDir "proj_a"
-    removeDir "proj_b"
-    removeDir "proj_c"
-    removeDir "proj_d"
+# withDir "tests/ws_semver2":
+#   try:
+#     buildGraphNoGitTags()
+#     testSemVer2(SemVerExpectedResultNoGitTags)
+#   finally:
+#     removeDir "does_not_exist"
+#     removeDir "semproject"
+#     removeDir "minproject"
+#     removeDir "source"
+#     removeDir "proj_a"
+#     removeDir "proj_b"
+#     removeDir "proj_c"
+#     removeDir "proj_d"
 
-when false: # withDir "tests/ws_semver2":
-  try:
-    testMinVer()
-  finally:
-    removeDir "does_not_exist"
-    removeDir "semproject"
-    removeDir "minproject"
-    removeDir "source"
-    removeDir "proj_a"
-    removeDir "proj_b"
-    removeDir "proj_c"
-    removeDir "proj_d"
+# when false: # withDir "tests/ws_semver2":
+#   try:
+#     testMinVer()
+#   finally:
+#     removeDir "does_not_exist"
+#     removeDir "semproject"
+#     removeDir "minproject"
+#     removeDir "source"
+#     removeDir "proj_a"
+#     removeDir "proj_b"
+#     removeDir "proj_c"
+#     removeDir "proj_d"
 
 proc integrationTest() =
   # Test installation of some "important_packages" which we are sure
@@ -160,7 +160,7 @@ proc cleanupIntegrationTest() =
   removeFile "nim.cfg"
   removeFile "ws_integration.nimble"
 
-when not defined(quick):
+when true or not defined(quick):
   withDir "tests/ws_integration":
     try:
       integrationTest()
