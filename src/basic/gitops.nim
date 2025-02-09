@@ -92,7 +92,7 @@ proc clone*(c: var AtlasContext; url, dest: string; retries = 5; fullClones=fals
     url.query = prev.query
     url.anchor = prev.anchor
 
-    echo "GIT CLONE: ", url.repr
+  echo "GIT CLONE: ", url.repr
   let cmd = $GitClone & " " & extraArgs & " " & quoteShell($url) & " " & dest
   for i in 1..retries:
     if execShellCmd(cmd) == 0:
