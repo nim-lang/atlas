@@ -49,6 +49,7 @@ type
     overridesFile*: string
     pluginsFile*: string
     origDepsDir*: string
+    proxy*: string
 
 
 proc `==`*(a, b: CfgPath): bool {.borrow.}

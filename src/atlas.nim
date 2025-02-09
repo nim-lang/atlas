@@ -403,6 +403,8 @@ proc main(c: var AtlasContext) =
         of "off": c.noColors = true
         of "on": c.noColors = false
         else: writeHelp()
+      of "force-proxy":
+        c.proxy = val
       of "verbosity":
         case val.normalize
         of "normal": c.verbosity = 0
