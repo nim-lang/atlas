@@ -161,7 +161,8 @@ proc integrationTest() =
   # Test installation of some "important_packages" which we are sure
   # won't disappear in the near or far future. Turns out `nitter` has
   # quite some dependencies so it suffices:
-  exec atlasExe & " --force-proxy=http://localhost:4242/ --full --verbosity:trace --keepWorkspace use https://github.com/zedeus/nitter"
+  # exec atlasExe & " --force-proxy=http://localhost:4242/ --full --verbosity:trace --keepWorkspace use https://github.com/zedeus/nitter"
+  exec atlasExe & " --verbosity:trace --keepWorkspace use https://github.com/zedeus/nitter"
   sameDirContents("expected", ".")
 
 proc cleanupIntegrationTest() =
@@ -185,7 +186,7 @@ if failures > 0: quit($failures & " failures occurred.")
 
 # creating git repos
 # nim c -r   1.80s user 0.71s system 60% cpu 4.178 total
-# integration: nim c -r   30.74s user 23.58s system 42% cpu 2:06.64 total
+# w/integration: nim c -r   23.86s user 18.01s system 71% cpu 58.225 total
 
 # cloning git repos
 # nim c -r   1.59s user 0.60s system 88% cpu 2.472 total
