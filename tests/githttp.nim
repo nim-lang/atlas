@@ -15,12 +15,15 @@ proc findDir(org, repo, files: string): string =
     for dir in searchDirs:
       result = dir / org / repo / files
       if dirExists(dir / org / repo):
-        break
+        return
     # otherwise try without org in the searchdir
     for dir in searchDirs:
       result = dir / repo / files
       if dirExists(dir / repo):
-        break
+        return
+    
+    if not repo.endsWith(".git"):
+      return findDir(org, repo & ".git", files)
 
 proc handleRequest(req: Request) {.async.} =
   let arg = req.url.path.strip(chars={'/'})
