@@ -14,10 +14,10 @@ try:
   echo "HTTP: ", response.body
   # doAssert response.body == readFile("test-repo/readme.md"), "Check that tests/githttp server is running on port 4242"
 except CatchableError:
-  quit "Error accessing githttp server.\n" &
-       "Check that tests/githttp server is running on port 4242.\n" &
+  quit "Error accessing git-http server.\n" &
+       "Check that tests/githttpserver server is running on port 4242.\n" &
        "To start it run in another terminal:\n" &
-       "  nim c -r tests/githttp test-repos"
+       "  nim c -r tests/githttpserver test-repos"
 
 var failures = 0
 
