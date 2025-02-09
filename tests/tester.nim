@@ -46,24 +46,24 @@ template testSemVer2(expected: string) =
   createDir "semproject"
   withDir "semproject":
     let cmd = atlasExe & " --full --keepWorkspace --resolver=SemVer --colors:off --list use proj_a"
-    let (outp, status) = execCmdEx(cmd)
+    let (outp, statusn) = execCmdEx(cmd)
+    let status = 1
     if status == 0:
-      checkpoint "Failed test.\n" &
+      checkpoint "<<<<<<<<<<<<<<<< Failed test\n" &
                   "\nExpected contents:\n\t" & expected.replace("\n", "\n\t") &
                   "\nInstead got:\n\t" & outp.replace("\n", "\n\t") &
-                  "\n"
+                  ">>>>>>>>>>>>>>>> Failed\n"
       check outp.contains expected
-      #   discard "fine"
-      # else:
-      #   echo "expected ", expected, " but got ", outp
-      #   raise newException(AssertionDefect, "Test failed!")
     else:
-      echo "\n\n<<<<<<<<<<<<<<<< failed "
+      echo "\n\n"
+      echo "<<<<<<<<<<<<<<<< Failed Exec "
       echo "testSemVer2:command: ", cmd
       echo "testSemVer2:pwd: ", getCurrentDir()
-      echo "testSemVer2:failed command:\n", outp
+      echo "testSemVer2:failed command:"
+      echo "================ Output:"
+      echo outp.replace("\n", "\n\t")
       echo ">>>>>>>>>>>>>>>> failed\n"
-      assert false, "testSemVer2"
+      check status == 0
 
 proc testMinVer(minVerExpectedResult: string) =
   buildGraph()
