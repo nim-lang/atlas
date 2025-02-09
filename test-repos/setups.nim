@@ -140,9 +140,12 @@ when isMainModule:
       echo "REPO: ", repo
       withDir(repo.org):
         let orig = ".." / "working" / repo.org / repo.name
-        let cmd = &"git clone --bare {orig} "
-        echo "CLONING: ", cmd, " cwd: ", getCurrentDir()
-        exec cmd
+        echo "CLONING: ", " cwd: ", getCurrentDir()
+        exec &"git clone --mirror {orig}"
+        withDir(repo.name & ".git"):
+          moveFile "hooks"/"post-update.sample", "hooks"/"post-update"
+          setFilePermissions("hooks"/"post-update", getFilePermissions("hooks"/"post-update") + {fpUserExec})
+
 
 
 # test-repos/setups  0.36s user 0.31s system 28% cpu 2.361 total
