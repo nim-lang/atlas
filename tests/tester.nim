@@ -63,19 +63,26 @@ template testSemVer2(expected: string) =
       echo ">>>>>>>>>>>>>>>> failed\n"
       check status == 0
 
-proc testMinVer(minVerExpectedResult: string) =
-  buildGraph()
+template testMinVer(expected: string) =
   createDir "minproject"
   withDir "minproject":
+    let cmd = atlasExe & " --keepWorkspace --resolver=MinVer --list use proj_a"
     let (outp, status) = execCmdEx(atlasExe & " --keepWorkspace --resolver=MinVer --list use proj_a")
     if status == 0:
-      if outp.contains minVerExpectedResult:
-        discard "fine"
-      else:
-        echo "expected ", minVerExpectedResult, " but got ", outp
-        raise newException(AssertionDefect, "Test failed!")
+      checkpoint "<<<<<<<<<<<<<<<< Failed test\n" &
+                  "\nExpected contents:\n\t" & expected.replace("\n", "\n\t") &
+                  "\nInstead got:\n\t" & outp.replace("\n", "\n\t") &
+                  ">>>>>>>>>>>>>>>> Failed\n"
+      check outp.contains expected
     else:
-      assert false, outp
+      echo "\n\n"
+      echo "<<<<<<<<<<<<<<<< Failed Exec "
+      echo "testSemVer2:command: ", cmd
+      echo "testSemVer2:pwd: ", getCurrentDir()
+      echo "testSemVer2:failed command:"
+      echo "================ Output:\n\t" & outp.replace("\n", "\n\t")
+      echo ">>>>>>>>>>>>>>>> failed\n"
+      check status == 0
 
 suite "basic repo tests":
   test "tests/ws_semver2":
@@ -135,29 +142,31 @@ suite "basic repo tests":
         removeDir "proj_c"
         removeDir "proj_d"
 
-    when false: # withDir "tests/ws_semver2":
-      try:
-        let minVerExpectedResult = dedent"""
-        selected:
-        [ ] (proj_a, 1.1.0)
-        [x] (proj_a, 1.0.0)
-        [ ] (proj_b, 1.1.0)
-        [x] (proj_b, 1.0.0)
-        [x] (proj_c, 1.2.0)
-        [ ] (proj_d, 2.0.0)
-        [x] (proj_d, 1.0.0)
-        end of selection
-        """
-        testMinVer(minVerExpectedResult )
-      finally:
-        removeDir "does_not_exist"
-        removeDir "semproject"
-        removeDir "minproject"
-        removeDir "source"
-        removeDir "proj_a"
-        removeDir "proj_b"
-        removeDir "proj_c"
-        removeDir "proj_d"
+  test "tests/ws_semver2":
+      withDir "tests/ws_semver2":
+        buildGraph()
+        try:
+          let minVerExpectedResult = dedent"""
+          [Info] (../resolve) selected:
+          [Info] (proj_a) [ ] (proj_a, 1.1.0)
+          [Info] (proj_a) [x] (proj_a, 1.0.0)
+          [Info] (proj_b) [ ] (proj_b, 1.1.0)
+          [Info] (proj_b) [x] (proj_b, 1.0.0)
+          [Info] (proj_c) [x] (proj_c, 1.2.0)
+          [Info] (proj_d) [ ] (proj_d, 2.0.0)
+          [Info] (proj_d) [x] (proj_d, 1.0.0)
+          [Info] (../resolve) end of selection
+          """
+          testMinVer(minVerExpectedResult)
+        finally:
+          removeDir "does_not_exist"
+          removeDir "semproject"
+          removeDir "minproject"
+          removeDir "source"
+          removeDir "proj_a"
+          removeDir "proj_b"
+          removeDir "proj_c"
+          removeDir "proj_d"
 
 proc integrationTest() =
   # Test installation of some "important_packages" which we are sure
