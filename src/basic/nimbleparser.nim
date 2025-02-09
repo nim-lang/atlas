@@ -7,12 +7,7 @@
 #
 
 import std / [os, strutils, tables, unicode, hashes]
-import versions, packagesjson, reporters, gitops, parse_requires, pkgurls, compiledpatterns
-
-when defined(nimAtlasBootstrap):
-  import ../dist/sat/src/sat/satvars
-else:
-  import sat/satvars
+import versions, packageinfo, reporters, gitops, parserequires, pkgurls, compiledpatterns
 
 type
   DependencyStatus* = enum

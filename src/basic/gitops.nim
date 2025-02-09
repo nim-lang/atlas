@@ -7,7 +7,7 @@
 #
 
 import std/[os, osproc, sequtils, strutils]
-import basic/[reporters, osutils, versions]
+import reporters, osutils, versions
 
 type
   Command* = enum

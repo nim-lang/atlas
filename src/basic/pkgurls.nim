@@ -13,6 +13,11 @@ import compiledpatterns, gitops
 const
   GitSuffix = ".git"
 
+type
+  PkgUrl* = object
+    projectName*: string
+    u: string
+
 proc isSep(c: char): bool {.inline.} =
   when defined(windows): c == '/' or c == '\\' else: c == '/'
 
@@ -27,11 +32,6 @@ proc extractProjectName*(s: string): string =
   result = s.substr(first+1, last)
   if result.endsWith(GitSuffix):
     result.setLen result.len - len(GitSuffix)
-
-type
-  PkgUrl* = object
-    projectName*: string
-    u: string
 
 proc `$`*(u: PkgUrl): string = u.u
 
