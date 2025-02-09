@@ -114,3 +114,5 @@ when isMainModule:
   setCurrentDir("test-repos")
   buildGraph()
   buildGraphNoGitTags()
+
+# test-repos/setups  0.36s user 0.31s system 28% cpu 2.361 total

@@ -12,6 +12,8 @@ src/basic/*
 !src/basic/*.*
 tests/*
 !tests/*.*
+test-repos/
+!test-repos/*.*
 atlas
 deps.png
 nim.cfg
