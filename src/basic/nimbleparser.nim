@@ -24,8 +24,8 @@ type
     err*: string
 
   NimbleContext* = object
-    hasPackageList: bool
-    nameToUrl: Table[string, string]
+    hasPackageList*: bool
+    nameToUrl*: Table[string, string]
 
 proc hash*(r: Requirements): Hash =
   var h: Hash = 0

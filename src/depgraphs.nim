@@ -8,8 +8,8 @@
 
 import std / [sets, tables, os, strutils, streams, json, jsonutils, algorithm]
 
-import basic/[depgraphtypes, pkgcache, context, gitops, reporters, nimbleparser, pkgurls, versions]
-import runners, cloner
+import basic/[depgraphtypes, context, gitops, reporters, nimbleparser, pkgurls, versions]
+import runners, cloner, pkgcache 
 
 when defined(nimAtlasBootstrap):
   import ../dist/sat/src/sat/[sat, satvars]

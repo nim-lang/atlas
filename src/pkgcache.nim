@@ -6,8 +6,8 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [os, strutils, tables, unicode, hashes]
-import versions, packagesjson, reporters, gitops, parse_requires, pkgurls, compiledpatterns
+import std / [os, strutils, tables, unicode, sets, json, hashes, algorithm]
+import basic/[context, depgraphtypes, versions, osutils, nimbleparser, packageinfo, reporters, gitops, parserequires, pkgurls, compiledpatterns]
 
 const
   DefaultPackagesSubDir* = "packages"

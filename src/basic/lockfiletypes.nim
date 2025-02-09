@@ -1,3 +1,5 @@
+import std / [strutils, tables, json, jsonutils]
+export tables
 
 type
   LockFileEntry* = object

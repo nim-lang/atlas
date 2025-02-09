@@ -17,7 +17,7 @@ type
     active*: bool
     isRoot*: bool
     isTopLevel*: bool
-    status: CloneStatus
+    status*: CloneStatus
     activeVersion*: int
     ondisk*: string
 
@@ -70,7 +70,7 @@ iterator allActiveNodes*(g: DepGraph): lent Dependency =
 iterator toposorted*(g: DepGraph): lent Dependency =
   for i in countdown(g.nodes.len-1, 0): yield g.nodes[i]
 
-proc findDependencyForDep(g: DepGraph; dep: PkgUrl): int {.inline.} =
+proc findDependencyForDep*(g: DepGraph; dep: PkgUrl): int {.inline.} =
   assert g.packageToDependency.hasKey(dep), $(dep, g.packageToDependency)
   result = g.packageToDependency.getOrDefault(dep)
 

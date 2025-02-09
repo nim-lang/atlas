@@ -9,8 +9,9 @@
 ## Lockfile implementation.
 
 import std / [sequtils, strutils, tables, sets, os, json, jsonutils]
-import context, gitops, nimblechecksums, compilerversions,
-  configutils, depgraphs, reporters, nimbleparser, pkgurls, cloner
+import basic/[lockfiletypes, context, gitops, nimblechecksums, compilerversions,
+  configutils, depgraphtypes, reporters, nimbleparser, pkgurls]
+import cloner
 
 const
   NimbleLockFileName* = "nimble.lock"

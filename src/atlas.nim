@@ -12,8 +12,8 @@
 import std / [parseopt, strutils, os, osproc, tables, sets, json, jsonutils]
 import basic / [versions, context, osutils, packageinfo,
                 configutils, nimblechecksums, reporters,
-                nimbleparser, pkgurls]
-import cloner, depgraphs, gitops, nimenv, lockfiles, confighandler
+                nimbleparser, gitops, pkgurls]
+import cloner, depgraphs, nimenv, lockfiles, confighandler
 
 from std/terminal import isatty
 
