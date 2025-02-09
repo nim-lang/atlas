@@ -1,7 +1,7 @@
 
 import std / [sets, tables, os, strutils, streams, json, jsonutils, algorithm]
 
-import context, gitops, runners, reporters, nimbleparser, pkgurls, cloner, versions
+import sattypes, context, gitops, reporters, nimbleparser, pkgurls, versions
 
 type
   DependencyVersion* = object  # Represents a specific version of a project.
@@ -69,6 +69,10 @@ iterator allActiveNodes*(g: DepGraph): lent Dependency =
 
 iterator toposorted*(g: DepGraph): lent Dependency =
   for i in countdown(g.nodes.len-1, 0): yield g.nodes[i]
+
+proc findDependencyForDep(g: DepGraph; dep: PkgUrl): int {.inline.} =
+  assert g.packageToDependency.hasKey(dep), $(dep, g.packageToDependency)
+  result = g.packageToDependency.getOrDefault(dep)
 
 iterator directDependencies*(g: DepGraph; c: var AtlasContext; d: Dependency): lent Dependency =
   if d.activeVersion >= 0 and d.activeVersion < d.versions.len:

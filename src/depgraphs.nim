@@ -8,7 +8,8 @@
 
 import std / [sets, tables, os, strutils, streams, json, jsonutils, algorithm]
 
-import context, gitops, runners, reporters, nimbleparser, pkgurls, cloner, versions
+import basic/[depgraphtypes, context, gitops, reporters, nimbleparser, pkgurls, versions]
+import runners, cloner
 
 when defined(nimAtlasBootstrap):
   import ../dist/sat/src/sat/[sat, satvars]
@@ -182,10 +183,6 @@ proc expand*(c: var AtlasContext; g: var DepGraph; nc: NimbleContext; m: Travers
         withDir c, dest:
           traverseDependency(c, nc, g, i, m)
     inc i
-
-proc findDependencyForDep(g: DepGraph; dep: PkgUrl): int {.inline.} =
-  assert g.packageToDependency.hasKey(dep), $(dep, g.packageToDependency)
-  result = g.packageToDependency.getOrDefault(dep)
 
 iterator mvalidVersions*(p: var Dependency; g: var DepGraph): var DependencyVersion =
   for v in mitems p.versions:
