@@ -150,13 +150,17 @@ proc checkoutGitCommit*(c: var Reporter; p, commit: string) =
   else:
     info(c, p, "updated package to " & commit)
 
-proc checkoutGitCommitFull*(c: var Reporter; p, commit: string; fullClones: bool) =
+proc checkoutGitCommitFull*(c: var AtlasContext; p, commit: string; fullClones: bool) =
   var smExtraArgs: seq[string] = @[]
 
   if not fullClones and commit.len == 40:
     smExtraArgs.add "--depth=1"
 
-    let (_, status) = exec(c, GitFetch, ["--update-shallow", "--tags", "origin", commit])
+    let extraArgs =
+      if c.dumbProxy: ""
+      elif not fullClones: "--update-shallow"
+      else: ""
+    let (_, status) = exec(c, GitFetch, [extraArgs, "--tags", "origin", commit])
     if status != 0:
       error(c, p, "could not fetch commit " & commit)
     else:
@@ -248,15 +252,17 @@ when false:
 proc getCurrentCommit*(): string =
   result = execProcess("git log -1 --pretty=format:%H").strip()
 
-proc isOutdated*(c: var Reporter; displayName: string): bool =
+proc isOutdated*(c: var AtlasContext; displayName: string): bool =
   ## determine if the given git repo `f` is updateable
   ##
 
   info c, displayName, "checking is package is up to date..."
 
   # TODO: does --update-shallow fetch tags on a shallow repo?
-  let (outp, status) = exec(c, GitFetch, ["--update-shallow", "--tags"])
-  # let (outp, status) = exec(c, GitFetch, ["--tags"])
+  let extraArgs =
+    if c.dumbProxy: ""
+    else: "--update-shallow"
+  let (outp, status) = exec(c, GitFetch, [extraArgs, "--tags"])
 
   if status == 0:
     let (cc, status) = exec(c, GitLastTaggedRef, [])
