@@ -2,6 +2,7 @@
 ## (c) 2021 Andreas Rumpf
 
 import std / [os, strutils, osproc, uri]
+import reporters
 
 proc lastPathComponent*(s: string): string =
   var last = s.len - 1
@@ -57,3 +58,20 @@ proc nimbleExec*(cmd: string; args: openArray[string]) =
     cmdLine.add ' '
     cmdLine.add quoteShell(args[i])
   discard os.execShellCmd(cmdLine)
+
+template withDir*(c: var Reporter; dir: string; body: untyped) =
+  let oldDir = getCurrentDir()
+  debug c, dir, "Current directory is now: " & dir
+  try:
+    setCurrentDir(dir)
+    body
+  finally:
+    setCurrentDir(oldDir)
+
+template withDir*(dir: string; body: untyped) =
+  let oldDir = getCurrentDir()
+  try:
+    setCurrentDir(dir)
+    body
+  finally:
+    setCurrentDir(oldDir)

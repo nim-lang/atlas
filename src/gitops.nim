@@ -7,7 +7,7 @@
 #
 
 import std/[os, osproc, sequtils, strutils]
-import reporters, osutils, versions
+import basic/[reporters, osutils, versions]
 
 type
   Command* = enum
@@ -267,23 +267,6 @@ proc isOutdated*(c: var Reporter; displayName: string): bool =
               result = true
   else:
     warn c, displayName, "`git fetch` failed: " & outp
-
-template withDir*(c: var Reporter; dir: string; body: untyped) =
-  let oldDir = getCurrentDir()
-  debug c, dir, "Current directory is now: " & dir
-  try:
-    setCurrentDir(dir)
-    body
-  finally:
-    setCurrentDir(oldDir)
-
-template withDir*(dir: string; body: untyped) =
-  let oldDir = getCurrentDir()
-  try:
-    setCurrentDir(dir)
-    body
-  finally:
-    setCurrentDir(oldDir)
 
 proc getRemoteUrl*(): string =
   execProcess("git config --get remote.origin.url").strip()

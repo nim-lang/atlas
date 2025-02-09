@@ -7,7 +7,7 @@
 #
 
 import std/[os, strutils]
-import context, osutils, parse_requires, reporters
+import context, osutils, parserequires, reporters
 
 export parse_requires
 
