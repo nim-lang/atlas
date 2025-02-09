@@ -51,21 +51,21 @@ when isMainModule:
     echo "Setup bare gits"
     for repo in repos:
       echo "git repo: ", repo
-    # removeDir("ws_integration")
-    # createDir("ws_integration")
-    # withDir("ws_integration"):
-    #   for repo in repos:
-    #     createDir(repo.org)
-    #   for repo in repos:
-    #     echo "REPO: ", repo
-    #     withDir(repo.org):
-    #       let orig = ".." / ".." / "working-integration" / repo.org / repo.name
-    #       echo "CLONING: ", " cwd: ", getCurrentDir()
-    #       exec &"git clone --mirror {orig}"
-    #       withDir(repo.name & ".git"):
-    #         moveFile "hooks"/"post-update.sample", "hooks"/"post-update"
-    #         setFilePermissions("hooks"/"post-update", getFilePermissions("hooks"/"post-update") + {fpUserExec})
-    #         exec "git update-server-info"
+    rmoveDir("ws_integration")
+    createDir("ws_integration")
+    withDir("ws_integration"):
+      for repo in repos:
+        createDir(repo.org)
+      for repo in repos:
+        echo "REPO: ", repo
+        withDir(repo.org):
+          let orig = ".." / ".." / "working-integration" / repo.org / repo.name
+          echo "CLONING: ", " cwd: ", getCurrentDir()
+          exec &"git clone --mirror {orig}"
+          withDir(repo.name & ".git"):
+            moveFile "hooks"/"post-update.sample", "hooks"/"post-update"
+            setFilePermissions("hooks"/"post-update", getFilePermissions("hooks"/"post-update") + {fpUserExec})
+            exec "git update-server-info"
 
 
 
