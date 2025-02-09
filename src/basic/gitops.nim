@@ -86,7 +86,13 @@ proc clone*(c: var AtlasContext; url, dest: string; retries = 5; fullClones=fals
   if $c.proxy != "":
     echo "GIT CLONE proxy: ", c.proxy.repr
     echo "GIT CLONE URL: ", url.repr
+    let prev = url
+    url = c.proxy
+    url.path = prev.path
+    url.query = prev.query
+    url.anchor = prev.anchor
 
+    echo "GIT CLONE: ", url.repr
   let cmd = $GitClone & " " & extraArgs & " " & quoteShell($url) & " " & dest
   for i in 1..retries:
     if execShellCmd(cmd) == 0:
