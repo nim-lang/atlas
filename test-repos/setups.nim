@@ -134,12 +134,15 @@ when isMainModule:
 
     echo "Setup bare gits"
     for repo in repos:
-      echo "REPO: ", repo
       removeDir(repo.org)
       createDir(repo.org)
+    for repo in repos:
+      echo "REPO: ", repo
       withDir(repo.org):
         let orig = ".." / "working" / repo.org / repo.name
-        exec &"git clone --bare {orig}"
+        let cmd = &"git clone --bare {orig} "
+        echo "CLONING: ", cmd, " cwd: ", getCurrentDir()
+        exec cmd
 
 
 # test-repos/setups  0.36s user 0.31s system 28% cpu 2.361 total
