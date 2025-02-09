@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [os]
+import std / [os, uri]
 import versions, parserequires, compiledpatterns, reporters
 
 const
@@ -49,7 +49,7 @@ type
     overridesFile*: string
     pluginsFile*: string
     origDepsDir*: string
-    proxy*: string
+    proxy*: Uri
 
 
 proc `==`*(a, b: CfgPath): bool {.borrow.}

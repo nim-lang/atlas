@@ -9,7 +9,7 @@
 ## Simple tool to automate frequent workflows: Can "clone"
 ## a Nimble dependency and its dependencies recursively.
 
-import std / [parseopt, strutils, os, osproc, tables, sets, json, jsonutils]
+import std / [parseopt, strutils, os, osproc, tables, sets, json, jsonutils, uri]
 import basic / [versions, context, osutils, packageinfos,
                 configutils, nimblechecksums, reporters,
                 nimbleparser, gitops, pkgurls]
@@ -404,7 +404,7 @@ proc main(c: var AtlasContext) =
         of "on": c.noColors = false
         else: writeHelp()
       of "force-proxy":
-        c.proxy = val
+        c.proxy = val.parseUri()
       of "verbosity":
         case val.normalize
         of "normal": c.verbosity = 0
