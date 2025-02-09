@@ -1,5 +1,5 @@
 
-import std / os
+import std / [os, strutils]
 
 proc exec*(cmd: string) =
   if execShellCmd(cmd) != 0:
@@ -111,8 +111,21 @@ proc buildGraphNoGitTags* =
       exec "git commit -m " & quoteShell("broken version of package D")
 
 when isMainModule:
-  setCurrentDir("test-repos")
-  buildGraph()
-  buildGraphNoGitTags()
+  withDir("test-repos"):
+    removeDir("working")
+    createDir "working"
+    withDir("working"):
+      buildGraph()
+      buildGraphNoGitTags()
+
+    var repos: seq[tuple[org: string, repo: string]]
+    for item in walkDir("working"/"buildGraph"):
+      if item.kind == pcDir:
+        echo "GIT REPO: ", item
+        let paths = item.path.split(DirSep)
+        let repo = (org: paths[1], repo: paths[2])
+        echo "GIT REPO: ", repo
+        repos.add(repo)
+
 
 # test-repos/setups  0.36s user 0.31s system 28% cpu 2.361 total
