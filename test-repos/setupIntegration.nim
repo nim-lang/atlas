@@ -51,7 +51,7 @@ when isMainModule:
     echo "Setup bare gits"
     for repo in repos:
       echo "git repo: ", repo
-    rmoveDir("ws_integration")
+    removeDir("ws_integration")
     createDir("ws_integration")
     withDir("ws_integration"):
       for repo in repos:
