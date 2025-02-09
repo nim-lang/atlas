@@ -40,7 +40,7 @@ proc toJson*(d: DepGraph): JsonNode =
   result["nodes"] = toJson(d.nodes)
   result["reqs"] = toJson(d.reqs)
 
-proc findNimbleFile(g: DepGraph; idx: int): (string, int) =
+proc findNimbleFile*(g: DepGraph; idx: int): (string, int) =
   var nimbleFile = g.nodes[idx].pkg.projectName & ".nimble"
   var found = 0
   if fileExists(nimbleFile):
