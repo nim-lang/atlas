@@ -23,7 +23,7 @@ proc setupWsIntegration() =
     echo "REPO: ", "org: ", org, " name: ", name, " url: ", "`" & repo & "`"
     createDir(org)
     withDir(org):
-      if not dirExists(name):
+      if not dirExists(name & ".git"):
         exec &"git clone --mirror {repo}"
 
         withDir(name & ".git"):
