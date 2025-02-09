@@ -26,32 +26,37 @@ if execShellCmd("nim c -o:$# -d:release src/atlas.nim" % [atlasExe]) != 0:
   quit("FAILURE: compilation of atlas failed")
 
 
-proc sameDirContents(expected, given: string): bool =
-  result = true
+template sameDirContents(expected, given: string) =
+  # result = true
   for _, e in walkDir(expected):
     let g = given / splitPath(e).tail
     if fileExists(g):
+      check readFile(e) == readFile(g)
       if readFile(e) != readFile(g):
         echo "FAILURE: files differ: ", e
         echo diffFiles(e, g).output
         inc failures
-        result = false
+        # result = false
     else:
       echo "FAILURE: file does not exist: ", g
       inc failures
-      result = false
+      # result = false
 
-proc testSemVer2(expected: string) =
+template testSemVer2(expected: string) =
   createDir "semproject"
   withDir "semproject":
     let cmd = atlasExe & " --full --keepWorkspace --resolver=SemVer --colors:off --list use proj_a"
     let (outp, status) = execCmdEx(cmd)
     if status == 0:
-      if outp.contains expected:
-        discard "fine"
-      else:
-        echo "expected ", expected, " but got ", outp
-        raise newException(AssertionDefect, "Test failed!")
+      checkpoint "Failed test.\n" &
+                  "\nExpected contents:\n\t" & expected.replace("\n", "\n\t") &
+                  "\nInstead got:\n\t" & outp.replace("\n", "\n\t") &
+                  "\n"
+      check outp.contains expected
+      #   discard "fine"
+      # else:
+      #   echo "expected ", expected, " but got ", outp
+      #   raise newException(AssertionDefect, "Test failed!")
     else:
       echo "\n\n<<<<<<<<<<<<<<<< failed "
       echo "testSemVer2:command: ", cmd
@@ -161,7 +166,7 @@ proc integrationTest() =
   # won't disappear in the near or far future. Turns out `nitter` has
   # quite some dependencies so it suffices:
   exec atlasExe & " --verbosity:trace --keepWorkspace use https://github.com/zedeus/nitter"
-  discard sameDirContents("expected", ".")
+  sameDirContents("expected", ".")
 
 proc cleanupIntegrationTest() =
   var dirs: seq[string] = @[]
