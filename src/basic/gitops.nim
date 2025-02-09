@@ -7,7 +7,7 @@
 #
 
 import std/[os, osproc, sequtils, strutils]
-import reporters, osutils, versions
+import reporters, osutils, versions, context
 
 type
   Command* = enum
@@ -70,7 +70,7 @@ proc checkGitDiffStatus*(c: var Reporter): string =
   else:
     ""
 
-proc clone*(c: var Reporter; url, dest: string; retries = 5; fullClones=false): bool =
+proc clone*(c: var AtlasContext; url, dest: string; retries = 5; fullClones=false): bool =
   ## clone git repo.
   ##
   ## note clones don't use `--recursive` but rely in the `checkoutCommit`

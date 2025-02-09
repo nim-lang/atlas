@@ -30,7 +30,7 @@ proc getPackageInfos*(depsDir: string): seq[PackageInfo] =
         if pkg != nil and not uniqueNames.containsOrIncl(pkg.name):
           result.add(pkg)
 
-proc updatePackages*(c: var Reporter; depsDir: string) =
+proc updatePackages*(c: var AtlasContext; depsDir: string) =
   if dirExists(depsDir / DefaultPackagesSubDir):
     withDir(c, depsDir / DefaultPackagesSubDir):
       gitPull(c, DefaultPackagesSubDir)
@@ -40,7 +40,7 @@ proc updatePackages*(c: var Reporter; depsDir: string) =
       if not success:
         error c, DefaultPackagesSubDir, "cannot clone packages repo"
 
-proc fillPackageLookupTable(c: var NimbleContext; r: var Reporter; depsdir: string) =
+proc fillPackageLookupTable(r: var AtlasContext; c: var NimbleContext; depsdir: string) =
   if not c.hasPackageList:
     c.hasPackageList = true
     if not fileExists(depsDir / DefaultPackagesSubDir / "packages.json"):
@@ -49,9 +49,9 @@ proc fillPackageLookupTable(c: var NimbleContext; r: var Reporter; depsdir: stri
     for entry in packages:
       c.nameToUrl[unicode.toLower entry.name] = entry.url
 
-proc createNimbleContext*(r: var Reporter; depsdir: string): NimbleContext =
+proc createNimbleContext*(r: var AtlasContext; depsdir: string): NimbleContext =
   result = NimbleContext()
-  fillPackageLookupTable(result, r, depsdir)
+  fillPackageLookupTable(r, result, depsdir)
 
 proc collectNimbleVersions*(c: var AtlasContext; nc: NimbleContext; g: var DepGraph; idx: int): seq[string] =
   let (outerNimbleFile, found) = findNimbleFile(g, idx)
