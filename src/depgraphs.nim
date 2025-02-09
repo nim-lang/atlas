@@ -8,7 +8,7 @@
 
 import std / [sets, tables, os, strutils, streams, json, jsonutils, algorithm]
 
-import basic/[depgraphtypes, context, gitops, reporters, nimbleparser, pkgurls, versions]
+import basic/[depgraphtypes, pkgcache, context, gitops, reporters, nimbleparser, pkgurls, versions]
 import runners, cloner
 
 when defined(nimAtlasBootstrap):

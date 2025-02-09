@@ -8,7 +8,7 @@ type
     version*: Version
     commit*: string
     req*: int # index into graph.reqs so that it can be shared between versions
-    v: VarId
+    v*: VarId
 
   Dependency* = object
     pkg*: PkgUrl
@@ -22,15 +22,15 @@ type
     ondisk*: string
 
   DepGraph* = object
-    nodes: seq[Dependency]
-    reqs: seq[Requirements]
-    packageToDependency: Table[PkgUrl, int]
-    ondisk: OrderedTable[string, string] # URL -> dirname mapping
-    reqsByDeps: Table[Requirements, int]
+    nodes*: seq[Dependency]
+    reqs*: seq[Requirements]
+    packageToDependency*: Table[PkgUrl, int]
+    ondisk*: OrderedTable[string, string] # URL -> dirname mapping
+    reqsByDeps*: Table[Requirements, int]
 
 const
-  EmptyReqs = 0
-  UnknownReqs = 1
+  EmptyReqs* = 0
+  UnknownReqs* = 1
 
 proc defaultReqs(): seq[Requirements] =
   @[Requirements(deps: @[], v: NoVar), Requirements(status: HasUnknownNimbleFile, v: NoVar)]
