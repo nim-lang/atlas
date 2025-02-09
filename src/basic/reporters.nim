@@ -81,7 +81,7 @@ proc writePendingMessages*(c: var Reporter) =
 proc infoNow*(c: var Reporter; p, arg: string) =
   writeMessage c, Info, p, arg
 
-proc fatal*(msg: string) =
+proc fatal*(c: var Reporter, msg: string) =
   when defined(debug):
     writeStackTrace()
   quit "[Error] " & msg
