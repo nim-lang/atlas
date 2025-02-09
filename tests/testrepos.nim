@@ -3,13 +3,13 @@ import std / os
 
 proc exec*(cmd: string) =
   if execShellCmd(cmd) != 0:
-    quit "FAILURE: " & cmd
+    quit "FAILURE RUNNING: " & cmd
 
 template withDir*(dir: string; body: untyped) =
   let old = getCurrentDir()
   try:
     setCurrentDir(dir)
-    echo "WITHDIR: ", dir, " at: ", getCurrentDir()
+    # echo "WITHDIR: ", dir, " at: ", getCurrentDir()
     body
   finally:
     setCurrentDir(old)
