@@ -169,3 +169,5 @@ when true or not defined(quick):
         cleanupIntegrationTest()
 
 if failures > 0: quit($failures & " failures occurred.")
+
+# nim c -r   30.74s user 23.58s system 42% cpu 2:06.64 total
