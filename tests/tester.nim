@@ -3,7 +3,7 @@
 import std / [strutils, os, osproc, sequtils, strformat]
 from std/private/gitutils import diffFiles
 import testrepos
-# import setups
+# import oldSetups
 
 if execShellCmd("nim c -d:debug -r tests/unittests.nim") != 0:
   quit("FAILURE: unit tests failed")
