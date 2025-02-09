@@ -160,7 +160,7 @@ proc cleanupIntegrationTest() =
   removeFile "nim.cfg"
   removeFile "ws_integration.nimble"
 
-when false or not defined(quick):
+when false and not defined(quick):
   withDir "tests/ws_integration":
     try:
       integrationTest()
@@ -170,4 +170,5 @@ when false or not defined(quick):
 
 if failures > 0: quit($failures & " failures occurred.")
 
-# nim c -r   30.74s user 23.58s system 42% cpu 2:06.64 total
+# mocks: nim c -r   1.48s user 0.45s system 67% cpu 2.881 total
+# integration: nim c -r   30.74s user 23.58s system 42% cpu 2:06.64 total
