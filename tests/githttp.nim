@@ -53,7 +53,7 @@ proc handleRequest(req: Request) {.async.} =
 when isMainModule:
 
   let server = newAsyncHttpServer()
-  let port = 8080
+  let port = 4242
   
   for arg in commandLineParams():
     if dirExists(arg):
