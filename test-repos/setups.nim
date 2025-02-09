@@ -119,13 +119,18 @@ when isMainModule:
       buildGraphNoGitTags()
 
     var repos: seq[tuple[org: string, repo: string]]
-    for item in walkDir("working"/"buildGraph"):
+    template findRepo(item) =
       if item.kind == pcDir:
-        echo "GIT REPO: ", item
+        # echo "GIT REPO: ", item
         let paths = item.path.split(DirSep)
         let repo = (org: paths[1], repo: paths[2])
         echo "GIT REPO: ", repo
         repos.add(repo)
+
+    for item in walkDir("working"/"buildGraph"):
+      findRepo(item)
+    for item in walkDir("working"/"buildGraphNoGitTags"):
+      findRepo(item)
 
 
 # test-repos/setups  0.36s user 0.31s system 28% cpu 2.361 total
