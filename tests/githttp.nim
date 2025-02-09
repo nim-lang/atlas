@@ -46,7 +46,7 @@ when isMainModule:
   
   for arg in commandLineParams():
     if dirExists(arg):
-      searchDirs.add(arg)
+      searchDirs.add(arg.absolutePath)
 
   echo "Starting server on port ", port
   waitFor server.serve(Port(port), handleRequest)
