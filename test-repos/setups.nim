@@ -1,5 +1,5 @@
 
-import std / [os, strutils]
+import std / [os, strutils, strformat]
 
 proc exec*(cmd: string) =
   if execShellCmd(cmd) != 0:
@@ -118,19 +118,28 @@ when isMainModule:
       buildGraph()
       buildGraphNoGitTags()
 
-    var repos: seq[tuple[org: string, repo: string]]
+    var repos: seq[tuple[org: string, name: string]]
     template findRepo(item) =
       if item.kind == pcDir:
         # echo "GIT REPO: ", item
         let paths = item.path.split(DirSep)
-        let repo = (org: paths[1], repo: paths[2])
-        echo "GIT REPO: ", repo
+        let repo = (org: paths[1], name: paths[2])
+        # echo "GIT REPO: ", repo
         repos.add(repo)
 
     for item in walkDir("working"/"buildGraph"):
       findRepo(item)
     for item in walkDir("working"/"buildGraphNoGitTags"):
       findRepo(item)
+
+    echo "Setup bare gits"
+    for repo in repos:
+      echo "REPO: ", repo
+      removeDir(repo.org)
+      createDir(repo.org)
+      withDir(repo.org):
+        let orig = ".." / "working" / repo.org / repo.name
+        exec &"git clone --bare {orig}"
 
 
 # test-repos/setups  0.36s user 0.31s system 28% cpu 2.361 total
