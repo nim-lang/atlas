@@ -18,12 +18,14 @@ proc getRepoUrls(): seq[string]
 
 proc setupWsIntegration() =
   for repo in getRepoUrls():
-    echo "REPO: ", "`" & repo & "`"
-
+    let name = repo.split("/")[^1]
+    echo "REPO: ", name, " url: ", "`" & repo & "`"
+    if not dirExists(name):
+      exec &"git clone {repo}"
 
 when isMainModule:
   withDir("test-repos"):
-    removeDir("working-integration")
+    # removeDir("working-integration")
     createDir "working-integration"
     withDir("working-integration"):
       setupWsIntegration()
@@ -31,10 +33,10 @@ when isMainModule:
     var repos: seq[tuple[org: string, name: string]]
     template findRepo(item) =
       if item.kind == pcDir and dirExists(item.path / ".git"):
-        # echo "GIT REPO: ", item
+        echo "GIT REPO: ", item
         let paths = item.path.split(DirSep)
         let repo = (org: paths[1], name: paths[2])
-        # echo "GIT REPO: ", repo
+        echo "GIT REPO: ", repo
         repos.add(repo)
 
     for item in walkDir("working-integration"):
@@ -77,13 +79,13 @@ proc getRepoUrls(): seq[string] =
   https://github.com/nim-lang/fusion
   https://github.com/disruptek/grok
   https://github.com/zedeus/httpbeast
-  https://github.com/dom96/jester/
+  https://github.com/dom96/jester
   https://github.com/treeform/jsony
-  https://github.com/karaxnim/karax/
+  https://github.com/karaxnim/karax
   https://github.com/PhilippMDoerner/lowdb
   https://github.com/jangko/msgpack4nim
   https://github.com/disruptek/muffins
-  https://github.com/fowlmouth/nake/
+  https://github.com/fowlmouth/nake
   https://github.com/xzfc/ndb.nim
   https://github.com/status-im/nim-bearssl
   https://github.com/juancarlospaco/nim-bytes2human
@@ -120,7 +122,7 @@ proc getRepoUrls(): seq[string] =
   https://github.com/CORDEA/oauth
   https://github.com/nim-lang/packages
   https://github.com/Araq/packedjson
-  https://github.com/NimParsers/parsetoml.git
+  https://github.com/NimParsers/parsetoml
   https://github.com/nimpylib/pylib
   https://github.com/OpenSystemsLab/q.nim
   https://github.com/zedeus/redis
