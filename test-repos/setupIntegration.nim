@@ -9,7 +9,7 @@ template withDir*(dir: string; body: untyped) =
   let old = getCurrentDir()
   try:
     setCurrentDir(dir)
-    echo "WITHDIR: ", dir, " at: ", getCurrentDir()
+    # echo "WITHDIR: ", dir, " at: ", getCurrentDir()
     body
   finally:
     setCurrentDir(old)
@@ -18,10 +18,13 @@ proc getRepoUrls(): seq[string]
 
 proc setupWsIntegration() =
   for repo in getRepoUrls():
+    let org = repo.split("/")[^2]
     let name = repo.split("/")[^1]
-    echo "REPO: ", name, " url: ", "`" & repo & "`"
-    if not dirExists(name):
-      exec &"git clone {repo}"
+    echo "REPO: ", "org: ", org, " name: ", name, " url: ", "`" & repo & "`"
+    createDir(org)
+    withDir(org):
+      if not dirExists(name):
+        exec &"git clone {repo}"
 
 when isMainModule:
   withDir("test-repos"):
@@ -32,6 +35,7 @@ when isMainModule:
 
     var repos: seq[tuple[org: string, name: string]]
     template findRepo(item) =
+      echo "FIND REPO: ", item
       if item.kind == pcDir and dirExists(item.path / ".git"):
         echo "GIT REPO: ", item
         let paths = item.path.split(DirSep)
@@ -39,27 +43,29 @@ when isMainModule:
         echo "GIT REPO: ", repo
         repos.add(repo)
 
-    for item in walkDir("working-integration"):
-      findRepo(item)
-    for item in walkDir("working-integration"):
-      findRepo(item)
+    for org in walkDir("working-integration"):
+      echo "ORG: ", org
+      for item in walkDir(org.path):
+        findRepo(item)
 
     echo "Setup bare gits"
-    removeDir("ws_integration")
-    createDir("ws_integration")
-    withDir("ws_integration"):
-      for repo in repos:
-        createDir(repo.org)
-      for repo in repos:
-        echo "REPO: ", repo
-        withDir(repo.org):
-          let orig = ".." / ".." / "working-integration" / repo.org / repo.name
-          echo "CLONING: ", " cwd: ", getCurrentDir()
-          exec &"git clone --mirror {orig}"
-          withDir(repo.name & ".git"):
-            moveFile "hooks"/"post-update.sample", "hooks"/"post-update"
-            setFilePermissions("hooks"/"post-update", getFilePermissions("hooks"/"post-update") + {fpUserExec})
-            exec "git update-server-info"
+    for repo in repos:
+      echo "git repo: ", repo
+    # removeDir("ws_integration")
+    # createDir("ws_integration")
+    # withDir("ws_integration"):
+    #   for repo in repos:
+    #     createDir(repo.org)
+    #   for repo in repos:
+    #     echo "REPO: ", repo
+    #     withDir(repo.org):
+    #       let orig = ".." / ".." / "working-integration" / repo.org / repo.name
+    #       echo "CLONING: ", " cwd: ", getCurrentDir()
+    #       exec &"git clone --mirror {orig}"
+    #       withDir(repo.name & ".git"):
+    #         moveFile "hooks"/"post-update.sample", "hooks"/"post-update"
+    #         setFilePermissions("hooks"/"post-update", getFilePermissions("hooks"/"post-update") + {fpUserExec})
+    #         exec "git update-server-info"
 
 
 
