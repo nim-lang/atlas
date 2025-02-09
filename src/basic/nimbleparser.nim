@@ -9,6 +9,11 @@
 import std / [os, strutils, tables, unicode, hashes]
 import versions, packageinfo, reporters, gitops, parserequires, pkgurls, compiledpatterns
 
+when defined(nimAtlasBootstrap):
+  import ../dist/sat/src/sat/satvars
+else:
+  import sat/satvars
+
 type
   DependencyStatus* = enum
     Normal, HasBrokenNimbleFile, HasUnknownNimbleFile, HasBrokenDep

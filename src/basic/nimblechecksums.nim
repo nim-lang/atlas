@@ -8,7 +8,7 @@
 
 import std / [strutils, os, sha1, algorithm]
 import reporters, osutils
-import ../gitops
+import gitops
 
 proc updateSecureHash(checksum: var Sha1State; c: var Reporter; name, path: string) =
   if not path.fileExists(): return
