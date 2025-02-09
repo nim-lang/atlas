@@ -50,6 +50,7 @@ type
     pluginsFile*: string
     origDepsDir*: string
     proxy*: Uri
+    dumbProxy*: bool
 
 
 proc `==`*(a, b: CfgPath): bool {.borrow.}
