@@ -11,9 +11,15 @@ var searchDirs: seq[string]
 
 proc findDir(org, repo, files: string): string =
   {.cast(gcsafe).}:
-    for folder in searchDirs:
-      result = folder / org / repo / files
-      if dirExists(folder / org / repo):
+    # search for org matches first
+    for dir in searchDirs:
+      result = dir / org / repo / files
+      if dirExists(dir / org / repo):
+        break
+    # otherwise try without org in the searchdir
+    for dir in searchDirs:
+      result = dir / repo / files
+      if dirExists(dir / repo):
         break
 
 proc handleRequest(req: Request) {.async.} =
