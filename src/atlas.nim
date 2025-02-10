@@ -217,7 +217,9 @@ proc traverse(c: var AtlasContext; nc: var NimbleContext; start: string): seq[Cf
 proc installDependencies(c: var AtlasContext; nc: var NimbleContext; nimbleFile: string) =
   # 1. find .nimble file in CWD
   # 2. install deps from .nimble
-  let (dir, pkgname, _) = splitFile(nimbleFile)
+  var (dir, pkgname, _) = splitFile(nimbleFile)
+  if dir == "":
+    dir = "."
   info c, pkgname, "installing dependencies for " & pkgname & ".nimble"
   var g = createGraph(c, createUrlSkipPatterns(dir))
   let paths = traverseLoop(c, nc, g)
@@ -383,7 +385,7 @@ proc main(c: var AtlasContext) =
           c.currentDir = getCurrentDir() / val
       of "deps":
         if val.len > 0:
-          c.depsDir = val
+          c.origDepsDir = val
           explicitDepsDirOverride = true
         else:
           writeHelp()
@@ -440,8 +442,8 @@ proc main(c: var AtlasContext) =
     elif action notin ["search", "list"]:
       fatal c, "No workspace found. Run `atlas init` if you want this current directory to be your workspace."
 
-  if not explicitDepsDirOverride and action notin ["init", "tag"] and c.depsDir.len == 0:
-    c.depsDir = c.workspace
+  if not explicitDepsDirOverride and action notin ["init", "tag"] and c.origDepsDir.len == 0:
+    c.origDepsDir = ""
   if action != "tag":
     createDir(c.depsDir)
 

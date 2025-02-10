@@ -164,7 +164,7 @@ proc createGraphFromWorkspace*(c: var AtlasContext): DepGraph =
   except:
     error c, configFile, "cannot read: " & configFile
 
-proc copyFromDisk*(c: var AtlasContext; w: Dependency; destDir: string): (CloneStatus, string) =
+proc copyFromDisk(c: var AtlasContext; w: Dependency; destDir: string): (CloneStatus, string) =
   var dir = w.pkg.url
   if dir.startsWith(FileWorkspace): dir = c.workspace / dir.substr(FileWorkspace.len)
   #template selectDir(a, b: string): string =

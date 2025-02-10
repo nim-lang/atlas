@@ -72,7 +72,7 @@ proc runNimScript*(c: var Reporter; scriptContent: string; name: string) =
 
   writeFile buildNims, scriptContent
 
-  let cmdLine = "nim e --hints:off " & quoteShell(buildNims)
+  let cmdLine = "nim e --hints:off -d:atlas " & quoteShell(buildNims)
   if os.execShellCmd(cmdLine) != 0:
     error c, name, "Nimscript failed: " & cmdLine
   else:

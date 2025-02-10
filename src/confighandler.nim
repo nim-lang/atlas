@@ -52,7 +52,7 @@ type
     graph: JsonNode
 
 proc writeDefaultConfigFile*(c: var AtlasContext) =
-  let config = JsonConfig(resolver: $SemVer, graph: newJNull())
+  let config = JsonConfig(deps: c.origDepsDir, resolver: $SemVer, graph: newJNull())
   let configFile = c.workspace / AtlasWorkspace
   writeFile(configFile, pretty %*config)
 
@@ -67,9 +67,7 @@ proc readConfig*(c: var AtlasContext) =
   try:
     let m = j.to(JsonConfig)
     if m.deps.len > 0:
-      c.depsDir = m.deps
       c.origDepsDir = m.deps
-      #absoluteDepsDir(c.workspace, m.deps)
     if m.overrides.len > 0:
       c.overridesFile = m.overrides
       parseOverridesFile(c, m.overrides)
