@@ -70,6 +70,14 @@ proc checkGitDiffStatus*(c: var Reporter): string =
   else:
     ""
 
+proc maybeUrlProxy*(c: var AtlasContext, url: Uri): Uri =
+  result = url
+  if $c.proxy != "":
+    result = c.proxy
+    result.path = url.path
+    result.query = url.query
+    result.anchor = url.anchor
+
 proc clone*(c: var AtlasContext; url, dest: string; retries = 5; fullClones=false): bool =
   ## clone git repo.
   ##
@@ -83,15 +91,7 @@ proc clone*(c: var AtlasContext; url, dest: string; retries = 5; fullClones=fals
     elif not fullClones: "--depth=1"
     else: ""
 
-  var url = url.parseUri()
-  if $c.proxy != "":
-    echo "GIT CLONE proxy: ", c.proxy.repr
-    echo "GIT CLONE URL: ", url.repr
-    let prev = url
-    url = c.proxy
-    url.path = prev.path
-    url.query = prev.query
-    url.anchor = prev.anchor
+  var url = c.maybeUrlProxy(url.parseUri())
 
   echo "GIT CLONE: ", url.repr
   let cmd = $GitClone & " " & extraArgs & " " & quoteShell($url) & " " & dest
