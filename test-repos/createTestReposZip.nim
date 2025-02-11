@@ -28,6 +28,4 @@ doAssert ver != "" and " " notin ver and ver.len() < 10, "need to provide atlas 
 
 withDir "test-repos":
   let zipfile = "test-repos-$1.zip" % [ver]
-  if fileExists(zipfile):
-    removeFile(zipfile)
-  exec "zip -r $1 ws_generated/ ws_integrated/" % [zipfile]
+  exec "zip -ru $1 ws_generated/ ws_integration/" % [zipfile]
