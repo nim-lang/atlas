@@ -22,7 +22,7 @@ proc checkServer() =
     echo "Starting Tester git http server"
     runGitHttpServerThread([
       "test-repos/ws_integration",
-      "test-repos/generated"
+      "test-repos/ws_generated"
     ])
     for count in 1..10:
       os.sleep(1000)
