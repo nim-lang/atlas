@@ -1,11 +1,11 @@
 
 import std / [os, strutils, strformat]
 
-proc exec*(cmd: string) =
+proc exec(cmd: string) =
   if execShellCmd(cmd) != 0:
     quit "FAILURE: " & cmd
 
-template withDir*(dir: string; body: untyped) =
+template withDir(dir: string; body: untyped) =
   let old = getCurrentDir()
   try:
     setCurrentDir(dir)
@@ -47,34 +47,6 @@ proc runWsIntegration*() =
         let repo = (org: paths[1], name: paths[2])
         echo "GIT REPO: ", repo
         repos.add(repo)
-
-    # for org in walkDir("ws_integration"):
-    #   echo "ORG: ", org
-    #   for item in walkDir(org.path):
-    #     findRepo(item)
-
-    # echo "============= Setup bare gits ============="
-    # for repo in repos:
-    #   echo "git repo: ", repo
-    # removeDir("ws_integration")
-    # createDir("ws_integration")
-    # withDir("ws_integration"):
-    #   for repo in repos:
-    #     createDir(repo.org)
-    #   for repo in repos:
-    #     echo "REPO: ", repo
-    #     withDir(repo.org):
-    #       let orig = ".." / ".." / "ws_integration" / repo.org / repo.name
-    #       echo "CLONING: ", " cwd: ", getCurrentDir()
-    #       exec &"git clone --mirror {orig}"
-    #       withDir(repo.name & ".git"):
-    #         moveFile "hooks"/"post-update.sample", "hooks"/"post-update"
-    #         setFilePermissions("hooks"/"post-update", getFilePermissions("hooks"/"post-update") + {fpUserExec})
-    #         exec "git update-server-info"
-
-
-
-# test-repos/setups  0.36s user 0.31s system 28% cpu 2.361 total
 
 proc getRepoUrls(): seq[string] =
   let repos = dedent"""

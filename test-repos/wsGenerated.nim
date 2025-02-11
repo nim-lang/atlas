@@ -1,11 +1,11 @@
 
 import std / [os, strutils, strformat]
 
-proc exec*(cmd: string) =
+proc exec(cmd: string) =
   if execShellCmd(cmd) != 0:
     quit "FAILURE: " & cmd
 
-template withDir*(dir: string; body: untyped) =
+template withDir(dir: string; body: untyped) =
   let old = getCurrentDir()
   try:
     setCurrentDir(dir)
