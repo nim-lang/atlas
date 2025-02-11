@@ -132,6 +132,7 @@ jobs:
         run: |
           cd atlas
           nimble install -y sat
+          nim c -r test-repos/downloadTestRepos.nim
           nim c -r tests/tester.nim
 
       - name: Test install with Nimble
