@@ -132,8 +132,6 @@ jobs:
         run: |
           cd atlas
           nim testSetup
-          ls -lh test-repos/
-          ls -lh test-repos/ws_generated/
 
       - name: Install SAT
         run: |
