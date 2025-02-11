@@ -23,7 +23,7 @@ proc findDir(org, repo, files: string): string =
       return findDir(org, repo & ".git", files)
 
 proc handleRequest(req: Request) {.async.} =
-  echo "http request: ", req.reqMethod, " url: ", req.url.path
+  # echo "http request: ", req.reqMethod, " url: ", req.url.path
 
   let arg = req.url.path.strip(chars={'/'})
   var path: string
@@ -33,7 +33,7 @@ proc handleRequest(req: Request) {.async.} =
     let repo = dirs[1]
     let files = dirs[2..^1].join($DirSep)
     path = findDir(org, repo, files)
-    echo "http repo: ", " repo: ", repo, " path: ", path
+    # echo "http repo: ", " repo: ", repo, " path: ", path
   except IndexDefect:
     {.cast(gcsafe).}:
       path = searchDirs[0] / arg
@@ -71,7 +71,8 @@ proc threadGitHttpServer*(args: (seq[string], Port)) {.thread.} =
   runGitHttpServer(dirs, port)
 
 var thread: Thread[(seq[string], Port)]
-proc runGitHttpServerThread*(dirs: seq[string], port = Port(4242)) =
+proc runGitHttpServerThread*(dirs: openArray[string], port = Port(4242)) =
+  let dirs = @dirs
   createThread(thread, threadGitHttpServer, (dirs, port))
 
 when isMainModule:

@@ -26,8 +26,11 @@ proc checkServer() =
       return
     except CatchableError:
       echo "Starting Tester git http server"
-      runGitHttpServerThread(@["test-repos/ws_integration"])
-      os.sleep(200)
+      runGitHttpServerThread([
+        "test-repos/ws_integration",
+        "test-repos/generated"
+      ])
+      os.sleep(400)
 
   quit "Error accessing git-http server.\n" &
        "Check that tests/githttpserver server is running on port 4242.\n" &
