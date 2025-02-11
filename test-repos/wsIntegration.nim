@@ -31,7 +31,7 @@ proc setupWsIntegration() =
           setFilePermissions("hooks"/"post-update", getFilePermissions("hooks"/"post-update") + {fpUserExec})
           exec "git update-server-info"
 
-when isMainModule:
+proc runWsIntegration*() =
   withDir("test-repos"):
     # removeDir("ws_integration")
     createDir "ws_integration"
@@ -151,3 +151,6 @@ proc getRepoUrls(): seq[string] =
   https://github.com/guzba/zippy
   """
   repos.strip(chars={'\n'}).splitLines()
+
+when isMainModule:
+  runWsIntegration()

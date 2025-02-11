@@ -110,7 +110,7 @@ proc buildGraphNoGitTags* =
       exec "git add proj_d.nimble"
       exec "git commit -m " & quoteShell("broken version of package D")
 
-when isMainModule:
+proc runWsGenerated*() =
   withDir("test-repos"):
     removeDir("working")
     createDir "working"
@@ -150,6 +150,5 @@ when isMainModule:
             setFilePermissions("hooks"/"post-update", getFilePermissions("hooks"/"post-update") + {fpUserExec})
             exec "git update-server-info"
 
-
-
-# test-repos/setups  0.36s user 0.31s system 28% cpu 2.361 total
+when isMainModule:
+  runWsGenerated()
