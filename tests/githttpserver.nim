@@ -1,6 +1,6 @@
 
 import asynchttpserver, asyncdispatch
-import os, strutils, mimetypes
+import os, strutils, mimetypes, httpclient
 
 var searchDirs: seq[string]
 
@@ -77,6 +77,12 @@ var thread: Thread[(seq[string], Port)]
 proc runGitHttpServerThread*(dirs: openArray[string], port = Port(4242)) =
   let dirs = @dirs
   createThread(thread, threadGitHttpServer, (dirs, port))
+
+proc checkHttpReadme*(): bool =
+    let client = newHttpClient()
+    let response = client.get("http://localhost:4242/readme.md")
+    echo "HTTP Server gave response: ", response.body
+    response.body == "This directory holds the bare git modules used for testing."
 
 when isMainModule:
   var dirs: seq[string]

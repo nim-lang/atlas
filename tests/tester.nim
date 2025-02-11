@@ -1,6 +1,6 @@
 # Small program that runs the test cases
 
-import std / [strutils, os, osproc, sequtils, strformat, httpclient, unittest]
+import std / [strutils, os, osproc, sequtils, strformat, unittest]
 from std/private/gitutils import diffFiles
 import testrepos
 import githttpserver
@@ -9,17 +9,10 @@ import githttpserver
 # if execShellCmd("nim c -d:debug -r tests/unittests.nim") != 0:
 #   quit("FAILURE: unit tests failed")
 
-var failures = 0
 
 let atlasExe = absolutePath("bin" / "atlas".addFileExt(ExeExt))
 if execShellCmd("nim c -o:$# -d:release src/atlas.nim" % [atlasExe]) != 0:
   quit("FAILURE: compilation of atlas failed")
-
-proc checkHttpReadme(): bool =
-    let client = newHttpClient()
-    let response = client.get("http://localhost:4242/readme.md")
-    echo "HTTP Server gave response: ", response.body
-    response.body == "This directory holds the bare git modules used for testing."
 
 proc checkServer() =
   try:
@@ -48,15 +41,15 @@ template sameDirContents(expected, given: string) =
   for _, e in walkDir(expected):
     let g = given / splitPath(e).tail
     if fileExists(g):
-      check readFile(e) == readFile(g)
-      if readFile(e) != readFile(g):
-        echo "FAILURE: files differ: ", e
+      let edata  = readFile(e)
+      let gdata = readFile(g)
+      check gdata == edata
+      if gdata != edata:
+        echo "FAILURE: files differ: ", e.absolutePath
         echo diffFiles(e, g).output
-        inc failures
-        # result = false
     else:
       echo "FAILURE: file does not exist: ", g
-      inc failures
+      check fileExists(g)
       # result = false
 
 template testSemVer2(expected: string) =
@@ -201,7 +194,7 @@ when not defined(quick):
       when not defined(keepTestDirs):
         cleanupIntegrationTest()
 
-if failures > 0: quit($failures & " failures occurred.")
+# if failures > 0: quit($failures & " failures occurred.")
 
 # Normal: create or remotely cloning repos
 # nim c -r   1.80s user 0.71s system 60% cpu 4.178 total
