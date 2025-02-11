@@ -1,19 +1,6 @@
 
 import std / [os, strutils, strformat]
 
-proc exec(cmd: string) =
-  if execShellCmd(cmd) != 0:
-    quit "FAILURE: " & cmd
-
-template withDir(dir: string; body: untyped) =
-  let old = getCurrentDir()
-  try:
-    setCurrentDir(dir)
-    # echo "WITHDIR: ", dir, " at: ", getCurrentDir()
-    body
-  finally:
-    setCurrentDir(old)
-
 proc getRepoUrls(): seq[string]
 
 proc setupWsIntegration() =

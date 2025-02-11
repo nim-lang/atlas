@@ -2,22 +2,10 @@ import std/[os, strutils]
 
 import wsGenerated
 import wsIntegration
+import downloadTestRepos
 
 runWsGenerated()
 runWsIntegration()
-
-proc exec(cmd: string) =
-  if execShellCmd(cmd) != 0:
-    quit "FAILURE: " & cmd
-
-template withDir(dir: string; body: untyped) =
-  let old = getCurrentDir()
-  try:
-    setCurrentDir(dir)
-    # echo "WITHDIR: ", dir, " at: ", getCurrentDir()
-    body
-  finally:
-    setCurrentDir(old)
 
 let nimble = readFile("atlas.nimble")
 var ver = ""
