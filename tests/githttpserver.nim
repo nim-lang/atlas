@@ -1,21 +1,24 @@
 
 import asynchttpserver, asyncdispatch
 import os, strutils, mimetypes, httpclient
+import basic/reporters
 
-var searchDirs: seq[string]
+var
+  searchDirs: seq[string]
+  c = Reporter()
 
 proc findDir(org, repo, files: string): string =
   {.cast(gcsafe).}:
     # search for org matches first
     for dir in searchDirs:
       result = dir / org / repo / files
-      # echo "searching: ", result
+      # infoNow "searching: ", result
       if fileExists(result):
         return
     # otherwise try without org in the searchdir
     for dir in searchDirs:
       result = dir / repo / files
-      # echo "searching: ", result
+      # infoNow "searching: ", result
       if fileExists(result):
         return
     
@@ -23,7 +26,7 @@ proc findDir(org, repo, files: string): string =
       return findDir(org, repo & ".git", files)
 
 proc handleRequest(req: Request) {.async.} =
-  # echo "http request: ", req.reqMethod, " url: ", req.url.path
+  # infoNow "http request: ", req.reqMethod, " url: ", req.url.path
 
   let arg = req.url.path.strip(chars={'/'})
   var path: string
@@ -33,11 +36,11 @@ proc handleRequest(req: Request) {.async.} =
     let repo = dirs[1]
     let files = dirs[2..^1].join($DirSep)
     path = findDir(org, repo, files)
-    # echo "http repo: ", " repo: ", repo, " path: ", path
+    # infoNow "http repo: ", " repo: ", repo, " path: ", path
   except IndexDefect:
     {.cast(gcsafe).}:
       path = findDir("", "", arg)
-      # echo "http direct file: ", path
+      # infoNow "http direct file: ", path
 
   # Serve static files if not a git request
   if fileExists(path):
@@ -62,10 +65,10 @@ proc runGitHttpServer*(dirs: seq[string], port = Port(4242)) =
       searchDirs.add(d)
     let server = newAsyncHttpServer()
     doAssert searchDirs.len() >= 1, "must provide at least one directory to serve repos from"
-    echo "Starting http git server on port ", repr port
-    echo "Git http server serving directories: "
+    infoNow c, "githttpserver", "Starting http git server on port " & repr(port)
+    infoNow c, "githttpserver", "Git http server serving directories: "
     for sd in searchDirs:
-      echo "\t", sd
+      infoNow c, "githttpserver", "\t" & sd
     waitFor server.serve(port, handleRequest)
 
 proc threadGitHttpServer*(args: (seq[string], Port)) {.thread.} =
@@ -81,7 +84,7 @@ proc runGitHttpServerThread*(dirs: openArray[string], port = Port(4242)) =
 proc checkHttpReadme*(): bool =
     let client = newHttpClient()
     let response = client.get("http://localhost:4242/readme.md")
-    echo "HTTP Server gave response: ", response.body
+    infoNow c, "githttpserver", "HTTP Server gave response: " & response.body
     response.body == "This directory holds the bare git modules used for testing."
 
 when isMainModule:
