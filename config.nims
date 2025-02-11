@@ -29,6 +29,9 @@ task buildRelease, "Build release":
     else:
       exec "nim c -d:release -o:./atlas src/atlas.nim"
 
+task testSetup, "Setup test-repos":
+  exec "nim c -r test-repos/downloadTestRepos"
+
 task test, "Runs all tests":
   unitTestsTask() # tester runs both
   testerTask()

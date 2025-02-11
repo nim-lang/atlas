@@ -20,5 +20,11 @@ when isMainModule:
     let release = "releases/download/test-repos-v0.8.0"
     let file = "test-repos-0.8.0.zip"
     let url = "$1/$2/$3/$4" % [host, repo, release, file]
+    echo "Downloading Test Repos zip"
     exec("curl -L -o $2 $1" % [url, file])
+    echo "Unzipping Test Repos"
     exec("unzip -o $1" % [file])
+
+  echo "Sanity checking test-repos/ws_generated/readme.md"
+  doAssert readFile("test-repos/ws_generated/readme.md") == "This directory holds the bare git modules used for testing."
+  echo "Sanity check successful"
