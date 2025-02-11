@@ -9,13 +9,13 @@ proc findDir(org, repo, files: string): string =
     # search for org matches first
     for dir in searchDirs:
       result = dir / org / repo / files
-      echo "searching: ", result
+      # echo "searching: ", result
       if fileExists(result):
         return
     # otherwise try without org in the searchdir
     for dir in searchDirs:
       result = dir / repo / files
-      echo "searching: ", result
+      # echo "searching: ", result
       if fileExists(result):
         return
     
@@ -23,7 +23,7 @@ proc findDir(org, repo, files: string): string =
       return findDir(org, repo & ".git", files)
 
 proc handleRequest(req: Request) {.async.} =
-  echo "http request: ", req.reqMethod, " url: ", req.url.path
+  # echo "http request: ", req.reqMethod, " url: ", req.url.path
 
   let arg = req.url.path.strip(chars={'/'})
   var path: string
@@ -33,11 +33,11 @@ proc handleRequest(req: Request) {.async.} =
     let repo = dirs[1]
     let files = dirs[2..^1].join($DirSep)
     path = findDir(org, repo, files)
-    echo "http repo: ", " repo: ", repo, " path: ", path
+    # echo "http repo: ", " repo: ", repo, " path: ", path
   except IndexDefect:
     {.cast(gcsafe).}:
       path = findDir("", "", arg)
-      echo "http direct file: ", path
+      # echo "http direct file: ", path
 
   # Serve static files if not a git request
   if fileExists(path):
