@@ -14,5 +14,11 @@ template withDir*(dir: string; body: untyped) =
     setCurrentDir(old)
 
 when isMainModule:
-  let reposUrl = "https://github.com/elcritch/atlas/releases/download/test-repos-v0.8.0/test-repos-0.8.0.zip"
-  exec("curl $1" % [reposUrl])
+  withDir "test-repos":
+    let host = "https://github.com"
+    let repo = "elcritch/atlas"
+    let release = "releases/download/test-repos-v0.8.0"
+    let file = "test-repos-0.8.0.zip"
+    let url = "$1/$2/$3/$4" % [host, repo, release, file]
+    exec("curl -L -o $2 $1" % [url, file])
+    exec("unzip -o $1" % [file])
