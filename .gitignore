@@ -14,7 +14,7 @@ tests/*
 !tests/*.*
 test-repos/*
 !test-repos/*.*
-test-repos/test-repos.zip
+test-repos/*.zip
 atlas
 deps.png
 nim.cfg
