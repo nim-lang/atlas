@@ -133,9 +133,9 @@ when isMainModule:
       findRepo(item)
 
     echo "Setup bare gits"
-    removeDir("generated")
-    createDir("generated")
-    withDir("generated"):
+    removeDir("ws_generated")
+    createDir("ws_generated")
+    withDir("ws_generated"):
       writeFile("readme.md", "This directory holds the bare git modules used for testing.")
       for repo in repos:
         createDir(repo.org)
