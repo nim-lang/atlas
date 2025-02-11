@@ -1,56 +1,16 @@
 # Small program that runs the test cases
 
 import std / [strutils, os, osproc, sequtils, strformat, unittest]
-from std/private/gitutils import diffFiles
-import testrepos
-import githttpserver
+import basic/reporters
+import testerutils
 
-# Run unit tests in config.nims
-# if execShellCmd("nim c -d:debug -r tests/unittests.nim") != 0:
-#   quit("FAILURE: unit tests failed")
-
+var c = Reporter()
 
 let atlasExe = absolutePath("bin" / "atlas".addFileExt(ExeExt))
 if execShellCmd("nim c -o:$# -d:release src/atlas.nim" % [atlasExe]) != 0:
   quit("FAILURE: compilation of atlas failed")
 
-proc checkServer() =
-  try:
-    if checkHttpReadme():
-      return
-  except CatchableError:
-    echo "Starting Tester git http server"
-    runGitHttpServerThread([
-      "test-repos/ws_integration",
-      "test-repos/ws_generated"
-    ])
-    for count in 1..10:
-      os.sleep(1000)
-      if checkHttpReadme():
-        return
-
-    quit "Error accessing git-http server.\n" &
-        "Check that tests/githttpserver server is running on port 4242.\n" &
-        "To start it run in another terminal:\n" &
-        "  nim c -r tests/githttpserver test-repos/generated"
-
-checkServer()
-
-template sameDirContents(expected, given: string) =
-  # result = true
-  for _, e in walkDir(expected):
-    let g = given / splitPath(e).tail
-    if fileExists(g):
-      let edata  = readFile(e)
-      let gdata = readFile(g)
-      check gdata == edata
-      if gdata != edata:
-        echo "FAILURE: files differ: ", e.absolutePath
-        echo diffFiles(e, g).output
-    else:
-      echo "FAILURE: file does not exist: ", g
-      check fileExists(g)
-      # result = false
+ensureGitHttpServer()
 
 template testSemVer2(expected: string) =
   createDir "semproject"
@@ -104,11 +64,29 @@ template removeDirs() =
   removeDir "proj_c"
   removeDir "proj_d"
 
+proc setupGraph* =
+  createDir "source"
+  withDir "source":
+
+    exec "git clone http://localhost:4242/buildGraph/proj_a"
+    exec "git clone http://localhost:4242/buildGraph/proj_b"
+    exec "git clone http://localhost:4242/buildGraph/proj_c"
+    exec "git clone http://localhost:4242/buildGraph/proj_d"
+
+proc setupGraphNoGitTags* =
+  createDir "source"
+  withDir "source":
+
+    exec "git clone http://localhost:4242/buildGraphNoGitTags/proj_a"
+    exec "git clone http://localhost:4242/buildGraphNoGitTags/proj_b"
+    exec "git clone http://localhost:4242/buildGraphNoGitTags/proj_c"
+    exec "git clone http://localhost:4242/buildGraphNoGitTags/proj_d"
+
 suite "basic repo tests":
   test "tests/ws_semver2":
     withDir "tests/ws_semver2":
       try:
-        buildGraph()
+        setupGraph()
         let semVerExpectedResult = dedent"""
         [Info] (../resolve) selected:
         [Info] (proj_a) [ ] (proj_a, 1.1.0)
@@ -127,7 +105,7 @@ suite "basic repo tests":
   test "tests/ws_semver2":
     withDir "tests/ws_semver2":
       try:
-        buildGraphNoGitTags()
+        setupGraphNoGitTags()
         let semVerExpectedResultNoGitTags = dedent"""
         [Info] (../resolve) selected:
         [Info] (proj_a) [ ] (proj_a, #head)
@@ -150,7 +128,7 @@ suite "basic repo tests":
 
   test "tests/ws_semver2":
       withDir "tests/ws_semver2":
-        buildGraph()
+        setupGraph()
         try:
           let minVerExpectedResult = dedent"""
           [Info] (../resolve) selected:
@@ -193,6 +171,8 @@ when not defined(quick):
     finally:
       when not defined(keepTestDirs):
         cleanupIntegrationTest()
+
+infoNow c, "tester", "All tests run successfully"
 
 # if failures > 0: quit($failures & " failures occurred.")
 
