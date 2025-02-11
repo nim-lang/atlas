@@ -29,7 +29,10 @@ task buildRelease, "Build release":
     else:
       exec "nim c -d:release -o:./atlas src/atlas.nim"
 
-task testSetup, "Setup test-repos":
+task testReposCreate, "Create a test-repos zipped cache":
+  exec "nim c -r test-repos/createTestReposZip"
+
+task testReposSetup, "Setup test-repos from a cached zip":
   exec "nim c -r test-repos/downloadTestRepos"
 
 task test, "Runs all tests":

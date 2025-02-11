@@ -131,7 +131,7 @@ jobs:
       - name: Setup Test Repos
         run: |
           cd atlas
-          nim testSetup
+          nim testReposSetup
 
       - name: Install SAT
         run: |
