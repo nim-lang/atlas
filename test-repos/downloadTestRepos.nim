@@ -13,6 +13,6 @@ template withDir*(dir: string; body: untyped) =
   finally:
     setCurrentDir(old)
 
-let reposUrl = "https://github.com/elcritch/atlas/releases/download/test-repos-v0.8.0/test-repos-0.8.0.zip"
-
-exec("curl $1" % [reposUrl])
+when isMainModule:
+  let reposUrl = "https://github.com/elcritch/atlas/releases/download/test-repos-v0.8.0/test-repos-0.8.0.zip"
+  exec("curl $1" % [reposUrl])

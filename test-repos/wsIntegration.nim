@@ -1,5 +1,6 @@
 
 import std / [os, strutils, strformat]
+import downloadTestRepos
 
 proc getRepoUrls(): seq[string]
 
