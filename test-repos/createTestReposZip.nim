@@ -30,4 +30,4 @@ withDir "test-repos":
   let zipfile = "test-repos-$1.zip" % [ver]
   if fileExists(zipfile):
     removeFile(zipfile)
-  exec "zip -r $1 ws_generated/ ws_integrated/" % [file]
+  exec "zip -r $1 ws_generated/ ws_integrated/" % [zipfile]
