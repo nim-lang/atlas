@@ -136,6 +136,7 @@ when isMainModule:
     removeDir("generated")
     createDir("generated")
     withDir("generated"):
+      writeFile("readme.md", "This directory holds the bare git modules used for testing.")
       for repo in repos:
         createDir(repo.org)
       for repo in repos:

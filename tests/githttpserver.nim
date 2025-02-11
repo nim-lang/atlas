@@ -54,7 +54,11 @@ proc handleRequest(req: Request) {.async.} =
 
 proc runGitHttpServer*(dirs: seq[string], port = Port(4242)) =
   {.cast(gcsafe).}:
-    searchDirs = dirs
+    for dir in dirs:
+      let d = dir.absolutePath()
+      if not dirExists(d):
+        raise newException(ValueError, "directory not found: " & d)
+      searchDirs.add(d)
     let server = newAsyncHttpServer()
     doAssert searchDirs.len() >= 1, "must provide at least one directory to serve repos from"
     echo "Starting http git server on port ", repr port
@@ -72,8 +76,4 @@ proc runGitHttpServerThread*(dirs: seq[string], port = Port(4242)) =
 
 when isMainModule:
   var dirs: seq[string]
-  for arg in commandLineParams():
-    dirs.add(arg.absolutePath)
-    if not dirExists(arg):
-      raise newException(ValueError, "directory not found: " & arg)
-  runGitHttpServer(dirs)
+  runGitHttpServer(commandLineParams())
