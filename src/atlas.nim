@@ -565,12 +565,6 @@ proc main(c: var AtlasContext) =
     setupNimEnv c, c.workspace, args[0], Keep in c.flags
   of "outdated":
     listOutdated(c)
-  #of "checksum":
-  #  singleArg()
-  #  let pkg = resolvePackage(c, args[0])
-  #  let cfg = findCfgDir(c, pkg)
-  #  let sha = nimbleChecksum(c, pkg, cfg)
-  #  info c, pkg, "SHA1Digest: " & sha
   of "new":
     singleArg()
     newProject(c, args[0])
