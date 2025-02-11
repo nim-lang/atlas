@@ -2,11 +2,6 @@
 import asynchttpserver, asyncdispatch
 import os, strutils, mimetypes
 
-type
-  GitRepo = object
-    path: string
-    name: string
-
 var searchDirs: seq[string]
 
 proc findDir(org, repo, files: string): string =
@@ -57,15 +52,28 @@ proc handleRequest(req: Request) {.async.} =
   else:
     await req.respond(Http404, "File not found")
 
+proc runGitHttpServer*(dirs: seq[string], port = Port(4242)) =
+  {.cast(gcsafe).}:
+    searchDirs = dirs
+    let server = newAsyncHttpServer()
+    doAssert searchDirs.len() >= 1, "must provide at least one directory to serve repos from"
+    echo "Starting http git server on port ", repr port
+    echo "Git http server serving directories: ", searchDirs
+    waitFor server.serve(port, handleRequest)
+
+proc threadGitHttpServer*(args: (seq[string], Port)) {.thread.} =
+  let dirs = args[0]
+  let port = args[1]
+  runGitHttpServer(dirs, port)
+
+var thread: Thread[(seq[string], Port)]
+proc runGitHttpServerThread*(dirs: seq[string], port = Port(4242)) =
+  createThread(thread, threadGitHttpServer, (dirs, port))
+
 when isMainModule:
-
-  let server = newAsyncHttpServer()
-  let port = 4242
-  
+  var dirs: seq[string]
   for arg in commandLineParams():
-    if dirExists(arg):
-      searchDirs.add(arg.absolutePath)
-
-  doAssert searchDirs.len() >= 1, "must provide at least one directory to serve repos from"
-  echo "Starting server on port ", port
-  waitFor server.serve(Port(port), handleRequest)
+    dirs.add(arg.absolutePath)
+    if not dirExists(arg):
+      raise newException(ValueError, "directory not found: " & arg)
+  runGitHttpServer(dirs)
