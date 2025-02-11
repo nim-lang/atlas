@@ -48,7 +48,6 @@ type
     plugins*: PluginInfo
     overridesFile*: string
     pluginsFile*: string
-    origDepsDir*: string
     proxy*: Uri
     dumbProxy*: bool
 
