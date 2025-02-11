@@ -18,6 +18,7 @@ if execShellCmd("nim c -o:$# -d:release src/atlas.nim" % [atlasExe]) != 0:
 proc checkHttpReadme(): bool =
     let client = newHttpClient()
     let response = client.get("http://localhost:4242/readme.md")
+    echo "HTTP Server gave response: ", response.body
     response.body == "This directory holds the bare git modules used for testing."
 
 proc checkServer() =
@@ -31,7 +32,7 @@ proc checkServer() =
       "test-repos/generated"
     ])
     for count in 1..10:
-      os.sleep(200)
+      os.sleep(1000)
       if checkHttpReadme():
         return
 
