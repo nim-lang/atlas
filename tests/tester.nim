@@ -4,11 +4,10 @@ import std / [strutils, os, osproc, sequtils, strformat, httpclient, unittest]
 from std/private/gitutils import diffFiles
 import testrepos
 import githttpserver
-# import oldSetups
 
+# Run unit tests in config.nims
 # if execShellCmd("nim c -d:debug -r tests/unittests.nim") != 0:
 #   quit("FAILURE: unit tests failed")
-
 
 var failures = 0
 
@@ -16,26 +15,30 @@ let atlasExe = absolutePath("bin" / "atlas".addFileExt(ExeExt))
 if execShellCmd("nim c -o:$# -d:release src/atlas.nim" % [atlasExe]) != 0:
   quit("FAILURE: compilation of atlas failed")
 
-proc checkServer() =
-  for count in 1..10:
-    try:
-      let client = newHttpClient()
-      let response = client.get("http://localhost:4242/readme.md")
-      echo "HTTP: ", response.body
-      # doAssert response.body == readFile("test-repo/readme.md"), "Check that tests/githttp server is running on port 4242"
-      return
-    except CatchableError:
-      echo "Starting Tester git http server"
-      runGitHttpServerThread([
-        "test-repos/ws_integration",
-        "test-repos/generated"
-      ])
-      os.sleep(400)
+proc checkHttpReadme(): bool =
+    let client = newHttpClient()
+    let response = client.get("http://localhost:4242/readme.md")
+    response.body == "This directory holds the bare git modules used for testing."
 
-  quit "Error accessing git-http server.\n" &
-       "Check that tests/githttpserver server is running on port 4242.\n" &
-       "To start it run in another terminal:\n" &
-       "  nim c -r tests/githttpserver test-repos/generated"
+proc checkServer() =
+  try:
+    if checkHttpReadme():
+      return
+  except CatchableError:
+    echo "Starting Tester git http server"
+    runGitHttpServerThread([
+      "test-repos/ws_integration",
+      "test-repos/generated"
+    ])
+    for count in 1..10:
+      os.sleep(200)
+      if checkHttpReadme():
+        return
+
+    quit "Error accessing git-http server.\n" &
+        "Check that tests/githttpserver server is running on port 4242.\n" &
+        "To start it run in another terminal:\n" &
+        "  nim c -r tests/githttpserver test-repos/generated"
 
 checkServer()
 
