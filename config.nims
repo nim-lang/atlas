@@ -41,6 +41,8 @@ task testReposSetup, "Setup atlas-tests from a cached zip":
   exec(fmt"unzip -o {file}")
 
 task test, "Runs all tests":
+  if not dirExists("atlas-tests"):
+    testReposSetupTask() # download atlas-tests
   unitTestsTask() # tester runs both
   testerTask()
 
