@@ -40,8 +40,8 @@ proc ensureGitHttpServer*() =
   except CatchableError:
     echo "Starting Tester git http server"
     runGitHttpServerThread([
-      "test-repos/ws_integration",
-      "test-repos/ws_generated"
+      "atlas-tests/ws_integration",
+      "atlas-tests/ws_generated"
     ])
     for count in 1..10:
       os.sleep(1000)
