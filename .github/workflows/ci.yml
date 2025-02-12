@@ -128,11 +128,20 @@ jobs:
           version: ${{ matrix.target.nim_branch }}
           architecture: ${{ matrix.target.cpu }}
 
-      - name: Run tests
+      - name: Setup Test Repos
+        run: |
+          cd atlas
+          nim testReposSetup
+
+      - name: Install SAT
         run: |
           cd atlas
           nimble install -y sat
-          nim c -r tests/tester.nim
+
+      - name: Run tests
+        run: |
+          cd atlas
+          nim test
 
       - name: Test install with Nimble
         run: |

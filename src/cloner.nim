@@ -9,7 +9,7 @@
 ## Resolves package names and turn them to URLs.
 
 import std / [os, strutils, osproc]
-import context, gitops, reporters, pkgurls
+import basic/[context, gitops, reporters, pkgurls]
 
 proc retryUrl(cmd, urlstr: string; c: var AtlasContext; displayName: string;
               tryBeforeSleep = true): bool =
@@ -56,6 +56,7 @@ proc cloneUrl*(c: var AtlasContext,
   let gitCmdStr = "git ls-remote --quiet --tags " & modurl
   var success = execCmdEx(gitCmdStr)[1] == QuitSuccess
   if not success and isGitHub:
+    infoNow c, url.projectName, "Trying to clone url again: " & modurl
     # retry multiple times to avoid annoying GitHub timeouts:
     success = retryUrl(gitCmdStr, modurl, c, url.projectName, false)
 

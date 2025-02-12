@@ -6,8 +6,8 @@
 #    distribution, for details about the copyright.
 #
 
-import std/[os, osproc, sequtils, strutils]
-import reporters, osutils, versions
+import std/[os, osproc, sequtils, strutils, uri]
+import reporters, osutils, versions, context
 
 type
   Command* = enum
@@ -70,7 +70,15 @@ proc checkGitDiffStatus*(c: var Reporter): string =
   else:
     ""
 
-proc clone*(c: var Reporter; url, dest: string; retries = 5; fullClones=false): bool =
+proc maybeUrlProxy*(c: var AtlasContext, url: Uri): Uri =
+  result = url
+  if $c.proxy != "":
+    result = c.proxy
+    result.path = url.path
+    result.query = url.query
+    result.anchor = url.anchor
+
+proc clone*(c: var AtlasContext; url, dest: string; retries = 5; fullClones=false): bool =
   ## clone git repo.
   ##
   ## note clones don't use `--recursive` but rely in the `checkoutCommit`
@@ -79,10 +87,13 @@ proc clone*(c: var Reporter; url, dest: string; retries = 5; fullClones=false): 
 
   # retry multiple times to avoid annoying github timeouts:
   let extraArgs =
-    if not fullClones: "--depth=1"
+    if $c.proxy != "" and c.dumbProxy: ""
+    elif not fullClones: "--depth=1"
     else: ""
 
-  let cmd = $GitClone & " " & extraArgs & " " & quoteShell(url) & " " & dest
+  var url = c.maybeUrlProxy(url.parseUri())
+
+  let cmd = $GitClone & " " & extraArgs & " " & quoteShell($url) & " " & dest
   for i in 1..retries:
     if execShellCmd(cmd) == 0:
       return true
@@ -138,13 +149,17 @@ proc checkoutGitCommit*(c: var Reporter; p, commit: string) =
   else:
     info(c, p, "updated package to " & commit)
 
-proc checkoutGitCommitFull*(c: var Reporter; p, commit: string; fullClones: bool) =
+proc checkoutGitCommitFull*(c: var AtlasContext; p, commit: string; fullClones: bool) =
   var smExtraArgs: seq[string] = @[]
 
   if not fullClones and commit.len == 40:
     smExtraArgs.add "--depth=1"
 
-    let (_, status) = exec(c, GitFetch, ["--update-shallow", "--tags", "origin", commit])
+    let extraArgs =
+      if c.dumbProxy: ""
+      elif not fullClones: "--update-shallow"
+      else: ""
+    let (_, status) = exec(c, GitFetch, [extraArgs, "--tags", "origin", commit])
     if status != 0:
       error(c, p, "could not fetch commit " & commit)
     else:
@@ -236,14 +251,17 @@ when false:
 proc getCurrentCommit*(): string =
   result = execProcess("git log -1 --pretty=format:%H").strip()
 
-proc isOutdated*(c: var Reporter; displayName: string): bool =
+proc isOutdated*(c: var AtlasContext; displayName: string): bool =
   ## determine if the given git repo `f` is updateable
   ##
 
   info c, displayName, "checking is package is up to date..."
 
   # TODO: does --update-shallow fetch tags on a shallow repo?
-  let (outp, status) = exec(c, GitFetch, ["--update-shallow", "--tags"])
+  let extraArgs =
+    if c.dumbProxy: ""
+    else: "--update-shallow"
+  let (outp, status) = exec(c, GitFetch, [extraArgs, "--tags"])
 
   if status == 0:
     let (cc, status) = exec(c, GitLastTaggedRef, [])
@@ -267,23 +285,6 @@ proc isOutdated*(c: var Reporter; displayName: string): bool =
               result = true
   else:
     warn c, displayName, "`git fetch` failed: " & outp
-
-template withDir*(c: var Reporter; dir: string; body: untyped) =
-  let oldDir = getCurrentDir()
-  debug c, dir, "Current directory is now: " & dir
-  try:
-    setCurrentDir(dir)
-    body
-  finally:
-    setCurrentDir(oldDir)
-
-template withDir*(dir: string; body: untyped) =
-  let oldDir = getCurrentDir()
-  try:
-    setCurrentDir(dir)
-    body
-  finally:
-    setCurrentDir(oldDir)
 
 proc getRemoteUrl*(): string =
   execProcess("git config --get remote.origin.url").strip()

@@ -7,88 +7,32 @@
 #
 
 import std / [json, os, sets, strutils, httpclient, uri]
-import context, reporters
-
-const
-  UnitTests = defined(atlasUnitTests)
-  #TestsDir = "atlas/tests"
-
-when UnitTests:
-  proc findAtlasDir*(): string =
-    result = currentSourcePath().absolutePath
-    while not result.endsWith("atlas"):
-      result = result.parentDir
-      assert result != "", "atlas dir not found!"
-
-type
-  PackageInfo* = ref object
-    # Required fields in a PackageInfo.
-    name*: string
-    url*: string # Download location.
-    license*: string
-    downloadMethod*: string
-    description*: string
-    tags*: seq[string] # \
-    # From here on, optional fields set to the empty string if not available.
-    version*: string
-    dvcsTag*: string
-    web*: string # Info url for humans.
-
-proc optionalField(obj: JsonNode, name: string, default = ""): string =
-  if hasKey(obj, name) and obj[name].kind == JString:
-    result = obj[name].str
-  else:
-    result = default
-
-proc requiredField(obj: JsonNode, name: string): string =
-  result = optionalField(obj, name, "")
-
-proc fromJson*(obj: JSonNode): PackageInfo =
-  result = PackageInfo()
-  result.name = obj.requiredField("name")
-  if result.name.len == 0: return nil
-  result.version = obj.optionalField("version")
-  result.url = obj.requiredField("url")
-  if result.url.len == 0: return nil
-  result.downloadMethod = obj.requiredField("method")
-  if result.downloadMethod.len == 0: return nil
-  result.dvcsTag = obj.optionalField("dvcs-tag")
-  result.license = obj.optionalField("license")
-  result.tags = @[]
-  for t in obj["tags"]:
-    result.tags.add(t.str)
-  result.description = obj.requiredField("description")
-  result.web = obj.optionalField("web")
+import basic/[context, reporters, packageinfos]
 
 const DefaultPackagesSubDir* = "packages"
 
-proc getPackageInfos*(depsDir: string): seq[PackageInfo] =
-  result = @[]
-  var uniqueNames = initHashSet[string]()
-  var jsonFiles = 0
-  for kind, path in walkDir(depsDir / DefaultPackagesSubDir):
-    if kind == pcFile and path.endsWith(".json"):
-      inc jsonFiles
-      let packages = json.parseFile(path)
-      for p in packages:
-        let pkg = p.fromJson()
-        if pkg != nil and not uniqueNames.containsOrIncl(pkg.name):
-          result.add(pkg)
+type PkgCandidates* = array[3, seq[PackageInfo]]
 
-proc `$`*(pkg: PackageInfo): string =
-  result = pkg.name & ":\n"
-  result &= "  url:         " & pkg.url & " (" & pkg.downloadMethod & ")\n"
-  result &= "  tags:        " & pkg.tags.join(", ") & "\n"
-  result &= "  description: " & pkg.description & "\n"
-  result &= "  license:     " & pkg.license & "\n"
-  if pkg.web.len > 0:
-    result &= "  website:     " & pkg.web & "\n"
-
-proc toTags(j: JsonNode): seq[string] =
-  result = @[]
-  if j.kind == JArray:
-    for elem in items j:
-      result.add elem.getStr("")
+proc determineCandidates*(pkgList: seq[PackageInfo];
+                         terms: seq[string]): PkgCandidates =
+  result[0] = @[]
+  result[1] = @[]
+  result[2] = @[]
+  for pkg in pkgList:
+    block termLoop:
+      for term in terms:
+        let word = term.toLower
+        if word == pkg.name.toLower:
+          result[0].add pkg
+          break termLoop
+        elif word in pkg.name.toLower:
+          result[1].add pkg
+          break termLoop
+        else:
+          for tag in pkg.tags:
+            if word in tag.toLower:
+              result[2].add pkg
+              break termLoop
 
 proc singleGithubSearch(c: var Reporter; term: string, fullSearch = false): JsonNode =
   when UnitTests:
@@ -165,7 +109,7 @@ proc getUrlFromGithub*(c: var Reporter; term: string): string =
 proc search*(c: var Reporter; pkgList: seq[PackageInfo]; terms: seq[string]) =
   var seen = initHashSet[string]()
   template onFound =
-    echo pkg
+    info c, "Found package", $pkg
     seen.incl pkg.url
     break forPackage
 
@@ -182,30 +126,7 @@ proc search*(c: var Reporter; pkgList: seq[PackageInfo]; terms: seq[string]) =
             if word in tag.toLower:
               onFound()
     else:
-      echo(pkg)
+      info(c, "Using package", $pkg)
   githubSearch c, seen, terms
   if seen.len == 0 and terms.len > 0:
-    echo("No PackageInfo found.")
-
-type PkgCandidates* = array[3, seq[PackageInfo]]
-
-proc determineCandidates*(pkgList: seq[PackageInfo];
-                         terms: seq[string]): PkgCandidates =
-  result[0] = @[]
-  result[1] = @[]
-  result[2] = @[]
-  for pkg in pkgList:
-    block termLoop:
-      for term in terms:
-        let word = term.toLower
-        if word == pkg.name.toLower:
-          result[0].add pkg
-          break termLoop
-        elif word in pkg.name.toLower:
-          result[1].add pkg
-          break termLoop
-        else:
-          for tag in pkg.tags:
-            if word in tag.toLower:
-              result[2].add pkg
-              break termLoop
+    info(c, "No PackageInfo found", $terms)

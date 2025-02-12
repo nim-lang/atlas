@@ -13,8 +13,16 @@ import compiledpatterns, gitops
 const
   GitSuffix = ".git"
 
+type
+  PkgUrl* = object
+    projectName*: string
+    u: string
+
 proc isSep(c: char): bool {.inline.} =
   when defined(windows): c == '/' or c == '\\' else: c == '/'
+
+proc isFileProtocol*(s: PkgUrl): bool = s.u.startsWith("file://")
+proc isUrl(s: string): bool {.inline.} = s.len > 5 and s.contains "://"
 
 proc extractProjectName*(s: string): string =
   var last = s.len - 1
@@ -24,11 +32,6 @@ proc extractProjectName*(s: string): string =
   result = s.substr(first+1, last)
   if result.endsWith(GitSuffix):
     result.setLen result.len - len(GitSuffix)
-
-type
-  PkgUrl* = object
-    projectName*: string
-    u: string
 
 proc `$`*(u: PkgUrl): string = u.u
 
@@ -55,7 +58,7 @@ template url*(p: PkgUrl): string = p.u
 proc `==`*(a, b: PkgUrl): bool {.inline.} = a.u == b.u
 proc hash*(a: PkgUrl): Hash {.inline.} = hash(a.u)
 
-proc isFileProtocol*(s: PkgUrl): bool = s.u.startsWith("file://")
+
 
 proc dir*(s: PkgUrl): string =
   if isFileProtocol(s):

@@ -1,3 +1,4 @@
+import std/strformat
 
 task build, "Build local atlas":
   exec "nim c -d:debug -o:./atlas src/atlas.nim"
@@ -29,8 +30,22 @@ task buildRelease, "Build release":
     else:
       exec "nim c -d:release -o:./atlas src/atlas.nim"
 
+task testReposSetup, "Setup atlas-tests from a cached zip":
+  let version = "v0.1.1"
+  let repo = "https://github.com/nim-lang/atlas-tests/"
+  let file = "atlas-tests.zip"
+  let url = fmt"{repo}/releases/download/{version}/{file}"
+  echo "Downloading Test Repos zip"
+  exec(fmt"curl -L -o {file} {url}")
+  echo "Unzipping Test Repos"
+  exec(fmt"unzip -o {file}")
+
 task test, "Runs all tests":
-  # unitTestsTask() # tester runs both
+  if not dirExists("atlas-tests"):
+    testReposSetupTask() # download atlas-tests
+  unitTestsTask() # tester runs both
   testerTask()
 
 --path:"$nim"
+
+--path:"../sat/src/"

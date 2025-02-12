@@ -6,8 +6,8 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [os]
-import versions, parse_requires, compiledpatterns, reporters
+import std / [os, uri]
+import versions, parserequires, compiledpatterns, reporters
 
 const
   UnitTests* = defined(atlasUnitTests)
@@ -48,6 +48,8 @@ type
     plugins*: PluginInfo
     overridesFile*: string
     pluginsFile*: string
+    proxy*: Uri
+    dumbProxy*: bool
 
 
 proc `==`*(a, b: CfgPath): bool {.borrow.}

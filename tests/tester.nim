@@ -1,155 +1,159 @@
 # Small program that runs the test cases
 
-import std / [strutils, os, osproc, sequtils, strformat]
-from std/private/gitutils import diffFiles
-import setups
+import std / [strutils, os, osproc, sequtils, strformat, unittest]
+import basic/reporters
+import testerutils
 
-if execShellCmd("nim c -d:debug -r tests/unittests.nim") != 0:
-  quit("FAILURE: unit tests failed")
-
-var failures = 0
+var c = Reporter()
 
 let atlasExe = absolutePath("bin" / "atlas".addFileExt(ExeExt))
 if execShellCmd("nim c -o:$# -d:release src/atlas.nim" % [atlasExe]) != 0:
   quit("FAILURE: compilation of atlas failed")
 
+ensureGitHttpServer()
 
-proc sameDirContents(expected, given: string): bool =
-  result = true
-  for _, e in walkDir(expected):
-    let g = given / splitPath(e).tail
-    if fileExists(g):
-      if readFile(e) != readFile(g):
-        echo "FAILURE: files differ: ", e
-        echo diffFiles(e, g).output
-        inc failures
-        result = false
-    else:
-      echo "FAILURE: file does not exist: ", g
-      inc failures
-      result = false
-
-const
-  SemVerExpectedResult = """
-[Info] (../resolve) selected:
-[Info] (proj_a) [ ] (proj_a, 1.1.0)
-[Info] (proj_a) [x] (proj_a, 1.0.0)
-[Info] (proj_b) [ ] (proj_b, 1.1.0)
-[Info] (proj_b) [x] (proj_b, 1.0.0)
-[Info] (proj_c) [x] (proj_c, 1.2.0)
-[Info] (proj_d) [ ] (proj_d, 2.0.0)
-[Info] (proj_d) [x] (proj_d, 1.0.0)
-[Info] (../resolve) end of selection
-"""
-
-  SemVerExpectedResultNoGitTags = """
-[Info] (../resolve) selected:
-[Info] (proj_a) [ ] (proj_a, #head)
-[Info] (proj_a) [ ] (proj_a, 1.1.0)
-[Info] (proj_a) [x] (proj_a, 1.0.0)
-[Info] (proj_b) [ ] (proj_b, #head)
-[Info] (proj_b) [ ] (proj_b, 1.1.0)
-[Info] (proj_b) [x] (proj_b, 1.0.0)
-[Info] (proj_c) [ ] (proj_c, #head)
-[Info] (proj_c) [x] (proj_c, 1.2.0)
-[Info] (proj_c) [ ] (proj_c, 1.0.0)
-[Info] (proj_d) [ ] (proj_d, #head)
-[Info] (proj_d) [ ] (proj_d, 2.0.0)
-[Info] (proj_d) [x] (proj_d, 1.0.0)
-[Info] (../resolve) end of selection
-"""
-
-  MinVerExpectedResult = """selected:
-[ ] (proj_a, 1.1.0)
-[x] (proj_a, 1.0.0)
-[ ] (proj_b, 1.1.0)
-[x] (proj_b, 1.0.0)
-[x] (proj_c, 1.2.0)
-[ ] (proj_d, 2.0.0)
-[x] (proj_d, 1.0.0)
-end of selection
-"""
-
-proc testSemVer2(expected: string) =
+template testSemVer2(expected: string) =
   createDir "semproject"
   withDir "semproject":
     let cmd = atlasExe & " --full --keepWorkspace --resolver=SemVer --colors:off --list use proj_a"
     let (outp, status) = execCmdEx(cmd)
     if status == 0:
-      if outp.contains expected:
-        discard "fine"
-      else:
-        echo "expected ", expected, " but got ", outp
-        raise newException(AssertionDefect, "Test failed!")
+      checkpoint "<<<<<<<<<<<<<<<< Failed test\n" &
+                  "\nExpected contents:\n\t" & expected.replace("\n", "\n\t") &
+                  "\nInstead got:\n\t" & outp.replace("\n", "\n\t") &
+                  ">>>>>>>>>>>>>>>> Failed\n"
+      check outp.contains expected
     else:
-      echo "\n\n<<<<<<<<<<<<<<<< failed "
+      echo "\n\n"
+      echo "<<<<<<<<<<<<<<<< Failed Exec "
       echo "testSemVer2:command: ", cmd
       echo "testSemVer2:pwd: ", getCurrentDir()
-      echo "testSemVer2:failed command:\n", outp
+      echo "testSemVer2:failed command:"
+      echo "================ Output:\n\t" & outp.replace("\n", "\n\t")
       echo ">>>>>>>>>>>>>>>> failed\n"
-      assert false, "testSemVer2"
+      check status == 0
 
-proc testMinVer() =
-  buildGraph()
+template testMinVer(expected: string) =
   createDir "minproject"
   withDir "minproject":
+    let cmd = atlasExe & " --keepWorkspace --resolver=MinVer --list use proj_a"
     let (outp, status) = execCmdEx(atlasExe & " --keepWorkspace --resolver=MinVer --list use proj_a")
     if status == 0:
-      if outp.contains MinVerExpectedResult:
-        discard "fine"
-      else:
-        echo "expected ", MinVerExpectedResult, " but got ", outp
-        raise newException(AssertionDefect, "Test failed!")
+      checkpoint "<<<<<<<<<<<<<<<< Failed test\n" &
+                  "\nExpected contents:\n\t" & expected.replace("\n", "\n\t") &
+                  "\nInstead got:\n\t" & outp.replace("\n", "\n\t") &
+                  ">>>>>>>>>>>>>>>> Failed\n"
+      check outp.contains expected
     else:
-      assert false, outp
+      echo "\n\n"
+      echo "<<<<<<<<<<<<<<<< Failed Exec "
+      echo "testSemVer2:command: ", cmd
+      echo "testSemVer2:pwd: ", getCurrentDir()
+      echo "testSemVer2:failed command:"
+      echo "================ Output:\n\t" & outp.replace("\n", "\n\t")
+      echo ">>>>>>>>>>>>>>>> failed\n"
+      check status == 0
 
-withDir "tests/ws_semver2":
-  try:
-    buildGraph()
-    testSemVer2(SemVerExpectedResult)
-  finally:
-    removeDir "does_not_exist"
-    removeDir "semproject"
-    removeDir "minproject"
-    removeDir "source"
-    removeDir "proj_a"
-    removeDir "proj_b"
-    removeDir "proj_c"
-    removeDir "proj_d"
+template removeDirs() =
+  removeDir "does_not_exist"
+  removeDir "semproject"
+  removeDir "minproject"
+  removeDir "source"
+  removeDir "proj_a"
+  removeDir "proj_b"
+  removeDir "proj_c"
+  removeDir "proj_d"
 
-withDir "tests/ws_semver2":
-  try:
-    buildGraphNoGitTags()
-    testSemVer2(SemVerExpectedResultNoGitTags)
-  finally:
-    removeDir "does_not_exist"
-    removeDir "semproject"
-    removeDir "minproject"
-    removeDir "source"
-    removeDir "proj_a"
-    removeDir "proj_b"
-    removeDir "proj_c"
-    removeDir "proj_d"
+proc setupGraph* =
+  createDir "source"
+  withDir "source":
 
-when false: # withDir "tests/ws_semver2":
-  try:
-    testMinVer()
-  finally:
-    removeDir "does_not_exist"
-    removeDir "semproject"
-    removeDir "minproject"
-    removeDir "source"
-    removeDir "proj_a"
-    removeDir "proj_b"
-    removeDir "proj_c"
-    removeDir "proj_d"
+    exec "git clone http://localhost:4242/buildGraph/proj_a"
+    exec "git clone http://localhost:4242/buildGraph/proj_b"
+    exec "git clone http://localhost:4242/buildGraph/proj_c"
+    exec "git clone http://localhost:4242/buildGraph/proj_d"
+
+proc setupGraphNoGitTags* =
+  createDir "source"
+  withDir "source":
+
+    exec "git clone http://localhost:4242/buildGraphNoGitTags/proj_a"
+    exec "git clone http://localhost:4242/buildGraphNoGitTags/proj_b"
+    exec "git clone http://localhost:4242/buildGraphNoGitTags/proj_c"
+    exec "git clone http://localhost:4242/buildGraphNoGitTags/proj_d"
+
+suite "basic repo tests":
+  test "tests/ws_semver2":
+    withDir "tests/ws_semver2":
+      try:
+        setupGraph()
+        let semVerExpectedResult = dedent"""
+        [Info] (../resolve) selected:
+        [Info] (proj_a) [ ] (proj_a, 1.1.0)
+        [Info] (proj_a) [x] (proj_a, 1.0.0)
+        [Info] (proj_b) [ ] (proj_b, 1.1.0)
+        [Info] (proj_b) [x] (proj_b, 1.0.0)
+        [Info] (proj_c) [x] (proj_c, 1.2.0)
+        [Info] (proj_d) [ ] (proj_d, 2.0.0)
+        [Info] (proj_d) [x] (proj_d, 1.0.0)
+        [Info] (../resolve) end of selection
+        """
+        testSemVer2(semVerExpectedResult)
+      finally:
+        removeDirs()
+
+  test "tests/ws_semver2":
+    withDir "tests/ws_semver2":
+      try:
+        setupGraphNoGitTags()
+        let semVerExpectedResultNoGitTags = dedent"""
+        [Info] (../resolve) selected:
+        [Info] (proj_a) [ ] (proj_a, #head)
+        [Info] (proj_a) [ ] (proj_a, 1.1.0)
+        [Info] (proj_a) [x] (proj_a, 1.0.0)
+        [Info] (proj_b) [ ] (proj_b, #head)
+        [Info] (proj_b) [ ] (proj_b, 1.1.0)
+        [Info] (proj_b) [x] (proj_b, 1.0.0)
+        [Info] (proj_c) [ ] (proj_c, #head)
+        [Info] (proj_c) [x] (proj_c, 1.2.0)
+        [Info] (proj_c) [ ] (proj_c, 1.0.0)
+        [Info] (proj_d) [ ] (proj_d, #head)
+        [Info] (proj_d) [ ] (proj_d, 2.0.0)
+        [Info] (proj_d) [x] (proj_d, 1.0.0)
+        [Info] (../resolve) end of selection
+        """
+        testSemVer2(semVerExpectedResultNoGitTags)
+      finally:
+        removeDirs()
+
+  test "tests/ws_semver2":
+      withDir "tests/ws_semver2":
+        setupGraph()
+        try:
+          let minVerExpectedResult = dedent"""
+          [Info] (../resolve) selected:
+          [Info] (proj_a) [ ] (proj_a, 1.1.0)
+          [Info] (proj_a) [x] (proj_a, 1.0.0)
+          [Info] (proj_b) [ ] (proj_b, 1.1.0)
+          [Info] (proj_b) [x] (proj_b, 1.0.0)
+          [Info] (proj_c) [x] (proj_c, 1.2.0)
+          [Info] (proj_d) [ ] (proj_d, 2.0.0)
+          [Info] (proj_d) [x] (proj_d, 1.0.0)
+          [Info] (../resolve) end of selection
+          """
+          testMinVer(minVerExpectedResult)
+        finally:
+          removeDirs()
 
 proc integrationTest() =
   # Test installation of some "important_packages" which we are sure
   # won't disappear in the near or far future. Turns out `nitter` has
   # quite some dependencies so it suffices:
-  exec atlasExe & " --verbosity:trace --keepWorkspace use https://github.com/zedeus/nitter"
-  discard sameDirContents("expected", ".")
+
+  exec atlasExe & " --proxy=http://localhost:4242/ --dumbproxy --full --verbosity:trace --keepWorkspace use https://github.com/zedeus/nitter"
+  # exec atlasExe & " --verbosity:trace --keepWorkspace use https://github.com/zedeus/nitter"
+
+  sameDirContents("expected", ".")
 
 proc cleanupIntegrationTest() =
   var dirs: seq[string] = @[]
@@ -168,4 +172,16 @@ when not defined(quick):
       when not defined(keepTestDirs):
         cleanupIntegrationTest()
 
-if failures > 0: quit($failures & " failures occurred.")
+infoNow c, "tester", "All tests run successfully"
+
+# if failures > 0: quit($failures & " failures occurred.")
+
+# Normal: create or remotely cloning repos
+# nim c -r   1.80s user 0.71s system 60% cpu 4.178 total
+# shims/nim c -r   32.00s user 25.11s system 41% cpu 2:18.60 total
+# nim c -r   30.83s user 24.67s system 40% cpu 2:17.17 total
+
+# Local repos:
+# nim c -r   1.59s user 0.60s system 88% cpu 2.472 total
+# w/integration: nim c -r   23.86s user 18.01s system 71% cpu 58.225 total
+# w/integration: nim c -r   32.00s user 25.11s system 41% cpu 1:22.80 total

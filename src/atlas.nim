@@ -9,10 +9,11 @@
 ## Simple tool to automate frequent workflows: Can "clone"
 ## a Nimble dependency and its dependencies recursively.
 
-import std / [parseopt, strutils, os, osproc, tables, sets, json, jsonutils]
-import versions, context, osutils, packagesjson, gitops, nimenv, lockfiles,
-  depgraphs, confighandler, configutils, cloner, nimblechecksums, reporters,
-  nimbleparser, pkgurls
+import std / [parseopt, strutils, os, osproc, tables, sets, json, jsonutils, uri]
+import basic / [versions, context, osutils, packageinfos,
+                configutils, nimblechecksums, reporters,
+                nimbleparser, gitops, pkgurls]
+import cloner, depgraphs, nimenv, lockfiles, confighandler, pkgcache, pkgsearch
 
 from std/terminal import isatty
 
@@ -327,21 +328,21 @@ proc main(c: var AtlasContext) =
   var args: seq[string] = @[]
   template singleArg() =
     if args.len != 1:
-      fatal action & " command takes a single package name"
+      fatal c, action & " command takes a single package name"
 
   template optSingleArg(default: string) =
     if args.len == 0:
       args.add default
     elif args.len != 1:
-      fatal action & " command takes a single package name"
+      fatal c, action & " command takes a single package name"
 
   template noArgs() =
     if args.len != 0:
-      fatal action & " command takes no arguments"
+      fatal c, action & " command takes no arguments"
 
   template projectCmd() =
     if c.projectDir == c.workspace or c.projectDir == c.depsDir:
-      fatal action & " command must be executed in a project, not in the workspace"
+      fatal c, action & " command must be executed in a project, not in the workspace"
 
   proc findCurrentNimble(): string =
     for x in walkPattern("*.nimble"):
@@ -404,6 +405,10 @@ proc main(c: var AtlasContext) =
         of "off": c.noColors = true
         of "on": c.noColors = false
         else: writeHelp()
+      of "proxy":
+        c.proxy = val.parseUri()
+      of "dumbproxy":
+        c.dumbProxy = true
       of "verbosity":
         case val.normalize
         of "normal": c.verbosity = 0
@@ -420,7 +425,7 @@ proc main(c: var AtlasContext) =
     of cmdEnd: assert false, "cannot happen"
 
   if c.workspace.len > 0:
-    if not dirExists(c.workspace): fatal "Workspace directory '" & c.workspace & "' not found."
+    if not dirExists(c.workspace): fatal c, "Workspace directory '" & c.workspace & "' not found."
     readConfig c
   elif action notin ["init", "tag"]:
     if GlobalWorkspace in c.flags:
@@ -435,7 +440,7 @@ proc main(c: var AtlasContext) =
       c.workspace = autoWorkspace(c.currentDir)
       createWorkspaceIn c
     elif action notin ["search", "list"]:
-      fatal "No workspace found. Run `atlas init` if you want this current directory to be your workspace."
+      fatal c, "No workspace found. Run `atlas init` if you want this current directory to be your workspace."
 
   if not explicitDepsDirOverride and action notin ["init", "tag"] and c.origDepsDir.len == 0:
     c.origDepsDir = ""
@@ -444,7 +449,7 @@ proc main(c: var AtlasContext) =
 
   case action
   of "":
-    fatal "No action."
+    fatal c, "No action."
   of "init":
     if GlobalWorkspace in c.flags:
       c.workspace = getHomeDir() / ".atlas"
@@ -494,21 +499,21 @@ proc main(c: var AtlasContext) =
     listChanged(c, args[0])
   of "convert":
     if args.len < 1:
-      fatal "convert command takes a nimble lockfile argument"
+      fatal c, "convert command takes a nimble lockfile argument"
     let lfn = if args.len == 1: LockFileName
               else: args[1]
     convertAndSaveNimbleLock c, args[0], lfn
   of "install", "setup":
     # projectCmd()
     if args.len > 1:
-      fatal "install command takes a single argument"
+      fatal c, "install command takes a single argument"
     var nimbleFile = ""
     if args.len == 1:
       nimbleFile = args[0]
     else:
       nimbleFile = findCurrentNimble()
     if nimbleFile.len == 0:
-      fatal "could not find a .nimble file"
+      fatal c, "could not find a .nimble file"
     else:
       var nc = createNimbleContext(c, c.depsDir)
       installDependencies(c, nc, nimbleFile)
@@ -531,7 +536,7 @@ proc main(c: var AtlasContext) =
     if fileExists(args[0]):
       echo toJson(extractRequiresInfo(args[0]))
     else:
-      fatal "File does not exist: " & args[0]
+      fatal c, "File does not exist: " & args[0]
   of "tag":
     projectCmd()
     if args.len == 0:
@@ -547,7 +552,7 @@ proc main(c: var AtlasContext) =
     else:
       var field: SemVerField
       try: field = parseEnum[SemVerField](args[0])
-      except: fatal "tag command takes one of 'patch' 'minor' 'major', a SemVer tag, or a letter from 'a' to 'z'"
+      except: fatal c, "tag command takes one of 'patch' 'minor' 'major', a SemVer tag, or a letter from 'a' to 'z'"
       tag(c, ord(field))
   of "build", "test", "doc", "tasks":
     projectCmd()
@@ -560,17 +565,11 @@ proc main(c: var AtlasContext) =
     setupNimEnv c, c.workspace, args[0], Keep in c.flags
   of "outdated":
     listOutdated(c)
-  #of "checksum":
-  #  singleArg()
-  #  let pkg = resolvePackage(c, args[0])
-  #  let cfg = findCfgDir(c, pkg)
-  #  let sha = nimbleChecksum(c, pkg, cfg)
-  #  info c, pkg, "SHA1Digest: " & sha
   of "new":
     singleArg()
     newProject(c, args[0])
   else:
-    fatal "Invalid action: " & action
+    fatal c, "Invalid action: " & action
 
 proc main =
   var c = AtlasContext(projectDir: getCurrentDir(), currentDir: getCurrentDir(), workspace: "")

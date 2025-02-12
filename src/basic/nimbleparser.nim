@@ -7,12 +7,7 @@
 #
 
 import std / [os, strutils, tables, unicode, hashes]
-import versions, packagesjson, reporters, gitops, parse_requires, pkgurls, compiledpatterns
-
-when defined(nimAtlasBootstrap):
-  import ../dist/sat/src/sat/satvars
-else:
-  import sat/satvars
+import sattypes, versions, packageinfos, reporters, gitops, parserequires, pkgurls, compiledpatterns
 
 type
   DependencyStatus* = enum
@@ -29,8 +24,8 @@ type
     err*: string
 
   NimbleContext* = object
-    hasPackageList: bool
-    nameToUrl: Table[string, string]
+    hasPackageList*: bool
+    nameToUrl*: Table[string, string]
 
 proc hash*(r: Requirements): Hash =
   var h: Hash = 0
@@ -45,29 +40,6 @@ proc `==`*(a, b: Requirements): bool =
   result = a.deps == b.deps and a.hasInstallHooks == b.hasInstallHooks and
       a.srcDir == b.srcDir and a.nimVersion == b.nimVersion
   #and a.version == b.version
-
-proc updatePackages*(c: var Reporter; depsDir: string) =
-  if dirExists(depsDir / DefaultPackagesSubDir):
-    withDir(c, depsDir / DefaultPackagesSubDir):
-      gitPull(c, DefaultPackagesSubDir)
-  else:
-    withDir c, depsDir:
-      let success = clone(c, "https://github.com/nim-lang/packages", DefaultPackagesSubDir)
-      if not success:
-        error c, DefaultPackagesSubDir, "cannot clone packages repo"
-
-proc fillPackageLookupTable(c: var NimbleContext; r: var Reporter; depsdir: string) =
-  if not c.hasPackageList:
-    c.hasPackageList = true
-    if not fileExists(depsDir / DefaultPackagesSubDir / "packages.json"):
-      updatePackages(r, depsdir)
-    let packages = getPackageInfos(depsDir)
-    for entry in packages:
-      c.nameToUrl[unicode.toLower entry.name] = entry.url
-
-proc createNimbleContext*(r: var Reporter; depsdir: string): NimbleContext =
-  result = NimbleContext()
-  fillPackageLookupTable(result, r, depsdir)
 
 proc addError*(err: var string; nimbleFile: string; msg: string) =
   if err.len > 0: err.add "\n"

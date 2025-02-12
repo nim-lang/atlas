@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import reporters
+import basic/reporters
 
 import std / [strutils, os, osproc]
 

@@ -1,8 +1,7 @@
 
 
 import std/[unittest, os, strutils]
-
-import context, osutils, versions
+import basic/[context, osutils, versions]
 
 when false:
   from nameresolver import resolvePackage
