@@ -7,7 +7,7 @@
 #
 
 import std / [os, strutils, tables, unicode, hashes]
-import sattypes, versions, packageinfos, reporters, gitops, parserequires, pkgurls, compiledpatterns
+import sattypes, versions, reporters, reporters, gitops, parserequires, pkgurls, compiledpatterns
 
 type
   DependencyStatus* = enum
@@ -48,7 +48,7 @@ proc addError*(err: var string; nimbleFile: string; msg: string) =
 
 proc isUrl(s: string): bool {.inline.} = s.len > 5 and s.contains "://"
 
-proc parseNimbleFile*(c: NimbleContext; nimbleFile: string; p: Patterns): Requirements =
+proc parseNimbleFile*(cc: var Reporter, nc: NimbleContext; nimbleFile: string; p: Patterns): Requirements =
   let nimbleInfo = extractRequiresInfo(nimbleFile)
 
   result = Requirements(
@@ -66,7 +66,7 @@ proc parseNimbleFile*(c: NimbleContext; nimbleFile: string; p: Patterns): Requir
     var didReplace = false
     var u = substitute(p, name, didReplace)
     if not didReplace:
-      u = (if name.isUrl: name else: c.nameToUrl.getOrDefault(unicode.toLower name, ""))
+      u = (if name.isUrl: name else: nc.nameToUrl.getOrDefault(unicode.toLower name, ""))
 
     if u.len == 0:
       result.status = HasBrokenDep
@@ -85,7 +85,7 @@ proc parseNimbleFile*(c: NimbleContext; nimbleFile: string; p: Patterns): Requir
           if v != Version"":
             result.nimVersion = v
         else:
-          result.deps.add (createUrlSkipPatterns(u), query)
+          result.deps.add (cc.createUrlSkipPatterns(u), query)
 
 proc findNimbleFile*(c: var Reporter; dir: string; ambiguous: var bool): string =
   result = ""
@@ -104,17 +104,17 @@ proc findNimbleFile*(c: var Reporter; dir: string; ambiguous: var bool): string 
 
 proc genRequiresLine(u: string): string = "requires \"$1\"\n" % u.escape("", "")
 
-proc patchNimbleFile*(c: var NimbleContext; r: var Reporter; p: Patterns; nimbleFile, name: string) =
+proc patchNimbleFile*(c: var Reporter, nc: var NimbleContext; r: var Reporter; p: Patterns; nimbleFile, name: string) =
   var didReplace = false
   var u = substitute(p, name, didReplace)
   if not didReplace:
-    u = (if name.isUrl: name else: c.nameToUrl.getOrDefault(unicode.toLower name, ""))
+    u = (if name.isUrl: name else: nc.nameToUrl.getOrDefault(unicode.toLower name, ""))
 
   if u.len == 0:
     error r, name, "cannot resolve package name: " & name
     return
 
-  let req = parseNimbleFile(c, nimbleFile, p)
+  let req = parseNimbleFile(c, nc, nimbleFile, p)
   # see if we have this requirement already listed. If so, do nothing:
   for d in req.deps:
     if d[0].url == u:

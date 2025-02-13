@@ -8,7 +8,7 @@
 
 import std / [hashes, strutils]
 from std / os import `/`, dirExists
-import compiledpatterns, gitops
+import compiledpatterns, gitops, reporters
 
 const
   GitSuffix = ".git"
@@ -35,21 +35,21 @@ proc extractProjectName*(s: string): string =
 
 proc `$`*(u: PkgUrl): string = u.u
 
-proc createUrlSkipPatterns*(x: string): PkgUrl =
+proc createUrlSkipPatterns*(c: var Reporter, x: string): PkgUrl =
   if "://" notin x:
     if dirExists(x):
-      let u2 = if isGitDir(x): getRemoteUrl(x) else: ("file://" & x)
+      let u2 = if isGitDir(x): c.getRemoteUrl(x) else: ("file://" & x)
       result = PkgUrl(projectName: extractProjectName(x), u: u2)
     else:
       raise newException(ValueError, "Invalid name or URL: " & x)
   else:
     result = PkgUrl(projectName: extractProjectName(x), u: x)
 
-proc createUrl*(u: string; p: Patterns): PkgUrl =
+proc createUrl*(c: var Reporter, u: string; p: Patterns): PkgUrl =
   var didReplace = false
   let x = substitute(p, u, didReplace)
   if not didReplace:
-    result = createUrlSkipPatterns(x)
+    result = c.createUrlSkipPatterns(x)
   else:
     result = PkgUrl(projectName: extractProjectName(x), u: x)
 
