@@ -109,12 +109,14 @@ suite "Git Operations Tests":
       check(incrementLastTag(reporter, "test", 1) == "v1.1.0")
       check(incrementLastTag(reporter, "test", 2) == "v1.0.1")
 
+  test "incrementLastTag behavior no tags":
+    withDir testDir:
       # Test with no tags
-      removeDir(testDir)
-      createDir(testDir)
-      discard execCmd("git init " & testDir)
-      withDir testDir:
-        check(incrementLastTag(reporter, "test", 0) == "v0.0.1")
+      discard execCmd("git init ")
+      writeFile("test.txt", "initial content")
+      discard execCmd("git add test.txt")
+      discard execCmd("git commit -m \"initial commit\"")
+      check(incrementLastTag(reporter, "test", 0) == "v0.0.1")
 
   test "isOutdated detection":
     withDir testDir:

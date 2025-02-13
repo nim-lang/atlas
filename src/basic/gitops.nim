@@ -229,12 +229,17 @@ proc incrementLastTag*(c: var Reporter; displayName: string; field: Natural): st
       lastTag = gitDescribeRefTag(c, lastTaggedRef)
       currentCommit = exec(c, GitCurrentCommit, [])[0].strip()
 
-    if lastTaggedRef == currentCommit:
+    echo "lastTaggedRef: ", lastTaggedRef 
+    echo "currentCommit: ", currentCommit 
+    if lastTaggedRef == "":
+      "v0.0.1" # assuming no tags have been made yet
+    elif lastTaggedRef == "" or lastTaggedRef == currentCommit:
       info c, displayName, "the current commit '" & currentCommit & "' is already tagged '" & lastTag & "'"
       lastTag
     else:
       incrementTag(c, displayName, lastTag, field)
-  else: "v0.0.1" # assuming no tags have been made yet
+  else:
+    "v0.0.1" # assuming no tags have been made yet
 
 proc needsCommitLookup*(commit: string): bool {.inline.} =
   '.' in commit or commit == InvalidCommit
