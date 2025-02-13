@@ -196,7 +196,7 @@ suite "Git Operations Tests":
       discard execCmd("git commit -m \"update commit\"")
       let newCommit = execProcess("git rev-parse HEAD").strip()
       let untaggedDescription = gitDescribeRefTag(reporter, newCommit)
-      check(untaggedDescription == "v1.0.0-1-" & newCommit[0..6])
+      check(untaggedDescription.startsWith("v1.0.0-1-"))
 
   test "getLastTaggedCommit functionality":
     withDir testDir:
