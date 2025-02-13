@@ -153,3 +153,105 @@ suite "Git Operations Tests":
       # Test getting remote URL from specific directory
       # let dirUrl = getRemoteUrl(c, testDir)
       # check(dirUrl == testUrl)
+
+  test "checkGitDiffStatus behavior":
+    withDir testDir:
+      discard execCmd("git init")
+      
+      # Test clean state
+      let cleanStatus = checkGitDiffStatus(reporter)
+      check(cleanStatus == "")
+      
+      # Test with uncommitted changes
+      writeFile("test.txt", "some content")
+      discard execCmd("git add test.txt")
+      writeFile("test.txt", "modified content")
+      let dirtyStatus = checkGitDiffStatus(reporter)
+      check(dirtyStatus == "'git diff' not empty")
+      
+      # Test with committed changes
+      discard execCmd("git add test.txt")
+      discard execCmd("git commit -m \"test commit\"")
+      let committedStatus = checkGitDiffStatus(reporter)
+      check(committedStatus == "")
+
+  test "gitDescribeRefTag functionality":
+    withDir testDir:
+      discard execCmd("git init")
+      
+      # Create and tag a commit
+      writeFile("test.txt", "initial content")
+      discard execCmd("git add test.txt")
+      discard execCmd("git commit -m \"initial commit\"")
+      let initialCommit = execProcess("git rev-parse HEAD").strip()
+      discard execCmd("git tag v1.0.0")
+      
+      # Test describing the tagged commit
+      let tagDescription = gitDescribeRefTag(reporter, initialCommit)
+      check(tagDescription == "v1.0.0")
+      
+      # Test describing an untagged commit
+      writeFile("test.txt", "updated content")
+      discard execCmd("git add test.txt")
+      discard execCmd("git commit -m \"update commit\"")
+      let newCommit = execProcess("git rev-parse HEAD").strip()
+      let untaggedDescription = gitDescribeRefTag(reporter, newCommit)
+      check(untaggedDescription == "v1.0.0-1-" & newCommit[0..6])
+
+  test "getLastTaggedCommit functionality":
+    withDir testDir:
+      discard execCmd("git init")
+      
+      # Create initial commit with no tag
+      writeFile("test.txt", "initial content")
+      discard execCmd("git add test.txt")
+      discard execCmd("git commit -m \"initial commit\"")
+      
+      # No tags yet
+      let noTag = getLastTaggedCommit(reporter)
+      check(noTag == "")
+      
+      # Add a tag
+      discard execCmd("git tag v1.0.0")
+      let taggedCommit = getLastTaggedCommit(reporter)
+      check(taggedCommit == "v1.0.0")
+      
+      # Add another commit and tag
+      writeFile("test.txt", "updated content")
+      discard execCmd("git add test.txt")
+      discard execCmd("git commit -m \"update commit\"")
+      discard execCmd("git tag v1.1.0")
+      let latestTag = getLastTaggedCommit(reporter)
+      check(latestTag == "v1.1.0")
+
+  test "collectTaggedVersions functionality":
+    withDir testDir:
+      discard execCmd("git init")
+      
+      # Create initial commit and tag
+      writeFile("test.txt", "initial content")
+      discard execCmd("git add test.txt")
+      discard execCmd("git commit -m \"initial commit\"")
+      discard execCmd("git tag v1.0.0")
+      
+      # Add more commits and tags
+      writeFile("test.txt", "second version")
+      discard execCmd("git add test.txt")
+      discard execCmd("git commit -m \"second commit\"")
+      discard execCmd("git tag v1.1.0")
+      
+      writeFile("test.txt", "third version")
+      discard execCmd("git add test.txt")
+      discard execCmd("git commit -m \"third commit\"")
+      discard execCmd("git tag v2.0.0")
+      
+      # Test collecting all tagged versions
+      let versions = collectTaggedVersions(reporter)
+      check(versions.len == 3)
+      check($versions[0].v == "v1.0.0")
+      check($versions[1].v == "v1.1.0")
+      check($versions[2].v == "v2.0.0")
+      
+      # Verify commit hashes are present
+      for v in versions:
+        check(v.h.len == 40)  # Full SHA-1 hash length
