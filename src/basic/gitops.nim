@@ -83,7 +83,7 @@ proc maybeUrlProxy*(c: var AtlasContext, url: Uri): Uri =
     result.query = url.query
     result.anchor = url.anchor
 
-proc clone*(c: var AtlasContext; url, dest: string; retries = 5; fullClones=false): bool =
+proc clone*(c: var AtlasContext; url: string, dest: Path; retries = 5; fullClones=false): bool =
   ## clone git repo.
   ##
   ## note clones don't use `--recursive` but rely in the `checkoutCommit`
@@ -98,7 +98,7 @@ proc clone*(c: var AtlasContext; url, dest: string; retries = 5; fullClones=fals
 
   var url = c.maybeUrlProxy(url.parseUri())
 
-  let cmd = $GitClone % [ "EXTRAARGS", extraArgs, "URL", quoteShell($url), "DEST", dest]
+  let cmd = $GitClone % [ "EXTRAARGS", extraArgs, "URL", quoteShell($url), "DEST", $dest]
   for i in 1..retries:
     if execShellCmd(cmd) == 0:
       return true
@@ -201,7 +201,7 @@ proc pushTag*(c: var Reporter; path: Path, displayName, tag: string) =
   else:
     info(c, displayName, "successfully pushed tag: " & tag)
 
-proc incrementTag*(c: var Reporter; path: Path, displayName, lastTag: string; field: Natural): string =
+proc incrementTag*(c: var Reporter; displayName, lastTag: string; field: Natural): string =
   var startPos =
     if lastTag[0] in {'0'..'9'}: 0
     else: 1
@@ -234,7 +234,7 @@ proc incrementLastTag*(c: var Reporter; path: Path, displayName: string; field: 
       info c, displayName, "the current commit '" & currentCommit & "' is already tagged '" & lastTag & "'"
       lastTag
     else:
-      c.incrementTag(path, displayName, lastTag, field)
+      c.incrementTag(displayName, lastTag, field)
   else:
     "v0.0.1" # assuming no tags have been made yet
 

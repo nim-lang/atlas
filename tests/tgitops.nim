@@ -1,5 +1,5 @@
 import unittest
-import std/[os, osproc, strutils, uri]
+import std/[os, files, dirs, paths, osproc, strutils, uri]
 import basic/[reporters, osutils, versions, context]
 
 import basic/gitops
@@ -8,7 +8,7 @@ suite "Git Operations Tests":
   var 
     c: AtlasContext
     reporter: Reporter
-    testDir = "tests/test_repo"
+    testDir = Path "tests/test_repo"
     
   setup:
     # Create a fresh test directory
@@ -23,7 +23,7 @@ suite "Git Operations Tests":
 
   test "isGitDir detection":
     check(not isGitDir(testDir))
-    discard execCmd("git init " & testDir)
+    discard execCmd("git init " & $testDir)
     check(isGitDir(testDir))
 
   test "sameVersionAs comparisons":
@@ -39,17 +39,17 @@ suite "Git Operations Tests":
 
   test "Git command execution":
     # Initialize test repo
-    withDir testDir:
+    withDir $testDir:
       discard execCmd("git init")
-      check(isGitDir("."))
+      check(isGitDir(Path "."))
       
       # Test git diff command
-      let (diffOutput, diffStatus) = exec(reporter, GitDiff, [])
+      let (diffOutput, diffStatus) = exec(reporter, GitDiff, Path ".", [])
       check(diffStatus == 0)
       check(diffOutput.len == 0)
 
   test "Version to commit resolution":
-    withDir testDir:
+    withDir $testDir:
       discard execCmd("git init")
       # Create and tag a test commit
       writeFile("test.txt", "test content")
@@ -58,7 +58,7 @@ suite "Git Operations Tests":
       discard execCmd("git tag v1.0.0")
       
       var err = false
-      let commit = versionToCommit(reporter, MinVer, parseVersionInterval("1.0.0", 0, err))
+      let commit = versionToCommit(reporter, Path ".", MinVer, parseVersionInterval("1.0.0", 0, err))
       check(commit.len > 0)
 
   test "Git clone functionality":
@@ -86,7 +86,7 @@ suite "Git Operations Tests":
 
   test "isGitDir detection":
     check(not isGitDir(testDir))
-    discard execCmd("git init " & testDir)
+    discard execCmd("git init " & $testDir)
     check(isGitDir(testDir))
 
   test "sameVersionAs comparisons":
@@ -96,7 +96,7 @@ suite "Git Operations Tests":
     check(not sameVersionAs("v10.0.0", "1.0.0"))
 
   test "incrementLastTag behavior":
-    withDir testDir:
+    withDir $testDir:
       discard execCmd("git init")
       # Create initial commit and tag
       writeFile("test.txt", "initial content")
@@ -107,21 +107,21 @@ suite "Git Operations Tests":
       discard execCmd("git commit -am \"second commit\"")
       
       # Test incrementing different version fields
-      check(incrementLastTag(reporter, "test", 0) == "v2.0.0")
-      check(incrementLastTag(reporter, "test", 1) == "v1.1.0")
-      check(incrementLastTag(reporter, "test", 2) == "v1.0.1")
+      check(incrementLastTag(reporter, Path ".", "test", 0) == "v2.0.0")
+      check(incrementLastTag(reporter, Path ".", "test", 1) == "v1.1.0")
+      check(incrementLastTag(reporter, Path ".", "test", 2) == "v1.0.1")
 
   test "incrementLastTag behavior no tags":
-    withDir testDir:
+    withDir $testDir:
       # Test with no tags
       discard execCmd("git init ")
       writeFile("test.txt", "initial content")
       discard execCmd("git add test.txt")
       discard execCmd("git commit -m \"initial commit\"")
-      check(incrementLastTag(reporter, "test", 0) == "v0.0.1")
+      check(incrementLastTag(reporter, Path ".", "test", 0) == "v0.0.1")
 
   test "isOutdated detection":
-    withDir testDir:
+    withDir $testDir:
       discard execCmd("git init")
       # Create initial commit and tag
       writeFile("test.txt", "initial content")
@@ -135,19 +135,19 @@ suite "Git Operations Tests":
       discard execCmd("git commit -m \"update commit\"")
       
       # Test if repo is outdated
-      let outdated = isOutdated(c, "test")
+      let outdated = c.isOutdated(Path ".", "test")
       # Note: This might fail in isolated test environments
       # We're mainly testing the function structure
       check(not outdated)  # Expected to be false in test environment
 
   test "getRemoteUrl functionality":
-    withDir testDir:
+    withDir $testDir:
       discard execCmd("git init")
       let testUrl = "https://github.com/test/repo.git"
       discard execCmd("git remote add origin " & testUrl)
       
       # Test getting remote URL
-      let url = getRemoteUrl(c)
+      let url = c.getRemoteUrl(Path ".")
       check(url == testUrl)
       
       # Test getting remote URL from specific directory
@@ -155,28 +155,28 @@ suite "Git Operations Tests":
       # check(dirUrl == testUrl)
 
   test "checkGitDiffStatus behavior":
-    withDir testDir:
+    withDir $testDir:
       discard execCmd("git init")
       
       # Test clean state
-      let cleanStatus = checkGitDiffStatus(reporter)
+      let cleanStatus = checkGitDiffStatus(reporter, Path ".")
       check(cleanStatus == "")
       
       # Test with uncommitted changes
       writeFile("test.txt", "some content")
       discard execCmd("git add test.txt")
       writeFile("test.txt", "modified content")
-      let dirtyStatus = checkGitDiffStatus(reporter)
+      let dirtyStatus = checkGitDiffStatus(reporter, Path ".")
       check(dirtyStatus == "'git diff' not empty")
       
       # Test with committed changes
       discard execCmd("git add test.txt")
       discard execCmd("git commit -m \"test commit\"")
-      let committedStatus = checkGitDiffStatus(reporter)
+      let committedStatus = checkGitDiffStatus(reporter, Path ".")
       check(committedStatus == "")
 
   test "gitDescribeRefTag functionality":
-    withDir testDir:
+    withDir $testDir:
       discard execCmd("git init")
       
       # Create and tag a commit
@@ -187,7 +187,7 @@ suite "Git Operations Tests":
       discard execCmd("git tag v1.0.0")
       
       # Test describing the tagged commit
-      let tagDescription = gitDescribeRefTag(reporter, initialCommit)
+      let tagDescription = gitDescribeRefTag(reporter, Path ".", initialCommit)
       check(tagDescription == "v1.0.0")
       
       # Test describing an untagged commit
@@ -195,11 +195,11 @@ suite "Git Operations Tests":
       discard execCmd("git add test.txt")
       discard execCmd("git commit -m \"update commit\"")
       let newCommit = execProcess("git rev-parse HEAD").strip()
-      let untaggedDescription = gitDescribeRefTag(reporter, newCommit)
+      let untaggedDescription = gitDescribeRefTag(reporter, Path ".", newCommit)
       check(untaggedDescription.startsWith("v1.0.0-1-"))
 
   test "collectTaggedVersions functionality":
-    withDir testDir:
+    withDir $testDir:
       discard execCmd("git init")
      
       # Create initial commit and tag
@@ -220,7 +220,7 @@ suite "Git Operations Tests":
       discard execCmd("git tag v2.0.0")
       
       # Test collecting all tagged versions
-      let versions = collectTaggedVersions(reporter)
+      let versions = collectTaggedVersions(reporter, Path ".")
       check(versions.len == 3)
       check($versions[0].v == "2.0.0")
       check($versions[1].v == "1.1.0")
