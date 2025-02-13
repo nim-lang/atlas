@@ -105,7 +105,7 @@ suite "Git Operations Tests":
       discard execCmd("git tag v1.0.0")
       writeFile("test.txt", "more content")
       discard execCmd("git commit -am \"second commit\"")
-      
+
       # Test incrementing different version fields
       check(incrementLastTag(reporter, Path ".", "test", 0) == "v2.0.0")
       check(incrementLastTag(reporter, Path ".", "test", 1) == "v1.1.0")
@@ -128,12 +128,12 @@ suite "Git Operations Tests":
       discard execCmd("git add test.txt")
       discard execCmd("git commit -m \"initial commit\"")
       discard execCmd("git tag v1.0.0")
-      
+
       # Create new commit without tag
       writeFile("test.txt", "updated content")
       discard execCmd("git add test.txt")
       discard execCmd("git commit -m \"update commit\"")
-      
+
       # Test if repo is outdated
       let outdated = c.isOutdated(Path ".", "test")
       # Note: This might fail in isolated test environments
