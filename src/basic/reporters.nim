@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [terminal]
+import std / [terminal, paths]
 
 type
   MsgKind* = enum
@@ -87,3 +87,17 @@ proc fatal*(c: var Reporter, msg: string, prefix = "fatal", code = 1) =
   writeMessage(c, Error, prefix, msg)
   quit 1
 
+proc warn*(c: var Reporter; p: Path, arg: string) =
+  warn(c, $p, arg)
+
+proc error*(c: var Reporter; p: Path, arg: string) =
+  error(c, $p, arg)
+
+proc info*(c: var Reporter; p: Path, arg: string) =
+  info(c, $p, arg)
+
+proc trace*(c: var Reporter; p: Path, arg: string) =
+  trace(c, $p, arg)
+
+proc debug*(c: var Reporter; p: Path, arg: string) =
+  debug(c, $p, arg)
