@@ -10,8 +10,8 @@ src/*
 !src/basic
 src/basic/*
 !src/basic/*.*
-tests/*
-!tests/*.*
+*/*
+!*/*.*
 atlas-tests/
 *.zip
 atlas
