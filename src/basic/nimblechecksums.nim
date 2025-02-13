@@ -37,13 +37,13 @@ proc updateSecureHash(checksum: var Sha1State; c: var Reporter; name, path: stri
     finally:
       file.close()
 
-proc nimbleChecksum*(c: var Reporter; name, path: string): string =
+proc nimbleChecksum*(c: var Reporter; name: string, path: Path): string =
   ## calculate a nimble style checksum from a `path`.
   ##
   ## Useful for exporting a Nimble sync file.
   ##
   withDir path:
-    var files = c.listFiles()
+    var files = c.listFiles(path)
     if files.len == 0:
       error c, path, "couldn't list files"
     else:
