@@ -87,6 +87,10 @@ proc fatal*(c: var Reporter, msg: string, prefix = "fatal", code = 1) =
   writeMessage(c, Error, prefix, msg)
   quit 1
 
+when not compiles($(Path("test"))):
+  template `$`*(x: Path): string =
+    string(x)
+
 proc warn*(c: var Reporter; p: Path, arg: string) =
   warn(c, $p, arg)
 

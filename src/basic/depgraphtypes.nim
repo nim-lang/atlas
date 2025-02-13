@@ -1,5 +1,5 @@
 
-import std / [sets, tables, os, strutils, streams, json, jsonutils, algorithm]
+import std / [sets, paths, dirs, tables, os, strutils, streams, json, jsonutils, algorithm]
 
 import sattypes, context, gitops, reporters, nimbleparser, pkgurls, versions
 
@@ -57,15 +57,15 @@ type
   PackageAction* = enum
     DoNothing, DoClone
 
-proc pkgUrlToDirname*(c: var AtlasContext; g: var DepGraph; d: Dependency): (string, PackageAction) =
+proc pkgUrlToDirname*(c: var AtlasContext; g: var DepGraph; d: Dependency): (Path, PackageAction) =
   # XXX implement namespace support here
-  var dest = g.ondisk.getOrDefault(d.pkg.url)
-  if dest.len == 0:
+  var dest = Path g.ondisk.getOrDefault(d.pkg.url)
+  if dest.string.len == 0:
     if d.isTopLevel:
       dest = c.workspace
     else:
       let depsDir = if d.isRoot: c.workspace else: c.depsDir
-      dest = depsDir / d.pkg.projectName
+      dest = depsDir / Path d.pkg.projectName
   result = (dest, if dirExists(dest): DoNothing else: DoClone)
 
 proc toDestDir*(g: DepGraph; d: Dependency): string =
@@ -118,11 +118,11 @@ proc bestNimVersion*(g: DepGraph): Version =
 
 proc readOnDisk(c: var AtlasContext; result: var DepGraph) =
   let configFile = c.workspace / AtlasWorkspace
-  var f = newFileStream(configFile, fmRead)
+  var f = newFileStream($configFile, fmRead)
   if f == nil:
     return
   try:
-    let j = parseJson(f, configFile)
+    let j = parseJson(f, $configFile)
     let g = j["graph"]
     let n = g.getOrDefault("nodes")
     if n.isNil: return
@@ -135,7 +135,7 @@ proc readOnDisk(c: var AtlasContext; result: var DepGraph) =
             result.packageToDependency[n.pkg] = result.nodes.len
             result.nodes.add Dependency(pkg: n.pkg, versions: @[], isRoot: true, isTopLevel: n.isTopLevel, activeVersion: -1)
   except:
-    error c, configFile, "cannot read: " & configFile
+    error c, configFile, "cannot read: " & $configFile
 
 proc createGraph*(c: var AtlasContext; s: PkgUrl): DepGraph =
   result = DepGraph(nodes: @[],
@@ -147,13 +147,13 @@ proc createGraph*(c: var AtlasContext; s: PkgUrl): DepGraph =
 proc createGraphFromWorkspace*(c: var AtlasContext): DepGraph =
   result = DepGraph(nodes: @[], reqs: defaultReqs())
   let configFile = c.workspace / AtlasWorkspace
-  var f = newFileStream(configFile, fmRead)
+  var f = newFileStream($configFile, fmRead)
   if f == nil:
-    error c, configFile, "cannot open: " & configFile
+    error c, configFile, "cannot open: " & $configFile
     return
 
   try:
-    let j = parseJson(f, configFile)
+    let j = parseJson(f, $configFile)
     let g = j["graph"]
 
     result.nodes = jsonTo(g["nodes"], typeof(result.nodes))
@@ -162,11 +162,12 @@ proc createGraphFromWorkspace*(c: var AtlasContext): DepGraph =
     for i, n in mpairs(result.nodes):
       result.packageToDependency[n.pkg] = i
   except:
-    error c, configFile, "cannot read: " & configFile
+    error c, configFile, "cannot read: " & $configFile
 
-proc copyFromDisk*(c: var AtlasContext; w: Dependency; destDir: string): (CloneStatus, string) =
+proc copyFromDisk*(c: var AtlasContext; w: Dependency; destDir: Path): (CloneStatus, string) =
   var dir = w.pkg.url
-  if dir.startsWith(FileWorkspace): dir = c.workspace / dir.substr(FileWorkspace.len)
+  if dir.startsWith(FileWorkspace):
+    dir = $c.workspace / dir.substr(FileWorkspace.len)
   #template selectDir(a, b: string): string =
   #  if dirExists(a): a else: b
 
@@ -175,7 +176,7 @@ proc copyFromDisk*(c: var AtlasContext; w: Dependency; destDir: string): (CloneS
     result = (Ok, "")
   elif dirExists(dir):
     info c, destDir, "cloning: " & dir
-    copyDir(dir, destDir)
+    copyDir(dir, $destDir)
     result = (Ok, "")
   else:
     result = (NotFound, dir)
