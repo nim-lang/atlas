@@ -1,8 +1,9 @@
 ## OS utilities like 'withDir'.
 ## (c) 2021 Andreas Rumpf
 
-import std / [os, strutils, osproc, uri]
+import std / [os, paths, strutils, osproc, uri]
 import reporters
+
 
 proc lastPathComponent*(s: string): string =
   var last = s.len - 1
@@ -29,9 +30,9 @@ proc isUrl*(x: string): bool =
   x.startsWith("http://") or
   x.startsWith("file://")
 
-proc readableFile*(s: string): string =
-  if s.isRelativeTo(getCurrentDir()):
-    relativePath(s, getCurrentDir())
+proc readableFile*(s: Path, path: Path): Path =
+  if s.isRelativeTo(path):
+    relativePath(s, path)
   else:
     s
 

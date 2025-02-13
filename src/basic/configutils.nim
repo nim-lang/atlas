@@ -42,7 +42,7 @@ proc patchNimCfg*(c: var AtlasContext; deps: seq[CfgPath]; cfgPath: CfgPath) =
     error(c, c.projectDir, "could not write the nim.cfg")
   elif not fileExists(cfg):
     writeFile(cfg, cfgContent)
-    info(c, projectFromCurrentDir(), "created: " & cfg.readableFile)
+    info(c, projectFromCurrentDir(), "created: " & cfg.readableFile(c.currentDir))
   else:
     let content = readFile(cfg)
     let start = content.find(configPatternBegin)
