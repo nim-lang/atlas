@@ -56,14 +56,16 @@ proc extractVersion*(s: string): string =
 proc exec*(c: var Reporter;
            cmd: Command;
            path: Path;
-           args: openArray[string]): (string, int) =
+           args: openArray[string],
+           ignoreError = false,
+           ): (string, int) =
   let cmd = $cmd % ["DIR", $path]
   #if execDir.len == 0: $cmd else: $(cmd) % [execDir]
   if isGitDir(path):
     result = silentExec(cmd, args)
   else:
     result = ("not a git repository", 1)
-  if result[1] != 0:
+  if not ignoreError and result[1] != 0:
     error c, "gitops", "Git command failed `$1` failed with code: $2" % [cmd, $result[1]]
 
 proc checkGitDiffStatus*(c: var Reporter, path: Path): string =
@@ -220,7 +222,10 @@ proc incrementTag*(c: var Reporter; displayName, lastTag: string; field: Natural
 
 proc incrementLastTag*(c: var Reporter; path: Path, displayName: string; field: Natural): string =
   let (ltr, status) = c.exec(GitLastTaggedRef, path, [])
-  if status == 0:
+  echo "incrementLastTag: `$1`" % [ltr]
+  if status != 0 or ltr == "":
+    "v0.0.1" # assuming no tags have been made yet
+  else:
     let
       lastTaggedRef = ltr.strip()
       lastTag = c.gitDescribeRefTag(path, lastTaggedRef)
@@ -235,8 +240,6 @@ proc incrementLastTag*(c: var Reporter; path: Path, displayName: string; field: 
       lastTag
     else:
       c.incrementTag(displayName, lastTag, field)
-  else:
-    "v0.0.1" # assuming no tags have been made yet
 
 proc needsCommitLookup*(commit: string): bool {.inline.} =
   '.' in commit or commit == InvalidCommit
