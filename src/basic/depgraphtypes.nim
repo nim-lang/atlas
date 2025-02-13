@@ -19,13 +19,13 @@ type
     isTopLevel*: bool
     status*: CloneStatus
     activeVersion*: int
-    ondisk*: string
+    ondisk*: Path
 
   DepGraph* = object
     nodes*: seq[Dependency]
     reqs*: seq[Requirements]
     packageToDependency*: Table[PkgUrl, int]
-    ondisk*: OrderedTable[string, string] # URL -> dirname mapping
+    ondisk*: OrderedTable[string, Path] # URL -> dirname mapping
     reqsByDeps*: Table[Requirements, int]
 
 const
@@ -68,7 +68,7 @@ proc pkgUrlToDirname*(c: var AtlasContext; g: var DepGraph; d: Dependency): (Pat
       dest = depsDir / Path d.pkg.projectName
   result = (dest, if dirExists(dest): DoNothing else: DoClone)
 
-proc toDestDir*(g: DepGraph; d: Dependency): string =
+proc toDestDir*(g: DepGraph; d: Dependency): Path =
   result = d.ondisk
 
 proc enrichVersionsViaExplicitHash*(versions: var seq[DependencyVersion]; x: VersionInterval) =

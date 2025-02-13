@@ -10,18 +10,18 @@ import std / [os, strutils, tables, unicode, sets, json, hashes, algorithm]
 import basic/[context, depgraphtypes, versions, osutils, nimbleparser, packageinfos, reporters, gitops, parserequires, pkgurls, compiledpatterns]
 
 const
-  DefaultPackagesSubDir* = "packages"
+  DefaultPackagesSubDir* = Path "packages"
 
 when defined(nimAtlasBootstrap):
   import ../dist/sat/src/sat/satvars
 else:
   import sat/satvars
 
-proc getPackageInfos*(depsDir: string): seq[PackageInfo] =
+proc getPackageInfos*(depsDir: Path): seq[PackageInfo] =
   result = @[]
   var uniqueNames = initHashSet[string]()
   var jsonFiles = 0
-  for kind, path in walkDir(depsDir / DefaultPackagesSubDir):
+  for kind, path in walkDir($(depsDir / DefaultPackagesSubDir)):
     if kind == pcFile and path.endsWith(".json"):
       inc jsonFiles
       let packages = json.parseFile(path)
@@ -31,11 +31,11 @@ proc getPackageInfos*(depsDir: string): seq[PackageInfo] =
           result.add(pkg)
 
 proc updatePackages*(c: var AtlasContext; depsDir: Path) =
-  if dirExists(depsDir / DefaultPackagesSubDir):
-    withDir(c, depsDir / DefaultPackagesSubDir):
-      gitPull(c, depsDir / DefaultPackagesSubDir, DefaultPackagesSubDir)
+  if dirExists($(depsDir / DefaultPackagesSubDir)):
+    withDir(c, $(depsDir / DefaultPackagesSubDir)):
+      gitPull(c, depsDir / DefaultPackagesSubDir, $DefaultPackagesSubDir)
   else:
-    withDir c, depsDir:
+    withDir c, $depsDir:
       let success = clone(c, "https://github.com/nim-lang/packages", DefaultPackagesSubDir)
       if not success:
         error c, DefaultPackagesSubDir, "cannot clone packages repo"
@@ -43,7 +43,7 @@ proc updatePackages*(c: var AtlasContext; depsDir: Path) =
 proc fillPackageLookupTable(r: var AtlasContext; c: var NimbleContext; depsdir: Path) =
   if not c.hasPackageList:
     c.hasPackageList = true
-    if not fileExists(depsDir / DefaultPackagesSubDir / "packages.json"):
+    if not fileExists($(depsDir / DefaultPackagesSubDir / Path "packages.json")):
       updatePackages(r, depsdir)
     let packages = getPackageInfos(depsDir)
     for entry in packages:
@@ -57,7 +57,7 @@ proc collectNimbleVersions*(c: var AtlasContext; nc: NimbleContext; g: var DepGr
   let (outerNimbleFile, found) = findNimbleFile(g, idx)
   result = @[]
   if found == 1:
-    let (outp, status) = exec(c, GitLog, [outerNimbleFile])
+    let (outp, status) = c.exec(GitLog, path, [outerNimbleFile])
     if status == 0:
       for line in splitLines(outp):
         if line.len > 0 and not line.endsWith("^{}"):

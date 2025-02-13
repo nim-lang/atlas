@@ -116,8 +116,8 @@ proc traverseRelease(c: var AtlasContext; nc: NimbleContext; g: var DepGraph; id
   else:
     g.nodes[idx].versions.add ensureMove pv
 
-proc traverseDependency*(c: var AtlasContext; nc: NimbleContext; g: var DepGraph; idx: int;
-                        m: TraversalMode) =
+proc traverseDependency*(c: var AtlasContext; nc: NimbleContext;
+                         g: var DepGraph, idx: int, m: TraversalMode) =
   var lastNimbleContents = "<invalid content>"
 
   let versions = move g.nodes[idx].versions
@@ -143,8 +143,8 @@ proc expand*(c: var AtlasContext; g: var DepGraph; nc: NimbleContext; m: Travers
         g.nodes[i].status = status
 
       if g.nodes[i].status == Ok:
-        withDir c, dest:
-          traverseDependency(c, nc, g, i, m)
+        # withDir c, dest:
+        traverseDependency(c, nc, g, i, m)
     inc i
 
 iterator mvalidVersions*(p: var Dependency; g: var DepGraph): var DependencyVersion =
