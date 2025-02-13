@@ -33,6 +33,8 @@ type
 proc isGitDir*(path: Path): bool =
   let gitPath = path / Path(".git")
   dirExists(gitPath) or fileExists(gitPath)
+proc isGitDir*(path: string): bool =
+  isGitDir(Path(path))
 
 proc sameVersionAs*(tag, ver: string): bool =
   const VersionChars = {'0'..'9', '.'}

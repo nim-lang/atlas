@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [hashes, strutils]
+import std / [hashes, paths, strutils]
 from std / os import `/`, dirExists
 import compiledpatterns, gitops, reporters
 
@@ -38,7 +38,11 @@ proc `$`*(u: PkgUrl): string = u.u
 proc createUrlSkipPatterns*(c: var Reporter, x: string): PkgUrl =
   if "://" notin x:
     if dirExists(x):
-      let u2 = if isGitDir(x): c.getRemoteUrl(x) else: ("file://" & x)
+      let u2 =
+        if isGitDir(x):
+          c.getRemoteUrl(Path(x))
+        else:
+          ("file://" & x)
       result = PkgUrl(projectName: extractProjectName(x), u: u2)
     else:
       raise newException(ValueError, "Invalid name or URL: " & x)
