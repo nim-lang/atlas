@@ -70,7 +70,7 @@ template withDir*(c: var Reporter; dir: string; body: untyped) =
     setCurrentDir(oldDir)
 
 template withDir*(dir: string; body: untyped) =
-  let oldDir = getCurrentDir()
+  let oldDir = ospaths.getCurrentDir()
   try:
     setCurrentDir(dir)
     body
