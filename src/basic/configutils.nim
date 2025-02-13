@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std/[os, strutils]
+import std/[os, strutils, dirs, files]
 import context, osutils, parserequires, reporters
 
 export parse_requires
@@ -19,7 +19,7 @@ proc parseNimble*(c: var AtlasContext; nimble: string): NimbleFileInfo =
   result = extractRequiresInfo(nimble)
 
 proc findCfgDir*(c: var AtlasContext): CfgPath =
-  for nimbleFile in walkPattern(c.currentDir / "*.nimble"):
+  for nimbleFile in walkPattern($c.currentDir / "*.nimble"):
     let nimbleInfo = parseNimble(c, nimbleFile)
     return CfgPath c.currentDir / nimbleInfo.srcDir
   return CfgPath c.currentDir
@@ -36,15 +36,15 @@ proc patchNimCfg*(c: var AtlasContext; deps: seq[CfgPath]; cfgPath: CfgPath) =
       paths.add "--path:\"" & x & "\"\n"
   var cfgContent = configPatternBegin & paths & configPatternEnd
 
-  let cfg = cfgPath.string / "nim.cfg"
+  let cfg = Path(cfgPath.string / "nim.cfg")
   assert cfgPath.string.len > 0
   if cfgPath.string.len > 0 and not dirExists(cfgPath.string):
-    error(c, c.projectDir, "could not write the nim.cfg")
+    error(c, $c.projectDir, "could not write the nim.cfg")
   elif not fileExists(cfg):
-    writeFile(cfg, cfgContent)
-    info(c, projectFromCurrentDir(), "created: " & cfg.readableFile(c.currentDir))
+    writeFile($cfg, cfgContent)
+    info(c, $c.projectFromCurrentDir(), "created: " & $cfg.readableFile(c.currentDir))
   else:
-    let content = readFile(cfg)
+    let content = readFile($cfg)
     let start = content.find(configPatternBegin)
     if start >= 0:
       cfgContent = content.substr(0, start-1) & cfgContent
@@ -56,5 +56,5 @@ proc patchNimCfg*(c: var AtlasContext; deps: seq[CfgPath]; cfgPath: CfgPath) =
     if cfgContent != content:
       # do not touch the file if nothing changed
       # (preserves the file date information):
-      writeFile(cfg, cfgContent)
-      info(c, projectFromCurrentDir(), "updated: " & cfg.readableFile)
+      writeFile($cfg, cfgContent)
+      info(c, $c.projectFromCurrentDir(), "updated: " & $cfg.readableFile(c.currentDir))

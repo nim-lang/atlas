@@ -1,14 +1,14 @@
 ## Utility API for Nim package managers.
 ## (c) 2021 Andreas Rumpf
 
-import std / strutils
+import std / [strutils, paths]
 
 import compiler / [ast, idents, msgs, syntaxes, options, pathutils, lineinfos]
 
 type
   NimbleFileInfo* = object
     requires*: seq[string]
-    srcDir*: string
+    srcDir*: Path
     version*: string
     tasks*: seq[(string, string)]
     hasInstallHooks*: bool
@@ -52,7 +52,7 @@ proc extract(n: PNode; conf: ConfigRef; result: var NimbleFileInfo) =
   of nkAsgn, nkFastAsgn:
     if n[0].kind == nkIdent and eqIdent(n[0].ident.s, "srcDir"):
       if n[1].kind in {nkStrLit..nkTripleStrLit}:
-        result.srcDir = n[1].strVal
+        result.srcDir = Path n[1].strVal
       else:
         localError(conf, n[1].info, "assignments to 'srcDir' must be string literals")
         result.hasErrors = true

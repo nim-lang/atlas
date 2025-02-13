@@ -72,10 +72,10 @@ proc displayName(c: AtlasContext; p: string): string =
   else:
     p
 
-template projectFromCurrentDir*(): untyped = c.currentDir.absolutePath
+proc projectFromCurrentDir*(c: AtlasContext): Path = c.currentDir.absolutePath
 
 template withDir*(c: var AtlasContext; dir: string; body: untyped) =
-  let oldDir = getCurrentDir()
+  let oldDir = ospaths2.getCurrentDir()
   debug c, dir, "Current directory is now: " & dir
   try:
     setCurrentDir(dir)
@@ -84,7 +84,7 @@ template withDir*(c: var AtlasContext; dir: string; body: untyped) =
     setCurrentDir(oldDir)
 
 template tryWithDir*(c: var AtlasContext; dir: string; body: untyped) =
-  let oldDir = getCurrentDir()
+  let oldDir = ospaths2.getCurrentDir()
   try:
     if dirExists(dir):
       setCurrentDir(dir)

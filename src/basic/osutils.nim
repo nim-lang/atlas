@@ -4,6 +4,7 @@
 import std / [os, paths, strutils, osproc, uri]
 import reporters
 
+export paths
 
 proc lastPathComponent*(s: string): string =
   var last = s.len - 1
