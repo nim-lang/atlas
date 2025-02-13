@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [os, strutils, tables, unicode, hashes]
+import std / [os, paths, strutils, tables, unicode, hashes]
 import sattypes, versions, reporters, reporters, gitops, parserequires, pkgurls, compiledpatterns
 
 type
@@ -16,7 +16,7 @@ type
   Requirements* = object
     deps*: seq[(PkgUrl, VersionInterval)]
     hasInstallHooks*: bool
-    srcDir*: string
+    srcDir*: Path
     version*: Version
     nimVersion*: Version
     v*: VarId
