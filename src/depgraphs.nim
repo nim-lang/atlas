@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [sets, tables, os, strutils, streams, json, jsonutils, algorithm]
+import std / [sets, paths, tables, os, strutils, streams, json, jsonutils, algorithm]
 
 import basic/[depgraphtypes, context, gitops, reporters, nimbleparser, pkgurls, versions]
 import runners, cloner, pkgcache 
@@ -26,9 +26,11 @@ type
   CommitOrigin = enum
     FromHead, FromGitTag, FromDep, FromNimbleFile
 
-iterator releases(c: var AtlasContext; m: TraversalMode; versions: seq[DependencyVersion];
+iterator releases(c: var AtlasContext;
+                  path: Path,
+                  m: TraversalMode; versions: seq[DependencyVersion];
                   nimbleCommits: seq[string]): (CommitOrigin, Commit) =
-  let (cc, status) = exec(c, GitCurrentCommit, [])
+  let (cc, status) = c.exec(GitCurrentCommit, path, [])
   if status == 0:
     case m
     of AllReleases:
@@ -37,20 +39,20 @@ iterator releases(c: var AtlasContext; m: TraversalMode; versions: seq[Dependenc
         var uniqueCommits = initHashSet[string]()
         for v in versions:
           if v.version == Version"" and v.commit.len > 0 and not uniqueCommits.containsOrIncl(v.commit):
-            let (_, status) = exec(c, GitCheckout, [v.commit])
+            let (_, status) = c.exec(GitCheckout, path, [v.commit])
             if status == 0:
               yield (FromDep, Commit(h: v.commit, v: Version""))
               inc produced
-        let tags = collectTaggedVersions(c)
+        let tags = c.collectTaggedVersions(path)
         for t in tags:
           if not uniqueCommits.containsOrIncl(t.h):
-            let (_, status) = exec(c, GitCheckout, [t.h])
+            let (_, status) = c.exec(GitCheckout, path, [t.h])
             if status == 0:
               yield (FromGitTag, t)
               inc produced
         for h in nimbleCommits:
           if not uniqueCommits.containsOrIncl(h):
-            let (_, status) = exec(c, GitCheckout, [h])
+            let (_, status) = c.exec(GitCheckout, path, [h])
             if status == 0:
               yield (FromNimbleFile, Commit(h: h, v: Version""))
               #inc produced
@@ -59,15 +61,15 @@ iterator releases(c: var AtlasContext; m: TraversalMode; versions: seq[Dependenc
           yield (FromHead, Commit(h: "", v: Version"#head"))
 
       finally:
-        discard exec(c, GitCheckout, [cc])
+        discard c.exec(GitCheckout, path, [cc])
     of CurrentCommit:
       yield (FromHead, Commit(h: "", v: Version"#head"))
   else:
     yield (FromHead, Commit(h: "", v: Version"#head"))
 
-proc traverseRelease(c: var AtlasContext; nc: NimbleContext; g: var DepGraph; idx: int;
+proc traverseRelease(c: var AtlasContext; nc: NimbleContext; graph: var DepGraph; idx: int;
                      origin: CommitOrigin; r: Commit; lastNimbleContents: var string) =
-  let (nimbleFile, found) = findNimbleFile(g, idx)
+  let (nimbleFile, found) = findNimbleFile(graph[idx])
   var pv = DependencyVersion(
     version: r.v,
     commit: r.h,
@@ -79,20 +81,20 @@ proc traverseRelease(c: var AtlasContext; nc: NimbleContext; g: var DepGraph; id
     when (NimMajor, NimMinor, NimPatch) == (2, 0, 0):
       # bug #110; make it compatible with Nim 2.0.0
       # ensureMove requires mutable places when version < 2.0.2
-      var nimbleContents = readFile(nimbleFile)
+      var nimbleContents = readFile($nimbleFile)
     else:
-      let nimbleContents = readFile(nimbleFile)
+      let nimbleContents = readFile($nimbleFile)
     if lastNimbleContents == nimbleContents:
-      pv.req = g.nodes[idx].versions[^1].req
+      pv.req = graph[idx].versions[^1].req
     else:
       let r = c.parseNimbleFile(nc, nimbleFile, c.overrides)
       if origin == FromNimbleFile and pv.version == Version"":
         pv.version = r.version
-      let ridx = g.reqsByDeps.getOrDefault(r, -1) # hasKey(r)
+      let ridx = graph.reqsByDeps.getOrDefault(r, -1) # hasKey(r)
       if ridx == -1:
-        pv.req = g.reqs.len
-        g.reqsByDeps[r] = pv.req
-        g.reqs.add r
+        pv.req = graph.reqs.len
+        graph.reqsByDeps[r] = pv.req
+        graph.reqs.add r
       else:
         pv.req = ridx
 
@@ -120,10 +122,11 @@ proc traverseDependency*(c: var AtlasContext; nc: NimbleContext;
                          g: var DepGraph, idx: int, m: TraversalMode) =
   var lastNimbleContents = "<invalid content>"
 
+  let dir = move g.nodes[idx].ondisk
   let versions = move g.nodes[idx].versions
   let nimbleVersions = collectNimbleVersions(c, nc, g, idx)
 
-  for (origin, r) in releases(c, m, versions, nimbleVersions):
+  for (origin, r) in c.releases(path, m, versions, nimbleVersions):
     traverseRelease c, nc, g, idx, origin, r, lastNimbleContents
 
 proc expand*(c: var AtlasContext; g: var DepGraph; nc: NimbleContext; m: TraversalMode) =

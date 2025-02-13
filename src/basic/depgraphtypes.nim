@@ -33,6 +33,11 @@ const
   UnknownReqs* = 1
   FileWorkspace* = "file://./"
 
+proc `[]`*(g: DepGraph, idx: int): Dependency =
+  g.nodes[idx]
+
+proc `[]`*(g: var DepGraph, idx: int): var Dependency =
+  g.nodes[idx]
 
 proc defaultReqs(): seq[Requirements] =
   @[Requirements(deps: @[], v: NoVar), Requirements(status: HasUnknownNimbleFile, v: NoVar)]
@@ -42,8 +47,7 @@ proc toJson*(d: DepGraph): JsonNode =
   result["nodes"] = toJson(d.nodes)
   result["reqs"] = toJson(d.reqs)
 
-proc findNimbleFile*(g: DepGraph; idx: int): (Path, int) =
-  let dep = g.nodes[idx]
+proc findNimbleFile*(dep: Dependency): (Path, int) =
   doAssert(dep.ondisk.string != "", "Package ondisk must be set before findNimbleFile can be called! Package: " & $(dep))
   var nimbleFile = dep.ondisk / Path(dep.pkg.projectName & ".nimble")
   var found = 0

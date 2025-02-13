@@ -53,11 +53,13 @@ proc createNimbleContext*(r: var AtlasContext; depsdir: Path): NimbleContext =
   result = NimbleContext()
   fillPackageLookupTable(r, result, depsdir)
 
-proc collectNimbleVersions*(c: var AtlasContext; nc: NimbleContext; g: var DepGraph; idx: int): seq[string] =
-  let (outerNimbleFile, found) = findNimbleFile(g, idx)
+proc collectNimbleVersions*(c: var AtlasContext; nc: NimbleContext; dep: Dependency): seq[string] =
+  let (outerNimbleFile, found) = findNimbleFile(dep)
+  let dir = dep.ondisk
+  doAssert(dep.ondisk.string != "", "Package ondisk must be set before collectNimbleVersions can be called! Package: " & $(dep))
   result = @[]
   if found == 1:
-    let (outp, status) = c.exec(GitLog, path, [outerNimbleFile])
+    let (outp, status) = c.exec(GitLog, dir, [$outerNimbleFile])
     if status == 0:
       for line in splitLines(outp):
         if line.len > 0 and not line.endsWith("^{}"):

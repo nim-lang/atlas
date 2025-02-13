@@ -48,7 +48,7 @@ proc addError*(err: var string; nimbleFile: string; msg: string) =
 
 proc isUrl(s: string): bool {.inline.} = s.len > 5 and s.contains "://"
 
-proc parseNimbleFile*(cc: var Reporter, nc: NimbleContext; nimbleFile: string; p: Patterns): Requirements =
+proc parseNimbleFile*(cc: var Reporter, nc: NimbleContext; nimbleFile: Path; p: Patterns): Requirements =
   let nimbleInfo = extractRequiresInfo(nimbleFile)
 
   result = Requirements(
@@ -70,7 +70,7 @@ proc parseNimbleFile*(cc: var Reporter, nc: NimbleContext; nimbleFile: string; p
 
     if u.len == 0:
       result.status = HasBrokenDep
-      result.err.addError nimbleFile, "cannot resolve package name: " & name
+      result.err.addError $nimbleFile, "cannot resolve package name: " & name
     else:
       var err = false
       let query = parseVersionInterval(r, i, err) # update err
@@ -78,7 +78,7 @@ proc parseNimbleFile*(cc: var Reporter, nc: NimbleContext; nimbleFile: string; p
       if err:
         if result.status != HasBrokenDep:
           result.status = HasBrokenNimbleFile
-          result.err.addError nimbleFile, "invalid 'requires' syntax in nimble file: " & r
+          result.err.addError $nimbleFile, "invalid 'requires' syntax in nimble file: " & r
       else:
         if cmpIgnoreCase(name, "nim") == 0:
           let v = extractGeQuery(query)
@@ -104,7 +104,8 @@ proc findNimbleFile*(c: var Reporter; dir: string; ambiguous: var bool): string 
 
 proc genRequiresLine(u: string): string = "requires \"$1\"\n" % u.escape("", "")
 
-proc patchNimbleFile*(c: var Reporter, nc: var NimbleContext; r: var Reporter; p: Patterns; nimbleFile, name: string) =
+proc patchNimbleFile*(c: var Reporter, nc: var NimbleContext;
+                      r: var Reporter; p: Patterns; nimbleFile: Path, name: string) =
   var didReplace = false
   var u = substitute(p, name, didReplace)
   if not didReplace:
@@ -122,7 +123,7 @@ proc patchNimbleFile*(c: var Reporter, nc: var NimbleContext; r: var Reporter; p
       return
 
   let line = genRequiresLine(if didReplace: name else: u)
-  var f = open(nimbleFile, fmAppend)
+  var f = open($nimbleFile, fmAppend)
   try:
     f.writeLine line
   finally:

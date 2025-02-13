@@ -65,7 +65,7 @@ proc extract(n: PNode; conf: ConfigRef; result: var NimbleFileInfo) =
   else:
     discard
 
-proc extractRequiresInfo*(nimbleFile: string): NimbleFileInfo =
+proc extractRequiresInfo*(nimbleFile: Path): NimbleFileInfo =
   ## Extract the `requires` information from a Nimble file. This does **not**
   ## evaluate the Nimble file. Errors are produced on stderr/stdout and are
   ## formatted as the Nim compiler does it. The parser uses the Nim compiler
