@@ -104,16 +104,6 @@ proc gitDescribeRefTag*(c: var Reporter; commit: string): string =
   let (lt, status) = exec(c, GitDescribe, ["--tags", commit])
   result = if status == 0: strutils.strip(lt) else: ""
 
-proc getLastTaggedCommit*(c: var Reporter): string =
-  let (ltr, status) = exec(c, GitLastTaggedRef, [])
-  echo "getLastTaggedCommit: ", ltr
-  if status == 0:
-    let lastTaggedRef = ltr.strip()
-    let lastTag = gitDescribeRefTag(c, lastTaggedRef)
-    echo "getLastTaggedCommit:lastTag: ", lastTag
-    if lastTag.len != 0:
-      result = lastTag
-
 proc collectTaggedVersions*(c: var Reporter): seq[Commit] =
   let (outp, status) = exec(c, GitTags, [])
   if status == 0:

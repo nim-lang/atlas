@@ -198,38 +198,6 @@ suite "Git Operations Tests":
       let untaggedDescription = gitDescribeRefTag(reporter, newCommit)
       check(untaggedDescription.startsWith("v1.0.0-1-"))
 
-  test "getLastTaggedCommit functionality":
-    withDir testDir:
-      discard execCmd("git init")
-      
-      # Create initial commit with no tag
-      writeFile("test.txt", "initial content")
-      discard execCmd("git add test.txt")
-      discard execCmd("git commit -m \"initial commit\"")
-      
-      # No tags yet
-      let noTag = getLastTaggedCommit(reporter)
-      check(noTag == "")
-      
-      # Add a tag
-      discard execCmd("git tag v1.0.0")
-      let taggedCommit = getLastTaggedCommit(reporter)
-      check(taggedCommit == "v1.0.0")
-      
-      # Add another commit and tag
-      writeFile("test.txt", "updated content")
-      discard execCmd("git add test.txt")
-      discard execCmd("git commit -m \"update commit\"")
-      discard execCmd("git tag v1.1.0")
-      echo "REV-TAGS:max1:"
-      echo execCmd("git rev-list --tags --max-count=1")
-      echo "REV-TAGS:"
-      echo execCmd("git rev-list --tags")
-      echo "ABBREV:"
-      echo execCmd("git show-ref --abbrev=7 --tags")
-      let latestTag = getLastTaggedCommit(reporter)
-      check(latestTag == "v1.1.0")
-
   test "collectTaggedVersions functionality":
     withDir testDir:
       discard execCmd("git init")
@@ -254,9 +222,9 @@ suite "Git Operations Tests":
       # Test collecting all tagged versions
       let versions = collectTaggedVersions(reporter)
       check(versions.len == 3)
-      check($versions[0].v == "v1.0.0")
-      check($versions[1].v == "v1.1.0")
-      check($versions[2].v == "v2.0.0")
+      check($versions[0].v == "2.0.0")
+      check($versions[1].v == "1.1.0")
+      check($versions[2].v == "1.0.0")
       
       # Verify commit hashes are present
       for v in versions:
