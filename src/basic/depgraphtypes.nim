@@ -42,7 +42,7 @@ proc toJson*(d: DepGraph): JsonNode =
   result["nodes"] = toJson(d.nodes)
   result["reqs"] = toJson(d.reqs)
 
-proc findNimbleFile*(g: DepGraph; idx: int): (string, int) =
+proc findNimbleFile*(g: DepGraph; idx: int): (Path, int) =
   var nimbleFile = g.nodes[idx].pkg.projectName & ".nimble"
   var found = 0
   if fileExists(nimbleFile):
@@ -51,7 +51,7 @@ proc findNimbleFile*(g: DepGraph; idx: int): (string, int) =
     for file in walkFiles("*.nimble"):
       nimbleFile = file
       inc found
-  result = (ensureMove nimbleFile, found)
+  result = (Path(ensureMove nimbleFile), found)
 
 type
   PackageAction* = enum
