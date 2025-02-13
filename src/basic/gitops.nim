@@ -57,7 +57,7 @@ proc exec*(c: var Reporter;
            cmd: Command;
            path: Path;
            args: openArray[string]): (string, int) =
-  let cmd = $cmd
+  let cmd = $cmd % ["DIR", $path]
   #if execDir.len == 0: $cmd else: $(cmd) % [execDir]
   if isGitDir(path):
     result = silentExec(cmd, args)
