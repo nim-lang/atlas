@@ -12,6 +12,7 @@ import reporters, osutils, versions, context
 type
   Command* = enum
     GitClone = "git clone",
+    GitRemoteUrl = "git config --get remote.origin.url",
     GitDiff = "git diff",
     GitFetch = "git fetch",
     GitTag = "git tag",
@@ -291,12 +292,16 @@ proc isOutdated*(c: var AtlasContext; displayName: string): bool =
   else:
     warn c, displayName, "`git fetch` failed: " & outp
 
-proc getRemoteUrl*(): string =
-  execProcess("git config --get remote.origin.url").strip()
+proc getRemoteUrl*(c: var Reporter): string =
+  let (cc, status) = exec(c, GitRemoteUrl, [])
+  if status != 0:
+    return ""
+  else:
+    return cc.strip()
 
-proc getRemoteUrl*(x: string): string =
-  withDir x:
-    result = getRemoteUrl()
+proc getRemoteUrl*(c: var Reporter, path: string): string =
+  withDir path:
+    result = getRemoteUrl(c)
 
 proc updateDir*(c: var Reporter; file, filter: string) =
   withDir c, file:
