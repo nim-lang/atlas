@@ -11,23 +11,23 @@ import reporters, osutils, versions, context
 
 type
   Command* = enum
-    GitClone = "git clone",
-    GitRemoteUrl = "git config --get remote.origin.url",
-    GitDiff = "git diff",
-    GitFetch = "git fetch",
-    GitTag = "git tag",
-    GitTags = "git show-ref --tags",
-    GitLastTaggedRef = "git rev-list --tags --max-count=1",
-    GitDescribe = "git describe",
-    GitRevParse = "git rev-parse",
-    GitCheckout = "git checkout",
+    GitClone = "git clone $EXTRAARGS $URL $DEST",
+    GitRemoteUrl = "git -C $DIR config --get remote.origin.url",
+    GitDiff = "git -C $DIR diff",
+    GitFetch = "git -C $DIR fetch",
+    GitTag = "git -C $DIR tag",
+    GitTags = "git -C $DIR show-ref --tags",
+    GitLastTaggedRef = "git -C $DIR rev-list --tags --max-count=1",
+    GitDescribe = "git -C $DIR describe",
+    GitRevParse = "git -C $DIR rev-parse",
+    GitCheckout = "git -C $DIR checkout",
     GitSubModUpdate = "git submodule update --init",
-    GitPush = "git push origin",
-    GitPull = "git pull",
-    GitCurrentCommit = "git log -n 1 --format=%H"
-    GitMergeBase = "git merge-base"
-    GitLsFiles = "git -C $1 ls-files"
-    GitLog = "git log --format=%H"
+    GitPush = "git -C $DIR push origin",
+    GitPull = "git -C $DIR pull",
+    GitCurrentCommit = "git -C $DIR log -n 1 --format=%H"
+    GitMergeBase = "git -C $DIR merge-base"
+    GitLsFiles = "git -C $DIR ls-files"
+    GitLog = "git -C $DIR log --format=%H"
 
 proc isGitDir*(path: string): bool =
   let gitPath = path / ".git"
@@ -94,7 +94,7 @@ proc clone*(c: var AtlasContext; url, dest: string; retries = 5; fullClones=fals
 
   var url = c.maybeUrlProxy(url.parseUri())
 
-  let cmd = $GitClone & " " & extraArgs & " " & quoteShell($url) & " " & dest
+  let cmd = $GitClone % [ "EXTRAARGS", extraArgs, "URL", quoteShell($url), "DEST", dest]
   for i in 1..retries:
     if execShellCmd(cmd) == 0:
       return true
