@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std/[os, osproc, sequtils, strutils, uri]
+import std/[os, files, dirs, paths, osproc, sequtils, strutils, uri]
 import reporters, osutils, versions, context
 
 type
@@ -29,8 +29,8 @@ type
     GitLsFiles = "git -C $DIR ls-files"
     GitLog = "git -C $DIR log --format=%H"
 
-proc isGitDir*(path: string): bool =
-  let gitPath = path / ".git"
+proc isGitDir*(path: Path): bool =
+  let gitPath = path / Path(".git")
   dirExists(gitPath) or fileExists(gitPath)
 
 proc sameVersionAs*(tag, ver: string): bool =
@@ -54,16 +54,17 @@ proc extractVersion*(s: string): string =
 
 proc exec*(c: var Reporter;
            cmd: Command;
+           path: Path;
            args: openArray[string]): (string, int) =
   let cmd = $cmd
   #if execDir.len == 0: $cmd else: $(cmd) % [execDir]
-  if isGitDir(getCurrentDir()):
+  if isGitDir(path):
     result = silentExec(cmd, args)
   else:
     result = ("not a git repository", 1)
 
-proc checkGitDiffStatus*(c: var Reporter): string =
-  let (outp, status) = c.exec(GitDiff, [])
+proc checkGitDiffStatus*(c: var Reporter, path: Path): string =
+  let (outp, status) = c.exec(GitDiff, path, [])
   if outp.len != 0:
     "'git diff' not empty"
   elif status != 0:
@@ -100,19 +101,19 @@ proc clone*(c: var AtlasContext; url, dest: string; retries = 5; fullClones=fals
       return true
     os.sleep(i*2_000)
 
-proc gitDescribeRefTag*(c: var Reporter; commit: string): string =
-  let (lt, status) = c.exec(GitDescribe, ["--tags", commit])
+proc gitDescribeRefTag*(c: var Reporter; path: Path, commit: string): string =
+  let (lt, status) = c.exec(GitDescribe, path, ["--tags", commit])
   result = if status == 0: strutils.strip(lt) else: ""
 
-proc collectTaggedVersions*(c: var Reporter): seq[Commit] =
-  let (outp, status) = c.exec(GitTags, [])
+proc collectTaggedVersions*(c: var Reporter, path: Path): seq[Commit] =
+  let (outp, status) = c.exec(GitTags, path, [])
   if status == 0:
     result = parseTaggedVersions(outp)
   else:
     result = @[]
 
-proc versionToCommit*(c: var Reporter; algo: ResolutionAlgorithm; query: VersionInterval): string =
-  let allVersions = collectTaggedVersions(c)
+proc versionToCommit*(c: var Reporter; path: Path, algo: ResolutionAlgorithm; query: VersionInterval): string =
+  let allVersions = c.collectTaggedVersions(path)
   case algo
   of MinVer:
     result = selectBestCommitMinVer(allVersions, query)
@@ -121,28 +122,28 @@ proc versionToCommit*(c: var Reporter; algo: ResolutionAlgorithm; query: Version
   of MaxVer:
     result = selectBestCommitMaxVer(allVersions, query)
 
-proc shortToCommit*(c: var Reporter; short: string): string =
-  let (cc, status) = c.exec(GitRevParse, [short])
+proc shortToCommit*(c: var Reporter; path: Path, short: string): string =
+  let (cc, status) = c.exec(GitRevParse, path, [short])
   result = if status == 0: strutils.strip(cc) else: ""
 
-proc listFiles*(c: var Reporter): seq[string] =
-  let (outp, status) = c.exec(GitLsFiles, [])
+proc listFiles*(c: var Reporter, path: Path): seq[string] =
+  let (outp, status) = c.exec(GitLsFiles, path, [])
   if status == 0:
     result = outp.splitLines().mapIt(it.strip())
   else:
     result = @[]
 
-proc checkoutGitCommit*(c: var Reporter; p, commit: string) =
-  let (currentCommit, statusA) = c.exec(GitCurrentCommit, [])
+proc checkoutGitCommit*(c: var Reporter; path: Path, commit: string) =
+  let (currentCommit, statusA) = c.exec(GitCurrentCommit, path, [])
   if statusA == 0 and currentCommit.strip() == commit: return
 
-  let (_, statusB) = c.exec(GitCheckout, [commit])
+  let (_, statusB) = c.exec(GitCheckout, path, [commit])
   if statusB != 0:
-    error(c, p, "could not checkout commit " & commit)
+    error(c, $path, "could not checkout commit " & commit)
   else:
-    info(c, p, "updated package to " & commit)
+    info(c, $path, "updated package to " & commit)
 
-proc checkoutGitCommitFull*(c: var AtlasContext; p, commit: string; fullClones: bool) =
+proc checkoutGitCommitFull*(c: var AtlasContext; path: Path, commit: string; fullClones: bool) =
   var smExtraArgs: seq[string] = @[]
 
   if not fullClones and commit.len == 40:
@@ -152,44 +153,44 @@ proc checkoutGitCommitFull*(c: var AtlasContext; p, commit: string; fullClones: 
       if c.dumbProxy: ""
       elif not fullClones: "--update-shallow"
       else: ""
-    let (_, status) = c.exec(GitFetch, [extraArgs, "--tags", "origin", commit])
+    let (_, status) = c.exec(GitFetch, path, [extraArgs, "--tags", "origin", commit])
     if status != 0:
-      error(c, p, "could not fetch commit " & commit)
+      error(c, $path, "could not fetch commit " & commit)
     else:
-      trace(c, p, "fetched package commit " & commit)
+      trace(c, $path, "fetched package commit " & commit)
   elif commit.len != 40:
-    info(c, p, "found short commit id; doing full fetch to resolve " & commit)
-    let (outp, status) = c.exec(GitFetch, ["--unshallow"])
+    info(c, $path, "found short commit id; doing full fetch to resolve " & commit)
+    let (outp, status) = c.exec(GitFetch, path, ["--unshallow"])
     if status != 0:
-      error(c, p, "could not fetch: " & outp)
+      error(c, $path, "could not fetch: " & outp)
     else:
-      trace(c, p, "fetched package updates ")
+      trace(c, $path, "fetched package updates ")
 
-  let (_, status) = c.exec(GitCheckout, [commit])
+  let (_, status) = c.exec(GitCheckout, path, [commit])
   if status != 0:
-    error(c, p, "could not checkout commit " & commit)
+    error(c, $path, "could not checkout commit " & commit)
   else:
-    info(c, p, "updated package to " & commit)
+    info(c, $path, "updated package to " & commit)
 
-  let (_, subModStatus) = c.exec(GitSubModUpdate, smExtraArgs)
+  let (_, subModStatus) = c.exec(GitSubModUpdate, path, smExtraArgs)
   if subModStatus != 0:
-    error(c, p, "could not update submodules")
+    error(c, $path, "could not update submodules")
   else:
-    info(c, p, "updated submodules ")
+    info(c, $path, "updated submodules ")
 
-proc gitPull*(c: var Reporter; displayName: string) =
-  let (outp, status) = c.exec(GitPull, [])
+proc gitPull*(c: var Reporter; path: Path, displayName: string) =
+  let (outp, status) = c.exec(GitPull, path, [])
   if status != 0:
     debug c, displayName, "git pull error: \n" & outp.splitLines().mapIt("\n>>> " & it).join("")
     error(c, displayName, "could not 'git pull'")
 
-proc gitTag*(c: var Reporter; displayName, tag: string) =
-  let (_, status) = c.exec(GitTag, [tag])
+proc gitTag*(c: var Reporter; path: Path, displayName, tag: string) =
+  let (_, status) = c.exec(GitTag, path, [tag])
   if status != 0:
     error(c, displayName, "could not 'git tag " & tag & "'")
 
-proc pushTag*(c: var Reporter; displayName, tag: string) =
-  let (outp, status) = c.exec(GitPush, [tag])
+proc pushTag*(c: var Reporter; path: Path, displayName, tag: string) =
+  let (outp, status) = c.exec(GitPush, path, [tag])
   if status != 0:
     error(c, displayName, "could not 'git push " & tag & "'")
   elif outp.strip() == "Everything up-to-date":
@@ -197,7 +198,7 @@ proc pushTag*(c: var Reporter; displayName, tag: string) =
   else:
     info(c, displayName, "successfully pushed tag: " & tag)
 
-proc incrementTag*(c: var Reporter; displayName, lastTag: string; field: Natural): string =
+proc incrementTag*(c: var Reporter; path: Path, displayName, lastTag: string; field: Natural): string =
   var startPos =
     if lastTag[0] in {'0'..'9'}: 0
     else: 1
@@ -214,13 +215,13 @@ proc incrementTag*(c: var Reporter; displayName, lastTag: string; field: Natural
   let patchNumber = parseInt(lastTag[startPos..<endPos])
   lastTag[0..<startPos] & $(patchNumber + 1) & lastTag[endPos..^1]
 
-proc incrementLastTag*(c: var Reporter; displayName: string; field: Natural): string =
-  let (ltr, status) = c.exec(GitLastTaggedRef, [])
+proc incrementLastTag*(c: var Reporter; path: Path, displayName: string; field: Natural): string =
+  let (ltr, status) = c.exec(GitLastTaggedRef, path, [])
   if status == 0:
     let
       lastTaggedRef = ltr.strip()
-      lastTag = gitDescribeRefTag(c, lastTaggedRef)
-      currentCommit = c.exec(GitCurrentCommit, [])[0].strip()
+      lastTag = c.gitDescribeRefTag(path, lastTaggedRef)
+      currentCommit = c.exec(GitCurrentCommit, path, [])[0].strip()
 
     echo "lastTaggedRef: ", lastTaggedRef 
     echo "currentCommit: ", currentCommit 
@@ -230,7 +231,7 @@ proc incrementLastTag*(c: var Reporter; displayName: string; field: Natural): st
       info c, displayName, "the current commit '" & currentCommit & "' is already tagged '" & lastTag & "'"
       lastTag
     else:
-      incrementTag(c, displayName, lastTag, field)
+      c.incrementTag(path, displayName, lastTag, field)
   else:
     "v0.0.1" # assuming no tags have been made yet
 
@@ -249,7 +250,7 @@ when false:
 proc getCurrentCommit*(): string =
   result = execProcess("git log -1 --pretty=format:%H").strip()
 
-proc isOutdated*(c: var AtlasContext; displayName: string): bool =
+proc isOutdated*(c: var AtlasContext; path: Path, displayName: string): bool =
   ## determine if the given git repo `f` is updateable
   ##
 
@@ -259,56 +260,51 @@ proc isOutdated*(c: var AtlasContext; displayName: string): bool =
   let extraArgs =
     if c.dumbProxy: ""
     else: "--update-shallow"
-  let (outp, status) = c.exec(GitFetch, [extraArgs, "--tags"])
+  let (outp, status) = c.exec(GitFetch, path, [extraArgs, "--tags"])
 
   if status == 0:
-    let (cc, status) = c.exec(GitLastTaggedRef, [])
+    let (cc, status) = c.exec(GitLastTaggedRef, path, [])
     let latestVersion = strutils.strip(cc)
     if status == 0 and latestVersion.len > 0:
       # see if we're past that commit:
-      let (cc, status) = c.exec(GitCurrentCommit, [])
+      let (cc, status) = c.exec(GitCurrentCommit, path, [])
       if status == 0:
         let currentCommit = strutils.strip(cc)
         if currentCommit != latestVersion:
           # checkout the later commit:
           # git merge-base --is-ancestor <commit> <commit>
-          let (cc, status) = c.exec(GitMergeBase, [currentCommit, latestVersion])
+          let (cc, status) = c.exec(GitMergeBase, path, [currentCommit, latestVersion])
           let mergeBase = strutils.strip(cc)
           #if mergeBase != latestVersion:
           #  echo f, " I'm at ", currentCommit, " release is at ", latestVersion, " merge base is ", mergeBase
           if status == 0 and mergeBase == currentCommit:
-            let v = extractVersion gitDescribeRefTag(c, latestVersion)
+            let v = extractVersion c.gitDescribeRefTag(path, latestVersion)
             if v.len > 0:
               info c, displayName, "new version available: " & v
               result = true
   else:
     warn c, displayName, "`git fetch` failed: " & outp
 
-proc getRemoteUrl*(c: var Reporter): string =
-  let (cc, status) = c.exec(GitRemoteUrl, [])
+proc getRemoteUrl*(c: var Reporter, path: Path): string =
+  let (cc, status) = c.exec(GitRemoteUrl, path, [])
   if status != 0:
     return ""
   else:
     return cc.strip()
 
-proc getRemoteUrl*(c: var Reporter, path: string): string =
-  withDir path:
-    result = getRemoteUrl(c)
-
-proc updateDir*(c: var Reporter; file, filter: string) =
-  withDir c, file:
-    let (remote, _) = osproc.execCmdEx("git remote -v")
-    if filter.len == 0 or filter in remote:
-      let diff = checkGitDiffStatus(c)
-      if diff.len > 0:
-        warn(c, file, "has uncommitted changes; skipped")
-      else:
-        let (branch, _) = osproc.execCmdEx("git rev-parse --abbrev-ref HEAD")
-        if branch.strip.len > 0:
-          let (output, exitCode) = osproc.execCmdEx("git pull origin " & branch.strip)
-          if exitCode != 0:
-            error c, file, output
-          else:
-            info(c, file, "successfully updated")
+proc updateDir*(c: var Reporter; path: Path, filter: string) =
+  let (remote, _) = osproc.execCmdEx("git remote -v")
+  if filter.len == 0 or filter in remote:
+    let diff = c.checkGitDiffStatus(path)
+    if diff.len > 0:
+      warn(c, $path, "has uncommitted changes; skipped")
+    else:
+      let (branch, _) = osproc.execCmdEx("git rev-parse --abbrev-ref HEAD")
+      if branch.strip.len > 0:
+        let (output, exitCode) = osproc.execCmdEx("git pull origin " & branch.strip)
+        if exitCode != 0:
+          error c, file, output
         else:
-          error c, file, "could not fetch current branch name"
+          info(c, file, "successfully updated")
+      else:
+        error c, file, "could not fetch current branch name"
