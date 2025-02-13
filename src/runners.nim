@@ -8,7 +8,7 @@
 
 import basic/reporters
 
-import std / [strutils, os, osproc]
+import std / [strutils, os, paths, osproc]
 
 const
   BuilderScriptTemplate* = """
@@ -78,9 +78,9 @@ proc runNimScript*(c: var Reporter; scriptContent: string; name: string) =
   else:
     removeFile buildNims
 
-proc runNimScriptInstallHook*(c: var Reporter; nimbleFile, name: string) =
+proc runNimScriptInstallHook*(c: var Reporter; nimbleFile: Path, name: string) =
   infoNow c, name, "running install hooks"
-  runNimScript c, InstallHookTemplate % [nimbleFile.escape], name
+  runNimScript c, InstallHookTemplate % [escape($(nimbleFile))], name
 
 proc runNimScriptBuilder*(c: var Reporter; p: (string, string); name: string) =
   infoNow c, name, "running nimble build scripts"

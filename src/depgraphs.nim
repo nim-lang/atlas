@@ -67,9 +67,9 @@ iterator releases(c: var AtlasContext;
   else:
     yield (FromHead, Commit(h: "", v: Version"#head"))
 
-proc traverseRelease(c: var AtlasContext; nc: NimbleContext; graph: var DepGraph; idx: int;
+proc traverseRelease(c: var AtlasContext; nc: NimbleContext; g: var DepGraph; idx: int;
                      origin: CommitOrigin; r: Commit; lastNimbleContents: var string) =
-  let (nimbleFile, found) = findNimbleFile(graph[idx])
+  let (nimbleFile, found) = findNimbleFile(g[idx])
   var pv = DependencyVersion(
     version: r.v,
     commit: r.h,
@@ -85,16 +85,16 @@ proc traverseRelease(c: var AtlasContext; nc: NimbleContext; graph: var DepGraph
     else:
       let nimbleContents = readFile($nimbleFile)
     if lastNimbleContents == nimbleContents:
-      pv.req = graph[idx].versions[^1].req
+      pv.req = g.nodes[idx].versions[^1].req
     else:
       let r = c.parseNimbleFile(nc, nimbleFile, c.overrides)
       if origin == FromNimbleFile and pv.version == Version"":
         pv.version = r.version
-      let ridx = graph.reqsByDeps.getOrDefault(r, -1) # hasKey(r)
+      let ridx = g.reqsByDeps.getOrDefault(r, -1) # hasKey(r)
       if ridx == -1:
-        pv.req = graph.reqs.len
-        graph.reqsByDeps[r] = pv.req
-        graph.reqs.add r
+        pv.req = g.reqs.len
+        g.reqsByDeps[r] = pv.req
+        g.reqs.add r
       else:
         pv.req = ridx
 
@@ -122,11 +122,10 @@ proc traverseDependency*(c: var AtlasContext; nc: NimbleContext;
                          g: var DepGraph, idx: int, m: TraversalMode) =
   var lastNimbleContents = "<invalid content>"
 
-  let dir = move g.nodes[idx].ondisk
   let versions = move g.nodes[idx].versions
-  let nimbleVersions = collectNimbleVersions(c, nc, g, idx)
+  let nimbleVersions = collectNimbleVersions(c, nc, g[idx])
 
-  for (origin, r) in c.releases(path, m, versions, nimbleVersions):
+  for (origin, r) in c.releases(g[idx].ondisk, m, versions, nimbleVersions):
     traverseRelease c, nc, g, idx, origin, r, lastNimbleContents
 
 proc expand*(c: var AtlasContext; g: var DepGraph; nc: NimbleContext; m: TraversalMode) =
@@ -143,9 +142,9 @@ proc expand*(c: var AtlasContext; g: var DepGraph; nc: NimbleContext; m: Travers
       if todo == DoClone:
         let (status, _) =
           if g.nodes[i].pkg.isFileProtocol:
-            copyFromDisk(c, g.nodes[i], dest)
+            copyFromDisk(c, g[i], dest)
           else:
-            cloneUrl(c, g.nodes[i].pkg, dest, false)
+            cloneUrl(c, g[i].pkg, $dest, false)
         g.nodes[i].status = status
 
       if g.nodes[i].status == Ok:
@@ -300,12 +299,12 @@ proc runBuildSteps(c: var AtlasContext; g: var DepGraph) =
   for i in countdown(g.nodes.len-1, 0):
     if g.nodes[i].active:
       let pkg = g.nodes[i].pkg
-      tryWithDir c, g.nodes[i].ondisk:
+      tryWithDir c, $g.nodes[i].ondisk:
         # check for install hooks
         let activeVersion = g.nodes[i].activeVersion
         let r = if g.nodes[i].versions.len == 0: -1 else: g.nodes[i].versions[activeVersion].req
         if r >= 0 and r < g.reqs.len and g.reqs[r].hasInstallHooks:
-          let (nf, found) = findNimbleFile(g, i)
+          let (nf, found) = findNimbleFile(g[i])
           if found == 1:
             runNimScriptInstallHook c, nf, pkg.projectName
         # check for nim script builders
@@ -343,9 +342,9 @@ proc solve*(c: var AtlasContext; g: var DepGraph; f: Form) =
         g.nodes[idx].activeVersion = m.index
         debug c, m.pkg.projectName, "package satisfiable"
         if m.commit != "" and g.nodes[idx].status == Ok:
-          assert g.nodes[idx].ondisk.len > 0, $(g.nodes[idx].pkg, idx)
-          withDir c, g.nodes[idx].ondisk:
-            checkoutGitCommit(c, m.pkg.projectName, m.commit)
+          assert g[idx].ondisk.string.len > 0, "Missing ondisk location for: " & $(g[idx].pkg, idx)
+          # withDir c, g.nodes[idx].ondisk:
+          c.checkoutGitCommit(g[idx].ondisk, m.commit)
 
     if NoExec notin c.flags:
       runBuildSteps(c, g)
