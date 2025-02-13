@@ -30,17 +30,17 @@ proc getPackageInfos*(depsDir: string): seq[PackageInfo] =
         if pkg != nil and not uniqueNames.containsOrIncl(pkg.name):
           result.add(pkg)
 
-proc updatePackages*(c: var AtlasContext; depsDir: string) =
+proc updatePackages*(c: var AtlasContext; depsDir: Path) =
   if dirExists(depsDir / DefaultPackagesSubDir):
     withDir(c, depsDir / DefaultPackagesSubDir):
-      gitPull(c, DefaultPackagesSubDir)
+      gitPull(c, depsDir / DefaultPackagesSubDir, DefaultPackagesSubDir)
   else:
     withDir c, depsDir:
       let success = clone(c, "https://github.com/nim-lang/packages", DefaultPackagesSubDir)
       if not success:
         error c, DefaultPackagesSubDir, "cannot clone packages repo"
 
-proc fillPackageLookupTable(r: var AtlasContext; c: var NimbleContext; depsdir: string) =
+proc fillPackageLookupTable(r: var AtlasContext; c: var NimbleContext; depsdir: Path) =
   if not c.hasPackageList:
     c.hasPackageList = true
     if not fileExists(depsDir / DefaultPackagesSubDir / "packages.json"):
@@ -49,7 +49,7 @@ proc fillPackageLookupTable(r: var AtlasContext; c: var NimbleContext; depsdir: 
     for entry in packages:
       c.nameToUrl[unicode.toLower entry.name] = entry.url
 
-proc createNimbleContext*(r: var AtlasContext; depsdir: string): NimbleContext =
+proc createNimbleContext*(r: var AtlasContext; depsdir: Path): NimbleContext =
   result = NimbleContext()
   fillPackageLookupTable(r, result, depsdir)
 
