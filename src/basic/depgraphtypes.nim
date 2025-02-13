@@ -1,5 +1,5 @@
 
-import std / [sets, paths, dirs, tables, os, strutils, streams, json, jsonutils, algorithm]
+import std / [sets, paths, files, dirs, tables, os, strutils, streams, json, jsonutils, algorithm]
 
 import sattypes, context, gitops, reporters, nimbleparser, pkgurls, versions
 
@@ -43,13 +43,15 @@ proc toJson*(d: DepGraph): JsonNode =
   result["reqs"] = toJson(d.reqs)
 
 proc findNimbleFile*(g: DepGraph; idx: int): (Path, int) =
-  var nimbleFile = g.nodes[idx].pkg.projectName & ".nimble"
+  let dep = g.nodes[idx]
+  doAssert(dep.ondisk.string != "", "Package ondisk must be set before findNimbleFile can be called! Package: " & $(dep))
+  var nimbleFile = dep.ondisk / Path(dep.pkg.projectName & ".nimble")
   var found = 0
   if fileExists(nimbleFile):
     inc found
   else:
-    for file in walkFiles("*.nimble"):
-      nimbleFile = file
+    for file in walkFiles($dep.ondisk / "*.nimble"):
+      nimbleFile = Path(file)
       inc found
   result = (Path(ensureMove nimbleFile), found)
 

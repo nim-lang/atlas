@@ -133,7 +133,10 @@ proc expand*(c: var AtlasContext; g: var DepGraph; nc: NimbleContext; m: Travers
   while i < g.nodes.len:
     if not processed.containsOrIncl(g.nodes[i].pkg):
       let (dest, todo) = pkgUrlToDirname(c, g, g.nodes[i])
+
+      # important: the ondisk path set here!
       g.nodes[i].ondisk = dest
+
       if todo == DoClone:
         let (status, _) =
           if g.nodes[i].pkg.isFileProtocol:
