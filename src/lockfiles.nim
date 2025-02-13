@@ -176,7 +176,7 @@ proc pinProject*(c: var AtlasContext; lockFilePath: string, exportNimble = false
   ##
   info c, "pin", "pinning project"
 
-  var g = createGraph(c, createUrl(c.currentDir, c.overrides))
+  var g = createGraph(c, c.createUrl(c.currentDir, c.overrides))
   var nc = createNimbleContext(c, c.depsDir)
   expandWithoutClone c, g, nc
   pinGraph c, g, lockFilePath
@@ -205,7 +205,7 @@ proc convertNimbleLock*(c: var AtlasContext; nimblePath: string): LockFile =
       # lookup package using url
       let pkgurl = info["url"].getStr
       info c, name, " imported "
-      let u = createUrl(pkgurl, c.overrides)
+      let u = c.createUrl(pkgurl, c.overrides)
       let dir = c.depsDir / u.projectName
       result.items[name] = LockFileEntry(
         dir: dir.relativePath(c.projectDir),
@@ -238,7 +238,7 @@ proc listChanged*(c: var AtlasContext; lockFilePath: string) =
       warn c, dir, "repo missing!"
       continue
     withDir c, dir:
-      let url = $getRemoteUrl()
+      let url = $c.getRemoteUrl()
       if v.url != url:
         warn c, v.dir, "remote URL has been changed;" &
                        " found: " & url &
@@ -292,12 +292,12 @@ proc replay*(c: var AtlasContext; lockFilePath: string) =
     trace c, "replay", "replaying: " & v.repr
     let dir = c.fromPrefixedPath(v.dir)
     if not dirExists(dir):
-      let (status, err) = c.cloneUrl(createUrl(v.url, c.overrides), dir, false)
+      let (status, err) = c.cloneUrl(c.createUrl(v.url, c.overrides), dir, false)
       if status != Ok:
         error c, lockFilePath, err
         continue
     withDir c, dir:
-      let url = $getRemoteUrl()
+      let url = $c.getRemoteUrl()
       if url.withoutSuffix(".git") != url:
         if IgnoreUrls in c.flags:
           warn c, v.dir, "remote URL differs from expected: got: " &

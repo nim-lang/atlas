@@ -199,7 +199,7 @@ proc traverseLoop(c: var AtlasContext; nc: var NimbleContext; g: var DepGraph): 
 
 proc traverse(c: var AtlasContext; nc: var NimbleContext; start: string): seq[CfgPath] =
   # returns the list of paths for the nim.cfg file.
-  let u = createUrl(start, c.overrides)
+  let u = c.createUrl(start, c.overrides)
   var g = c.createGraph(u)
 
   #if $pkg.url == "":
@@ -221,7 +221,7 @@ proc installDependencies(c: var AtlasContext; nc: var NimbleContext; nimbleFile:
   if dir == "":
     dir = "."
   info c, pkgname, "installing dependencies for " & pkgname & ".nimble"
-  var g = createGraph(c, createUrlSkipPatterns(dir))
+  var g = createGraph(c, c.createUrlSkipPatterns(dir))
   let paths = traverseLoop(c, nc, g)
   let cfgPath = if CfgHere in c.flags: CfgPath c.currentDir else: findCfgDir(c)
   patchNimCfg(c, paths, cfgPath)
@@ -474,7 +474,7 @@ proc main(c: var AtlasContext) =
     if nimbleFile.len == 0:
       nimbleFile = c.workspace / extractProjectName(c.workspace) & ".nimble"
       writeFile(nimbleFile, "")
-    patchNimbleFile(nc, c, c.overrides, nimbleFile, args[0])
+    c.patchNimbleFile(nc, c, c.overrides, nimbleFile, args[0])
     if c.errors > 0:
       discard "don't continue for 'cannot resolve'"
     elif nimbleFile.len > 0 and not amb:

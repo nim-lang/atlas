@@ -85,7 +85,7 @@ proc traverseRelease(c: var AtlasContext; nc: NimbleContext; g: var DepGraph; id
     if lastNimbleContents == nimbleContents:
       pv.req = g.nodes[idx].versions[^1].req
     else:
-      let r = parseNimbleFile(nc, nimbleFile, c.overrides)
+      let r = c.parseNimbleFile(nc, nimbleFile, c.overrides)
       if origin == FromNimbleFile and pv.version == Version"":
         pv.version = r.version
       let ridx = g.reqsByDeps.getOrDefault(r, -1) # hasKey(r)
