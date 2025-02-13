@@ -2,11 +2,13 @@ import unittest
 import std/[os, osproc, strutils, uri]
 import basic/[reporters, osutils, versions, context]
 
+import basic/gitops
+
 suite "Git Operations Tests":
   var 
     c: AtlasContext
     reporter: Reporter
-    testDir = "test_repo"
+    testDir = "tests/test_repo"
     
   setup:
     # Create a fresh test directory
@@ -55,14 +57,15 @@ suite "Git Operations Tests":
       discard execCmd("git commit -m \"test commit\"")
       discard execCmd("git tag v1.0.0")
       
-      let commit = versionToCommit(reporter, MinVer, parseVersionInterval("1.0.0"))
+      var err = false
+      let commit = versionToCommit(reporter, MinVer, parseVersionInterval("1.0.0", 0, err))
       check(commit.len > 0)
 
   test "Git clone functionality":
-    let testUrl = "https://github.com/test/repo.git"
-    let success = clone(c, testUrl, testDir)
+    let testUrl = "http://localhost:4242/buildGraph/proj_a.git"
+    let success = clone(c, testUrl, testDir, fullClones=true)
     # Note: This will fail without network access, so we just check the function exists
-    check(success == false)  # Expected to fail since URL is fake
+    check(success == true)  # Expected to fail since URL is fake
 
   test "incrementTag behavior":
     check(incrementTag(reporter, "test", "v1.0.0", 2) == "v1.0.1")
@@ -80,6 +83,3 @@ suite "Git Operations Tests":
     check(isShortCommitHash("1234567"))
     check(not isShortCommitHash("abc"))
     check(not isShortCommitHash("1234567890abcdef1234567890abcdef12345678"))
-
-when isMainModule:
-  main()

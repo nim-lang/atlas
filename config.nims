@@ -31,18 +31,22 @@ task buildRelease, "Build release":
       exec "nim c -d:release -o:./atlas src/atlas.nim"
 
 task testReposSetup, "Setup atlas-tests from a cached zip":
-  let version = "v0.1.1"
-  let repo = "https://github.com/nim-lang/atlas-tests/"
-  let file = "atlas-tests.zip"
-  let url = fmt"{repo}/releases/download/{version}/{file}"
-  echo "Downloading Test Repos zip"
-  exec(fmt"curl -L -o {file} {url}")
-  echo "Unzipping Test Repos"
-  exec(fmt"unzip -o {file}")
+  if not dirExists("atlas-tests"):
+    let version = "v0.1.1"
+    let repo = "https://github.com/nim-lang/atlas-tests/"
+    let file = "atlas-tests.zip"
+    let url = fmt"{repo}/releases/download/{version}/{file}"
+    echo "Downloading Test Repos zip"
+    exec(fmt"curl -L -o {file} {url}")
+    echo "Unzipping Test Repos"
+    exec(fmt"unzip -o {file}")
+
+task runGitHttpServer, "Run test http server":
+  testReposSetupTask()
+  exec "nim c -r tests/githttpserver.nim atlas-tests/ws_integration atlas-tests/ws_generated"
 
 task test, "Runs all tests":
-  if not dirExists("atlas-tests"):
-    testReposSetupTask() # download atlas-tests
+  testReposSetupTask() # download atlas-tests
   unitTestsTask() # tester runs both
   testerTask()
 
