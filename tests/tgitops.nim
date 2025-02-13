@@ -221,13 +221,19 @@ suite "Git Operations Tests":
       discard execCmd("git add test.txt")
       discard execCmd("git commit -m \"update commit\"")
       discard execCmd("git tag v1.1.0")
+      echo "REV-TAGS:max1:"
+      echo execCmd("git rev-list --tags --max-count=1")
+      echo "REV-TAGS:"
+      echo execCmd("git rev-list --tags")
+      echo "ABBREV:"
+      echo execCmd("git show-ref --abbrev=7 --tags")
       let latestTag = getLastTaggedCommit(reporter)
       check(latestTag == "v1.1.0")
 
   test "collectTaggedVersions functionality":
     withDir testDir:
       discard execCmd("git init")
-      
+     
       # Create initial commit and tag
       writeFile("test.txt", "initial content")
       discard execCmd("git add test.txt")

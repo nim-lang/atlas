@@ -106,9 +106,11 @@ proc gitDescribeRefTag*(c: var Reporter; commit: string): string =
 
 proc getLastTaggedCommit*(c: var Reporter): string =
   let (ltr, status) = exec(c, GitLastTaggedRef, [])
+  echo "getLastTaggedCommit: ", ltr
   if status == 0:
     let lastTaggedRef = ltr.strip()
     let lastTag = gitDescribeRefTag(c, lastTaggedRef)
+    echo "getLastTaggedCommit:lastTag: ", lastTag
     if lastTag.len != 0:
       result = lastTag
 
