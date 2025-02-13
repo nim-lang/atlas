@@ -28,6 +28,7 @@ type
     GitMergeBase = "git -C $DIR merge-base"
     GitLsFiles = "git -C $DIR ls-files"
     GitLog = "git -C $DIR log --format=%H"
+    GitCurrentBranch = "git rev-parse --abbrev-ref HEAD"
 
 proc isGitDir*(path: Path): bool =
   let gitPath = path / Path(".git")
@@ -62,6 +63,8 @@ proc exec*(c: var Reporter;
     result = silentExec(cmd, args)
   else:
     result = ("not a git repository", 1)
+  if result[1] != 0:
+    error c, "gitops", "Git command failed `$1` failed with code: $2" % [cmd, $result[1]]
 
 proc checkGitDiffStatus*(c: var Reporter, path: Path): string =
   let (outp, status) = c.exec(GitDiff, path, [])
@@ -299,12 +302,12 @@ proc updateDir*(c: var Reporter; path: Path, filter: string) =
     if diff.len > 0:
       warn(c, $path, "has uncommitted changes; skipped")
     else:
-      let (branch, _) = osproc.execCmdEx("git rev-parse --abbrev-ref HEAD")
+      let (branch, status) = c.exec(GitCurrentBranch, path, [])
       if branch.strip.len > 0:
         let (output, exitCode) = osproc.execCmdEx("git pull origin " & branch.strip)
         if exitCode != 0:
-          error c, file, output
+          error c, $path, output
         else:
-          info(c, file, "successfully updated")
+          info(c, $path, "successfully updated")
       else:
-        error c, file, "could not fetch current branch name"
+        error c, $path, "could not fetch current branch name"
