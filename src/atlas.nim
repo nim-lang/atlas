@@ -440,6 +440,7 @@ proc main(c: var AtlasContext) =
       echo "USE:nimbleFile:set: ", $nimbleFile, " abs: ", $nimbleFile.absolutePath
       writeFile($nimbleFile, "")
     c.patchNimbleFile(nc, c, c.overrides, nimbleFile, args[0])
+
     if c.errors > 0:
       discard "don't continue for 'cannot resolve'"
     elif nimbleFiles == 1:
