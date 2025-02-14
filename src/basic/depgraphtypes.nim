@@ -50,8 +50,7 @@ proc toJson*(d: DepGraph): JsonNode =
 proc findNimbleFile*(nimbleFile: Path): (Path, int) =
   var found = 0
   if fileExists(nimbleFile):
-    inc found
-  result = (Path(nimbleFile), found)
+    result = (Path(nimbleFile), 1)
 
 proc findNimbleFile*(dep: Dependency): (Path, int) =
   doAssert(dep.ondisk.string != "", "Package ondisk must be set before findNimbleFile can be called! Package: " & $(dep))

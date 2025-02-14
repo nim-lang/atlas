@@ -100,6 +100,8 @@ proc patchNimbleFile*(c: var Reporter, nc: var NimbleContext;
     error r, name, "cannot resolve package name: " & name
     return
 
+  echo "NIMBLEFILE: ", $nimbleFile
+  echo "NIMBLEFILE: ", $nimbleFile.absolutePath
   let req = parseNimbleFile(c, nc, nimbleFile, p)
   # see if we have this requirement already listed. If so, do nothing:
   for d in req.deps:

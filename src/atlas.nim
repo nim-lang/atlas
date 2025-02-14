@@ -431,19 +431,20 @@ proc main(c: var AtlasContext) =
     patchNimCfg c, deps, cfgPath
   of "use":
     singleArg()
-    #fillPackageLookupTable(c.nimbleContext, c, )
-    var (nimbleFile, cnt) = findNimbleFile(c.workspace)
+    var (nimbleFile, nimbleFiles) = findNimbleFile(c.workspace)
     var nc = createNimbleContext(c, c.depsDir)
 
-    if nimbleFile.len == 0:
+    echo "USE:foundNimble: ", $nimbleFile, " cnt: ", nimbleFiles, " abs: ", $nimbleFile.absolutePath
+    if nimbleFiles == 0:
       nimbleFile = c.workspace / Path(extractProjectName($c.workspace) & ".nimble")
+      echo "USE:nimbleFile:set: ", $nimbleFile, " abs: ", $nimbleFile.absolutePath
       writeFile($nimbleFile, "")
     c.patchNimbleFile(nc, c, c.overrides, nimbleFile, args[0])
     if c.errors > 0:
       discard "don't continue for 'cannot resolve'"
-    elif nimbleFile.len > 0 and cnt == 1:
+    elif nimbleFiles == 1:
       c.installDependencies(nc, nimbleFile.Path)
-    elif cnt > 1:
+    elif nimbleFiles > 1:
       error c, args[0], "ambiguous .nimble file"
     else:
       error c, args[0], "cannot find .nimble file"
