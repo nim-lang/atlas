@@ -33,10 +33,10 @@ proc hasHostnameOf(url: string; host: string): bool =
 
 proc cloneUrl*(c: var AtlasContext,
                   url: PkgUrl,
-                  dest: string;
+                  dest: Path;
                   cloneUsingHttps: bool): (CloneStatus, string) =
   ## Returns an error message on error or else "".
-  assert not dest.contains("://")
+  assert not dest.string.contains("://")
 
   var modurl = url.url
   if modurl.startsWith(GitProtocol):
@@ -68,13 +68,13 @@ proc cloneUrl*(c: var AtlasContext,
       if retryUrl("hg identify " & modurl, modurl, c, url.projectName, true):
         (NotFound, "Unable to identify url: " & modurl)
       else:
-        let hgCmdStr = "hg clone " & modurl & " " & dest
+        let hgCmdStr = "hg clone " & modurl & " " & $dest
         if retryUrl(hgCmdStr, modurl, c, url.projectName, true):
           (Ok, "")
         else:
           (OtherError, "exernal program failed: " & hgCmdStr)
   else:
-    if gitops.clone(c, url.url, Path(dest), fullClones=true): # gitops.clone has buit-in retrying
+    if gitops.clone(c, url.url, dest, fullClones=true): # gitops.clone has buit-in retrying
       (Ok, "")
     else:
       (OtherError, "exernal program failed: " & $GitClone)
