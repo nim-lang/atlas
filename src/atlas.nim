@@ -33,7 +33,7 @@ const
       ver & " (sha: " & staticExec("git log -n 1 --format=%H") & ")"
 
 const
-  LockFileName = "atlas.lock"
+  LockFileName = Path "atlas.lock"
   Usage = "atlas - Nim Package Cloner Version " & AtlasVersion & """
 
   (c) 2021 Andreas Rumpf
@@ -180,14 +180,14 @@ proc traverse(c: var AtlasContext; nc: var NimbleContext; start: string): seq[Cf
   afterGraphActions c, g
 
 
-proc installDependencies(c: var AtlasContext; nc: var NimbleContext; nimbleFile: string) =
+proc installDependencies(c: var AtlasContext; nc: var NimbleContext; nimbleFile: Path) =
   # 1. find .nimble file in CWD
   # 2. install deps from .nimble
   var (dir, pkgname, _) = splitFile(nimbleFile)
-  if dir == "":
-    dir = "."
-  info c, pkgname, "installing dependencies for " & pkgname & ".nimble"
-  var g = createGraph(c, c.createUrlSkipPatterns(dir))
+  if dir == Path "":
+    dir = Path "."
+  info c, pkgname, "installing dependencies for " & $pkgname & ".nimble"
+  var g = createGraph(c, c.createUrlSkipPatterns($dir))
   let paths = traverseLoop(c, nc, g)
   let cfgPath = if CfgHere in c.flags: CfgPath c.currentDir else: findCfgDir(c)
   patchNimCfg(c, paths, cfgPath)
@@ -309,9 +309,9 @@ proc main(c: var AtlasContext) =
     if c.projectDir == c.workspace or c.projectDir == c.depsDir:
       fatal c, action & " command must be executed in a project, not in the workspace"
 
-  proc findCurrentNimble(): string =
+  proc findCurrentNimble(): Path =
     for x in walkPattern("*.nimble"):
-      return x
+      return Path x
 
   var autoinit = false
   var explicitProjectOverride = false
@@ -432,48 +432,48 @@ proc main(c: var AtlasContext) =
   of "use":
     singleArg()
     #fillPackageLookupTable(c.nimbleContext, c, )
-    var (nimbleFile, cnt) = c.findNimbleFile(c.workspace)
+    var (nimbleFile, cnt) = findNimbleFile(c.workspace)
     var nc = createNimbleContext(c, c.depsDir)
 
     if nimbleFile.len == 0:
-      nimbleFile = c.workspace / extractProjectName(c.workspace) & ".nimble"
-      writeFile(nimbleFile, "")
+      nimbleFile = c.workspace / Path(extractProjectName($c.workspace) & ".nimble")
+      writeFile($nimbleFile, "")
     c.patchNimbleFile(nc, c, c.overrides, nimbleFile, args[0])
     if c.errors > 0:
       discard "don't continue for 'cannot resolve'"
-    elif nimbleFile.len > 0 and not amb:
-      installDependencies(c, nc, nimbleFile)
-    elif amb:
+    elif nimbleFile.len > 0 and cnt == 1:
+      c.installDependencies(nc, nimbleFile.Path)
+    elif cnt > 1:
       error c, args[0], "ambiguous .nimble file"
     else:
       error c, args[0], "cannot find .nimble file"
 
   of "pin":
-    optSingleArg(LockFileName)
+    optSingleArg($LockFileName)
     if c.projectDir == c.workspace or c.projectDir == c.depsDir:
-      pinWorkspace c, args[0]
+      pinWorkspace c, Path(args[0])
     else:
-      let exportNimble = args[0] == NimbleLockFileName
-      pinProject c, args[0], exportNimble
+      let exportNimble = Path(args[0]) == NimbleLockFileName
+      pinProject c, Path(args[0]), exportNimble
   of "rep", "replay", "reproduce":
-    optSingleArg(LockFileName)
-    replay(c, args[0])
+    optSingleArg($LockFileName)
+    replay(c, Path(args[0]))
   of "changed":
-    optSingleArg(LockFileName)
-    listChanged(c, args[0])
+    optSingleArg($LockFileName)
+    listChanged(c, Path(args[0]))
   of "convert":
     if args.len < 1:
       fatal c, "convert command takes a nimble lockfile argument"
     let lfn = if args.len == 1: LockFileName
-              else: args[1]
-    convertAndSaveNimbleLock c, args[0], lfn
+              else: Path(args[1])
+    convertAndSaveNimbleLock c, Path(args[0]), lfn
   of "install", "setup":
     # projectCmd()
     if args.len > 1:
       fatal c, "install command takes a single argument"
-    var nimbleFile = ""
+    var nimbleFile = Path ""
     if args.len == 1:
-      nimbleFile = args[0]
+      nimbleFile = Path args[0]
     else:
       nimbleFile = findCurrentNimble()
     if nimbleFile.len == 0:
@@ -498,7 +498,7 @@ proc main(c: var AtlasContext) =
   of "extract":
     singleArg()
     if fileExists(args[0]):
-      echo toJson(extractRequiresInfo(args[0]))
+      echo toJson(extractRequiresInfo(Path args[0]))
     else:
       fatal c, "File does not exist: " & args[0]
   of "tag":
@@ -536,7 +536,9 @@ proc main(c: var AtlasContext) =
     fatal c, "Invalid action: " & action
 
 proc main =
-  var c = AtlasContext(projectDir: getCurrentDir(), currentDir: getCurrentDir(), workspace: "")
+  var c = AtlasContext(projectDir: paths.getCurrentDir(),
+                       currentDir: paths.getCurrentDir(),
+                       workspace: Path "")
   try:
     main(c)
   finally:
