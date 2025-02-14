@@ -26,16 +26,16 @@ proc prefixedPath*(c: var AtlasContext, path: Path): Path =
   else:
     return Path($path)
 
-proc fromPrefixedPath*(c: var AtlasContext, path: string): Path =
+proc fromPrefixedPath*(c: var AtlasContext, path: Path): Path =
   var path = path
-  if path.startsWith("$deps"):
-    path.removePrefix("$deps")
-    return c.depsDir / Path(path)
-  elif path.startsWith("$workspace"):
-    path.removePrefix("$workspace")
-    return c.workspace / Path(path)
+  if path.string.startsWith("$deps"):
+    path.string.removePrefix("$deps")
+    return c.depsDir / path
+  elif path.string.startsWith("$workspace"):
+    path.string.removePrefix("$workspace")
+    return c.workspace / path
   else:
-    return c.depsDir / Path(path)
+    return c.depsDir / path
 
 proc genLockEntry(c: var AtlasContext; lf: var LockFile; w: Dependency) =
   lf.items[w.pkg.projectName] = LockFileEntry(
@@ -240,8 +240,8 @@ proc listChanged*(c: var AtlasContext; lockFile: Path) =
     if not dirExists(dir):
       warn c, dir, "repo missing!"
       continue
-    withDir c, dir:
-      let url = $c.getRemoteUrl()
+    withDir c, $dir:
+      let url = $c.getRemoteUrl(dir)
       if v.url != url:
         warn c, v.dir, "remote URL has been changed;" &
                        " found: " & url &
@@ -270,23 +270,23 @@ proc replay*(c: var AtlasContext; lockFile: Path) =
   ## this also includes updating the nim.cfg and nimble file as well
   ## if they're included in the lockfile
   ##
-  let lf = if lockFilePath == NimbleLockFileName:
-              convertNimbleLock(c, lockFilePath)
+  let lf = if lockFile == NimbleLockFileName:
+              convertNimbleLock(c, lockFile)
            else:
-              readLockFile(lockFilePath)
+              readLockFile(lockFile)
 
   #let lfBase = splitPath(lockFilePath).head
   var genCfg = CfgHere in c.flags
 
   # update the nim.cfg file
   if lf.nimcfg.len > 0:
-    writeFile(c.currentDir / NimCfg, lf.nimcfg.join("\n"))
+    writeFile($(c.currentDir / NimCfg), lf.nimcfg.join("\n"))
   else:
     genCfg = true
 
   # update the nimble file
-  if lf.nimbleFile.filename.len > 0:
-    writeFile(c.currentDir / lf.nimbleFile.filename,
+  if lf.nimbleFile.filename.string.len > 0:
+    writeFile($(c.currentDir / lf.nimbleFile.filename),
               lf.nimbleFile.content.join("\n"))
 
   # update the the dependencies
