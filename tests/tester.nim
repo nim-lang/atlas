@@ -27,7 +27,7 @@ template testSemVer2(expected: string) =
       echo "\n\n"
       echo "<<<<<<<<<<<<<<<< Failed Exec "
       echo "testSemVer2:command: ", cmd
-      echo "testSemVer2:pwd: ", getCurrentDir()
+      echo "testSemVer2:pwd: ", ospaths2.getCurrentDir()
       echo "testSemVer2:failed command:"
       echo "================ Output:\n\t" & outp.replace("\n", "\n\t")
       echo ">>>>>>>>>>>>>>>> failed\n"
@@ -48,7 +48,7 @@ template testMinVer(expected: string) =
       echo "\n\n"
       echo "<<<<<<<<<<<<<<<< Failed Exec "
       echo "testSemVer2:command: ", cmd
-      echo "testSemVer2:pwd: ", getCurrentDir()
+      echo "testSemVer2:pwd: ", ospaths2.getCurrentDir()
       echo "testSemVer2:failed command:"
       echo "================ Output:\n\t" & outp.replace("\n", "\n\t")
       echo ">>>>>>>>>>>>>>>> failed\n"
