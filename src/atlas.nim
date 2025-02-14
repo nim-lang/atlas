@@ -130,15 +130,15 @@ proc generateDepGraph(c: var AtlasContext; g: DepGraph) =
   for n in allNodes(g):
     for child in directDependencies(g, c, n):
       dotGraph.addf("\"$1\" -> \"$2\";\n", [n.repr, child.repr])
-  let dotFile = c.currentDir / "deps.dot"
-  writeFile(dotFile, "digraph deps {\n$1}\n" % dotGraph)
+  let dotFile = c.currentDir / "deps.dot".Path
+  writeFile($dotFile, "digraph deps {\n$1}\n" % dotGraph)
   let graphvizDotPath = findExe("dot")
   if graphvizDotPath.len == 0:
     #echo("gendepend: Graphviz's tool dot is required, " &
     #  "see https://graphviz.org/download for downloading")
     discard
   else:
-    discard execShellCmd("dot -Tpng -odeps.png " & quoteShell(dotFile))
+    discard execShellCmd("dot -Tpng -odeps.png " & quoteShell($dotFile))
 
 proc afterGraphActions(c: var AtlasContext; g: DepGraph) =
   if c.errors == 0 and KeepWorkspace notin c.flags:

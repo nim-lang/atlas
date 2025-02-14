@@ -33,7 +33,7 @@ proc getPackageInfos*(depsDir: Path): seq[PackageInfo] =
 proc updatePackages*(c: var AtlasContext; depsDir: Path) =
   if dirExists($(depsDir / DefaultPackagesSubDir)):
     withDir(c, $(depsDir / DefaultPackagesSubDir)):
-      gitPull(c, depsDir / DefaultPackagesSubDir, $DefaultPackagesSubDir)
+      gitPull(c, depsDir / DefaultPackagesSubDir)
   else:
     withDir c, $depsDir:
       let success = clone(c, "https://github.com/nim-lang/packages", DefaultPackagesSubDir)

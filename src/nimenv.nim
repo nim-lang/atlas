@@ -22,15 +22,15 @@ else:
     ShellFile = "export PATH=$1:$$PATH\n"
 
 const
-  ActivationFile = when defined(windows): "activate.bat" else: "activate.sh"
+  ActivationFile = when defined(windows): Path "activate.bat" else: Path "activate.sh"
 
-proc infoAboutActivation(c: var Reporter; nimDest, nimVersion: string) =
+proc infoAboutActivation(c: var Reporter; nimDest: Path, nimVersion: string) =
   when defined(windows):
     info c, nimDest, "RUN\nnim-" & nimVersion & "\\activate.bat"
   else:
     info c, nimDest, "RUN\nsource nim-" & nimVersion & "/activate.sh"
 
-proc setupNimEnv*(c: var Reporter; workspace, nimVersion: string; keepCsources: bool) =
+proc setupNimEnv*(c: var Reporter; workspace: Path, nimVersion: string; keepCsources: bool) =
   template isDevel(nimVersion: string): bool = nimVersion == "devel"
 
   template exec(c: var Reporter; command: string) =
@@ -39,9 +39,9 @@ proc setupNimEnv*(c: var Reporter; workspace, nimVersion: string; keepCsources: 
       error c, ("nim-" & nimVersion), "failed: " & cmd
       return
 
-  let nimDest = "nim-" & nimVersion
-  if dirExists(workspace / nimDest):
-    if not fileExists(workspace / nimDest / ActivationFile):
+  let nimDest = Path("nim-" & nimVersion)
+  if dirExists($(workspace / nimDest)):
+    if not fileExists($(workspace / nimDest / ActivationFile)):
       info c, nimDest, "already exists; remove or rename and try again"
     else:
       infoAboutActivation c, nimDest, nimVersion
@@ -60,11 +60,11 @@ proc setupNimEnv*(c: var Reporter; workspace, nimVersion: string; keepCsources: 
       "csources" # has some chance of working
     else:
       "csources_v1"
-  withDir c, workspace:
+  withDir c, $workspace:
     if not dirExists(csourcesVersion):
       exec c, "git clone https://github.com/nim-lang/" & csourcesVersion
-    exec c, "git clone https://github.com/nim-lang/nim " & nimDest
-  withDir c, workspace / csourcesVersion:
+    exec c, "git clone https://github.com/nim-lang/nim " & $nimDest
+  withDir c, $workspace / csourcesVersion:
     when defined(windows):
       exec c, "build.bat"
     else:
@@ -75,7 +75,7 @@ proc setupNimEnv*(c: var Reporter; workspace, nimVersion: string; keepCsources: 
         exec c, "make"
   let nimExe0 = ".." / csourcesVersion / "bin" / "nim".addFileExt(ExeExt)
   let dir = Path(workspace / nimDest)
-  withDir c, workspace / nimDest:
+  withDir c, $(workspace / nimDest):
     let nimExe = "bin" / "nim".addFileExt(ExeExt)
     copyFileWithPermissions nimExe0, nimExe
     let query = createQueryEq(if nimVersion.isDevel: Version"#head" else: Version(nimVersion))
@@ -90,15 +90,15 @@ proc setupNimEnv*(c: var Reporter; workspace, nimVersion: string; keepCsources: 
     exec c, kochExe & " boot -d:release --skipUserCfg --skipParentCfg --hints:off"
     exec c, kochExe & " tools --skipUserCfg --skipParentCfg --hints:off"
     # remove any old atlas binary that we now would end up using:
-    if cmpPaths(getAppDir(), workspace / nimDest / "bin") != 0:
+    if cmpPaths(getAppDir(), $(workspace / nimDest / "bin".Path)) != 0:
       removeFile "bin" / "atlas".addFileExt(ExeExt)
     # unless --keep is used delete the csources because it takes up about 2GB and
     # is not necessary afterwards:
     if not keepCsources:
-      removeDir workspace / csourcesVersion / "c_code"
-    let pathEntry = workspace / nimDest / "bin"
+      removeDir $workspace / csourcesVersion / "c_code"
+    let pathEntry = workspace / nimDest / "bin".Path
     when defined(windows):
-      writeFile "activate.bat", BatchFile % pathEntry.replace('/', '\\')
+      writeFile "activate.bat", BatchFile % $pathEntry.replace('/', '\\')
     else:
-      writeFile "activate.sh", ShellFile % pathEntry
+      writeFile "activate.sh", ShellFile % $pathEntry
     infoAboutActivation c, nimDest, nimVersion

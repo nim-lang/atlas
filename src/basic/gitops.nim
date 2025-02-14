@@ -185,25 +185,25 @@ proc checkoutGitCommitFull*(c: var AtlasContext; path: Path, commit: string; ful
   else:
     info(c, $path, "updated submodules ")
 
-proc gitPull*(c: var Reporter; path: Path, displayName: string) =
+proc gitPull*(c: var Reporter; path: Path) =
   let (outp, status) = c.exec(GitPull, path, [])
   if status != 0:
-    debug c, displayName, "git pull error: \n" & outp.splitLines().mapIt("\n>>> " & it).join("")
-    error(c, displayName, "could not 'git pull'")
+    debug c, path, "git pull error: \n" & outp.splitLines().mapIt("\n>>> " & it).join("")
+    error(c, path, "could not 'git pull'")
 
-proc gitTag*(c: var Reporter; path: Path, displayName, tag: string) =
+proc gitTag*(c: var Reporter; path: Path, tag: string) =
   let (_, status) = c.exec(GitTag, path, [tag])
   if status != 0:
-    error(c, displayName, "could not 'git tag " & tag & "'")
+    error(c, path, "could not 'git tag " & tag & "'")
 
-proc pushTag*(c: var Reporter; path: Path, displayName, tag: string) =
+proc pushTag*(c: var Reporter; path: Path, tag: string) =
   let (outp, status) = c.exec(GitPush, path, [tag])
   if status != 0:
-    error(c, displayName, "could not 'git push " & tag & "'")
+    error(c, path, "could not 'git push " & tag & "'")
   elif outp.strip() == "Everything up-to-date":
-    info(c, displayName, "is up-to-date")
+    info(c, path, "is up-to-date")
   else:
-    info(c, displayName, "successfully pushed tag: " & tag)
+    info(c, path, "successfully pushed tag: " & tag)
 
 proc incrementTag*(c: var Reporter; displayName, lastTag: string; field: Natural): string =
   var startPos =
@@ -222,7 +222,7 @@ proc incrementTag*(c: var Reporter; displayName, lastTag: string; field: Natural
   let patchNumber = parseInt(lastTag[startPos..<endPos])
   lastTag[0..<startPos] & $(patchNumber + 1) & lastTag[endPos..^1]
 
-proc incrementLastTag*(c: var Reporter; path: Path, displayName: string; field: Natural): string =
+proc incrementLastTag*(c: var Reporter; path: Path, field: Natural): string =
   let (ltr, status) = c.exec(GitLastTaggedRef, path, [])
   echo "incrementLastTag: `$1`" % [ltr]
   if status != 0 or ltr == "":
@@ -238,10 +238,10 @@ proc incrementLastTag*(c: var Reporter; path: Path, displayName: string; field: 
     if lastTaggedRef == "":
       "v0.0.1" # assuming no tags have been made yet
     elif lastTaggedRef == "" or lastTaggedRef == currentCommit:
-      info c, displayName, "the current commit '" & currentCommit & "' is already tagged '" & lastTag & "'"
+      info c, path, "the current commit '" & currentCommit & "' is already tagged '" & lastTag & "'"
       lastTag
     else:
-      c.incrementTag(displayName, lastTag, field)
+      c.incrementTag($path, lastTag, field)
 
 proc needsCommitLookup*(commit: string): bool {.inline.} =
   '.' in commit or commit == InvalidCommit
