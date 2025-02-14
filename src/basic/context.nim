@@ -46,8 +46,8 @@ type
     overrides*: Patterns
     defaultAlgo*: ResolutionAlgorithm
     plugins*: PluginInfo
-    overridesFile*: string
-    pluginsFile*: string
+    overridesFile*: Path
+    pluginsFile*: Path
     proxy*: Uri
     dumbProxy*: bool
 

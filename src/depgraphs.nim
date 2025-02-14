@@ -144,7 +144,7 @@ proc expand*(c: var AtlasContext; g: var DepGraph; nc: NimbleContext; m: Travers
           if g.nodes[i].pkg.isFileProtocol:
             copyFromDisk(c, g[i], dest)
           else:
-            cloneUrl(c, g[i].pkg, $dest, false)
+            cloneUrl(c, g[i].pkg, dest, false)
         g.nodes[i].status = status
 
       if g.nodes[i].status == Ok:

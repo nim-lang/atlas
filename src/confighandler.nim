@@ -11,16 +11,16 @@
 import std / [strutils, os, streams, json]
 import basic/[versions, context, reporters, compiledpatterns, parserequires]
 
-proc parseOverridesFile(c: var AtlasContext; filename: string) =
+proc parseOverridesFile(c: var AtlasContext; filename: Path) =
   const Separator = " -> "
   let path = c.workspace / filename
   var f: File
-  if open(f, path):
-    info c, "overrides", "loading file: " & path
+  if open(f, $path):
+    info c, "overrides", "loading file: " & $path
     c.flags.incl UsesOverrides
     try:
       var lineCount = 1
-      for line in lines(path):
+      for line in lines($path):
         let splitPos = line.find(Separator)
         if splitPos >= 0 and line[0] != '#':
           let key = line.substr(0, splitPos-1)
@@ -36,10 +36,10 @@ proc parseOverridesFile(c: var AtlasContext; filename: string) =
     finally:
       close f
   else:
-    error c, path, "cannot open: " & path
+    error c, path, "cannot open: " & $path
 
-proc readPluginsDir(c: var AtlasContext; dir: string) =
-  for k, f in walkDir(c.workspace / dir):
+proc readPluginsDir(c: var AtlasContext; dir: Path) =
+  for k, f in walkDir($(c.workspace / dir)):
     if k == pcFile and f.endsWith(".nims"):
       extractPluginInfo f, c.plugins
 
@@ -52,39 +52,39 @@ type
     graph: JsonNode
 
 proc writeDefaultConfigFile*(c: var AtlasContext) =
-  let config = JsonConfig(deps: c.origDepsDir, resolver: $SemVer, graph: newJNull())
+  let config = JsonConfig(deps: $c.origDepsDir, resolver: $SemVer, graph: newJNull())
   let configFile = c.workspace / AtlasWorkspace
-  writeFile(configFile, pretty %*config)
+  writeFile($configFile, pretty %*config)
 
 proc readConfig*(c: var AtlasContext) =
   let configFile = c.workspace / AtlasWorkspace
-  var f = newFileStream(configFile, fmRead)
+  var f = newFileStream($configFile, fmRead)
   if f == nil:
-    error c, configFile, "cannot open: " & configFile
+    error c, configFile, "cannot open: " & $configFile
     return
 
-  let j = parseJson(f, configFile)
+  let j = parseJson(f, $configFile)
   try:
     let m = j.to(JsonConfig)
     if m.deps.len > 0:
-      c.origDepsDir = m.deps
+      c.origDepsDir = m.deps.Path
     if m.overrides.len > 0:
-      c.overridesFile = m.overrides
-      parseOverridesFile(c, m.overrides)
+      c.overridesFile = m.overrides.Path
+      parseOverridesFile(c, m.overrides.Path)
     if m.resolver.len > 0:
       try:
         c.defaultAlgo = parseEnum[ResolutionAlgorithm](m.resolver)
       except ValueError:
         warn c, configFile, "ignored unknown resolver: " & m.resolver
     if m.plugins.len > 0:
-      c.pluginsFile = m.plugins
-      readPluginsDir(c, m.plugins)
+      c.pluginsFile = m.plugins.Path
+      readPluginsDir(c, m.plugins.Path)
   finally:
     close f
 
 proc writeConfig*(c: AtlasContext; graph: JsonNode) =
-  let config = JsonConfig(deps: c.origDepsDir, overrides: c.overridesFile,
-    plugins: c.pluginsFile, resolver: $c.defaultAlgo,
+  let config = JsonConfig(deps: $c.origDepsDir, overrides: $c.overridesFile,
+    plugins: $c.pluginsFile, resolver: $c.defaultAlgo,
     graph: graph)
   let configFile = c.workspace / AtlasWorkspace
-  writeFile(configFile, pretty %*config)
+  writeFile($configFile, pretty %*config)

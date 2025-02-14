@@ -297,10 +297,10 @@ proc replay*(c: var AtlasContext; lockFile: Path) =
     if not dirExists(dir):
       let (status, err) = c.cloneUrl(c.createUrl(v.url, c.overrides), dir, false)
       if status != Ok:
-        error c, lockFilePath, err
+        error c, lockFile, err
         continue
-    withDir c, dir:
-      let url = $c.getRemoteUrl()
+    withDir c, $dir:
+      let url = $c.getRemoteUrl(dir)
       if url.withoutSuffix(".git") != url:
         if IgnoreUrls in c.flags:
           warn c, v.dir, "remote URL differs from expected: got: " &
