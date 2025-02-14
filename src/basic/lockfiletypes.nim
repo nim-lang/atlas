@@ -5,13 +5,13 @@ import reporters
 
 type
   LockFileEntry* = object
-    dir*: string
+    dir*: Path
     url*: string
     commit*: string
     version*: string
 
   LockedNimbleFile* = object
-    filename*: string
+    filename*: Path
     content*: seq[string]
 
   LockFile* = object # serialized as JSON

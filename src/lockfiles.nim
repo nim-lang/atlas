@@ -17,14 +17,14 @@ const
   NimbleLockFileName* = Path "nimble.lock"
 
 
-proc prefixedPath*(c: var AtlasContext, path: Path): string =
+proc prefixedPath*(c: var AtlasContext, path: Path): Path =
   let parts = splitPath($path)
   if path.isRelativeTo(c.depsDir):
-    return "$deps" / parts.tail
+    return Path("$deps" / parts.tail)
   elif path.isRelativeTo(c.workspace):
-    return "$workspace" / parts.tail
+    return Path("$workspace" / parts.tail)
   else:
-    return $path
+    return Path($path)
 
 proc fromPrefixedPath*(c: var AtlasContext, path: string): Path =
   var path = path
@@ -159,7 +159,7 @@ proc pinGraph*(c: var AtlasContext; g: var DepGraph; lockFile: Path; exportNimbl
   let (nimblePath, cnt) = findNimbleFile(startPkg)
   if cnt > 0 and nimblePath.string.len > 0 and nimblePath.fileExists():
     lf.nimbleFile = LockedNimbleFile(
-      filename: $nimblePath.relativePath(c.currentDir),
+      filename: nimblePath.relativePath(c.currentDir),
       content: readFile($nimblePath).splitLines())
 
   if not exportNimble:
@@ -211,7 +211,7 @@ proc convertNimbleLock*(c: var AtlasContext; nimble: Path): LockFile =
       let u = c.createUrl(pkgurl, c.overrides)
       let dir = c.depsDir / u.projectName.Path 
       result.items[name] = LockFileEntry(
-        dir: $dir.relativePath(c.projectDir),
+        dir: dir.relativePath(c.projectDir),
         url: pkgurl,
         commit: info["vcsRevision"].getStr
       )
