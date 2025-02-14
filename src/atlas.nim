@@ -152,14 +152,14 @@ proc afterGraphActions(c: var AtlasContext; g: DepGraph) =
       setupNimEnv c, c.workspace, v.string, Keep in c.flags
 
 proc getRequiredCommit*(c: var AtlasContext; w: Dependency): string =
-  if isShortCommitHash(w.commit): shortToCommit(c, w.commit)
+  if isShortCommitHash(w.commit): shortToCommit(c, w.ondisk, w.commit)
   else: w.commit
 
 proc checkoutLaterCommit(c: var AtlasContext; g: var DepGraph; w: Dependency) =
   # Now dead code.
-  withDir c, w.ondisk:
+  withDir c, $w.ondisk:
     if w.commit.len == 0 or cmpIgnoreCase(w.commit, InvalidCommit) == 0:
-      gitPull(c, w.pkg.url)
+      c.gitPull(w.ondisk, w.pkg.url)
     else:
       let err = checkGitDiffStatus(c)
       if err.len > 0:
