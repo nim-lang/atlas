@@ -39,7 +39,11 @@ proc fromPrefixedPath*(c: var AtlasContext, path: string): Path =
 
 proc genLockEntry(c: var AtlasContext; lf: var LockFile; w: Dependency) =
   lf.items[w.pkg.projectName] = LockFileEntry(
-    dir: c.prefixedPath(w.ondisk), url: w.pkg.url, commit: getCurrentCommit(), version: "")
+    dir: c.prefixedPath(w.ondisk),
+    url: w.pkg.url,
+    commit: getCurrentCommit(),
+    version: ""
+  )
 
 when false:
   proc genLockEntriesForDir(c: var AtlasContext; lf: var LockFile; dir: string) =
@@ -119,7 +123,7 @@ proc expandWithoutClone*(c: var AtlasContext; g: var DepGraph; nc: NimbleContext
           c.traverseDependency(nc, g, i, CurrentCommit)
     inc i
 
-proc pinGraph*(c: var AtlasContext; g: var DepGraph; lockFilePath: string; exportNimble = false) =
+proc pinGraph*(c: var AtlasContext; g: var DepGraph; lockFile: Path; exportNimble = false) =
   info c, "pin", "pinning project"
   var lf = newLockFile()
   let startPkg = c.currentDir # resolvePackage(c, "file://" & c.currentDir)
@@ -128,7 +132,7 @@ proc pinGraph*(c: var AtlasContext; g: var DepGraph; lockFilePath: string; expor
   var nlf = newNimbleLockFile()
   var nimbleDeps = newTable[string, HashSet[string]]()
 
-  info c, startPkg, "pinning lockfile: " & lockFilePath
+  info c, startPkg, "pinning lockfile: " & $lockFile
 
   var nc = createNimbleContext(c, c.depsDir)
   expandWithoutClone c, g, nc
@@ -152,48 +156,48 @@ proc pinGraph*(c: var AtlasContext; g: var DepGraph; lockFilePath: string; expor
   if fileExists(nimcfgPath):
     lf.nimcfg = readFile($nimcfgPath).splitLines()
 
-  let (nimblePath, amb) = findNimbleFile(startPkg)
-  if not amb and nimblePath.len > 0 and nimblePath.fileExists():
+  let (nimblePath, cnt) = findNimbleFile(startPkg)
+  if cnt > 0 and nimblePath.string.len > 0 and nimblePath.fileExists():
     lf.nimbleFile = LockedNimbleFile(
-      filename: nimblePath.relativePath(c.currentDir),
-      content: readFile(nimblePath).splitLines())
+      filename: $nimblePath.relativePath(c.currentDir),
+      content: readFile($nimblePath).splitLines())
 
   if not exportNimble:
-    write lf, lockFilePath
+    write lf, $lockFile
   else:
-    write nlf, lockFilePath
+    write nlf, $lockFile
 
-proc pinWorkspace*(c: var AtlasContext; lockFilePath: string) =
+proc pinWorkspace*(c: var AtlasContext; lockFile: Path) =
   info c, "pin", "pinning workspace: " & $c.workspace
   var g = createGraphFromWorkspace(c)
   var nc = createNimbleContext(c, c.depsDir)
   expandWithoutClone c, g, nc
-  pinGraph c, g, lockFilePath
+  pinGraph c, g, lockFile
 
-proc pinProject*(c: var AtlasContext; lockFilePath: string, exportNimble = false) =
+proc pinProject*(c: var AtlasContext; lockFile: Path, exportNimble = false) =
   ## Pin project using deps starting from the current project directory.
   ##
   info c, "pin", "pinning project"
 
-  var g = createGraph(c, c.createUrl(c.currentDir, c.overrides))
+  var g = createGraph(c, c.createUrl($c.currentDir, c.overrides))
   var nc = createNimbleContext(c, c.depsDir)
   expandWithoutClone c, g, nc
-  pinGraph c, g, lockFilePath
+  pinGraph c, g, lockFile
 
 proc compareVersion(c: var AtlasContext; key, wanted, got: string) =
   if wanted != got:
     warn c, key, "environment mismatch: " &
       " versions differ: previously used: " & wanted & " but now at: " & got
 
-proc convertNimbleLock*(c: var AtlasContext; nimblePath: string): LockFile =
+proc convertNimbleLock*(c: var AtlasContext; nimble: Path): LockFile =
   ## converts nimble lock file into a Atlas lockfile
   ##
-  let jsonAsStr = readFile(nimblePath)
+  let jsonAsStr = readFile($nimble)
   let jsonTree = parseJson(jsonAsStr)
 
   if jsonTree.getOrDefault("version") == nil or
       "packages" notin jsonTree:
-    error c, nimblePath, "invalid nimble lockfile"
+    error c, nimble, "invalid nimble lockfile"
     return
 
   result = newLockFile()
@@ -205,30 +209,30 @@ proc convertNimbleLock*(c: var AtlasContext; nimblePath: string): LockFile =
       let pkgurl = info["url"].getStr
       info c, name, " imported "
       let u = c.createUrl(pkgurl, c.overrides)
-      let dir = c.depsDir / u.projectName
+      let dir = c.depsDir / u.projectName.Path 
       result.items[name] = LockFileEntry(
-        dir: dir.relativePath(c.projectDir),
+        dir: $dir.relativePath(c.projectDir),
         url: pkgurl,
         commit: info["vcsRevision"].getStr
       )
 
-proc convertAndSaveNimbleLock*(c: var AtlasContext; nimblePath, lockFilePath: string) =
+proc convertAndSaveNimbleLock*(c: var AtlasContext; nimble, lockFile: Path) =
   ## convert and save a nimble.lock into an Atlast lockfile
-  let lf = convertNimbleLock(c, nimblePath)
-  write lf, lockFilePath
+  let lf = convertNimbleLock(c, nimble)
+  write lf, $lockFile
 
-proc listChanged*(c: var AtlasContext; lockFilePath: string) =
+proc listChanged*(c: var AtlasContext; lockFile: Path) =
   ## replays the given lockfile by cloning and updating all the deps
   ##
   ## this also includes updating the nim.cfg and nimble file as well
   ## if they're included in the lockfile
   ##
-  let lf = if lockFilePath == NimbleLockFileName:
-              convertNimbleLock(c, lockFilePath)
+  let lf = if lockFile == NimbleLockFileName:
+              convertNimbleLock(c, lockFile)
            else:
-              readLockFile(lockFilePath)
+              readLockFile(lockFile)
 
-  let base = splitPath(lockFilePath).head
+  let base = splitPath(lockFile).head
 
   # update the the dependencies
   for _, v in pairs(lf.items):
@@ -260,7 +264,7 @@ proc withoutSuffix(s, suffix: string): string =
   if result.endsWith(suffix):
     result.setLen result.len - suffix.len
 
-proc replay*(c: var AtlasContext; lockFilePath: string) =
+proc replay*(c: var AtlasContext; lockFile: Path) =
   ## replays the given lockfile by cloning and updating all the deps
   ##
   ## this also includes updating the nim.cfg and nimble file as well
