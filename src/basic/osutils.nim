@@ -62,7 +62,7 @@ proc nimbleExec*(cmd: string; args: openArray[string]) =
   discard os.execShellCmd(cmdLine)
 
 template withDir*(c: var Reporter; dir: string; body: untyped) =
-  let oldDir = getCurrentDir()
+  let oldDir = ospaths2.getCurrentDir()
   debug c, dir, "Current directory is now: " & dir
   try:
     setCurrentDir(dir)

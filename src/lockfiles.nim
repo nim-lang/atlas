@@ -8,7 +8,7 @@
 
 ## Lockfile implementation.
 
-import std / [sequtils, strutils, tables, sets, os, json, jsonutils]
+import std / [sequtils, paths, dirs, files, strutils, tables, sets, os, json, jsonutils]
 import basic/[lockfiletypes, context, gitops, nimblechecksums, compilerversions,
   configutils, depgraphtypes, reporters, nimbleparser, pkgurls]
 import cloner, depgraphs, pkgcache
@@ -17,25 +17,25 @@ const
   NimbleLockFileName* = "nimble.lock"
 
 
-proc prefixedPath*(c: var AtlasContext, path: string): string =
-  let parts = path.splitPath
+proc prefixedPath*(c: var AtlasContext, path: Path): string =
+  let parts = splitPath($path)
   if path.isRelativeTo(c.depsDir):
     return "$deps" / parts.tail
   elif path.isRelativeTo(c.workspace):
     return "$workspace" / parts.tail
   else:
-    return path
+    return $path
 
-proc fromPrefixedPath*(c: var AtlasContext, path: string): string =
+proc fromPrefixedPath*(c: var AtlasContext, path: string): Path =
   var path = path
   if path.startsWith("$deps"):
     path.removePrefix("$deps")
-    return c.depsDir / path
+    return c.depsDir / Path(path)
   elif path.startsWith("$workspace"):
     path.removePrefix("$workspace")
-    return c.workspace / path
+    return c.workspace / Path(path)
   else:
-    return c.depsDir / path
+    return c.depsDir / Path(path)
 
 proc genLockEntry(c: var AtlasContext; lf: var LockFile; w: Dependency) =
   lf.items[w.pkg.projectName] = LockFileEntry(
@@ -89,8 +89,8 @@ proc genLockEntry(c: var AtlasContext;
                   w: Dependency,
                   cfg: CfgPath,
                   deps: HashSet[string]) =
-  var amb = false
-  let nimbleFile = findNimbleFile(c, "", amb)
+  # var amb = false
+  let (nimbleFile, cnt) = findNimbleFile(w)
   let info = extractRequiresInfo(nimbleFile)
   let commit = getCurrentCommit()
   infoNow c, w.pkg.projectName, "calculating nimble checksum"
@@ -105,7 +105,7 @@ proc genLockEntry(c: var AtlasContext;
   )
 
 const
-  NimCfg = "nim.cfg"
+  NimCfg = Path "nim.cfg"
 
 proc expandWithoutClone*(c: var AtlasContext; g: var DepGraph; nc: NimbleContext) =
   ## Expand the graph by adding all dependencies.
@@ -115,8 +115,8 @@ proc expandWithoutClone*(c: var AtlasContext; g: var DepGraph; nc: NimbleContext
     if not processed.containsOrIncl(g.nodes[i].pkg):
       let (dest, todo) = pkgUrlToDirname(c, g, g.nodes[i])
       if todo == DoNothing:
-        withDir c, dest:
-          traverseDependency(c, nc, g, i, CurrentCommit)
+        withDir c, $dest:
+          c.traverseDependency(nc, g, i, CurrentCommit)
     inc i
 
 proc pinGraph*(c: var AtlasContext; g: var DepGraph; lockFilePath: string; exportNimble = false) =
@@ -135,7 +135,7 @@ proc pinGraph*(c: var AtlasContext; g: var DepGraph; lockFilePath: string; expor
 
   for w in toposorted(g):
     let dir = w.ondisk
-    tryWithDir c, dir:
+    tryWithDir c, $dir:
       if not exportNimble:
         # generate atlas native lockfile entries
         genLockEntry c, lf, w
@@ -150,10 +150,9 @@ proc pinGraph*(c: var AtlasContext; g: var DepGraph; lockFilePath: string; expor
 
   let nimcfgPath = c.currentDir / NimCfg
   if fileExists(nimcfgPath):
-    lf.nimcfg = readFile(nimcfgPath).splitLines()
+    lf.nimcfg = readFile($nimcfgPath).splitLines()
 
-  var amb = false
-  let nimblePath = findNimbleFile(c, startPkg, amb)
+  let (nimblePath, amb) = findNimbleFile(startPkg)
   if not amb and nimblePath.len > 0 and nimblePath.fileExists():
     lf.nimbleFile = LockedNimbleFile(
       filename: nimblePath.relativePath(c.currentDir),

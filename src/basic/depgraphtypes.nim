@@ -47,17 +47,20 @@ proc toJson*(d: DepGraph): JsonNode =
   result["nodes"] = toJson(d.nodes)
   result["reqs"] = toJson(d.reqs)
 
-proc findNimbleFile*(dep: Dependency): (Path, int) =
-  doAssert(dep.ondisk.string != "", "Package ondisk must be set before findNimbleFile can be called! Package: " & $(dep))
-  var nimbleFile = dep.ondisk / Path(dep.pkg.projectName & ".nimble")
+proc findNimbleFile*(nimbleFile: Path): (Path, int) =
   var found = 0
   if fileExists(nimbleFile):
     inc found
-  else:
-    for file in walkFiles($dep.ondisk / "*.nimble"):
-      nimbleFile = Path(file)
-      inc found
   result = (Path(ensureMove nimbleFile), found)
+
+proc findNimbleFile*(dep: Dependency): (Path, int) =
+  doAssert(dep.ondisk.string != "", "Package ondisk must be set before findNimbleFile can be called! Package: " & $(dep))
+  var nimbleFile = dep.ondisk / Path(dep.pkg.projectName & ".nimble")
+  result = findNimbleFile(nimbleFile)
+  if result[1] == 0:
+    for file in walkFiles($dep.ondisk / "*.nimble"):
+      result[0] = Path(file)
+      inc result[1]
 
 type
   PackageAction* = enum

@@ -15,18 +15,14 @@ const
   configPatternBegin = "############# begin Atlas config section ##########\n"
   configPatternEnd =   "############# end Atlas config section   ##########\n"
 
-proc parseNimble*(c: var AtlasContext; nimble: string): NimbleFileInfo =
+proc parseNimble*(c: var AtlasContext; nimble: Path): NimbleFileInfo =
   result = extractRequiresInfo(nimble)
 
-proc findCfgDir*(c: var AtlasContext): CfgPath =
-  for nimbleFile in walkPattern($c.currentDir / "*.nimble"):
-    let nimbleInfo = parseNimble(c, nimbleFile)
-    return CfgPath c.currentDir / nimbleInfo.srcDir
-  return CfgPath c.currentDir
-
-proc findCfgDir*(c: var AtlasContext, dir: string): CfgPath =
-  c.withDir dir:
-    result = findCfgDir(c)
+proc findCfgDir*(c: var AtlasContext, dir = c.currentDir): CfgPath =
+  for nimbleFile in walkPattern($dir / "*.nimble"):
+    let nimbleInfo = c.parseNimble(Path nimbleFile)
+    return CfgPath dir / nimbleInfo.srcDir
+  return CfgPath dir
 
 proc patchNimCfg*(c: var AtlasContext; deps: seq[CfgPath]; cfgPath: CfgPath) =
   var paths = "--noNimblePath\n"

@@ -74,16 +74,17 @@ proc setupNimEnv*(c: var Reporter; workspace, nimVersion: string; keepCsources: 
       else:
         exec c, "make"
   let nimExe0 = ".." / csourcesVersion / "bin" / "nim".addFileExt(ExeExt)
+  let dir = Path(workspace / nimDest)
   withDir c, workspace / nimDest:
     let nimExe = "bin" / "nim".addFileExt(ExeExt)
     copyFileWithPermissions nimExe0, nimExe
     let query = createQueryEq(if nimVersion.isDevel: Version"#head" else: Version(nimVersion))
     if not nimVersion.isDevel:
-      let commit = versionToCommit(c, SemVer, query)
+      let commit = c.versionToCommit(dir, SemVer, query)
       if commit.len == 0:
         error c, nimDest, "cannot resolve version to a commit"
         return
-      checkoutGitCommit(c, nimdest, commit)
+      c.checkoutGitCommit(dir, commit)
     exec c, nimExe & " c --noNimblePath --skipUserCfg --skipParentCfg --hints:off koch"
     let kochExe = when defined(windows): "koch.exe" else: "./koch"
     exec c, kochExe & " boot -d:release --skipUserCfg --skipParentCfg --hints:off"

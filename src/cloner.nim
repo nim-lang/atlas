@@ -133,7 +133,7 @@ when false:
     result = PackageDir c.depsDir / pkg.repo.string
     trace c, pkg, "dependency not found using default"
 
-  proc findNimbleFile*(c: var AtlasContext; pkg: Package; depDir = PackageDir""): string =
+  proc findNimbleFile*(c: var AtlasContext; pkg: Package; depDir = PackageDir""): Path =
     let dir = if depDir.string.len == 0: dependencyDir(c, pkg).string
               else: depDir.string
     result = dir / (pkg.name.string & ".nimble")
