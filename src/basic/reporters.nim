@@ -7,6 +7,7 @@
 #
 
 import std / [terminal, paths]
+export paths
 
 type
   MsgKind* = enum

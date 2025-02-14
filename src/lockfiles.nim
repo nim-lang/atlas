@@ -14,7 +14,7 @@ import basic/[lockfiletypes, context, gitops, nimblechecksums, compilerversions,
 import cloner, depgraphs, pkgcache
 
 const
-  NimbleLockFileName* = "nimble.lock"
+  NimbleLockFileName* = Path "nimble.lock"
 
 
 proc prefixedPath*(c: var AtlasContext, path: Path): string =

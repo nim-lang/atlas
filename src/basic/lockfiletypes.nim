@@ -1,6 +1,8 @@
 import std / [strutils, tables, json, jsonutils]
 export tables
 
+import reporters
+
 type
   LockFileEntry* = object
     dir*: string
@@ -35,8 +37,8 @@ proc convertKeyToArray(jsonTree: var JsonNode, path: varargs[string]) =
       contents.add(% line)
     parent[path[^1]] = contents
 
-proc readLockFile*(filename: string): LockFile =
-  let jsonAsStr = readFile(filename)
+proc readLockFile*(filename: Path): LockFile =
+  let jsonAsStr = readFile($filename)
   var jsonTree = parseJson(jsonAsStr)
 
   # convert older non-array file contents to JArray
