@@ -92,6 +92,10 @@ when not compiles($(Path("test"))):
   template `$`*(x: Path): string =
     string(x)
 
+when not compiles(len(Path("test"))):
+  template len*(x: Path): int =
+    x.string.len()
+
 proc warn*(c: var Reporter; p: Path, arg: string) =
   warn(c, $p, arg)
 

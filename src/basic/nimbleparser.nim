@@ -87,21 +87,6 @@ proc parseNimbleFile*(cc: var Reporter, nc: NimbleContext; nimbleFile: Path; p: 
         else:
           result.deps.add (cc.createUrlSkipPatterns(u), query)
 
-# proc findNimbleFile*(c: var Reporter; dir: string; ambiguous: var bool): string =
-#   result = ""
-#   var counter = 0
-#   for x in walkFiles(dir / "*.nimble"):
-#     inc counter
-#     if result.len == 0:
-#       result = x
-#   if counter > 1:
-#     ambiguous = true
-#     result = ""
-
-#  if counter > 1:
-#    warn c, dir, "cannot determine `.nimble` file; there are multiple to choose from"
-#    result = ""
-
 proc genRequiresLine(u: string): string = "requires \"$1\"\n" % u.escape("", "")
 
 proc patchNimbleFile*(c: var Reporter, nc: var NimbleContext;

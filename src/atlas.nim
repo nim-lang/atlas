@@ -9,7 +9,7 @@
 ## Simple tool to automate frequent workflows: Can "clone"
 ## a Nimble dependency and its dependencies recursively.
 
-import std / [parseopt, strutils, os, osproc, tables, sets, json, jsonutils, uri]
+import std / [parseopt, files, dirs, strutils, os, osproc, tables, sets, json, jsonutils, uri]
 import basic / [versions, context, osutils, packageinfos,
                 configutils, nimblechecksums, reporters,
                 nimbleparser, gitops, pkgurls]
@@ -199,13 +199,12 @@ proc updateDir(c: var AtlasContext; dir, filter: string) =
     debug c, (c.workspace / Path("updating")), "checking directory: " & $kind & " file: " & file.absolutePath
     if kind == pcDir and isGitDir(file):
       trace c, file, "updating directory"
-      gitops.updateDir(c, file, filter)
+      gitops.updateDir(c, file.Path, filter)
 
-
-proc detectWorkspace(currentDir: string): string =
+proc detectWorkspace(currentDir: Path): Path =
   ## find workspace by checking `currentDir` and its parents.
   result = currentDir
-  while result.len > 0:
+  while result.string.len > 0:
     if fileExists(result / AtlasWorkspace):
       return result
     result = result.parentDir()
@@ -217,24 +216,24 @@ proc detectWorkspace(currentDir: string): string =
       if kind == pcDir and fileExists(file / AtlasWorkspace):
         return file
 
-proc autoWorkspace(currentDir: string): string =
+proc autoWorkspace(currentDir: Path): Path =
   result = currentDir
-  while result.len > 0 and dirExists(result / ".git"):
+  while result.len > 0 and dirExists(result / Path ".git"):
     result = result.parentDir()
 
 proc createWorkspaceIn(c: var AtlasContext) =
   if not fileExists(c.workspace / AtlasWorkspace):
     writeDefaultConfigFile c
     info c, c.workspace, "created atlas.workspace"
-  if c.workspace != c.depsDir and c.depsDir != "":
+  if c.workspace != c.depsDir and c.depsDir != Path "":
     createDir absoluteDepsDir(c.workspace, c.depsDir)
     info c, c.depsDir, "created deps dir"
 
-proc listOutdated(c: var AtlasContext; dir: string) =
+proc listOutdated(c: var AtlasContext; dir: Path) =
   var updateable = 0
   for k, f in walkDir(dir, relative=true):
     if k in {pcDir, pcLinkToDir} and isGitDir(dir / f):
-      withDir c, dir / f:
+      withDir c, $(dir / f):
         if gitops.isOutdated(c, dir / f):
           inc updateable
 
@@ -242,7 +241,7 @@ proc listOutdated(c: var AtlasContext; dir: string) =
     info c, c.workspace, "all packages are up to date"
 
 proc listOutdated(c: var AtlasContext) =
-  if c.depsDir.len > 0 and c.depsDir != c.workspace:
+  if c.depsDir.string.len > 0 and c.depsDir != c.workspace:
     listOutdated c, c.depsDir
   listOutdated c, c.workspace
 
@@ -333,12 +332,12 @@ proc main(c: var AtlasContext) =
       of "keepcommits": c.flags.incl KeepCommits
       of "workspace":
         if val == ".":
-          c.workspace = getCurrentDir()
+          c.workspace = paths.getCurrentDir()
           createWorkspaceIn c
         elif val.len > 0:
-          c.workspace = val
+          c.workspace = Path val
           if not explicitProjectOverride:
-            c.currentDir = val
+            c.currentDir = Path val
           createDir(val)
           createWorkspaceIn c
         else:
@@ -346,12 +345,12 @@ proc main(c: var AtlasContext) =
       of "project":
         explicitProjectOverride = true
         if isAbsolute(val):
-          c.currentDir = val
+          c.currentDir = Path val
         else:
-          c.currentDir = getCurrentDir() / val
+          c.currentDir = paths.getCurrentDir() / Path val
       of "deps":
         if val.len > 0:
-          c.origDepsDir = val
+          c.origDepsDir = Path val
           explicitDepsDirOverride = true
         else:
           writeHelp()
@@ -391,11 +390,11 @@ proc main(c: var AtlasContext) =
     of cmdEnd: assert false, "cannot happen"
 
   if c.workspace.len > 0:
-    if not dirExists(c.workspace): fatal c, "Workspace directory '" & c.workspace & "' not found."
+    if not dirExists(c.workspace): fatal c, "Workspace directory '" & $c.workspace & "' not found."
     readConfig c
   elif action notin ["init", "tag"]:
     if GlobalWorkspace in c.flags:
-      c.workspace = detectWorkspace(getHomeDir() / ".atlas")
+      c.workspace = detectWorkspace(Path(getHomeDir() / ".atlas"))
       warn c, c.workspace, "using global workspace"
     else:
       c.workspace = detectWorkspace(c.currentDir)
@@ -409,7 +408,7 @@ proc main(c: var AtlasContext) =
       fatal c, "No workspace found. Run `atlas init` if you want this current directory to be your workspace."
 
   if not explicitDepsDirOverride and action notin ["init", "tag"] and c.origDepsDir.len == 0:
-    c.origDepsDir = ""
+    c.origDepsDir = Path ""
   if action != "tag":
     createDir(c.depsDir)
 
@@ -418,10 +417,10 @@ proc main(c: var AtlasContext) =
     fatal c, "No action."
   of "init":
     if GlobalWorkspace in c.flags:
-      c.workspace = getHomeDir() / ".atlas"
+      c.workspace = Path(getHomeDir() / ".atlas")
       createDir(c.workspace)
     else:
-      c.workspace = getCurrentDir()
+      c.workspace = paths.getCurrentDir()
     createWorkspaceIn c
   of "clone", "update":
     singleArg()
@@ -433,8 +432,7 @@ proc main(c: var AtlasContext) =
   of "use":
     singleArg()
     #fillPackageLookupTable(c.nimbleContext, c, )
-    var amb = false
-    var nimbleFile = findNimbleFile(c, c.workspace, amb)
+    var (nimbleFile, cnt) = c.findNimbleFile(c.workspace)
     var nc = createNimbleContext(c, c.depsDir)
 
     if nimbleFile.len == 0:

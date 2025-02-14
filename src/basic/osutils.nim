@@ -38,8 +38,8 @@ proc readableFile*(s: Path, path: Path): Path =
     s
 
 
-proc absoluteDepsDir*(workspace, value: string): string =
-  if value == ".":
+proc absoluteDepsDir*(workspace, value: Path): Path =
+  if value == Path ".":
     result = workspace
   elif isAbsolute(value):
     result = value
