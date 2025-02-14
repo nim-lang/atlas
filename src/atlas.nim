@@ -155,47 +155,13 @@ proc getRequiredCommit*(c: var AtlasContext; w: Dependency): string =
   if isShortCommitHash(w.commit): shortToCommit(c, w.ondisk, w.commit)
   else: w.commit
 
-proc checkoutLaterCommit(c: var AtlasContext; g: var DepGraph; w: Dependency) =
-  # Now dead code.
-  withDir c, $w.ondisk:
-    if w.commit.len == 0 or cmpIgnoreCase(w.commit, InvalidCommit) == 0:
-      c.gitPull(w.ondisk, w.pkg.url)
-    else:
-      let err = checkGitDiffStatus(c)
-      if err.len > 0:
-        warn c, w.pkg.projectName, err
-      else:
-        let requiredCommit = getRequiredCommit(c, w)
-        let (cc, status) = exec(c, GitCurrentCommit, [])
-        let currentCommit = strutils.strip(cc)
-        if requiredCommit == "" or status != 0:
-          if requiredCommit == "" and w.commit == InvalidCommit:
-            warn c, w.pkg.projectName, "package has no tagged releases"
-          else:
-            warn c, w.pkg.projectName, "cannot find specified version/commit " & w.commit
-        else:
-          if currentCommit != requiredCommit:
-            # checkout the later commit:
-            # git merge-base --is-ancestor <commit> <commit>
-            let (cc, status) = exec(c, GitMergeBase, [currentCommit, requiredCommit])
-            let mergeBase = strutils.strip(cc)
-            if status == 0 and (mergeBase == currentCommit or mergeBase == requiredCommit):
-              # conflict resolution: pick the later commit:
-              if mergeBase == currentCommit:
-                checkoutGitCommit(c, w.ondisk, requiredCommit)
-            else:
-              checkoutGitCommit(c, w.ondisk, requiredCommit)
-              when false:
-                warn c, w.pkg.projectName, "do not know which commit is more recent:",
-                  currentCommit, "(current) or", w.commit, " =", requiredCommit, "(required)"
-
 proc traverseLoop(c: var AtlasContext; nc: var NimbleContext; g: var DepGraph): seq[CfgPath] =
   result = @[]
   expand c, g, nc, TraversalMode.AllReleases
   let f = toFormular(c, g, c.defaultAlgo)
   solve c, g, f
   for w in allActiveNodes(g):
-    result.add CfgPath(toDestDir(g, w) / getCfgPath(g, w).string)
+    result.add CfgPath(toDestDir(g, w) / getCfgPath(g, w).Path)
 
 proc traverse(c: var AtlasContext; nc: var NimbleContext; start: string): seq[CfgPath] =
   # returns the list of paths for the nim.cfg file.
@@ -230,7 +196,7 @@ proc installDependencies(c: var AtlasContext; nc: var NimbleContext; nimbleFile:
 proc updateDir(c: var AtlasContext; dir, filter: string) =
   ## update the package's VCS
   for kind, file in walkDir(dir):
-    debug c, (c.workspace / "updating"), "checking directory: " & $kind & " file: " & file.absolutePath
+    debug c, (c.workspace / Path("updating")), "checking directory: " & $kind & " file: " & file.absolutePath
     if kind == pcDir and isGitDir(file):
       trace c, file, "updating directory"
       gitops.updateDir(c, file, filter)
