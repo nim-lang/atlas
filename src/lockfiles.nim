@@ -93,8 +93,14 @@ proc genLockEntry(c: var AtlasContext;
                   w: Dependency,
                   cfg: CfgPath,
                   deps: HashSet[string]) =
-  # var amb = false
-  let (nimbleFile, cnt) = findNimbleFile(w)
+  let nimbleFiles = findNimbleFile(w)
+  let nimbleFile =
+    if nimbleFiles.len() == 1:
+      nimbleFiles[0]
+    else:
+      error c, w.pkg.projectName, "Couldn't find nimble file at " & $w.ondisk
+      return
+
   let info = extractRequiresInfo(nimbleFile)
   let commit = getCurrentCommit()
   infoNow c, w.pkg.projectName, "calculating nimble checksum"
@@ -156,11 +162,11 @@ proc pinGraph*(c: var AtlasContext; g: var DepGraph; lockFile: Path; exportNimbl
   if fileExists(nimcfgPath):
     lf.nimcfg = readFile($nimcfgPath).splitLines()
 
-  let (nimblePath, cnt) = findNimbleFile(startPkg)
-  if cnt > 0 and nimblePath.string.len > 0 and nimblePath.fileExists():
+  let nimblePaths = findNimbleFile(startPkg)
+  if nimblePaths.len() == 1 and nimblePaths[0].string.len > 0 and nimblePaths[0].fileExists():
     lf.nimbleFile = LockedNimbleFile(
-      filename: nimblePath.relativePath(c.currentDir),
-      content: readFile($nimblePath).splitLines())
+      filename: nimblePaths[0].relativePath(c.currentDir),
+      content: readFile($nimblePaths[0]).splitLines())
 
   if not exportNimble:
     write lf, $lockFile

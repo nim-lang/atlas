@@ -433,21 +433,25 @@ proc main(c: var AtlasContext) =
   of "use":
     singleArg()
     let currDirName = c.workspace.splitFile().name.string
-    var (nimbleFile, nimbleFiles) = findNimbleFile(c.workspace, currDirName)
+    var nimbleFiles = findNimbleFile(c.workspace, currDirName)
     var nc = createNimbleContext(c, c.depsDir)
 
-    echo "USE:foundNimble: ", $nimbleFile, " cnt: ", nimbleFiles, " abs: ", $nimbleFile.absolutePath
-    if nimbleFiles == 0:
-      nimbleFile = c.workspace / Path(extractProjectName($c.workspace) & ".nimble")
-      echo "USE:nimbleFile:set: ", $nimbleFile, " abs: ", $nimbleFile.absolutePath
+    echo "USE:foundNimble: ", $nimbleFiles
+    if nimbleFiles.len() == 0:
+      let nimbleFile = c.workspace / Path(extractProjectName($c.workspace) & ".nimble")
+      trace c, "use", "USE:nimbleFile:set: " & $nimbleFile
       writeFile($nimbleFile, "")
-    c.patchNimbleFile(nc, c, c.overrides, nimbleFile, args[0])
+      nimbleFiles.add(nimbleFile)
+    elif nimbleFiles.len() > 1:
+      error c, "use", "Ambiguous Nimble files found: " & $nimbleFiles
+
+    c.patchNimbleFile(nc, c, c.overrides, nimbleFiles[0], args[0])
 
     if c.errors > 0:
       discard "don't continue for 'cannot resolve'"
-    elif nimbleFiles == 1:
-      c.installDependencies(nc, nimbleFile.Path)
-    elif nimbleFiles > 1:
+    elif nimbleFiles.len() == 1:
+      c.installDependencies(nc, nimbleFiles[0].Path)
+    elif nimbleFiles.len() > 1:
       error c, args[0], "ambiguous .nimble file"
     else:
       error c, args[0], "cannot find .nimble file"

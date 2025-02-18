@@ -69,15 +69,16 @@ iterator releases(c: var AtlasContext;
 
 proc traverseRelease(c: var AtlasContext; nc: NimbleContext; g: var DepGraph; idx: int;
                      origin: CommitOrigin; r: Commit; lastNimbleContents: var string) =
-  let (nimbleFile, found) = findNimbleFile(g[idx])
+  let nimbleFiles = findNimbleFile(g[idx])
   var pv = DependencyVersion(
     version: r.v,
     commit: r.h,
     req: EmptyReqs, v: NoVar)
   var badNimbleFile = false
-  if found != 1:
+  if nimbleFiles.len() != 1:
     pv.req = UnknownReqs
   else:
+    let nimbleFile = nimbleFiles[0]
     when (NimMajor, NimMinor, NimPatch) == (2, 0, 0):
       # bug #110; make it compatible with Nim 2.0.0
       # ensureMove requires mutable places when version < 2.0.2
@@ -305,9 +306,9 @@ proc runBuildSteps(c: var AtlasContext; g: var DepGraph) =
         let activeVersion = g.nodes[i].activeVersion
         let r = if g.nodes[i].versions.len == 0: -1 else: g.nodes[i].versions[activeVersion].req
         if r >= 0 and r < g.reqs.len and g.reqs[r].hasInstallHooks:
-          let (nf, found) = findNimbleFile(g[i])
-          if found == 1:
-            runNimScriptInstallHook c, nf, pkg.projectName
+          let nfs = findNimbleFile(g[i])
+          if nfs.len() == 1:
+            runNimScriptInstallHook c, nfs[0], pkg.projectName
         # check for nim script builders
         for p in mitems c.plugins.builderPatterns:
           let f = p[0] % pkg.projectName
