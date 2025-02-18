@@ -56,18 +56,13 @@ proc findNimbleFile*(dir: Path, projectName: string): (Path, int) =
   var nimbleFile = dir / Path(projectName & ".nimble")
   result = findNimbleFile(nimbleFile)
   if result[1] == 0:
-    for file in walkFiles($dep.ondisk / "*.nimble"):
+    for file in walkFiles($dir / "*.nimble"):
       result[0] = Path(file)
       inc result[1]
 
 proc findNimbleFile*(dep: Dependency): (Path, int) =
   doAssert(dep.ondisk.string != "", "Package ondisk must be set before findNimbleFile can be called! Package: " & $(dep))
-  var nimbleFile = dep.ondisk / Path(dep.pkg.projectName & ".nimble")
-  result = findNimbleFile(nimbleFile)
-  if result[1] == 0:
-    for file in walkFiles($dep.ondisk / "*.nimble"):
-      result[0] = Path(file)
-      inc result[1]
+  result = findNimbleFile(dep.ondisk, dep.pkg.projectName & ".nimble")
 
 type
   PackageAction* = enum
