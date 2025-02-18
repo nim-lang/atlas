@@ -30,37 +30,37 @@ proc getPackageInfos*(depsDir: Path): seq[PackageInfo] =
         if pkg != nil and not uniqueNames.containsOrIncl(pkg.name):
           result.add(pkg)
 
-proc updatePackages*(c: var AtlasContext; depsDir: Path) =
+proc updatePackages*(depsDir: Path) =
   if dirExists($(depsDir / DefaultPackagesSubDir)):
-    withDir(c, $(depsDir / DefaultPackagesSubDir)):
-      gitPull(c, depsDir / DefaultPackagesSubDir)
+    withDir($(depsDir / DefaultPackagesSubDir)):
+      gitPull(depsDir / DefaultPackagesSubDir)
   else:
-    withDir c, $depsDir:
-      let success = clone(c, "https://github.com/nim-lang/packages", DefaultPackagesSubDir)
+    withDir $depsDir:
+      let success = clone("https://github.com/nim-lang/packages", DefaultPackagesSubDir)
       if not success:
-        error c, DefaultPackagesSubDir, "cannot clone packages repo"
+        error DefaultPackagesSubDir, "cannot clone packages repo"
 
-proc fillPackageLookupTable(r: var AtlasContext; c: var NimbleContext; depsdir: Path) =
+proc fillPackageLookupTable(c: var NimbleContext; depsdir: Path) =
   if not c.hasPackageList:
     c.hasPackageList = true
     if not fileExists($(depsDir / DefaultPackagesSubDir / Path "packages.json")):
-      updatePackages(r, depsdir)
+      updatePackages(depsdir)
     let packages = getPackageInfos(depsDir)
     for entry in packages:
       c.nameToUrl[unicode.toLower entry.name] = entry.url
 
-proc createNimbleContext*(r: var AtlasContext; depsdir: Path): NimbleContext =
+proc createNimbleContext*(depsdir: Path): NimbleContext =
   result = NimbleContext()
-  fillPackageLookupTable(r, result, depsdir)
+  fillPackageLookupTable(result, depsdir)
 
-proc collectNimbleVersions*(c: var AtlasContext; nc: NimbleContext; dep: Dependency): seq[string] =
+proc collectNimbleVersions*(nc: NimbleContext; dep: Dependency): seq[string] =
   let nimbleFiles = findNimbleFile(dep)
   let dir = dep.ondisk
   doAssert(dep.ondisk.string != "", "Package ondisk must be set before collectNimbleVersions can be called! Package: " & $(dep))
-  trace c, "collectNimbleVersions", "dep: " & dep.pkg.projectName & " at: " & $dep.ondisk
+  trace "collectNimbleVersions", "dep: " & dep.pkg.projectName & " at: " & $dep.ondisk
   result = @[]
   if nimbleFiles.len() == 1:
-    let (outp, status) = c.exec(GitLog, dir, [$nimbleFiles[0]])
+    let (outp, status) = exec(GitLog, dir, [$nimbleFiles[0]])
     if status == 0:
       for line in splitLines(outp):
         if line.len > 0 and not line.endsWith("^{}"):

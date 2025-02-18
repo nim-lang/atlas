@@ -135,7 +135,7 @@ suite "Git Operations Tests":
       discard execCmd("git commit -m \"update commit\"")
 
       # Test if repo is outdated
-      let outdated = c.isOutdated(Path ".", "test")
+      let outdated = isOutdated(Path ".", "test")
       # Note: This might fail in isolated test environments
       # We're mainly testing the function structure
       check(not outdated)  # Expected to be false in test environment
@@ -147,7 +147,7 @@ suite "Git Operations Tests":
       discard execCmd("git remote add origin " & testUrl)
       
       # Test getting remote URL
-      let url = c.getRemoteUrl(Path ".")
+      let url = getRemoteUrl(Path ".")
       check(url == testUrl)
       
       # Test getting remote URL from specific directory

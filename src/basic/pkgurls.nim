@@ -35,12 +35,12 @@ proc extractProjectName*(s: string): string =
 
 proc `$`*(u: PkgUrl): string = u.u
 
-proc createUrlSkipPatterns*(c: var Reporter, x: string): PkgUrl =
+proc createUrlSkipPatterns*(x: string): PkgUrl =
   if "://" notin x:
     if dirExists(x):
       let u2 =
         if isGitDir(x):
-          c.getRemoteUrl(Path(x))
+          getRemoteUrl(Path(x))
         else:
           ("file://" & x)
       result = PkgUrl(projectName: extractProjectName(x), u: u2)
@@ -49,11 +49,11 @@ proc createUrlSkipPatterns*(c: var Reporter, x: string): PkgUrl =
   else:
     result = PkgUrl(projectName: extractProjectName(x), u: x)
 
-proc createUrl*(c: var Reporter, u: string; p: Patterns): PkgUrl =
+proc createUrl*(u: string; p: Patterns): PkgUrl =
   var didReplace = false
   let x = substitute(p, u, didReplace)
   if not didReplace:
-    result = c.createUrlSkipPatterns(x)
+    result = createUrlSkipPatterns(x)
   else:
     result = PkgUrl(projectName: extractProjectName(x), u: x)
 

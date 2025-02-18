@@ -11,13 +11,13 @@
 import std / [strutils, os, streams, json]
 import basic/[versions, context, reporters, compiledpatterns, parserequires]
 
-proc parseOverridesFile(c: var AtlasContext; filename: Path) =
+proc parseOverridesFile(filename: Path) =
   const Separator = " -> "
-  let path = c.workspace / filename
+  let path = context().workspace / filename
   var f: File
   if open(f, $path):
-    info c, "overrides", "loading file: " & $path
-    c.flags.incl UsesOverrides
+    info "overrides", "loading file: " & $path
+    context().flags.incl UsesOverrides
     try:
       var lineCount = 1
       for line in lines($path):
@@ -26,22 +26,22 @@ proc parseOverridesFile(c: var AtlasContext; filename: Path) =
           let key = line.substr(0, splitPos-1)
           let val = line.substr(splitPos+len(Separator))
           if key.len == 0 or val.len == 0:
-            error c, path, "key/value must not be empty"
-          let err = c.overrides.addPattern(key, val)
+            error path, "key/value must not be empty"
+          let err = context().overrides.addPattern(key, val)
           if err.len > 0:
-            error c, path, "(" & $lineCount & "): " & err
+            error path, "(" & $lineCount & "): " & err
         else:
           discard "ignore the line"
         inc lineCount
     finally:
       close f
   else:
-    error c, path, "cannot open: " & $path
+    error path, "cannot open: " & $path
 
-proc readPluginsDir(c: var AtlasContext; dir: Path) =
-  for k, f in walkDir($(c.workspace / dir)):
+proc readPluginsDir(dir: Path) =
+  for k, f in walkDir($(context().workspace / dir)):
     if k == pcFile and f.endsWith(".nims"):
-      extractPluginInfo f, c.plugins
+      extractPluginInfo f, context().plugins
 
 type
   JsonConfig = object
@@ -51,40 +51,40 @@ type
     resolver: string
     graph: JsonNode
 
-proc writeDefaultConfigFile*(c: var AtlasContext) =
-  let config = JsonConfig(deps: $c.origDepsDir, resolver: $SemVer, graph: newJNull())
-  let configFile = c.workspace / AtlasWorkspace
+proc writeDefaultConfigFile*() =
+  let config = JsonConfig(deps: $context().origDepsDir, resolver: $SemVer, graph: newJNull())
+  let configFile = context().workspace / AtlasWorkspace
   writeFile($configFile, pretty %*config)
 
-proc readConfig*(c: var AtlasContext) =
-  let configFile = c.workspace / AtlasWorkspace
+proc readConfig*() =
+  let configFile = context().workspace / AtlasWorkspace
   var f = newFileStream($configFile, fmRead)
   if f == nil:
-    error c, configFile, "cannot open: " & $configFile
+    error configFile, "cannot open: " & $configFile
     return
 
   let j = parseJson(f, $configFile)
   try:
     let m = j.to(JsonConfig)
     if m.deps.len > 0:
-      c.origDepsDir = m.deps.Path
+      context().origDepsDir = m.deps.Path
     if m.overrides.len > 0:
-      c.overridesFile = m.overrides.Path
-      parseOverridesFile(c, m.overrides.Path)
+      context().overridesFile = m.overrides.Path
+      parseOverridesFile(m.overrides.Path)
     if m.resolver.len > 0:
       try:
-        c.defaultAlgo = parseEnum[ResolutionAlgorithm](m.resolver)
+        context().defaultAlgo = parseEnum[ResolutionAlgorithm](m.resolver)
       except ValueError:
-        warn c, configFile, "ignored unknown resolver: " & m.resolver
+        warn configFile, "ignored unknown resolver: " & m.resolver
     if m.plugins.len > 0:
-      c.pluginsFile = m.plugins.Path
-      readPluginsDir(c, m.plugins.Path)
+      context().pluginsFile = m.plugins.Path
+      readPluginsDir(m.plugins.Path)
   finally:
     close f
 
-proc writeConfig*(c: AtlasContext; graph: JsonNode) =
-  let config = JsonConfig(deps: $c.origDepsDir, overrides: $c.overridesFile,
-    plugins: $c.pluginsFile, resolver: $c.defaultAlgo,
+proc writeConfig*(graph: JsonNode) =
+  let config = JsonConfig(deps: $context().origDepsDir, overrides: $context().overridesFile,
+    plugins: $context().pluginsFile, resolver: $context().defaultAlgo,
     graph: graph)
-  let configFile = c.workspace / AtlasWorkspace
+  let configFile = context().workspace / AtlasWorkspace
   writeFile($configFile, pretty %*config)

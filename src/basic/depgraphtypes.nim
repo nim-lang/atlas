@@ -69,14 +69,14 @@ type
   PackageAction* = enum
     DoNothing, DoClone
 
-proc pkgUrlToDirname*(c: var AtlasContext; g: var DepGraph; d: Dependency): (Path, PackageAction) =
+proc pkgUrlToDirname*(g: var DepGraph; d: Dependency): (Path, PackageAction) =
   # XXX implement namespace support here
   var dest = Path g.ondisk.getOrDefault(d.pkg.url)
   if dest.string.len == 0:
     if d.isTopLevel:
-      dest = c.workspace
+      dest = context().workspace
     else:
-      let depsDir = if d.isRoot: c.workspace else: c.depsDir
+      let depsDir = if d.isRoot: context().workspace else: context().depsDir
       dest = depsDir / Path d.pkg.projectName
   result = (dest, if dirExists(dest): DoNothing else: DoClone)
 
@@ -106,7 +106,7 @@ proc findDependencyForDep*(g: DepGraph; dep: PkgUrl): int {.inline.} =
   assert g.packageToDependency.hasKey(dep), $(dep, g.packageToDependency)
   result = g.packageToDependency.getOrDefault(dep)
 
-iterator directDependencies*(g: DepGraph; c: var AtlasContext; d: Dependency): lent Dependency =
+iterator directDependencies*(g: DepGraph; d: Dependency): lent Dependency =
   if d.activeVersion >= 0 and d.activeVersion < d.versions.len:
     let deps {.cursor.} = g.reqs[d.versions[d.activeVersion].req].deps
     for dep in deps:
@@ -128,8 +128,8 @@ proc bestNimVersion*(g: DepGraph): Version =
       let v = g.reqs[n.versions[n.activeVersion].req].nimVersion
       if v > result: result = v
 
-proc readOnDisk(c: var AtlasContext; result: var DepGraph) =
-  let configFile = c.workspace / AtlasWorkspace
+proc readOnDisk(result: var DepGraph) =
+  let configFile = context().workspace / AtlasWorkspace
   var f = newFileStream($configFile, fmRead)
   if f == nil:
     return
@@ -147,21 +147,21 @@ proc readOnDisk(c: var AtlasContext; result: var DepGraph) =
             result.packageToDependency[n.pkg] = result.nodes.len
             result.nodes.add Dependency(pkg: n.pkg, versions: @[], isRoot: true, isTopLevel: n.isTopLevel, activeVersion: -1)
   except:
-    error c, configFile, "cannot read: " & $configFile
+    error configFile, "cannot read: " & $configFile
 
-proc createGraph*(c: var AtlasContext; s: PkgUrl): DepGraph =
+proc createGraph*(s: PkgUrl): DepGraph =
   result = DepGraph(nodes: @[],
     reqs: defaultReqs())
   result.packageToDependency[s] = result.nodes.len
   result.nodes.add Dependency(pkg: s, versions: @[], isRoot: true, isTopLevel: true, activeVersion: -1)
-  readOnDisk(c, result)
+  readOnDisk(result)
 
-proc createGraphFromWorkspace*(c: var AtlasContext): DepGraph =
+proc createGraphFromWorkspace*(): DepGraph =
   result = DepGraph(nodes: @[], reqs: defaultReqs())
-  let configFile = c.workspace / AtlasWorkspace
+  let configFile = context().workspace / AtlasWorkspace
   var f = newFileStream($configFile, fmRead)
   if f == nil:
-    error c, configFile, "cannot open: " & $configFile
+    error configFile, "cannot open: " & $configFile
     return
 
   try:
@@ -174,12 +174,12 @@ proc createGraphFromWorkspace*(c: var AtlasContext): DepGraph =
     for i, n in mpairs(result.nodes):
       result.packageToDependency[n.pkg] = i
   except:
-    error c, configFile, "cannot read: " & $configFile
+    error configFile, "cannot read: " & $configFile
 
-proc copyFromDisk*(c: var AtlasContext; w: Dependency; destDir: Path): (CloneStatus, string) =
+proc copyFromDisk*(w: Dependency; destDir: Path): (CloneStatus, string) =
   var dir = w.pkg.url
   if dir.startsWith(FileWorkspace):
-    dir = $c.workspace / dir.substr(FileWorkspace.len)
+    dir = $context().workspace / dir.substr(FileWorkspace.len)
   #template selectDir(a, b: string): string =
   #  if dirExists(a): a else: b
 
@@ -187,7 +187,7 @@ proc copyFromDisk*(c: var AtlasContext; w: Dependency; destDir: Path): (CloneSta
   if w.isTopLevel:
     result = (Ok, "")
   elif dirExists(dir):
-    info c, destDir, "cloning: " & dir
+    info destDir, "cloning: " & dir
     copyDir(dir, $destDir)
     result = (Ok, "")
   else:

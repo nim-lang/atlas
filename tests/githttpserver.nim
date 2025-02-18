@@ -65,10 +65,10 @@ proc runGitHttpServer*(dirs: seq[string], port = Port(4242)) =
       searchDirs.add(d)
     let server = newAsyncHttpServer()
     doAssert searchDirs.len() >= 1, "must provide at least one directory to serve repos from"
-    infoNow c, "githttpserver", "Starting http git server on port " & repr(port)
-    infoNow c, "githttpserver", "Git http server serving directories: "
+    infoNow "githttpserver", "Starting http git server on port " & repr(port)
+    infoNow "githttpserver", "Git http server serving directories: "
     for sd in searchDirs:
-      infoNow c, "githttpserver", "\t" & sd
+      infoNow "githttpserver", "\t" & sd
     waitFor server.serve(port, handleRequest)
 
 proc threadGitHttpServer*(args: (seq[string], Port)) {.thread.} =
@@ -84,7 +84,7 @@ proc runGitHttpServerThread*(dirs: openArray[string], port = Port(4242)) =
 proc checkHttpReadme*(): bool =
     let client = newHttpClient()
     let response = client.get("http://localhost:4242/readme.md")
-    infoNow c, "githttpserver", "HTTP Server gave response: " & response.body
+    infoNow "githttpserver", "HTTP Server gave response: " & response.body
     response.body == "This directory holds the bare git modules used for testing."
 
 when isMainModule:

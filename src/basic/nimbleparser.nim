@@ -7,7 +7,7 @@
 #
 
 import std / [os, paths, strutils, tables, unicode, hashes]
-import sattypes, versions, reporters, reporters, gitops, parserequires, pkgurls, compiledpatterns
+import sattypes, versions, context, reporters, gitops, parserequires, pkgurls, compiledpatterns
 
 type
   DependencyStatus* = enum
@@ -48,7 +48,7 @@ proc addError*(err: var string; nimbleFile: string; msg: string) =
 
 proc isUrl(s: string): bool {.inline.} = s.len > 5 and s.contains "://"
 
-proc parseNimbleFile*(cc: var Reporter, nc: NimbleContext; nimbleFile: Path; p: Patterns): Requirements =
+proc parseNimbleFile*(nc: NimbleContext; nimbleFile: Path; p: Patterns): Requirements =
   let nimbleInfo = extractRequiresInfo(nimbleFile)
 
   result = Requirements(
@@ -85,28 +85,28 @@ proc parseNimbleFile*(cc: var Reporter, nc: NimbleContext; nimbleFile: Path; p: 
           if v != Version"":
             result.nimVersion = v
         else:
-          result.deps.add (cc.createUrlSkipPatterns(u), query)
+          result.deps.add (createUrlSkipPatterns(u), query)
 
 proc genRequiresLine(u: string): string = "requires \"$1\"\n" % u.escape("", "")
 
-proc patchNimbleFile*(c: var Reporter, nc: var NimbleContext;
-                      r: var Reporter; p: Patterns; nimbleFile: Path, name: string) =
+proc patchNimbleFile*(nc: var NimbleContext;
+                      p: Patterns; nimbleFile: Path, name: string) =
   var didReplace = false
   var u = substitute(p, name, didReplace)
   if not didReplace:
     u = (if name.isUrl: name else: nc.nameToUrl.getOrDefault(unicode.toLower name, ""))
 
   if u.len == 0:
-    error r, name, "cannot resolve package name: " & name
+    error name, "cannot resolve package name: " & name
     return
 
   echo "NIMBLEFILE: ", $nimbleFile
   echo "NIMBLEFILE: ", $nimbleFile.absolutePath
-  let req = parseNimbleFile(c, nc, nimbleFile, p)
+  let req = parseNimbleFile(nc, nimbleFile, p)
   # see if we have this requirement already listed. If so, do nothing:
   for d in req.deps:
     if d[0].url == u:
-      info(r, nimbleFile, "up to date")
+      info(nimbleFile, "up to date")
       return
 
   let line = genRequiresLine(if didReplace: name else: u)
@@ -115,4 +115,4 @@ proc patchNimbleFile*(c: var Reporter, nc: var NimbleContext;
     f.writeLine line
   finally:
     f.close()
-  info(r, nimbleFile, "updated")
+  info(nimbleFile, "updated")

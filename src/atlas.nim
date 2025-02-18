@@ -63,7 +63,7 @@ Command:
   tag [major|minor|patch]
                         add and push a new tag, input must be one of:
                         ['major'|'minor'|'patch'] or a SemVer tag like ['1.0.3']
-                        or a letter ['a'..'z']: a.b.c.d.e.f.g
+                        or a letter ['a'..'z']: a.b.context().d.e.f.g
   pin [atlas.lock]      pin the current checkouts and store them in the lock file
   rep [atlas.lock]      replay the state of the projects according to the lock file
   changed <atlack.lock> list any packages that differ from the lock file
@@ -110,17 +110,17 @@ proc writeVersion() =
   stdout.flushFile()
   quit(0)
 
-proc tag(c: var AtlasContext; tag: string) =
-  gitTag(c, c.projectDir, tag)
-  pushTag(c, c.projectDir, tag)
+proc tag(tag: string) =
+  gitTag(context().projectDir, tag)
+  pushTag(context().projectDir, tag)
 
-proc tag(c: var AtlasContext; field: Natural) =
-  let oldErrors = c.errors
-  let newTag = incrementLastTag(c, c.projectDir, field)
-  if c.errors == oldErrors:
-    tag(c, newTag)
+proc tag(field: Natural) =
+  let oldErrors = context().errors
+  let newTag = incrementLastTag(context().projectDir, field)
+  if context().errors == oldErrors:
+    tag(newTag)
 
-proc generateDepGraph(c: var AtlasContext; g: DepGraph) =
+proc generateDepGraph(g: DepGraph) =
   proc repr(w: Dependency): string =
     $(w.pkg.url / w.commit)
 
@@ -128,9 +128,9 @@ proc generateDepGraph(c: var AtlasContext; g: DepGraph) =
   for n in allNodes(g):
     dotGraph.addf("\"$1\" [label=\"$2\"];\n", [n.repr, if n.active: "" else: "unused"])
   for n in allNodes(g):
-    for child in directDependencies(g, c, n):
+    for child in directDependencies(g, n):
       dotGraph.addf("\"$1\" -> \"$2\";\n", [n.repr, child.repr])
-  let dotFile = c.currentDir / "deps.dot".Path
+  let dotFile = context().currentDir / "deps.dot".Path
   writeFile($dotFile, "digraph deps {\n$1}\n" % dotGraph)
   let graphvizDotPath = findExe("dot")
   if graphvizDotPath.len == 0:
@@ -140,67 +140,67 @@ proc generateDepGraph(c: var AtlasContext; g: DepGraph) =
   else:
     discard execShellCmd("dot -Tpng -odeps.png " & quoteShell($dotFile))
 
-proc afterGraphActions(c: var AtlasContext; g: DepGraph) =
-  if c.errors == 0 and KeepWorkspace notin c.flags:
-    writeConfig c, toJson(g)
+proc afterGraphActions(g: DepGraph) =
+  if context().errors == 0 and KeepWorkspace notin context().flags:
+    writeConfig toJson(g)
 
-  if ShowGraph in c.flags:
-    generateDepGraph c, g
-  if c.errors == 0 and AutoEnv in c.flags:
+  if ShowGraph in context().flags:
+    generateDepGraph g
+  if context().errors == 0 and AutoEnv in context().flags:
     let v = g.bestNimVersion
     if v != Version"":
-      setupNimEnv c, c.workspace, v.string, Keep in c.flags
+      setupNimEnv context().workspace, v.string, Keep in context().flags
 
-proc getRequiredCommit*(c: var AtlasContext; w: Dependency): string =
-  if isShortCommitHash(w.commit): shortToCommit(c, w.ondisk, w.commit)
+proc getRequiredCommit*(w: Dependency): string =
+  if isShortCommitHash(w.commit): shortToCommit(w.ondisk, w.commit)
   else: w.commit
 
-proc traverseLoop(c: var AtlasContext; nc: var NimbleContext; g: var DepGraph): seq[CfgPath] =
+proc traverseLoop(nc: var NimbleContext; g: var DepGraph): seq[CfgPath] =
   result = @[]
-  expand(c, g, nc, TraversalMode.AllReleases)
-  let f = toFormular(c, g, c.defaultAlgo)
-  solve(c, g, f)
+  expand(g, nc, TraversalMode.AllReleases)
+  let f = toFormular(g, context().defaultAlgo)
+  solve(g, f)
   for w in allActiveNodes(g):
     result.add CfgPath(toDestDir(g, w) / getCfgPath(g, w).Path)
 
-proc traverse(c: var AtlasContext; nc: var NimbleContext; start: string): seq[CfgPath] =
+proc traverse(nc: var NimbleContext; start: string): seq[CfgPath] =
   # returns the list of paths for the nim.cfg file.
-  let u = c.createUrl(start, c.overrides)
-  var g = c.createGraph(u)
+  let u = createUrl(start, context().overrides)
+  var g = createGraph(u)
 
   #if $pkg.url == "":
-  #  error c, pkg, "cannot resolve package name"
+  #  error pkg, "cannot resolve package name"
   #  return
-  #c.projectDir = c.depsDir / u.projectName
+  #context().projectDir = context().depsDir / u.projectName
   for n in allNodes(g):
-    c.projectDir = n.ondisk
+    context().projectDir = n.ondisk
     break
 
-  result = traverseLoop(c, nc, g)
-  afterGraphActions c, g
+  result = traverseLoop(nc, g)
+  afterGraphActions g
 
 
-proc installDependencies(c: var AtlasContext; nc: var NimbleContext; nimbleFile: Path) =
+proc installDependencies(nc: var NimbleContext; nimbleFile: Path) =
   # 1. find .nimble file in CWD
   # 2. install deps from .nimble
   var (dir, pkgname, _) = splitFile(nimbleFile)
   if dir == Path "":
     dir = Path "."
-  info c, pkgname, "installing dependencies for " & $pkgname & ".nimble"
-  trace c, pkgname, "using nimble file at " & $nimbleFile
-  var g = createGraph(c, c.createUrlSkipPatterns($dir))
-  let paths = traverseLoop(c, nc, g)
-  let cfgPath = if CfgHere in c.flags: CfgPath c.currentDir else: findCfgDir(c)
-  patchNimCfg(c, paths, cfgPath)
-  afterGraphActions c, g
+  info pkgname, "installing dependencies for " & $pkgname & ".nimble"
+  trace pkgname, "using nimble file at " & $nimbleFile
+  var g = createGraph(createUrlSkipPatterns($dir))
+  let paths = traverseLoop(nc, g)
+  let cfgPath = if CfgHere in context().flags: CfgPath context().currentDir else: findCfgDir()
+  patchNimCfg(paths, cfgPath)
+  afterGraphActions g
 
-proc updateDir(c: var AtlasContext; dir, filter: string) =
+proc updateDir(dir, filter: string) =
   ## update the package's VCS
   for kind, file in walkDir(dir):
-    debug c, (c.workspace / Path("updating")), "checking directory: " & $kind & " file: " & file.absolutePath
+    debug (context().workspace / Path("updating")), "checking directory: " & $kind & " file: " & file.absolutePath
     if kind == pcDir and isGitDir(file):
-      trace c, file, "updating directory"
-      gitops.updateDir(c, file.Path, filter)
+      trace file, "updating directory"
+      gitops.updateDir(file.Path, filter)
 
 proc detectWorkspace(currentDir: Path): Path =
   ## find workspace by checking `currentDir` and its parents.
@@ -222,31 +222,31 @@ proc autoWorkspace(currentDir: Path): Path =
   while result.len > 0 and dirExists(result / Path ".git"):
     result = result.parentDir()
 
-proc createWorkspaceIn(c: var AtlasContext) =
-  if not fileExists(c.workspace / AtlasWorkspace):
-    writeDefaultConfigFile c
-    info c, c.workspace, "created atlas.workspace"
-  if c.workspace != c.depsDir and c.depsDir != Path "":
-    createDir absoluteDepsDir(c.workspace, c.depsDir)
-    info c, c.depsDir, "created deps dir"
+proc createWorkspaceIn() =
+  if not fileExists(context().workspace / AtlasWorkspace):
+    writeDefaultConfigFile()
+    info context().workspace, "created atlas.workspace"
+  if context().workspace != context().depsDir and context().depsDir != Path "":
+    createDir absoluteDepsDir(context().workspace, context().depsDir)
+    info context().depsDir, "created deps dir"
 
-proc listOutdated(c: var AtlasContext; dir: Path) =
+proc listOutdated(dir: Path) =
   var updateable = 0
   for k, f in walkDir(dir, relative=true):
     if k in {pcDir, pcLinkToDir} and isGitDir(dir / f):
-      withDir c, $(dir / f):
-        if gitops.isOutdated(c, dir / f):
+      withDir $(dir / f):
+        if gitops.isOutdated(dir / f):
           inc updateable
 
   if updateable == 0:
-    info c, c.workspace, "all packages are up to date"
+    info context().workspace, "all packages are up to date"
 
-proc listOutdated(c: var AtlasContext) =
-  if c.depsDir.string.len > 0 and c.depsDir != c.workspace:
-    listOutdated c, c.depsDir
-  listOutdated c, c.workspace
+proc listOutdated() =
+  if context().depsDir.string.len > 0 and context().depsDir != context().workspace:
+    listOutdated context().depsDir
+  listOutdated context().workspace
 
-proc newProject(c: var AtlasContext; projectName: string) =
+proc newProject(projectName: string) =
   ## Tries to create a new project directory in the current dir
   ## with a single bare `projectname.nim` file inside.
   ## `projectName` is validated.
@@ -269,46 +269,46 @@ proc newProject(c: var AtlasContext; projectName: string) =
 
   let name = projectName.strip()
   if not (isValidFilename(name) and isValidProjectName(name)):
-    error c, name, "'" & name & "' is not a vaild project name!"
+    error name, "'" & name & "' is not a vaild project name!"
     quit(1)
   if dirExists(name):
-    error c, name, "Directory '" & name & "' already exists!"
+    error name, "Directory '" & name & "' already exists!"
     quit(1)
   try:
     createDir(name)
   except OSError as e:
-    error c, name, "Failed to create directory '$#': $#" % [name, e.msg]
+    error name, "Failed to create directory '$#': $#" % [name, e.msg]
     quit(1)
-  info c, name, "created project dir"
-  withDir(c, name):
+  info name, "created project dir"
+  withDir(name):
     let fname = name.replace('-', '_') & ".nim"
     try:
       # A header doc comment with the project's name
       fname.writeFile("## $#\n" % name)
     except IOError as e:
-      error c, name, "Failed writing to file '$#': $#" % [fname, e.msg]
+      error name, "Failed writing to file '$#': $#" % [fname, e.msg]
       quit(1)
 
-proc main(c: var AtlasContext) =
+proc mainRun() =
   var action = ""
   var args: seq[string] = @[]
   template singleArg() =
     if args.len != 1:
-      fatal c, action & " command takes a single package name"
+      fatal action & " command takes a single package name"
 
   template optSingleArg(default: string) =
     if args.len == 0:
       args.add default
     elif args.len != 1:
-      fatal c, action & " command takes a single package name"
+      fatal action & " command takes a single package name"
 
   template noArgs() =
     if args.len != 0:
-      fatal c, action & " command takes no arguments"
+      fatal action & " command takes no arguments"
 
   template projectCmd() =
-    if c.projectDir == c.workspace or c.projectDir == c.depsDir:
-      fatal c, action & " command must be executed in a project, not in the workspace"
+    if context().projectDir == context().workspace or context().projectDir == context().depsDir:
+      fatal action & " command must be executed in a project, not in the workspace"
 
   proc findCurrentNimble(): Path =
     for x in walkPattern("*.nimble"):
@@ -318,7 +318,7 @@ proc main(c: var AtlasContext) =
   var explicitProjectOverride = false
   var explicitDepsDirOverride = false
   if existsEnv("NO_COLOR") or not isatty(stdout) or (getEnv("TERM") == "dumb"):
-    c.noColors = true
+    context().noColors = true
   for kind, key, val in getopt():
     case kind
     of cmdArgument:
@@ -330,202 +330,203 @@ proc main(c: var AtlasContext) =
       case normalize(key)
       of "help", "h": writeHelp()
       of "version", "v": writeVersion()
-      of "keepcommits": c.flags.incl KeepCommits
+      of "keepcommits": context().flags.incl KeepCommits
       of "workspace":
         if val == ".":
-          c.workspace = paths.getCurrentDir()
-          createWorkspaceIn c
+          context().workspace = paths.getCurrentDir()
+          createWorkspaceIn()
         elif val.len > 0:
-          c.workspace = Path val
+          context().workspace = Path val
           if not explicitProjectOverride:
-            c.currentDir = Path val
+            context().currentDir = Path val
           createDir(val)
-          createWorkspaceIn c
+          createWorkspaceIn()
         else:
           writeHelp()
       of "project":
         explicitProjectOverride = true
         if isAbsolute(val):
-          c.currentDir = Path val
+          context().currentDir = Path val
         else:
-          c.currentDir = paths.getCurrentDir() / Path val
+          context().currentDir = paths.getCurrentDir() / Path val
       of "deps":
         if val.len > 0:
-          c.origDepsDir = Path val
+          context().origDepsDir = Path val
           explicitDepsDirOverride = true
         else:
           writeHelp()
-      of "cfghere": c.flags.incl CfgHere
-      of "full": c.flags.incl FullClones
+      of "cfghere": context().flags.incl CfgHere
+      of "full": context().flags.incl FullClones
       of "autoinit": autoinit = true
-      of "showgraph": c.flags.incl ShowGraph
-      of "ignoreurls": c.flags.incl IgnoreUrls
-      of "keepworkspace": c.flags.incl KeepWorkspace
-      of "keep": c.flags.incl Keep
-      of "autoenv": c.flags.incl AutoEnv
-      of "noexec": c.flags.incl NoExec
-      of "list": c.flags.incl ListVersions
-      of "global", "g": c.flags.incl GlobalWorkspace
+      of "showgraph": context().flags.incl ShowGraph
+      of "ignoreurls": context().flags.incl IgnoreUrls
+      of "keepworkspace": context().flags.incl KeepWorkspace
+      of "keep": context().flags.incl Keep
+      of "autoenv": context().flags.incl AutoEnv
+      of "noexec": context().flags.incl NoExec
+      of "list": context().flags.incl ListVersions
+      of "global", "g": context().flags.incl GlobalWorkspace
       of "colors":
         case val.normalize
-        of "off": c.noColors = true
-        of "on": c.noColors = false
+        of "off": context().noColors = true
+        of "on": context().noColors = false
         else: writeHelp()
       of "proxy":
-        c.proxy = val.parseUri()
+        context().proxy = val.parseUri()
       of "dumbproxy":
-        c.dumbProxy = true
+        context().dumbProxy = true
       of "verbosity":
         case val.normalize
-        of "normal": c.verbosity = 0
-        of "trace": c.verbosity = 1
-        of "debug": c.verbosity = 2
+        of "normal": context().verbosity = 0
+        of "trace": context().verbosity = 1
+        of "debug": context().verbosity = 2
         else: writeHelp()
-      of "assertonerror": c.assertOnError = true
+      of "assertonerror": context().assertOnError = true
       of "resolver":
         try:
-          c.defaultAlgo = parseEnum[ResolutionAlgorithm](val)
+          context().defaultAlgo = parseEnum[ResolutionAlgorithm](val)
         except ValueError:
           quit "unknown resolver: " & val
       else: writeHelp()
     of cmdEnd: assert false, "cannot happen"
 
-  if c.workspace.len > 0:
-    if not dirExists(c.workspace): fatal c, "Workspace directory '" & $c.workspace & "' not found."
-    readConfig c
+  if context().workspace.len > 0:
+    if not dirExists(context().workspace):
+      fatal "Workspace directory '" & $context().workspace & "' not found."
+    readConfig()
   elif action notin ["init", "tag"]:
-    if GlobalWorkspace in c.flags:
-      c.workspace = detectWorkspace(Path(getHomeDir() / ".atlas"))
-      warn c, c.workspace, "using global workspace"
+    if GlobalWorkspace in context().flags:
+      context().workspace = detectWorkspace(Path(getHomeDir() / ".atlas"))
+      warn context().workspace, "using global workspace"
     else:
-      c.workspace = detectWorkspace(c.currentDir)
-    if c.workspace.len > 0:
-      readConfig c
-      info c, c.workspace.absolutePath, "is the current workspace"
+      context().workspace = detectWorkspace(context().currentDir)
+    if context().workspace.len > 0:
+      readConfig()
+      info context().workspace.absolutePath, "is the current workspace"
     elif autoinit:
-      c.workspace = autoWorkspace(c.currentDir)
-      createWorkspaceIn c
+      context().workspace = autoWorkspace(context().currentDir)
+      createWorkspaceIn()
     elif action notin ["search", "list"]:
-      fatal c, "No workspace found. Run `atlas init` if you want this current directory to be your workspace."
+      fatal "No workspace found. Run `atlas init` if you want this current directory to be your workspace."
 
-  if not explicitDepsDirOverride and action notin ["init", "tag"] and c.origDepsDir.len == 0:
-    c.origDepsDir = Path ""
+  if not explicitDepsDirOverride and action notin ["init", "tag"] and context().origDepsDir.len == 0:
+    context().origDepsDir = Path ""
   if action != "tag":
-    createDir(c.depsDir)
+    createDir(context().depsDir)
 
   case action
   of "":
-    fatal c, "No action."
+    fatal "No action."
   of "init":
-    if GlobalWorkspace in c.flags:
-      c.workspace = Path(getHomeDir() / ".atlas")
-      createDir(c.workspace)
+    if GlobalWorkspace in context().flags:
+      context().workspace = Path(getHomeDir() / ".atlas")
+      createDir(context().workspace)
     else:
-      c.workspace = paths.getCurrentDir()
-    createWorkspaceIn c
+      context().workspace = paths.getCurrentDir()
+    createWorkspaceIn()
   of "clone", "update":
     singleArg()
-    var nc = createNimbleContext(c, c.depsDir)
-    let deps = traverse(c, nc, args[0])
-    let cfgPath = if CfgHere in c.flags: CfgPath c.currentDir
-                  else: findCfgDir(c)
-    patchNimCfg c, deps, cfgPath
+    var nc = createNimbleContext(context().depsDir)
+    let deps = traverse(nc, args[0])
+    let cfgPath = if CfgHere in context().flags: CfgPath context().currentDir
+                  else: findCfgDir()
+    patchNimCfg deps, cfgPath
   of "use":
     singleArg()
-    let currDirName = c.workspace.splitFile().name.string
-    var nimbleFiles = findNimbleFile(c.workspace, currDirName)
-    var nc = createNimbleContext(c, c.depsDir)
+    let currDirName = context().workspace.splitFile().name.string
+    var nimbleFiles = findNimbleFile(context().workspace, currDirName)
+    var nc = createNimbleContext(context().depsDir)
 
     echo "USE:foundNimble: ", $nimbleFiles
     if nimbleFiles.len() == 0:
-      let nimbleFile = c.workspace / Path(extractProjectName($c.workspace) & ".nimble")
-      trace c, "use", "USE:nimbleFile:set: " & $nimbleFile
+      let nimbleFile = context().workspace / Path(extractProjectName($context().workspace) & ".nimble")
+      trace "use", "USE:nimbleFile:set: " & $nimbleFile
       writeFile($nimbleFile, "")
       nimbleFiles.add(nimbleFile)
     elif nimbleFiles.len() > 1:
-      error c, "use", "Ambiguous Nimble files found: " & $nimbleFiles
+      error "use", "Ambiguous Nimble files found: " & $nimbleFiles
 
-    c.patchNimbleFile(nc, c, c.overrides, nimbleFiles[0], args[0])
+    patchNimbleFile(nc, context().overrides, nimbleFiles[0], args[0])
 
-    if c.errors > 0:
+    if context().errors > 0:
       discard "don't continue for 'cannot resolve'"
     elif nimbleFiles.len() == 1:
-      c.installDependencies(nc, nimbleFiles[0].Path)
+      installDependencies(nc, nimbleFiles[0].Path)
     elif nimbleFiles.len() > 1:
-      error c, args[0], "ambiguous .nimble file"
+      error args[0], "ambiguous .nimble file"
     else:
-      error c, args[0], "cannot find .nimble file"
+      error args[0], "cannot find .nimble file"
 
   of "pin":
     optSingleArg($LockFileName)
-    if c.projectDir == c.workspace or c.projectDir == c.depsDir:
-      pinWorkspace c, Path(args[0])
+    if context().projectDir == context().workspace or context().projectDir == context().depsDir:
+      pinWorkspace Path(args[0])
     else:
       let exportNimble = Path(args[0]) == NimbleLockFileName
-      pinProject c, Path(args[0]), exportNimble
+      pinProject Path(args[0]), exportNimble
   of "rep", "replay", "reproduce":
     optSingleArg($LockFileName)
-    replay(c, Path(args[0]))
+    replay(Path(args[0]))
   of "changed":
     optSingleArg($LockFileName)
-    listChanged(c, Path(args[0]))
+    listChanged(Path(args[0]))
   of "convert":
     if args.len < 1:
-      fatal c, "convert command takes a nimble lockfile argument"
+      fatal "convert command takes a nimble lockfile argument"
     let lfn = if args.len == 1: LockFileName
               else: Path(args[1])
-    convertAndSaveNimbleLock c, Path(args[0]), lfn
+    convertAndSaveNimbleLock Path(args[0]), lfn
   of "install", "setup":
     # projectCmd()
     if args.len > 1:
-      fatal c, "install command takes a single argument"
+      fatal "install command takes a single argument"
     var nimbleFile = Path ""
     if args.len == 1:
       nimbleFile = Path args[0]
     else:
       nimbleFile = findCurrentNimble()
     if nimbleFile.len == 0:
-      fatal c, "could not find a .nimble file"
+      fatal "could not find a .nimble file"
     else:
-      var nc = createNimbleContext(c, c.depsDir)
-      installDependencies(c, nc, nimbleFile)
+      var nc = createNimbleContext(context().depsDir)
+      installDependencies(nc, nimbleFile)
   of "refresh":
     noArgs()
-    updatePackages(c, c.depsDir)
+    updatePackages(context().depsDir)
   of "search", "list":
-    if c.workspace.len != 0:
-      updatePackages(c, c.depsDir)
-      let pkgInfos = getPackageInfos(c.depsDir)
-      search c, pkgInfos, args
+    if context().workspace.len != 0:
+      updatePackages(context().depsDir)
+      let pkgInfos = getPackageInfos(context().depsDir)
+      search pkgInfos, args
     else:
-      search c, @[], args
+      search @[], args
   of "updateprojects":
-    updateDir(c, c.workspace, if args.len == 0: "" else: args[0])
+    updateDir(context().workspace, if args.len == 0: "" else: args[0])
   of "updatedeps":
-    updateDir(c, c.depsDir, if args.len == 0: "" else: args[0])
+    updateDir(context().depsDir, if args.len == 0: "" else: args[0])
   of "extract":
     singleArg()
     if fileExists(args[0]):
       echo toJson(extractRequiresInfo(Path args[0]))
     else:
-      fatal c, "File does not exist: " & args[0]
+      fatal "File does not exist: " & args[0]
   of "tag":
     projectCmd()
     if args.len == 0:
-      tag(c, ord(patch))
+      tag(ord(patch))
     elif args[0].len == 1 and args[0][0] in {'a'..'z'}:
       let field = ord(args[0][0]) - ord('a')
-      tag(c, field)
+      tag(field)
     elif args[0].len == 1 and args[0][0] in {'A'..'Z'}:
       let field = ord(args[0][0]) - ord('A')
-      tag(c, field)
+      tag(field)
     elif '.' in args[0]:
-      tag(c, args[0])
+      tag(args[0])
     else:
       var field: SemVerField
       try: field = parseEnum[SemVerField](args[0])
-      except: fatal c, "tag command takes one of 'patch' 'minor' 'major', a SemVer tag, or a letter from 'a' to 'z'"
-      tag(c, ord(field))
+      except: fatal "tag command takes one of 'patch' 'minor' 'major', a SemVer tag, or a letter from 'a' to 'z'"
+      tag(ord(field))
   of "build", "test", "doc", "tasks":
     projectCmd()
     nimbleExec(action, args)
@@ -534,24 +535,24 @@ proc main(c: var AtlasContext) =
     nimbleExec("", args)
   of "env":
     singleArg()
-    setupNimEnv c, c.workspace, args[0], Keep in c.flags
+    setupNimEnv context().workspace, args[0], Keep in context().flags
   of "outdated":
-    listOutdated(c)
+    listOutdated()
   of "new":
     singleArg()
-    newProject(c, args[0])
+    newProject(args[0])
   else:
-    fatal c, "Invalid action: " & action
+    fatal "Invalid action: " & action
 
 proc main =
-  var c = AtlasContext(projectDir: paths.getCurrentDir(),
-                       currentDir: paths.getCurrentDir(),
-                       workspace: Path "")
+  setContext AtlasContext(projectDir: paths.getCurrentDir(),
+                          currentDir: paths.getCurrentDir(),
+                          workspace: Path "")
   try:
-    main(c)
+    mainRun()
   finally:
-    writePendingMessages(c)
-  if c.errors > 0:
+    context().writePendingMessages()
+  if context().errors > 0:
     quit 1
 
 when isMainModule:

@@ -34,7 +34,7 @@ proc determineCandidates*(pkgList: seq[PackageInfo];
               result[2].add pkg
               break termLoop
 
-proc singleGithubSearch(c: var Reporter; term: string, fullSearch = false): JsonNode =
+proc singleGithubSearch(term: string, fullSearch = false): JsonNode =
   when UnitTests:
     echo "SEARCH: ", term
     let filename = "query_github_" & term & ".json"
@@ -52,7 +52,7 @@ proc singleGithubSearch(c: var Reporter; term: string, fullSearch = false): Json
       let x = client.getContent(searchUrl)
       result = parseJson(x).getOrDefault("items")
       if result.kind != JArray:
-        error c, "github search", "got bad results from GitHub"
+        error "github search", "got bad results from GitHub"
         result = newJArray()
       # do full search and filter for languages
       if fullSearch:
@@ -66,22 +66,22 @@ proc singleGithubSearch(c: var Reporter; term: string, fullSearch = false): Json
 
       if result.len() == 0:
         if not fullSearch:
-          trace c, "github search", "no results found by Github quick search; doing full search"
-          result = c.singleGithubSearch(term, fullSearch=true)
+          trace "github search", "no results found by Github quick search; doing full search"
+          result = singleGithubSearch(term, fullSearch=true)
         else:
-          trace c, "github search", "no results found by Github full search"
+          trace "github search", "no results found by Github full search"
       else:
-        trace c, "github search", "found " & $result.len() & " results on GitHub"
+        trace "github search", "found " & $result.len() & " results on GitHub"
     except CatchableError as exc:
-      error c, "github search", "error searching github: " & exc.msg
+      error "github search", "error searching github: " & exc.msg
       # result = parseJson("{\"items\": []}")
       result = newJArray()
     finally:
       client.close()
 
-proc githubSearch(c: var Reporter; seen: var HashSet[string]; terms: seq[string]) =
+proc githubSearch(seen: var HashSet[string]; terms: seq[string]) =
   for term in terms:
-    for j in items(c.singleGithubSearch(term)):
+    for j in items(singleGithubSearch(term)):
       let p = PackageInfo(
         name: j.getOrDefault("name").getStr,
         url: j.getOrDefault("html_url").getStr,
@@ -94,10 +94,10 @@ proc githubSearch(c: var Reporter; seen: var HashSet[string]; terms: seq[string]
       if not seen.containsOrIncl(p.url):
         echo p
 
-proc getUrlFromGithub*(c: var Reporter; term: string): string =
+proc getUrlFromGithub*(term: string): string =
   var matches = 0
   result = ""
-  for j in items(c.singleGithubSearch(term)):
+  for j in items(singleGithubSearch(term)):
     let name = j.getOrDefault("name").getStr
     if cmpIgnoreCase(name, term) == 0:
       result = j.getOrDefault("html_url").getStr
@@ -106,10 +106,10 @@ proc getUrlFromGithub*(c: var Reporter; term: string): string =
     # ambiguous, not ok!
     result = ""
 
-proc search*(c: var Reporter; pkgList: seq[PackageInfo]; terms: seq[string]) =
+proc search*(pkgList: seq[PackageInfo]; terms: seq[string]) =
   var seen = initHashSet[string]()
   template onFound =
-    info c, "Found package", $pkg
+    info "Found package", $pkg
     seen.incl pkg.url
     break forPackage
 
@@ -126,7 +126,7 @@ proc search*(c: var Reporter; pkgList: seq[PackageInfo]; terms: seq[string]) =
             if word in tag.toLower:
               onFound()
     else:
-      info(c, "Using package", $pkg)
-  githubSearch c, seen, terms
+      info("Using package", $pkg)
+  githubSearch seen, terms
   if seen.len == 0 and terms.len > 0:
-    info(c, "No PackageInfo found", $terms)
+    info("No PackageInfo found", $terms)

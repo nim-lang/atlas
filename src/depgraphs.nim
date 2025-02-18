@@ -8,7 +8,7 @@
 
 import std / [sets, paths, tables, os, strutils, streams, json, jsonutils, algorithm]
 
-import basic/[depgraphtypes, context, gitops, reporters, nimbleparser, pkgurls, versions]
+import basic/[depgraphtypes, osutils, context, gitops, reporters, nimbleparser, pkgurls, versions]
 import runners, cloner, pkgcache 
 
 export depgraphtypes
@@ -26,11 +26,11 @@ type
   CommitOrigin = enum
     FromHead, FromGitTag, FromDep, FromNimbleFile
 
-iterator releases(c: var AtlasContext;
+iterator releases(
                   path: Path,
                   m: TraversalMode; versions: seq[DependencyVersion];
                   nimbleCommits: seq[string]): (CommitOrigin, Commit) =
-  let (cc, status) = c.exec(GitCurrentCommit, path, [])
+  let (cc, status) = exec(GitCurrentCommit, path, [])
   if status == 0:
     case m
     of AllReleases:
@@ -39,20 +39,20 @@ iterator releases(c: var AtlasContext;
         var uniqueCommits = initHashSet[string]()
         for v in versions:
           if v.version == Version"" and v.commit.len > 0 and not uniqueCommits.containsOrIncl(v.commit):
-            let (_, status) = c.exec(GitCheckout, path, [v.commit])
+            let (_, status) = exec(GitCheckout, path, [v.commit])
             if status == 0:
               yield (FromDep, Commit(h: v.commit, v: Version""))
               inc produced
-        let tags = c.collectTaggedVersions(path)
+        let tags = collectTaggedVersions(path)
         for t in tags:
           if not uniqueCommits.containsOrIncl(t.h):
-            let (_, status) = c.exec(GitCheckout, path, [t.h])
+            let (_, status) = exec(GitCheckout, path, [t.h])
             if status == 0:
               yield (FromGitTag, t)
               inc produced
         for h in nimbleCommits:
           if not uniqueCommits.containsOrIncl(h):
-            let (_, status) = c.exec(GitCheckout, path, [h])
+            let (_, status) = exec(GitCheckout, path, [h])
             if status == 0:
               yield (FromNimbleFile, Commit(h: h, v: Version""))
               #inc produced
@@ -61,13 +61,13 @@ iterator releases(c: var AtlasContext;
           yield (FromHead, Commit(h: "", v: Version"#head"))
 
       finally:
-        discard c.exec(GitCheckout, path, [cc])
+        discard exec(GitCheckout, path, [cc])
     of CurrentCommit:
       yield (FromHead, Commit(h: "", v: Version"#head"))
   else:
     yield (FromHead, Commit(h: "", v: Version"#head"))
 
-proc traverseRelease(c: var AtlasContext; nc: NimbleContext; g: var DepGraph; idx: int;
+proc traverseRelease(nc: NimbleContext; g: var DepGraph; idx: int;
                      origin: CommitOrigin; r: Commit; lastNimbleContents: var string) =
   let nimbleFiles = findNimbleFile(g[idx])
   var pv = DependencyVersion(
@@ -88,7 +88,7 @@ proc traverseRelease(c: var AtlasContext; nc: NimbleContext; g: var DepGraph; id
     if lastNimbleContents == nimbleContents:
       pv.req = g.nodes[idx].versions[^1].req
     else:
-      let r = c.parseNimbleFile(nc, nimbleFile, c.overrides)
+      let r = parseNimbleFile(nc, nimbleFile, context().overrides)
       if origin == FromNimbleFile and pv.version == Version"":
         pv.version = r.version
       let ridx = g.reqsByDeps.getOrDefault(r, -1) # hasKey(r)
@@ -119,39 +119,39 @@ proc traverseRelease(c: var AtlasContext; nc: NimbleContext; g: var DepGraph; id
   else:
     g.nodes[idx].versions.add ensureMove pv
 
-proc traverseDependency*(c: var AtlasContext; nc: NimbleContext;
+proc traverseDependency*(nc: NimbleContext;
                          g: var DepGraph, idx: int, m: TraversalMode) =
   var lastNimbleContents = "<invalid content>"
 
   let versions = move g.nodes[idx].versions
-  let nimbleVersions = collectNimbleVersions(c, nc, g[idx])
+  let nimbleVersions = collectNimbleVersions(nc, g[idx])
 
-  for (origin, r) in c.releases(g[idx].ondisk, m, versions, nimbleVersions):
-    traverseRelease c, nc, g, idx, origin, r, lastNimbleContents
+  for (origin, r) in releases(g[idx].ondisk, m, versions, nimbleVersions):
+    traverseRelease nc, g, idx, origin, r, lastNimbleContents
 
-proc expand*(c: var AtlasContext; g: var DepGraph; nc: NimbleContext; m: TraversalMode) =
+proc expand*(g: var DepGraph; nc: NimbleContext; m: TraversalMode) =
   ## Expand the graph by adding all dependencies.
   var processed = initHashSet[PkgUrl]()
   var i = 0
   while i < g.nodes.len:
     if not processed.containsOrIncl(g.nodes[i].pkg):
-      let (dest, todo) = pkgUrlToDirname(c, g, g.nodes[i])
+      let (dest, todo) = pkgUrlToDirname(g, g.nodes[i])
 
-      trace c, "expand", "pkg: " & g[i].pkg.projectName & " dest: " & $dest
+      trace "expand", "pkg: " & g[i].pkg.projectName & " dest: " & $dest
       # important: the ondisk path set here!
       g.nodes[i].ondisk = dest
 
       if todo == DoClone:
         let (status, _) =
           if g.nodes[i].pkg.isFileProtocol:
-            copyFromDisk(c, g[i], dest)
+            copyFromDisk(g[i], dest)
           else:
-            cloneUrl(c, g[i].pkg, dest, false)
+            cloneUrl(g[i].pkg, dest, false)
         g.nodes[i].status = status
 
       if g.nodes[i].status == Ok:
-        # withDir c, dest:
-        traverseDependency(c, nc, g, i, m)
+        # withDir dest:
+        traverseDependency(nc, g, i, m)
     inc i
 
 iterator mvalidVersions*(p: var Dependency; g: var DepGraph): var DependencyVersion =
@@ -170,7 +170,7 @@ type
     mapping: Table[VarId, SatVarInfo]
     idgen: int32
 
-proc toFormular*(c: var AtlasContext; g: var DepGraph; algo: ResolutionAlgorithm): Form =
+proc toFormular*(g: var DepGraph; algo: ResolutionAlgorithm): Form =
   # Key idea: use a SAT variable for every `Requirements` object, which are
   # shared.
   result = Form()
@@ -293,7 +293,7 @@ proc toFormular*(c: var AtlasContext; g: var DepGraph; algo: ResolutionAlgorithm
 proc toString(x: SatVarInfo): string =
   "(" & x.pkg.projectName & ", " & $x.version & ")"
 
-proc runBuildSteps(c: var AtlasContext; g: var DepGraph) =
+proc runBuildSteps(g: var DepGraph) =
   ## execute build steps for the dependency graph
   ##
   ## `countdown` suffices to give us some kind of topological sort:
@@ -301,21 +301,21 @@ proc runBuildSteps(c: var AtlasContext; g: var DepGraph) =
   for i in countdown(g.nodes.len-1, 0):
     if g.nodes[i].active:
       let pkg = g.nodes[i].pkg
-      tryWithDir c, $g.nodes[i].ondisk:
+      tryWithDir $g.nodes[i].ondisk:
         # check for install hooks
         let activeVersion = g.nodes[i].activeVersion
         let r = if g.nodes[i].versions.len == 0: -1 else: g.nodes[i].versions[activeVersion].req
         if r >= 0 and r < g.reqs.len and g.reqs[r].hasInstallHooks:
           let nfs = findNimbleFile(g[i])
           if nfs.len() == 1:
-            runNimScriptInstallHook c, nfs[0], pkg.projectName
+            runNimScriptInstallHook nfs[0], pkg.projectName
         # check for nim script builders
-        for p in mitems c.plugins.builderPatterns:
+        for p in mitems context().plugins.builderPatterns:
           let f = p[0] % pkg.projectName
           if fileExists(f):
-            runNimScriptBuilder c, p, pkg.projectName
+            runNimScriptBuilder p, pkg.projectName
 
-proc debugFormular(c: var AtlasContext; g: var DepGraph; f: Form; s: Solution) =
+proc debugFormular(g: var DepGraph; f: Form; s: Solution) =
   echo "FORM: ", f.f
   #for n in g.nodes:
   #  echo "v", n.v.int, " ", n.pkg.url
@@ -326,10 +326,10 @@ proc debugFormular(c: var AtlasContext; g: var DepGraph; f: Form; s: Solution) =
     if s.isTrue(VarId(i)):
       echo "v", i, ": T"
 
-proc solve*(c: var AtlasContext; g: var DepGraph; f: Form) =
+proc solve*(g: var DepGraph; f: Form) =
   let m = f.idgen
   var s = createSolution(m)
-  #debugFormular c, g, f, s
+  #debugFormular g, f, s
 
   if satisfiable(f.f, s):
     for n in mitems g.nodes:
@@ -342,36 +342,36 @@ proc solve*(c: var AtlasContext; g: var DepGraph; f: Form) =
         g.nodes[idx].active = true
         assert g.nodes[idx].activeVersion == -1, "too bad: " & g.nodes[idx].pkg.url
         g.nodes[idx].activeVersion = m.index
-        debug c, m.pkg.projectName, "package satisfiable"
+        debug m.pkg.projectName, "package satisfiable"
         if m.commit != "" and g.nodes[idx].status == Ok:
           assert g[idx].ondisk.string.len > 0, "Missing ondisk location for: " & $(g[idx].pkg, idx)
-          # withDir c, g.nodes[idx].ondisk:
-          c.checkoutGitCommit(g[idx].ondisk, m.commit)
+          # withDir g.nodes[idx].ondisk:
+          checkoutGitCommit(g[idx].ondisk, m.commit)
 
-    if NoExec notin c.flags:
-      runBuildSteps(c, g)
+    if NoExec notin context().flags:
+      runBuildSteps(g)
       #echo f
 
-    if ListVersions in c.flags:
-      info c, "../resolve", "selected:"
+    if ListVersions in context().flags:
+      info "../resolve", "selected:"
       for n in items g.nodes:
         if not n.isTopLevel:
           for v in items(n.versions):
             let item = f.mapping[v.v]
             if s.isTrue(v.v):
-              info c, item.pkg.projectName, "[x] " & toString item
+              info item.pkg.projectName, "[x] " & toString item
             else:
-              info c, item.pkg.projectName, "[ ] " & toString item
-      info c, "../resolve", "end of selection"
+              info item.pkg.projectName, "[ ] " & toString item
+      info "../resolve", "end of selection"
   else:
     #echo "FORM: ", f.f
     var notFound = 0
     for p in mitems(g.nodes):
       if p.isRoot and p.status != Ok:
-        error c, c.workspace, "cannot find package: " & p.pkg.projectName
+        error context().workspace, "cannot find package: " & p.pkg.projectName
         inc notFound
     if notFound > 0: return
-    error c, c.workspace, "version conflict; for more information use --showGraph"
+    error context().workspace, "version conflict; for more information use --showGraph"
     for p in mitems(g.nodes):
       var usedVersions = 0
       for ver in mvalidVersions(p, g):
@@ -379,4 +379,4 @@ proc solve*(c: var AtlasContext; g: var DepGraph; f: Form) =
       if usedVersions > 1:
         for ver in mvalidVersions(p, g):
           if s.isTrue(ver.v):
-            error c, p.pkg.projectName, string(ver.version) & " required"
+            error p.pkg.projectName, string(ver.version) & " required"

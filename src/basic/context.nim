@@ -9,6 +9,8 @@
 import std / [os, uri, paths]
 import versions, parserequires, compiledpatterns, reporters
 
+export reporters
+
 const
   UnitTests* = defined(atlasUnitTests)
   TestsDir* = "atlas/tests"
@@ -51,6 +53,15 @@ type
     proxy*: Uri
     dumbProxy*: bool
 
+var atlasContext: AtlasContext
+
+proc setContext*(ctx: AtlasContext) =
+  atlasContext = ctx
+proc context*(): var AtlasContext =
+  atlasContext
+
+proc errors*(): int =
+  atlasContext.errors
 
 proc `==`*(a, b: CfgPath): bool {.borrow.}
 
@@ -72,23 +83,44 @@ proc displayName(c: AtlasContext; p: string): string =
   else:
     p
 
-proc projectFromCurrentDir*(c: AtlasContext): Path = c.currentDir.absolutePath
+proc projectFromCurrentDir*(): Path = context().currentDir.absolutePath
 
-template withDir*(c: var AtlasContext; dir: string; body: untyped) =
-  let oldDir = ospaths2.getCurrentDir()
-  debug c, dir, "Current directory is now: " & dir
-  try:
-    setCurrentDir(dir)
-    body
-  finally:
-    setCurrentDir(oldDir)
+# template withDir*(dir: string; body: untyped) =
+#   let oldDir = ospaths2.getCurrentDir()
+#   debug dir, "Current directory is now: " & dir
+#   try:
+#     setCurrentDir(dir)
+#     body
+#   finally:
+#     setCurrentDir(oldDir)
 
-template tryWithDir*(c: var AtlasContext; dir: string; body: untyped) =
-  let oldDir = ospaths2.getCurrentDir()
-  try:
-    if dirExists(dir):
-      setCurrentDir(dir)
-      debug c, dir, "Current directory is now: " & dir
-      body
-  finally:
-    setCurrentDir(oldDir)
+# template tryWithDir*(dir: string; body: untyped) =
+#   let oldDir = ospaths2.getCurrentDir()
+#   try:
+#     if dirExists(dir):
+#       setCurrentDir(dir)
+#       debug dir, "Current directory is now: " & dir
+#       body
+#   finally:
+#     setCurrentDir(oldDir)
+
+proc warn*(p: Path | string, arg: string) =
+  warn(atlasContext, $p, arg)
+
+proc error*(p: Path | string, arg: string) =
+  error(atlasContext, $p, arg)
+
+proc info*(p: Path | string, arg: string) =
+  info(atlasContext, $p, arg)
+
+proc trace*(p: Path | string, arg: string) =
+  trace(atlasContext, $p, arg)
+
+proc debug*(p: Path | string, arg: string) =
+  debug(atlasContext, $p, arg)
+
+proc fatal*(msg: string | Path, prefix = "fatal", code = 1) =
+  fatal(atlasContext, msg, prefix, code)
+
+proc infoNow*(p: Path | string, arg: string) =
+  infoNow(atlasContext, $p, arg)

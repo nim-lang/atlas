@@ -15,16 +15,16 @@ const
   configPatternBegin = "############# begin Atlas config section ##########\n"
   configPatternEnd =   "############# end Atlas config section   ##########\n"
 
-proc parseNimble*(c: var AtlasContext; nimble: Path): NimbleFileInfo =
+proc parseNimble*(nimble: Path): NimbleFileInfo =
   result = extractRequiresInfo(nimble)
 
-proc findCfgDir*(c: var AtlasContext, dir = c.currentDir): CfgPath =
+proc findCfgDir*(dir = context().currentDir): CfgPath =
   for nimbleFile in walkPattern($dir / "*.nimble"):
-    let nimbleInfo = c.parseNimble(Path nimbleFile)
+    let nimbleInfo = parseNimble(Path nimbleFile)
     return CfgPath dir / nimbleInfo.srcDir
   return CfgPath dir
 
-proc patchNimCfg*(c: var AtlasContext; deps: seq[CfgPath]; cfgPath: CfgPath) =
+proc patchNimCfg*(deps: seq[CfgPath]; cfgPath: CfgPath) =
   var paths = "--noNimblePath\n"
   for d in deps:
     let x = relativePath(d.string, cfgPath.string, '/')
@@ -35,10 +35,10 @@ proc patchNimCfg*(c: var AtlasContext; deps: seq[CfgPath]; cfgPath: CfgPath) =
   let cfg = Path(cfgPath.string / "nim.cfg")
   assert cfgPath.string.len > 0
   if cfgPath.string.len > 0 and not dirExists(cfgPath.string):
-    error(c, $c.projectDir, "could not write the nim.cfg")
+    error($context().projectDir, "could not write the nim.cfg")
   elif not fileExists(cfg):
     writeFile($cfg, cfgContent)
-    info(c, $c.projectFromCurrentDir(), "created: " & $cfg.readableFile(c.currentDir))
+    info($projectFromCurrentDir(), "created: " & $cfg.readableFile(context().currentDir))
   else:
     let content = readFile($cfg)
     let start = content.find(configPatternBegin)
@@ -53,4 +53,4 @@ proc patchNimCfg*(c: var AtlasContext; deps: seq[CfgPath]; cfgPath: CfgPath) =
       # do not touch the file if nothing changed
       # (preserves the file date information):
       writeFile($cfg, cfgContent)
-      info(c, $c.projectFromCurrentDir(), "updated: " & $cfg.readableFile(c.currentDir))
+      info($projectFromCurrentDir(), "updated: " & $cfg.readableFile(context().currentDir))

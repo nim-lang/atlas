@@ -172,7 +172,7 @@ when not defined(quick):
       when not defined(keepTestDirs):
         cleanupIntegrationTest()
 
-infoNow c, "tester", "All tests run successfully"
+infoNow "tester", "All tests run successfully"
 
 # if failures > 0: quit($failures & " failures occurred.")
 
