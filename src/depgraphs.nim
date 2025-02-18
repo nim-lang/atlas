@@ -136,6 +136,7 @@ proc expand*(c: var AtlasContext; g: var DepGraph; nc: NimbleContext; m: Travers
     if not processed.containsOrIncl(g.nodes[i].pkg):
       let (dest, todo) = pkgUrlToDirname(c, g, g.nodes[i])
 
+      trace c, "expand", "pkg: " & g[i].pkg.projectName & " dest: " & $dest
       # important: the ondisk path set here!
       g.nodes[i].ondisk = dest
 
