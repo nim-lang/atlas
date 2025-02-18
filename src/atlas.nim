@@ -157,9 +157,9 @@ proc getRequiredCommit*(c: var AtlasContext; w: Dependency): string =
 
 proc traverseLoop(c: var AtlasContext; nc: var NimbleContext; g: var DepGraph): seq[CfgPath] =
   result = @[]
-  expand c, g, nc, TraversalMode.AllReleases
+  expand(c, g, nc, TraversalMode.AllReleases)
   let f = toFormular(c, g, c.defaultAlgo)
-  solve c, g, f
+  solve(c, g, f)
   for w in allActiveNodes(g):
     result.add CfgPath(toDestDir(g, w) / getCfgPath(g, w).Path)
 
@@ -187,6 +187,7 @@ proc installDependencies(c: var AtlasContext; nc: var NimbleContext; nimbleFile:
   if dir == Path "":
     dir = Path "."
   info c, pkgname, "installing dependencies for " & $pkgname & ".nimble"
+  trace c, pkgname, "using nimble file at " & $nimbleFile
   var g = createGraph(c, c.createUrlSkipPatterns($dir))
   let paths = traverseLoop(c, nc, g)
   let cfgPath = if CfgHere in c.flags: CfgPath c.currentDir else: findCfgDir(c)
@@ -431,7 +432,8 @@ proc main(c: var AtlasContext) =
     patchNimCfg c, deps, cfgPath
   of "use":
     singleArg()
-    var (nimbleFile, nimbleFiles) = findNimbleFile(c.workspace)
+    let currDirName = c.workspace.splitFile().name.string
+    var (nimbleFile, nimbleFiles) = findNimbleFile(c.workspace, currDirName)
     var nc = createNimbleContext(c, c.depsDir)
 
     echo "USE:foundNimble: ", $nimbleFile, " cnt: ", nimbleFiles, " abs: ", $nimbleFile.absolutePath
