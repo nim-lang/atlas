@@ -123,22 +123,22 @@ proc expand*(graph: var DepGraph; nimbleCtx: NimbleContext; mode: TraversalMode)
   var processed = initHashSet[PkgUrl]()
   var i = 0
   while i < graph.nodes.len:
-    if not processed.containsOrIncl(graph.nodes[i].pkg):
-      let (dest, todo) = pkgUrlToDirname(graph, graph.nodes[i])
+    if not processed.containsOrIncl(graph[i].pkg):
+      let (dest, todo) = pkgUrlToDirname(graph, graph[i])
 
       trace "expand", "pkg: " & graph[i].pkg.projectName & " dest: " & $dest
       # important: the ondisk path set here!
-      graph.nodes[i].ondisk = dest
+      graph[i].ondisk = dest
 
       if todo == DoClone:
         let (status, _) =
-          if graph.nodes[i].pkg.isFileProtocol:
+          if graph[i].pkg.isFileProtocol:
             copyFromDisk(graph[i], dest)
           else:
             cloneUrl(graph[i].pkg, dest, false)
-        graph.nodes[i].status = status
+        graph[i].status = status
 
-      if graph.nodes[i].status == Ok:
+      if graph[i].status == Ok:
         traverseDependency(nimbleCtx, graph, i, mode)
     inc i
 
@@ -264,12 +264,12 @@ proc runBuildSteps(graph: var DepGraph) =
   ## `countdown` suffices to give us some kind of topological sort:
   ##
   for i in countdown(graph.nodes.len-1, 0):
-    if graph.nodes[i].active:
-      let pkg = graph.nodes[i].pkg
-      tryWithDir $graph.nodes[i].ondisk:
+    if graph[i].active:
+      let pkg = graph[i].pkg
+      tryWithDir $graph[i].ondisk:
         # check for install hooks
-        let activeVersion = graph.nodes[i].activeVersion
-        let reqIdx = if graph.nodes[i].versions.len == 0: -1 else: graph.nodes[i].versions[activeVersion].req
+        let activeVersion = graph[i].activeVersion
+        let reqIdx = if graph[i].versions.len == 0: -1 else: graph[i].versions[activeVersion].req
         if reqIdx >= 0 and reqIdx < graph.reqs.len and graph.reqs[reqIdx].hasInstallHooks:
           let nimbleFiles = findNimbleFile(graph[i])
           if nimbleFiles.len() == 1:
@@ -300,11 +300,11 @@ proc solve*(graph: var DepGraph; form: Form) =
       if solution.isTrue(VarId(varIdx)) and form.mapping.hasKey(VarId varIdx):
         let mapInfo = form.mapping[VarId varIdx]
         let i = findDependencyForDep(graph, mapInfo.pkg)
-        graph.nodes[i].active = true
-        assert graph.nodes[i].activeVersion == -1, "too bad: " & graph.nodes[i].pkg.url
-        graph.nodes[i].activeVersion = mapInfo.index
+        graph[i].active = true
+        assert graph[i].activeVersion == -1, "too bad: " & graph[i].pkg.url
+        graph[i].activeVersion = mapInfo.index
         debug mapInfo.pkg.projectName, "package satisfiable"
-        if mapInfo.commit != "" and graph.nodes[i].status == Ok:
+        if mapInfo.commit != "" and graph[i].status == Ok:
           assert graph[i].ondisk.string.len > 0, "Missing ondisk location for: " & $(graph[i].pkg, i)
           checkoutGitCommit(graph[i].ondisk, mapInfo.commit)
 
