@@ -59,7 +59,7 @@ proc findNimbleFile*(nimbleFile: Path): seq[Path] =
 
 proc findNimbleFile*(dir: Path, projectName: string): seq[Path] =
   var nimbleFile = dir / Path(projectName & ".nimble")
-  debug "findNimbleFile:check:", " path: " & $projectName & " dir: " & $dir
+  debug "findNimbleFile:check:projectName", " path: " & $projectName & " dir: " & $dir
   result = findNimbleFile(nimbleFile)
   debug "findNimbleFile:res:", " res: " & $result
   if result.len() == 0:

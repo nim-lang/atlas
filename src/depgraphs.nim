@@ -18,8 +18,7 @@ type
   CommitOrigin = enum
     FromHead, FromGitTag, FromDep, FromNimbleFile
 
-iterator releases(
-                  path: Path,
+iterator releases(path: Path,
                   mode: TraversalMode; versions: seq[DependencyVersion];
                   nimbleCommits: seq[string]): (CommitOrigin, Commit) =
   let (currentCommit, status) = exec(GitCurrentCommit, path, [])
@@ -116,8 +115,12 @@ proc traverseDependency*(nimbleCtx: NimbleContext;
   let nimbleVersions = collectNimbleVersions(nimbleCtx, graph[idx])
   trace "traverseDependency", "nimble versions: " & $nimbleVersions
 
-  for (origin, release) in releases(graph[idx].ondisk, mode, versions, nimbleVersions):
+  if graph[idx].isRoot:
+    let (origin, release) = (FromHead, Commit(h: "", v: Version"#head"))
     traverseRelease nimbleCtx, graph, idx, origin, release, lastNimbleContents
+  else:
+    for (origin, release) in releases(graph[idx].ondisk, mode, versions, nimbleVersions):
+      traverseRelease nimbleCtx, graph, idx, origin, release, lastNimbleContents
 
 proc expand*(graph: var DepGraph; nimbleCtx: NimbleContext; mode: TraversalMode) =
   ## Expand the graph by adding all dependencies.
