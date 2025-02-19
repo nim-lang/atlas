@@ -33,20 +33,20 @@ iterator releases(path: Path,
         var uniqueCommits = initHashSet[string]()
         for version in versions:
           if version.version == Version"" and version.commit.len > 0 and not uniqueCommits.containsOrIncl(version.commit):
-            let (_, status) = exec(GitCheckout, path, [version.commit])
+            let status = checkoutGitCommit(path, version.commit)
             if status == 0:
               yield (FromDep, Commit(h: version.commit, v: Version""))
               inc produced
         let tags = collectTaggedVersions(path)
         for tag in tags:
           if not uniqueCommits.containsOrIncl(tag.h):
-            let (_, status) = exec(GitCheckout, path, [tag.h])
+            let status = checkoutGitCommit(path, tag.h)
             if status == 0:
               yield (FromGitTag, tag)
               inc produced
         for hash in nimbleCommits:
           if not uniqueCommits.containsOrIncl(hash):
-            let (_, status) = exec(GitCheckout, path, [hash])
+            let status = checkoutGitCommit(path, hash)
             if status == 0:
               yield (FromNimbleFile, Commit(h: hash, v: Version""))
 

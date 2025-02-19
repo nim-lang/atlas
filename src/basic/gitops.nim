@@ -9,6 +9,8 @@
 import std/[os, files, dirs, paths, osproc, sequtils, strutils, uri]
 import reporters, osutils, versions, context
 
+const Ok*: int = 0
+
 type
   Command* = enum
     GitClone = "git clone $EXTRAARGS $URL $DEST",
@@ -147,12 +149,13 @@ proc currentGitCommit*(path: Path, ignoreError = false): string =
   else:
     return ""
 
-proc checkoutGitCommit*(path: Path, commit: string) =
+proc checkoutGitCommit*(path: Path, commit: string): int =
   let currentCommit = currentGitCommit(path)
   if currentCommit.len() == 40 and currentCommit == commit:
     return
 
   let (_, statusB) = exec(GitCheckout, path, [commit])
+  result = statusB
   if statusB != 0:
     error($path, "could not checkout commit " & commit)
   else:
