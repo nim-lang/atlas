@@ -349,7 +349,8 @@ proc solve*(graph: var DepGraph; form: Form) =
       if pkg.isRoot and pkg.state != Processed:
         error context().workspace, "invalid find package: " & pkg.pkg.projectName & " in state: " & $pkg.state & " error: " & $pkg.errors
         inc notFoundCount
-    if notFoundCount > 0: return
+    if notFoundCount > 0:
+      return
     error context().workspace, "version conflict; for more information use --showGraph"
     for pkg in mitems(graph.nodes):
       var usedVersionCount = 0
