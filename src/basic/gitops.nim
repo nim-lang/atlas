@@ -140,9 +140,17 @@ proc listFiles*(path: Path): seq[string] =
   else:
     result = @[]
 
+proc currentGitCommit*(path: Path, ignoreError = false): string =
+  let (currentCommit, status) = exec(GitCurrentCommit, path, [], ignoreError = ignoreError)
+  if status == 0:
+    return currentCommit.strip()
+  else:
+    return ""
+
 proc checkoutGitCommit*(path: Path, commit: string) =
-  let (currentCommit, statusA) = exec(GitCurrentCommit, path, [])
-  if statusA == 0 and currentCommit.strip() == commit: return
+  let currentCommit = currentGitCommit(path)
+  if currentCommit.len() == 40 and currentCommit == commit:
+    return
 
   let (_, statusB) = exec(GitCheckout, path, [commit])
   if statusB != 0:
@@ -248,15 +256,6 @@ proc needsCommitLookup*(commit: string): bool {.inline.} =
 
 proc isShortCommitHash*(commit: string): bool {.inline.} =
   commit.len >= 4 and commit.len < 40
-
-when false:
-  proc getRequiredCommit*(w: Dependency): string =
-    if needsCommitLookup(w.commit): versionToCommit(c, w)
-    elif isShortCommitHash(w.commit): shortToCommit(c, w.commit)
-    else: w.commit
-
-proc getCurrentCommit*(): string =
-  result = execProcess("git log -1 --pretty=format:%H").strip()
 
 proc isOutdated*(path: Path): bool =
   ## determine if the given git repo `f` is updateable

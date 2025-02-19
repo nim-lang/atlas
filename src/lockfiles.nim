@@ -41,7 +41,7 @@ proc genLockEntry(lf: var LockFile; w: Dependency) =
   lf.items[w.pkg.projectName] = LockFileEntry(
     dir: prefixedPath(w.ondisk),
     url: w.pkg.url,
-    commit: getCurrentCommit(),
+    commit: currentGitCommit(w.ondisk),
     version: ""
   )
 
@@ -102,7 +102,7 @@ proc genLockEntry(
       return
 
   let info = extractRequiresInfo(nimbleFile)
-  let commit = getCurrentCommit()
+  let commit = currentGitCommit(w.ondisk)
   infoNow w.pkg.projectName, "calculating nimble checksum"
   let chk = nimbleChecksum(w.pkg.projectName, w.ondisk)
   lf.packages[w.pkg.projectName] = NimbleLockFileEntry(
@@ -253,7 +253,7 @@ proc listChanged*(lockFile: Path) =
                        " found: " & url &
                        " lockfile has: " & v.url
 
-      let commit = gitops.getCurrentCommit()
+      let commit = currentGitCommit(dir)
       if commit != v.commit:
         #let info = parseNimble(pkg.nimble)
         warn dir, "commit differs;" &

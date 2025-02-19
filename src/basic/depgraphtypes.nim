@@ -25,7 +25,7 @@ type
     state*: DependencyState
     active*: bool
     ondisk*: Path
-    error*: string
+    errors*: seq[string]
 
   DepGraph* = object
     nodes*: seq[Dependency]

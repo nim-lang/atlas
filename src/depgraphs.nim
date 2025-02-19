@@ -22,7 +22,10 @@ iterator releases(path: Path,
                   mode: TraversalMode; versions: seq[DependencyVersion];
                   nimbleCommits: seq[string]): (CommitOrigin, Commit) =
   let (currentCommit, status) = exec(GitCurrentCommit, path, [])
-  if status == 0:
+  debug "depgraphs:releases", "currentCommit: " & $currentCommit & " status: " & $status
+  if status != 0:
+    yield (FromHead, Commit(h: "", v: Version"#head"))
+  else:
     case mode
     of AllReleases:
       try:
@@ -54,8 +57,6 @@ iterator releases(path: Path,
         discard exec(GitCheckout, path, [currentCommit])
     of CurrentCommit:
       yield (FromHead, Commit(h: "", v: Version"#head"))
-  else:
-    yield (FromHead, Commit(h: "", v: Version"#head"))
 
 proc traverseRelease(nimbleCtx: NimbleContext; graph: var DepGraph; idx: int;
                      origin: CommitOrigin; release: Commit; lastNimbleContents: var string) =
@@ -146,13 +147,13 @@ proc expand*(graph: var DepGraph; nimbleCtx: NimbleContext; mode: TraversalMode)
           graph[i].state = Found
         else:
           graph[i].state = Error
-          graph[i].error = $status & ":" & msg
+          graph[i].errors.add $status & ":" & msg
       of DoNothing:
         if graph[i].ondisk.dirExists():
           graph[i].state = Found
         else:
           graph[i].state = Error
-          graph[i].error = "ondisk location missing"
+          graph[i].errors.add "ondisk location missing"
 
       if graph[i].state == Found:
         traverseDependency(nimbleCtx, graph, i, mode)
@@ -344,7 +345,7 @@ proc solve*(graph: var DepGraph; form: Form) =
     var notFoundCount = 0
     for pkg in mitems(graph.nodes):
       if pkg.isRoot and pkg.state != Processed:
-        error context().workspace, "invalid find package: " & pkg.pkg.projectName & " in state: " & $pkg.state & " error: " & pkg.error
+        error context().workspace, "invalid find package: " & pkg.pkg.projectName & " in state: " & $pkg.state & " error: " & $pkg.errors
         inc notFoundCount
     if notFoundCount > 0: return
     error context().workspace, "version conflict; for more information use --showGraph"
