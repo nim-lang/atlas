@@ -84,7 +84,6 @@ proc setupGraphNoGitTags* =
 
 suite "basic repo tests":
   test "tests/ws_semver2":
-    when true:
       withDir "tests/ws_semver2":
         removeDirs()
         setupGraph()
@@ -102,7 +101,6 @@ suite "basic repo tests":
         testSemVer2(semVerExpectedResult)
 
   test "tests/ws_semver2":
-    when false:
       withDir "tests/ws_semver2":
         removeDirs()
         setupGraphNoGitTags()
@@ -125,7 +123,6 @@ suite "basic repo tests":
         testSemVer2(semVerExpectedResultNoGitTags)
 
   test "tests/ws_semver2":
-    when false:
       withDir "tests/ws_semver2":
         removeDirs()
         setupGraph()
