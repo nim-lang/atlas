@@ -21,9 +21,9 @@ type
 iterator releases(path: Path,
                   mode: TraversalMode; versions: seq[DependencyVersion];
                   nimbleCommits: seq[string]): (CommitOrigin, Commit) =
-  let (currentCommit, status) = exec(GitCurrentCommit, path, [])
-  debug "depgraphs:releases", "currentCommit: " & $currentCommit & " status: " & $status
-  if status != 0:
+  let currentCommit = currentGitCommit(path)
+  debug "depgraphs:releases", "currentCommit: " & $currentCommit
+  if currentCommit.len() == 40:
     yield (FromHead, Commit(h: "", v: Version"#head"))
   else:
     case mode
