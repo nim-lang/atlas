@@ -10,15 +10,20 @@ type
     req*: int # index into graph.reqs so that it can be shared between versions
     v*: VarId
 
+  DependencyState* = enum
+    NotLoaded
+    Found
+    Loaded
+
   Dependency* = object
     pkg*: PkgUrl
     versions*: seq[DependencyVersion]
-    #v: VarId
-    active*: bool
     isRoot*: bool
     isTopLevel*: bool
-    status*: CloneStatus
     activeVersion*: int
+    state*: DependencyState
+    status*: CloneStatus
+    active*: bool
     ondisk*: Path
 
   DepGraph* = object
@@ -145,7 +150,7 @@ proc readOnDisk(result: var DepGraph) =
         if n.isRoot:
           if not result.packageToDependency.hasKey(n.pkg):
             result.packageToDependency[n.pkg] = result.nodes.len
-            result.nodes.add Dependency(pkg: n.pkg, versions: @[], isRoot: true, isTopLevel: n.isTopLevel, activeVersion: -1)
+            result.nodes.add Dependency(pkg: n.pkg, isRoot: true, isTopLevel: n.isTopLevel, activeVersion: -1)
   except:
     error configFile, "cannot read: " & $configFile
 

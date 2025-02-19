@@ -121,6 +121,7 @@ proc traverseDependency*(nimbleCtx: NimbleContext;
 
 proc expand*(graph: var DepGraph; nimbleCtx: NimbleContext; mode: TraversalMode) =
   ## Expand the graph by adding all dependencies.
+  trace "expand", "nodes: " & $graph.nodes
   var processed = initHashSet[PkgUrl]()
   var i = 0
   while i < graph.nodes.len:
@@ -129,6 +130,7 @@ proc expand*(graph: var DepGraph; nimbleCtx: NimbleContext; mode: TraversalMode)
 
       trace "expand", "todo: " & $todo & " pkg: " & graph[i].pkg.projectName & " dest: " & $dest
       # important: the ondisk path set here!
+      graph[i].state = Found
       graph[i].ondisk = dest
 
       if todo == DoClone:
