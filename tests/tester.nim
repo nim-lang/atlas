@@ -84,8 +84,9 @@ proc setupGraphNoGitTags* =
 
 suite "basic repo tests":
   test "tests/ws_semver2":
-    withDir "tests/ws_semver2":
-      try:
+    with true:
+      withDir "tests/ws_semver2":
+        removeDirs()
         setupGraph()
         let semVerExpectedResult = dedent"""
         [Info] (../resolve) selected:
@@ -99,12 +100,11 @@ suite "basic repo tests":
         [Info] (../resolve) end of selection
         """
         testSemVer2(semVerExpectedResult)
-      finally:
-        removeDirs()
 
   test "tests/ws_semver2":
-    withDir "tests/ws_semver2":
-      try:
+    with false:
+      withDir "tests/ws_semver2":
+        removeDirs()
         setupGraphNoGitTags()
         let semVerExpectedResultNoGitTags = dedent"""
         [Info] (../resolve) selected:
@@ -123,27 +123,24 @@ suite "basic repo tests":
         [Info] (../resolve) end of selection
         """
         testSemVer2(semVerExpectedResultNoGitTags)
-      finally:
-        removeDirs()
 
   test "tests/ws_semver2":
+    with false:
       withDir "tests/ws_semver2":
+        removeDirs()
         setupGraph()
-        try:
-          let minVerExpectedResult = dedent"""
-          [Info] (../resolve) selected:
-          [Info] (proj_a) [ ] (proj_a, 1.1.0)
-          [Info] (proj_a) [x] (proj_a, 1.0.0)
-          [Info] (proj_b) [ ] (proj_b, 1.1.0)
-          [Info] (proj_b) [x] (proj_b, 1.0.0)
-          [Info] (proj_c) [x] (proj_c, 1.2.0)
-          [Info] (proj_d) [ ] (proj_d, 2.0.0)
-          [Info] (proj_d) [x] (proj_d, 1.0.0)
-          [Info] (../resolve) end of selection
-          """
-          testMinVer(minVerExpectedResult)
-        finally:
-          removeDirs()
+        let minVerExpectedResult = dedent"""
+        [Info] (../resolve) selected:
+        [Info] (proj_a) [ ] (proj_a, 1.1.0)
+        [Info] (proj_a) [x] (proj_a, 1.0.0)
+        [Info] (proj_b) [ ] (proj_b, 1.1.0)
+        [Info] (proj_b) [x] (proj_b, 1.0.0)
+        [Info] (proj_c) [x] (proj_c, 1.2.0)
+        [Info] (proj_d) [ ] (proj_d, 2.0.0)
+        [Info] (proj_d) [x] (proj_d, 1.0.0)
+        [Info] (../resolve) end of selection
+        """
+        testMinVer(minVerExpectedResult)
 
 proc integrationTest() =
   # Test installation of some "important_packages" which we are sure

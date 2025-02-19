@@ -53,9 +53,9 @@ proc findNimbleFile*(nimbleFile: Path): seq[Path] =
 
 proc findNimbleFile*(dir: Path, projectName: string): seq[Path] =
   var nimbleFile = dir / Path(projectName & ".nimble")
-  echo "findNimbleFile:check:", " path: ", projectName, " dir: ", $dir
+  debug "findNimbleFile:check:", " path: " & $projectName & " dir: " & $dir
   result = findNimbleFile(nimbleFile)
-  echo "findNimbleFile:res:", " res: ", result
+  debug "findNimbleFile:res:", " res: " & $result
   if result.len() == 0:
     for file in walkFiles($dir / "*.nimble"):
       echo "findNimbleFile:search:", " file: ", file
