@@ -119,9 +119,11 @@ proc traverseDependency*(nimbleCtx: NimbleContext;
   if graph[idx].isRoot:
     let (origin, release) = (FromHead, Commit(h: "", v: Version"#head"))
     traverseRelease nimbleCtx, graph, idx, origin, release, lastNimbleContents
+    graph[idx].state = Processed
   else:
     for (origin, release) in releases(graph[idx].ondisk, mode, versions, nimbleVersions):
       traverseRelease nimbleCtx, graph, idx, origin, release, lastNimbleContents
+    graph[idx].state = Processed
 
 proc expand*(graph: var DepGraph; nimbleCtx: NimbleContext; mode: TraversalMode) =
   ## Expand the graph by adding all dependencies.
