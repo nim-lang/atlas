@@ -1,7 +1,7 @@
 
 import asynchttpserver, asyncdispatch
 import os, strutils, mimetypes, httpclient
-import basic/reporters
+import basic/context
 
 var
   searchDirs: seq[string]
