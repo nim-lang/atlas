@@ -6,15 +6,24 @@ import reporters
 
 export paths
 
+type
+  PackageUrl* = Uri
+
+type
+  ResultCode* = distinct int
+const
+  Ok* = ResultCode(0)
+
+proc `==`*(a,b: ResultCode): bool {.borrow.}
+proc `$`*(a: ResultCode): string =
+  "ResultCode($1)" % [$(int(a))]
+
 proc lastPathComponent*(s: string): string =
   var last = s.len - 1
   while last >= 0 and s[last] in {DirSep, AltSep}: dec last
   var first = last - 1
   while first >= 0 and s[first] notin {DirSep, AltSep}: dec first
   result = s.substr(first+1, last)
-
-type
-  PackageUrl* = Uri
 
 proc getFilePath*(x: PackageUrl): string =
   assert x.scheme == "file"
@@ -47,12 +56,13 @@ proc absoluteDepsDir*(workspace, value: Path): Path =
     result = workspace / value
 
 
-proc silentExec*(cmd: string; args: openArray[string]): (string, int) =
+proc silentExec*(cmd: string; args: openArray[string]): (string, ResultCode) =
   var cmdLine = cmd
   for i in 0..<args.len:
     cmdLine.add ' '
     cmdLine.add quoteShell(args[i])
-  result = osproc.execCmdEx(cmdLine)
+  let (res, code) = osproc.execCmdEx(cmdLine)
+  result = (res, ResultCode(code))
 
 proc nimbleExec*(cmd: string; args: openArray[string]) =
   var cmdLine = "nimble " & cmd

@@ -9,8 +9,6 @@
 import std/[os, files, dirs, paths, osproc, sequtils, strutils, uri]
 import reporters, osutils, versions, context
 
-const Ok*: int = 0
-
 type
   Command* = enum
     GitClone = "git clone $EXTRAARGS $URL $DEST",
@@ -61,22 +59,22 @@ proc exec*(gitCmd: Command;
            path: Path;
            args: openArray[string],
            ignoreError = false,
-           ): (string, int) =
+           ): (string, ResultCode) =
   let cmd = $gitCmd % ["DIR", $path]
   #if execDir.len == 0: $cmd else: $(cmd) % [execDir]
   debug "gitops", "Running Git command `$1`" % [ join(@[cmd] & @args, " ")]
   if isGitDir(path):
     result = silentExec(cmd, args)
   else:
-    result = ("not a git repository", 1)
-  if not ignoreError and result[1] != 0:
+    result = ("not a git repository", ResultCode(1))
+  if not ignoreError and result[1] != Ok:
     error "gitops", "Git command failed `$1` failed with code: $2" % [$gitCmd, $result[1]]
 
 proc checkGitDiffStatus*(path: Path): string =
   let (outp, status) = exec(GitDiff, path, [])
   if outp.len != 0:
     "'git diff' not empty"
-  elif status != 0:
+  elif status != Ok:
     "'git diff' returned non-zero"
   else:
     ""
@@ -112,11 +110,11 @@ proc clone*(url: string, dest: Path; retries = 5; fullClones=false): bool =
 
 proc gitDescribeRefTag*(path: Path, commit: string): string =
   let (lt, status) = exec(GitDescribe, path, ["--tags", commit])
-  result = if status == 0: strutils.strip(lt) else: ""
+  result = if status == Ok: strutils.strip(lt) else: ""
 
 proc collectTaggedVersions*(path: Path): seq[Commit] =
   let (outp, status) = exec(GitTags, path, [])
-  if status == 0:
+  if status == Ok:
     result = parseTaggedVersions(outp)
   else:
     result = @[]
@@ -133,30 +131,30 @@ proc versionToCommit*(path: Path, algo: ResolutionAlgorithm; query: VersionInter
 
 proc shortToCommit*(path: Path, short: string): string =
   let (cc, status) = exec(GitRevParse, path, [short])
-  result = if status == 0: strutils.strip(cc) else: ""
+  result = if status == Ok: strutils.strip(cc) else: ""
 
 proc listFiles*(path: Path): seq[string] =
   let (outp, status) = exec(GitLsFiles, path, [])
-  if status == 0:
+  if status == Ok:
     result = outp.splitLines().mapIt(it.strip())
   else:
     result = @[]
 
 proc currentGitCommit*(path: Path, ignoreError = false): string =
   let (currentCommit, status) = exec(GitCurrentCommit, path, [], ignoreError = ignoreError)
-  if status == 0:
+  if status == Ok:
     return currentCommit.strip()
   else:
     return ""
 
-proc checkoutGitCommit*(path: Path, commit: string): int =
+proc checkoutGitCommit*(path: Path, commit: string): ResultCode =
   let currentCommit = currentGitCommit(path)
   if currentCommit.len() == 40 and currentCommit == commit:
     return
 
   let (_, statusB) = exec(GitCheckout, path, [commit])
   result = statusB
-  if statusB != 0:
+  if statusB != Ok:
     error($path, "could not checkout commit " & commit)
   else:
     info($path, "updated package to " & commit)
@@ -172,44 +170,44 @@ proc checkoutGitCommitFull*(path: Path, commit: string; fullClones: bool) =
       elif not fullClones: "--update-shallow"
       else: ""
     let (_, status) = exec(GitFetch, path, [extraArgs, "--tags", "origin", commit])
-    if status != 0:
+    if status != Ok:
       error($path, "could not fetch commit " & commit)
     else:
       trace($path, "fetched package commit " & commit)
   elif commit.len != 40:
     info($path, "found short commit id; doing full fetch to resolve " & commit)
     let (outp, status) = exec(GitFetch, path, ["--unshallow"])
-    if status != 0:
+    if status != Ok:
       error($path, "could not fetch: " & outp)
     else:
       trace($path, "fetched package updates ")
 
   let (_, status) = exec(GitCheckout, path, [commit])
-  if status != 0:
+  if status != Ok:
     error($path, "could not checkout commit " & commit)
   else:
     info($path, "updated package to " & commit)
 
   let (_, subModStatus) = exec(GitSubModUpdate, path, smExtraArgs)
-  if subModStatus != 0:
+  if subModstatus != Ok:
     error($path, "could not update submodules")
   else:
     info($path, "updated submodules ")
 
 proc gitPull*(path: Path) =
   let (outp, status) = exec(GitPull, path, [])
-  if status != 0:
+  if status != Ok:
     debug path, "git pull error: \n" & outp.splitLines().mapIt("\n>>> " & it).join("")
     error(path, "could not 'git pull'")
 
 proc gitTag*(path: Path, tag: string) =
   let (_, status) = exec(GitTag, path, [tag])
-  if status != 0:
+  if status != Ok:
     error(path, "could not 'git tag " & tag & "'")
 
 proc pushTag*(path: Path, tag: string) =
   let (outp, status) = exec(GitPush, path, [tag])
-  if status != 0:
+  if status != Ok:
     error(path, "could not 'git push " & tag & "'")
   elif outp.strip() == "Everything up-to-date":
     info(path, "is up-to-date")
@@ -236,7 +234,7 @@ proc incrementTag*(displayName, lastTag: string; field: Natural): string =
 proc incrementLastTag*(path: Path, field: Natural): string =
   let (ltr, status) = exec(GitLastTaggedRef, path, [])
   echo "incrementLastTag: `$1`" % [ltr]
-  if status != 0 or ltr == "":
+  if status != Ok or ltr == "":
     "v0.0.1" # assuming no tags have been made yet
   else:
     let
@@ -272,13 +270,13 @@ proc isOutdated*(path: Path): bool =
     else: "--update-shallow"
   let (outp, status) = exec(GitFetch, path, [extraArgs, "--tags"])
 
-  if status == 0:
+  if status == Ok:
     let (cc, status) = exec(GitLastTaggedRef, path, [])
     let latestVersion = strutils.strip(cc)
-    if status == 0 and latestVersion.len > 0:
+    if status == Ok and latestVersion.len > 0:
       # see if we're past that commit:
       let (cc, status) = exec(GitCurrentCommit, path, [])
-      if status == 0:
+      if status == Ok:
         let currentCommit = strutils.strip(cc)
         if currentCommit != latestVersion:
           # checkout the later commit:
@@ -287,7 +285,7 @@ proc isOutdated*(path: Path): bool =
           let mergeBase = strutils.strip(cc)
           #if mergeBase != latestVersion:
           #  echo f, " I'm at ", currentCommit, " release is at ", latestVersion, " merge base is ", mergeBase
-          if status == 0 and mergeBase == currentCommit:
+          if status == Ok and mergeBase == currentCommit:
             let v = extractVersion gitDescribeRefTag(path, latestVersion)
             if v.len > 0:
               info path, "new version available: " & v
@@ -297,7 +295,7 @@ proc isOutdated*(path: Path): bool =
 
 proc getRemoteUrl*(path: Path): string =
   let (cc, status) = exec(GitRemoteUrl, path, [])
-  if status != 0:
+  if status != Ok:
     return ""
   else:
     return cc.strip()

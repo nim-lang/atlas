@@ -84,7 +84,7 @@ proc setupNimEnv*(workspace: Path, nimVersion: string; keepCsources: bool) =
       if commit.len == 0:
         error nimDest, "cannot resolve version to a commit"
         return
-      checkoutGitCommit(dir, commit)
+      discard checkoutGitCommit(dir, commit)
     exec nimExe & " c --noNimblePath --skipUserCfg --skipParentCfg --hints:off koch"
     let kochExe = when defined(windows): "koch.exe" else: "./koch"
     exec kochExe & " boot -d:release --skipUserCfg --skipParentCfg --hints:off"

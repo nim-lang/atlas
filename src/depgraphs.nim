@@ -34,20 +34,20 @@ iterator releases(path: Path,
         for version in versions:
           if version.version == Version"" and version.commit.len > 0 and not uniqueCommits.containsOrIncl(version.commit):
             let status = checkoutGitCommit(path, version.commit)
-            if status == 0:
+            if status == Ok:
               yield (FromDep, Commit(h: version.commit, v: Version""))
               inc produced
         let tags = collectTaggedVersions(path)
         for tag in tags:
           if not uniqueCommits.containsOrIncl(tag.h):
             let status = checkoutGitCommit(path, tag.h)
-            if status == 0:
+            if status == Ok:
               yield (FromGitTag, tag)
               inc produced
         for hash in nimbleCommits:
           if not uniqueCommits.containsOrIncl(hash):
             let status = checkoutGitCommit(path, hash)
-            if status == 0:
+            if status == Ok:
               yield (FromNimbleFile, Commit(h: hash, v: Version""))
 
         if produced == 0:
@@ -325,7 +325,7 @@ proc solve*(graph: var DepGraph; form: Form) =
         debug mapInfo.pkg.projectName, "package satisfiable"
         if mapInfo.commit != "" and graph[i].state == Processed:
           assert graph[i].ondisk.string.len > 0, "Missing ondisk location for: " & $(graph[i].pkg, i)
-          checkoutGitCommit(graph[i].ondisk, mapInfo.commit)
+          let res = checkoutGitCommit(graph[i].ondisk, mapInfo.commit)
 
     if NoExec notin context().flags:
       runBuildSteps(graph)

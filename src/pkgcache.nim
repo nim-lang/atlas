@@ -61,7 +61,7 @@ proc collectNimbleVersions*(nc: NimbleContext; dep: Dependency): seq[string] =
   result = @[]
   if nimbleFiles.len() == 1:
     let (outp, status) = exec(GitLog, dir, [$nimbleFiles[0]], ignoreError = true)
-    if status == 0:
+    if status == Ok:
       for line in splitLines(outp):
         if line.len > 0 and not line.endsWith("^{}"):
           result.add line
