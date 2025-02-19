@@ -60,7 +60,7 @@ proc collectNimbleVersions*(nc: NimbleContext; dep: Dependency): seq[string] =
   trace "collectNimbleVersions", "dep: " & dep.pkg.projectName & " at: " & $dep.ondisk
   result = @[]
   if nimbleFiles.len() == 1:
-    let (outp, status) = exec(GitLog, dir, [$nimbleFiles[0]])
+    let (outp, status) = exec(GitLog, dir, [$nimbleFiles[0]], ignoreError = true)
     if status == 0:
       for line in splitLines(outp):
         if line.len > 0 and not line.endsWith("^{}"):

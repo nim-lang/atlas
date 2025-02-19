@@ -155,14 +155,6 @@ proc getRequiredCommit*(w: Dependency): string =
   if isShortCommitHash(w.commit): shortToCommit(w.ondisk, w.commit)
   else: w.commit
 
-proc traverseLoop(nc: var NimbleContext; g: var DepGraph): seq[CfgPath] =
-  result = @[]
-  expand(g, nc, TraversalMode.AllReleases)
-  let f = toFormular(g, context().defaultAlgo)
-  solve(g, f)
-  for w in allActiveNodes(g):
-    result.add CfgPath(toDestDir(g, w) / getCfgPath(g, w).Path)
-
 proc traverse(nc: var NimbleContext; start: string): seq[CfgPath] =
   # returns the list of paths for the nim.cfg file.
   let u = createUrl(start, context().overrides)

@@ -62,6 +62,7 @@ proc exec*(cmd: Command;
            ): (string, int) =
   let cmd = $cmd % ["DIR", $path]
   #if execDir.len == 0: $cmd else: $(cmd) % [execDir]
+  trace "gitops", "Running Git command `$1`" % [ join(@[cmd] & @args, " ")]
   if isGitDir(path):
     result = silentExec(cmd, args)
   else:

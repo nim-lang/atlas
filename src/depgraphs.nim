@@ -75,7 +75,7 @@ proc traverseRelease(nimbleCtx: NimbleContext; graph: var DepGraph; idx: int;
     else:
       let nimbleContents = readFile($nimbleFile)
     if lastNimbleContents == nimbleContents:
-      packageVer.req = graph.nodes[idx].versions[^1].req
+      packageVer.req = graph[idx].versions[^1].req
     else:
       let reqResult = parseNimbleFile(nimbleCtx, nimbleFile, context().overrides)
       if origin == FromNimbleFile and packageVer.version == Version"":
@@ -96,23 +96,23 @@ proc traverseRelease(nimbleCtx: NimbleContext; graph: var DepGraph; idx: int;
         if depIdx == -1:
           graph.packageToDependency[dep] = graph.nodes.len
           graph.nodes.add Dependency(pkg: dep, versions: @[], isRoot: idx == 0, activeVersion: -1)
-          enrichVersionsViaExplicitHash graph.nodes[graph.nodes.len-1].versions, interval
+          enrichVersionsViaExplicitHash graph[graph.nodes.len-1].versions, interval
         else:
-          graph.nodes[depIdx].isRoot = graph.nodes[depIdx].isRoot or idx == 0
-          enrichVersionsViaExplicitHash graph.nodes[depIdx].versions, interval
+          graph[depIdx].isRoot = graph[depIdx].isRoot or idx == 0
+          enrichVersionsViaExplicitHash graph[depIdx].versions, interval
     else:
       badNimbleFile = true
 
   if origin == FromNimbleFile and (packageVer.version == Version"" or badNimbleFile):
     discard "not a version we model in the dependency graph"
   else:
-    graph.nodes[idx].versions.add ensureMove packageVer
+    graph[idx].versions.add ensureMove packageVer
 
 proc traverseDependency*(nimbleCtx: NimbleContext;
                          graph: var DepGraph, idx: int, mode: TraversalMode) =
   var lastNimbleContents = "<invalid content>"
 
-  let versions = move graph.nodes[idx].versions
+  let versions = move graph[idx].versions
   let nimbleVersions = collectNimbleVersions(nimbleCtx, graph[idx])
 
   for (origin, release) in releases(graph[idx].ondisk, mode, versions, nimbleVersions):
@@ -126,7 +126,7 @@ proc expand*(graph: var DepGraph; nimbleCtx: NimbleContext; mode: TraversalMode)
     if not processed.containsOrIncl(graph[i].pkg):
       let (dest, todo) = pkgUrlToDirname(graph, graph[i])
 
-      trace "expand", "pkg: " & graph[i].pkg.projectName & " dest: " & $dest
+      trace "expand", "todo: " & $todo & " pkg: " & graph[i].pkg.projectName & " dest: " & $dest
       # important: the ondisk path set here!
       graph[i].ondisk = dest
 
@@ -210,7 +210,7 @@ proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
       for dep, query in items graph.reqs[ver.req].deps:
         let queryVer = if algo == SemVer: toSemVer(query) else: query
         let commit = extractSpecificCommit(queryVer)
-        let availVer = graph.nodes[findDependencyForDep(graph, dep)]
+        let availVer = graph[findDependencyForDep(graph, dep)]
         if availVer.versions.len == 0: continue
 
         let beforeExactlyOneOf = builder.getPatchPos()
@@ -338,3 +338,12 @@ proc solve*(graph: var DepGraph; form: Form) =
         for ver in mvalidVersions(pkg, graph):
           if solution.isTrue(ver.v):
             error pkg.pkg.projectName, string(ver.version) & " required"
+
+
+proc traverseLoop*(nc: var NimbleContext; g: var DepGraph): seq[CfgPath] =
+  result = @[]
+  expand(g, nc, TraversalMode.AllReleases)
+  let f = toFormular(g, context().defaultAlgo)
+  solve(g, f)
+  for w in allActiveNodes(g):
+    result.add CfgPath(toDestDir(g, w) / getCfgPath(g, w).Path)
