@@ -55,12 +55,12 @@ proc extractVersion*(s: string): string =
   while i < s.len and s[i] notin {'0'..'9'}: inc i
   result = s.substr(i)
 
-proc exec*(cmd: Command;
+proc exec*(gitCmd: Command;
            path: Path;
            args: openArray[string],
            ignoreError = false,
            ): (string, int) =
-  let cmd = $cmd % ["DIR", $path]
+  let cmd = $gitCmd % ["DIR", $path]
   #if execDir.len == 0: $cmd else: $(cmd) % [execDir]
   debug "gitops", "Running Git command `$1`" % [ join(@[cmd] & @args, " ")]
   if isGitDir(path):
@@ -68,7 +68,7 @@ proc exec*(cmd: Command;
   else:
     result = ("not a git repository", 1)
   if not ignoreError and result[1] != 0:
-    error "gitops", "Git command failed `$1` failed with code: $2" % [cmd, $result[1]]
+    error "gitops", "Git command failed `$1` failed with code: $2" % [$gitCmd, $result[1]]
 
 proc checkGitDiffStatus*(path: Path): string =
   let (outp, status) = exec(GitDiff, path, [])
