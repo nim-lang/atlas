@@ -11,9 +11,10 @@ type
     v*: VarId
 
   DependencyState* = enum
-    NotLoaded
+    NotInitialized
     Found
-    Loaded
+    Processed
+    Error
 
   Dependency* = object
     pkg*: PkgUrl
@@ -22,9 +23,9 @@ type
     isTopLevel*: bool
     activeVersion*: int
     state*: DependencyState
-    status*: CloneStatus
     active*: bool
     ondisk*: Path
+    error*: string
 
   DepGraph* = object
     nodes*: seq[Dependency]

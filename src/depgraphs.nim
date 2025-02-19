@@ -1,4 +1,4 @@
-import std / [sets, paths, tables, os, strutils, streams, json, jsonutils, algorithm]
+import std / [sets, paths, dirs, files, tables, os, strutils, streams, json, jsonutils, algorithm]
 
 import basic/[depgraphtypes, osutils, context, gitops, reporters, nimbleparser, pkgurls, versions]
 import runners, cloner, pkgcache 
@@ -130,18 +130,28 @@ proc expand*(graph: var DepGraph; nimbleCtx: NimbleContext; mode: TraversalMode)
 
       trace "expand", "todo: " & $todo & " pkg: " & graph[i].pkg.projectName & " dest: " & $dest
       # important: the ondisk path set here!
-      graph[i].state = Found
       graph[i].ondisk = dest
 
-      if todo == DoClone:
-        let (status, _) =
+      case todo
+      of DoClone:
+        let (status, msg) =
           if graph[i].pkg.isFileProtocol:
             copyFromDisk(graph[i], dest)
           else:
             cloneUrl(graph[i].pkg, dest, false)
-        graph[i].status = status
+        if status == Ok:
+          graph[i].state = Found
+        else:
+          graph[i].state = Error
+          graph[i].error = $status & ":" & msg
+      of DoNothing:
+        if graph[i].ondisk.dirExists():
+          graph[i].state = Found
+        else:
+          graph[i].state = Error
+          graph[i].error = "ondisk location missing"
 
-      if graph[i].status == Ok:
+      if graph[i].state == Found:
         traverseDependency(nimbleCtx, graph, i, mode)
     inc i
 
@@ -181,7 +191,9 @@ proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
       inc result.idgen
       inc verIdx
 
-    if pkg.status != Ok:
+    doAssert pkg.state != NotInitialized
+
+    if pkg.state == Error:
       builder.openOpr(AndForm)
       for ver in mitems pkg.versions: builder.addNegated ver.v
       builder.closeOpr # AndForm
@@ -307,7 +319,7 @@ proc solve*(graph: var DepGraph; form: Form) =
         assert graph[i].activeVersion == -1, "too bad: " & graph[i].pkg.url
         graph[i].activeVersion = mapInfo.index
         debug mapInfo.pkg.projectName, "package satisfiable"
-        if mapInfo.commit != "" and graph[i].status == Ok:
+        if mapInfo.commit != "" and graph[i].state == Processed:
           assert graph[i].ondisk.string.len > 0, "Missing ondisk location for: " & $(graph[i].pkg, i)
           checkoutGitCommit(graph[i].ondisk, mapInfo.commit)
 
@@ -328,8 +340,8 @@ proc solve*(graph: var DepGraph; form: Form) =
   else:
     var notFoundCount = 0
     for pkg in mitems(graph.nodes):
-      if pkg.isRoot and pkg.status != Ok:
-        error context().workspace, "cannot find package: " & pkg.pkg.projectName
+      if pkg.isRoot and pkg.state != Processed:
+        error context().workspace, "invalid find package: " & pkg.pkg.projectName & " in state: " & $pkg.state & " error: " & pkg.error
         inc notFoundCount
     if notFoundCount > 0: return
     error context().workspace, "version conflict; for more information use --showGraph"
