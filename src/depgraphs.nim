@@ -114,6 +114,7 @@ proc traverseDependency*(nimbleCtx: NimbleContext;
 
   let versions = move graph[idx].versions
   let nimbleVersions = collectNimbleVersions(nimbleCtx, graph[idx])
+  trace "traverseDependency", "nimble versions: " & $nimbleVersions
 
   for (origin, release) in releases(graph[idx].ondisk, mode, versions, nimbleVersions):
     traverseRelease nimbleCtx, graph, idx, origin, release, lastNimbleContents
