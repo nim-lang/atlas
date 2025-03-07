@@ -1,15 +1,9 @@
-#
-#           Atlas Package Cloner
-#        (c) Copyright 2023 Andreas Rumpf
-#
-#    See the file "copying.txt", included in this
-#    distribution, for details about the copyright.
-#
+import std / [sets, tables, sequtils, paths, dirs, files, tables, os, strutils, streams, json, jsonutils, algorithm]
 
-import std / [sets, tables, os, strutils, streams, json, jsonutils, algorithm]
+import basic/[deptypes, versions, depgraphtypes, osutils, context, gitops, reporters, nimbleparser, pkgurls, versions]
+import dependencies, runners 
 
-import basic/[depgraphtypes, context, gitops, reporters, nimbleparser, pkgurls, versions]
-import runners, cloner, pkgcache 
+import std/[json, jsonutils]
 
 export depgraphtypes
 
@@ -18,358 +12,359 @@ when defined(nimAtlasBootstrap):
 else:
   import sat/[sat, satvars]
 
-type
-  TraversalMode* = enum
-    AllReleases,
-    CurrentCommit
+export sat
 
-  CommitOrigin = enum
-    FromHead, FromGitTag, FromDep, FromNimbleFile
+iterator directDependencies*(graph: DepGraph; pkg: Package): lent Package =
+  if pkg.activeNimbleRelease != nil:
+    for (durl, _) in pkg.activeNimbleRelease.requirements:
+      # let idx = findDependencyForDep(graph, dep[0])
+      yield graph.pkgs[durl]
 
-iterator releases(c: var AtlasContext; m: TraversalMode; versions: seq[DependencyVersion];
-                  nimbleCommits: seq[string]): (CommitOrigin, Commit) =
-  let (cc, status) = exec(c, GitCurrentCommit, [])
-  if status == 0:
-    case m
-    of AllReleases:
-      try:
-        var produced = 0
-        var uniqueCommits = initHashSet[string]()
-        for v in versions:
-          if v.version == Version"" and v.commit.len > 0 and not uniqueCommits.containsOrIncl(v.commit):
-            let (_, status) = exec(c, GitCheckout, [v.commit])
-            if status == 0:
-              yield (FromDep, Commit(h: v.commit, v: Version""))
-              inc produced
-        let tags = collectTaggedVersions(c)
-        for t in tags:
-          if not uniqueCommits.containsOrIncl(t.h):
-            let (_, status) = exec(c, GitCheckout, [t.h])
-            if status == 0:
-              yield (FromGitTag, t)
-              inc produced
-        for h in nimbleCommits:
-          if not uniqueCommits.containsOrIncl(h):
-            let (_, status) = exec(c, GitCheckout, [h])
-            if status == 0:
-              yield (FromNimbleFile, Commit(h: h, v: Version""))
-              #inc produced
-
-        if produced == 0:
-          yield (FromHead, Commit(h: "", v: Version"#head"))
-
-      finally:
-        discard exec(c, GitCheckout, [cc])
-    of CurrentCommit:
-      yield (FromHead, Commit(h: "", v: Version"#head"))
-  else:
-    yield (FromHead, Commit(h: "", v: Version"#head"))
-
-proc traverseRelease(c: var AtlasContext; nc: NimbleContext; g: var DepGraph; idx: int;
-                     origin: CommitOrigin; r: Commit; lastNimbleContents: var string) =
-  let (nimbleFile, found) = findNimbleFile(g, idx)
-  var pv = DependencyVersion(
-    version: r.v,
-    commit: r.h,
-    req: EmptyReqs, v: NoVar)
-  var badNimbleFile = false
-  if found != 1:
-    pv.req = UnknownReqs
-  else:
-    when (NimMajor, NimMinor, NimPatch) == (2, 0, 0):
-      # bug #110; make it compatible with Nim 2.0.0
-      # ensureMove requires mutable places when version < 2.0.2
-      var nimbleContents = readFile(nimbleFile)
-    else:
-      let nimbleContents = readFile(nimbleFile)
-    if lastNimbleContents == nimbleContents:
-      pv.req = g.nodes[idx].versions[^1].req
-    else:
-      let r = parseNimbleFile(nc, nimbleFile, c.overrides)
-      if origin == FromNimbleFile and pv.version == Version"":
-        pv.version = r.version
-      let ridx = g.reqsByDeps.getOrDefault(r, -1) # hasKey(r)
-      if ridx == -1:
-        pv.req = g.reqs.len
-        g.reqsByDeps[r] = pv.req
-        g.reqs.add r
-      else:
-        pv.req = ridx
-
-      lastNimbleContents = ensureMove nimbleContents
-
-    if g.reqs[pv.req].status == Normal:
-      for dep, interval in items(g.reqs[pv.req].deps):
-        let didx = g.packageToDependency.getOrDefault(dep, -1)
-        if didx == -1:
-          g.packageToDependency[dep] = g.nodes.len
-          g.nodes.add Dependency(pkg: dep, versions: @[], isRoot: idx == 0, activeVersion: -1)
-          enrichVersionsViaExplicitHash g.nodes[g.nodes.len-1].versions, interval
-        else:
-          g.nodes[didx].isRoot = g.nodes[didx].isRoot or idx == 0
-          enrichVersionsViaExplicitHash g.nodes[didx].versions, interval
-    else:
-      badNimbleFile = true
-
-  if origin == FromNimbleFile and (pv.version == Version"" or badNimbleFile):
-    discard "not a version we model in the dependency graph"
-  else:
-    g.nodes[idx].versions.add ensureMove pv
-
-proc traverseDependency*(c: var AtlasContext; nc: NimbleContext; g: var DepGraph; idx: int;
-                        m: TraversalMode) =
-  var lastNimbleContents = "<invalid content>"
-
-  let versions = move g.nodes[idx].versions
-  let nimbleVersions = collectNimbleVersions(c, nc, g, idx)
-
-  for (origin, r) in releases(c, m, versions, nimbleVersions):
-    traverseRelease c, nc, g, idx, origin, r, lastNimbleContents
-
-proc expand*(c: var AtlasContext; g: var DepGraph; nc: NimbleContext; m: TraversalMode) =
-  ## Expand the graph by adding all dependencies.
-  var processed = initHashSet[PkgUrl]()
-  var i = 0
-  while i < g.nodes.len:
-    if not processed.containsOrIncl(g.nodes[i].pkg):
-      let (dest, todo) = pkgUrlToDirname(c, g, g.nodes[i])
-      g.nodes[i].ondisk = dest
-      if todo == DoClone:
-        let (status, _) =
-          if g.nodes[i].pkg.isFileProtocol:
-            copyFromDisk(c, g.nodes[i], dest)
-          else:
-            cloneUrl(c, g.nodes[i].pkg, dest, false)
-        g.nodes[i].status = status
-
-      if g.nodes[i].status == Ok:
-        withDir c, dest:
-          traverseDependency(c, nc, g, i, m)
-    inc i
-
-iterator mvalidVersions*(p: var Dependency; g: var DepGraph): var DependencyVersion =
-  for v in mitems p.versions:
-    if g.reqs[v.req].status == Normal: yield v
+iterator validVersions*(pkg: Package): (PackageVersion, NimbleRelease) =
+  for ver, rel in mpairs(pkg.versions):
+    if rel.status == Normal:
+      yield (ver, rel)
 
 type
   SatVarInfo* = object # attached information for a SAT variable
-    pkg: PkgUrl
-    commit: string
-    version: Version
-    index: int
+    pkg*: Package
+    version*: PackageVersion
+    release*: NimbleRelease
+    # index*: int
 
   Form* = object
-    f: Formular
-    mapping: Table[VarId, SatVarInfo]
+    formula*: Formular
+    mapping*: Table[VarId, SatVarInfo]
     idgen: int32
 
-proc toFormular*(c: var AtlasContext; g: var DepGraph; algo: ResolutionAlgorithm): Form =
-  # Key idea: use a SAT variable for every `Requirements` object, which are
-  # shared.
+template withOpenBr(b, op, blk) =
+  b.openOpr(op)
+  `blk`
+  b.closeOpr()
+
+
+const useOldAtlastVer = true
+
+proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
   result = Form()
   var b = Builder()
-  b.openOpr(AndForm)
 
-  when false:
-    for n in mitems g.nodes:
-      n.v = VarId(result.idgen)
-      inc result.idgen
-      # all root nodes must be true:
-      if n.isRoot: b.add n.v
-      # all broken nodes must not be true:
-      if n.status != Ok:
-        b.addNegated n.v
+  withOpenBr(b, AndForm):
 
-  for p in mitems(g.nodes):
-    # if Package p is installed, pick one of its concrete versions, but not versions
-    # that are errornous:
-    # A -> (exactly one of: A1, A2, A3)
-    if p.versions.len == 0: continue
-
-    p.versions.sort proc (a, b: DependencyVersion): int =
-      (if a.version < b.version: 1
-      elif a.version == b.version: 0
-      else: -1)
-
-    var i = 0
-    for ver in mitems p.versions:
-      ver.v = VarId(result.idgen)
-      result.mapping[ver.v] = SatVarInfo(pkg: p.pkg, commit: ver.commit, version: ver.version, index: i)
-
-      inc result.idgen
-      inc i
-
-    if p.status != Ok:
-      # all of its versions must be `false`
-      b.openOpr(AndForm)
-      for ver in mitems p.versions: b.addNegated ver.v
-      b.closeOpr # AndForm
-    elif p.isRoot:
-      b.openOpr(ExactlyOneOfForm)
-      for ver in mitems p.versions: b.add ver.v
-      b.closeOpr # ExactlyOneOfForm
-    else:
-      # Either one version is selected or none:
-      b.openOpr(ZeroOrOneOfForm)
-      for ver in mitems p.versions: b.add ver.v
-      b.closeOpr # ExactlyOneOfForm
-
-  # Model the dependency graph:
-  for p in mitems(g.nodes):
-    for ver in mvalidVersions(p, g):
-      if isValid(g.reqs[ver.req].v):
-        # already covered this sub-formula (ref semantics!)
+    # First pass: Assign variables and encode version selection constraints
+    for p in mvalues(graph.pkgs):
+      if p.versions.len == 0:
+        debug p.url.projectName, "skipping adding package variable as it has no versions"
         continue
-      let eqVar = VarId(result.idgen)
-      g.reqs[ver.req].v = eqVar
-      inc result.idgen
 
-      if g.reqs[ver.req].deps.len == 0: continue
+      # # Sort versions in descending order (newer versions first)
 
-      let beforeEq = b.getPatchPos()
+      case algo
+      of MinVer: p.versions.sort(sortVersionsDesc)
+      of SemVer, MaxVer: p.versions.sort(sortVersionsAsc)
 
-      b.openOpr(OrForm)
-      b.addNegated eqVar
-      if g.reqs[ver.req].deps.len > 1: b.openOpr(AndForm)
-      var elements = 0
-      for dep, query in items g.reqs[ver.req].deps:
-        let q = if algo == SemVer: toSemVer(query) else: query
-        let commit = extractSpecificCommit(q)
-        let av = g.nodes[findDependencyForDep(g, dep)]
-        if av.versions.len == 0: continue
+      # Assign a unique SAT variable to each version of the package
+      var i = 0
+      for ver, rel in p.validVersions():
+        ver.vid = VarId(result.idgen)
+        # Map the SAT variable to package information for result interpretation
+        result.mapping[ver.vid] = SatVarInfo( pkg: p, version: ver, release: rel)
+        inc result.idgen
+        inc i
 
-        let beforeExactlyOneOf = b.getPatchPos()
-        b.openOpr(ExactlyOneOfForm)
-        inc elements
-        var matchCounter = 0
+      doAssert p.state != NotInitialized, "package not initialized: " & $p.toJson(ToJsonOptions(enumMode: joptEnumString))
 
-        if commit.len > 0:
-          for j in countup(0, av.versions.len-1):
-            if q.matches(av.versions[j].version) or commit == av.versions[j].commit:
-              b.add av.versions[j].v
-              inc matchCounter
+      # Add constraints based on the package status
+      if p.state == Error:
+        # If package is broken, enforce that none of its versions can be selected
+        withOpenBr(b, AndForm):
+          for ver, rel in p.validVersions():
+            b.addNegated ver.vid
+      elif p.isRoot:
+        # If it's a root package, enforce that exactly one version must be selected
+        withOpenBr(b, ExactlyOneOfForm):
+          for ver, rel in p.validVersions():
+            b.add ver.vid
+      else:
+        # For non-root packages, they can either have one version selected or none at all
+        withOpenBr(b, ZeroOrOneOfForm):
+          for ver, rel in p.validVersions():
+            b.add ver.vid
+
+    # This simpler deps loop was copied from Nimble after it was first ported from Atlas :)
+    # It appears to acheive the same results, but it's a lot simpler
+    for pkg in graph.pkgs.mvalues():
+      for ver, rel in validVersions(pkg):
+        var allDepsCompatible = true
+
+        # First check if all dependencies can be satisfied
+        for dep, query in items(rel.requirements):
+          let depNode = graph.pkgs[dep]
+
+          var hasCompatible = false
+          for depVer, relVer in depNode.validVersions():
+            if query.matches(depVer.version()):
+              hasCompatible = true
               break
-          #mapping.add (g.nodes[i].pkg, commit, v)
-        elif algo == MinVer:
-          for j in countup(0, av.versions.len-1):
-            if q.matches(av.versions[j].version):
-              b.add av.versions[j].v
-              inc matchCounter
-        else:
-          for j in countdown(av.versions.len-1, 0):
-            if q.matches(av.versions[j].version):
-              b.add av.versions[j].v
-              inc matchCounter
-        b.closeOpr # ExactlyOneOfForm
-        if matchCounter == 0:
-          b.resetToPatchPos beforeExactlyOneOf
-          b.add falseLit()
-          #echo "FOUND nothing for ", q, " ", dep
 
-      if g.reqs[ver.req].deps.len > 1: b.closeOpr # AndForm
-      b.closeOpr # EqForm
-      if elements == 0:
-        b.resetToPatchPos beforeEq
+          if not hasCompatible:
+            allDepsCompatible = false
+            error pkg.url.projectName, "no versions matched requirements for this dep", $dep.projectName
+            break
 
-  # Model the dependency graph:
-  for p in mitems(g.nodes):
-    for ver in mvalidVersions(p, g):
-      if g.reqs[ver.req].deps.len > 0:
-        b.openOpr(OrForm)
-        b.addNegated ver.v # if this version is chosen, these are its dependencies
-        b.add g.reqs[ver.req].v
-        b.closeOpr # OrForm
+        # If any dependency can't be satisfied, make this version unsatisfiable
+        if not allDepsCompatible:
+          error pkg.url.projectName, "all requirements needed were not matched", $rel.requirements
+          b.addNegated(ver.vid)
+          continue
 
-  b.closeOpr # AndForm
-  result.f = toForm(b)
+        # Add implications for each dependency
+        # for dep, q in items graph.reqs[ver.req].deps:
+        for dep, query in items(rel.requirements):
+          let depNode = graph.pkgs[dep]
 
-proc toString(x: SatVarInfo): string =
-  "(" & x.pkg.projectName & ", " & $x.version & ")"
+          var compatibleVersions: seq[VarId] = @[]
+          for depVer, relVer in depNode.validVersions():
+            if query.matches(depVer.version()):
+              compatibleVersions.add(depVer.vid)
 
-proc runBuildSteps(c: var AtlasContext; g: var DepGraph) =
+          # Add implication: if this version is selected, one of its compatible deps must be selected
+          withOpenBr(b, OrForm):
+            b.addNegated(ver.vid)  # not A
+            withOpenBr(b, OrForm):
+              for compatVer in compatibleVersions:
+                b.add(compatVer)
+
+    when false:
+      # Note this original ran, but seems to have problems now with minver...
+      #
+      # Original Atlas version ported to the new Package graph layout
+      # However the Nimble version appears to accomplish the same with less work
+      # Going to keep this here however, could be things we'll need to re-add later
+      # like handline the explicit commits, which were broken already anyways...
+      # 
+      # This loop sets up the dependency relationships in the SAT formula
+      # It creates constraints for each package's requirements
+      #
+      for pkg in graph.pkgs.mvalues():
+        for ver, rel in validVersions(pkg):
+          # Skip if this requirement has already been processed
+          if isValid(rel.rid): continue
+          # Assign a unique SAT variable to this requirement set
+          let eqVar = VarId(result.idgen)
+          rel.rid = eqVar
+          inc result.idgen
+          # Skip empty requirement sets
+          if rel.requirements.len == 0: continue
+          let beforeEq = b.getPatchPos()
+          # Create a constraint: if this requirement is true, then all its dependencies must be satisfied
+          b.openOpr(OrForm)
+          b.addNegated eqVar
+          if rel.requirements.len > 1:
+            b.openOpr(AndForm)
+          var elementCount = 0
+          # For each dependency in the requirement, create version matching constraints
+          for dep, query in items rel.requirements:
+            let queryVer = if algo == SemVer: toSemVer(query) else: query
+            let commit = extractSpecificCommit(queryVer)
+            let availVer = graph.pkgs[dep]
+            if availVer.versions.len == 0:
+              continue
+            let beforeExactlyOneOf = b.getPatchPos()
+            b.openOpr(ExactlyOneOfForm)
+            inc elementCount
+            var matchCount = 0
+            var availVers = availVer.versions.keys().toSeq()
+            info pkg.url.projectName, "version keys:", $dep.projectName, "availVers:", $availVers
+            if not commit.isEmpty():
+              info pkg.url.projectName, "adding requirements selections by specific commit:", $dep.projectName, "commit:", $commit
+              # Match by specific commit if specified
+              for depVer in availVers:
+                if queryVer.matches(depVer.version()) or commit == depVer.commit():
+                  b.add depVer.vid
+                  inc matchCount
+                  break
+            elif algo == MinVer:
+              # For MinVer algorithm, try to find the minimum version that satisfies the requirement
+              info pkg.url.projectName, "adding requirements selections by MinVer:", $dep.projectName
+              for depVer in availVers:
+                if queryVer.matches(depVer.version()):
+                  b.add depVer.vid
+                  inc matchCount
+            else:
+              # For other algorithms (like SemVer), try to find the maximum version that satisfies
+              info pkg.url.projectName, "adding requirements selections by SemVer:", $dep.projectName, "vers:", $availVers
+              availVers.reverse()
+              for depVer in availVers:
+                if queryVer.matches(depVer.version()):
+                  info pkg.url.projectName, "matched requirement selections by SemVer:", $queryVer, "depVer:", $depVer
+                  b.add depVer.vid
+                  inc matchCount
+            b.closeOpr() # ExactlyOneOfForm
+            # If no matching version was found, add a false literal to make the formula unsatisfiable
+            if matchCount == 0:
+              b.resetToPatchPos beforeExactlyOneOf
+              b.add falseLit()
+          if rel.requirements.len > 1:
+            b.closeOpr() # AndForm
+          b.closeOpr() # EqForm
+          # If no dependencies were processed, reset the formula position
+          if elementCount == 0:
+            b.resetToPatchPos beforeEq
+
+      # This final loop links package versions to their requirements
+      # It enforces that if a version is selected, its requirements must be satisfied
+      for pkg in mvalues(graph.pkgs):
+        for ver, rel in validVersions(pkg):
+          if rel.requirements.len > 0:
+            info pkg.url.projectName, "adding package requirements restraint:", $ver, "vid: ", $ver.vid.int, "rel:", $rel.rid.int
+            b.openOpr(OrForm)
+            b.addNegated ver.vid
+            b.add rel.rid
+            b.closeOpr() # OrForm
+          else:
+            info pkg.url.projectName, "not adding pacakge requirements restraint:", $ver
+
+  result.formula = toForm(b)
+
+
+proc toString(info: SatVarInfo): string =
+  "(" & info.pkg.url.projectName & ", " & $info.version & ")"
+
+proc debugFormular*(graph: var DepGraph; form: Form; solution: Solution) =
+  echo "FORM:\n\t", form.formula
+  var keys = form.mapping.keys().toSeq()
+  keys.sort(proc (a, b: VarId): int = cmp(a.int, b.int))
+  for key in keys:
+    let value = form.mapping[key]
+    echo "\tv", key.int, ": ", value
+  let maxVar = maxVariable(form.formula)
+  echo "solutions:"
+  for varIdx in 0 ..< maxVar:
+    if solution.isTrue(VarId(varIdx)):
+      echo "\tv", varIdx, ": T"
+  echo ""
+
+proc toPretty*(v: uint64): string = 
+  if v == DontCare: "X"
+  elif v == SetToTrue: "T"
+  elif v == SetToFalse: "F"
+  elif v == IsInvalid: "!"
+  else: ""
+
+proc solve*(graph: var DepGraph; form: Form) =
+  for pkg in graph.pkgs.mvalues():
+    pkg.activeVersion = nil
+    pkg.active = false
+
+  let maxVar = form.idgen
+  if context().dumpGraphs:
+    dumpJson(graph, "graph-solve-input.json")
+
+  var solution = createSolution(maxVar)
+
+  if context().dumpFormular:
+    debugFormular graph, form, solution
+
+  if satisfiable(form.formula, solution):
+    graph.root.active = true
+    for varIdx in 0 ..< maxVar:
+      let vid = VarId varIdx
+      if vid in form.mapping:
+        let mapInfo = form.mapping[vid]
+        trace mapInfo.pkg.projectName, "v" & $varIdx & " sat var: " & $solution.getVar(vid).toPretty()
+
+      if solution.isTrue(VarId(varIdx)) and form.mapping.hasKey(VarId varIdx):
+        let mapInfo = form.mapping[VarId varIdx]
+        let pkg = mapInfo.pkg
+        let ver = mapInfo.version
+        pkg.active = true
+        assert not pkg.isNil, "too bad: " & $pkg.url
+        assert not mapInfo.release.isNil, "too bad: " & $pkg.url
+        pkg.activeVersion = mapInfo.version
+        debug pkg.url.projectName, "package satisfiable"
+
+    if ListVersions in context().flags:
+      warn "Resolved", "selected:"
+      for pkg in values(graph.pkgs):
+        if not pkg.isRoot:
+          for ver, rel in pkg.versions:
+            if ver.vid in form.mapping:
+              let item = form.mapping[ver.vid]
+              doAssert pkg.url == item.pkg.url
+              if solution.isTrue(ver.vid):
+                warn item.pkg.url.projectName, "[x] " & toString item
+              else:
+                warn item.pkg.url.projectName, "[ ] " & toString item
+            else:
+              warn pkg.url.projectName, "[!] " & "(" & $rel.status & "; pkg: " & pkg.url.projectName & ", " & $ver & ")"
+      warn "Resolved", "end of selection"
+  else:
+    var notFoundCount = 0
+    for pkg in values(graph.pkgs):
+      if pkg.isRoot and pkg.state != Processed:
+        error context().workspace, "invalid find package: " & pkg.url.projectName & " in state: " & $pkg.state & " error: " & $pkg.errors
+        inc notFoundCount
+    if notFoundCount > 0:
+      return
+    error context().workspace, "version conflict; for more information use --showGraph"
+    for pkg in mvalues(graph.pkgs):
+      var usedVersionCount = 0
+      for (ver, rel) in validVersions(pkg):
+        if solution.isTrue(ver.vid): inc usedVersionCount
+      if usedVersionCount > 1:
+        for (ver, rel) in validVersions(pkg):
+          if solution.isTrue(ver.vid):
+            error pkg.url.projectName, string(ver.version()) & " required"
+  if context().dumpGraphs:
+    dumpJson(graph, "graph-solved.json")
+
+proc traverseLoop*(nc: var NimbleContext, path: Path): seq[CfgPath] =
+  result = @[]
+  let specs = expand(nc, TraversalMode.AllReleases, path)
+  var graph: DepGraph
+  let form = graph.toFormular(context().defaultAlgo)
+  
+  solve(graph, form)
+
+
+proc runBuildSteps*(graph: DepGraph) =
   ## execute build steps for the dependency graph
   ##
   ## `countdown` suffices to give us some kind of topological sort:
   ##
-  for i in countdown(g.nodes.len-1, 0):
-    if g.nodes[i].active:
-      let pkg = g.nodes[i].pkg
-      tryWithDir c, g.nodes[i].ondisk:
+  var revPkgs = graph.pkgs.values().toSeq()
+  revPkgs.reverse()
+
+  # for i in countdown(graph.pkgs.len-1, 0):
+  for pkg in revPkgs:
+    if pkg.active:
+      doAssert pkg != nil
+      tryWithDir $pkg.ondisk:
         # check for install hooks
-        let activeVersion = g.nodes[i].activeVersion
-        let r = if g.nodes[i].versions.len == 0: -1 else: g.nodes[i].versions[activeVersion].req
-        if r >= 0 and r < g.reqs.len and g.reqs[r].hasInstallHooks:
-          let (nf, found) = findNimbleFile(g, i)
-          if found == 1:
-            runNimScriptInstallHook c, nf, pkg.projectName
-        # check for nim script builders
-        for p in mitems c.plugins.builderPatterns:
-          let f = p[0] % pkg.projectName
-          if fileExists(f):
-            runNimScriptBuilder c, p, pkg.projectName
+        if not pkg.activeNimbleRelease.isNil and
+            pkg.activeNimbleRelease.hasInstallHooks:
+          let nimbleFiles = findNimbleFile(pkg)
+          if nimbleFiles.len() == 1:
+            info pkg.url.projectName, "Running installHook"
+            runNimScriptInstallHook nimbleFiles[0], pkg.projectName
+        # check for nim script bs
+        for pattern in mitems context().plugins.builderPatterns:
+          let bFile = pattern[0] % pkg.projectName
+          if fileExists(bFile):
+            runNimScriptBuilder pattern, pkg.projectName
 
-proc debugFormular(c: var AtlasContext; g: var DepGraph; f: Form; s: Solution) =
-  echo "FORM: ", f.f
-  #for n in g.nodes:
-  #  echo "v", n.v.int, " ", n.pkg.url
-  for k, v in pairs(f.mapping):
-    echo "v", k.int, ": ", v
-  let m = maxVariable(f.f)
-  for i in 0 ..< m:
-    if s.isTrue(VarId(i)):
-      echo "v", i, ": T"
+proc activateGraph*(graph: DepGraph): seq[CfgPath] =
+  for pkg in allActiveNodes(graph):
+    if not pkg.activeVersion.commit().isEmpty():
+      if pkg.ondisk.string.len == 0:
+        error pkg.url.projectName, "Missing ondisk location for:", $(pkg.url)
+      else:
+        let res = checkoutGitCommit(pkg.ondisk, pkg.activeVersion.commit())
 
-proc solve*(c: var AtlasContext; g: var DepGraph; f: Form) =
-  let m = f.idgen
-  var s = createSolution(m)
-  #debugFormular c, g, f, s
+  if NoExec notin context().flags:
+    runBuildSteps(graph)
 
-  if satisfiable(f.f, s):
-    for n in mitems g.nodes:
-      if n.isRoot: n.active = true
-    for i in 0 ..< m:
-      if s.isTrue(VarId(i)) and f.mapping.hasKey(VarId i):
-        let m = f.mapping[VarId i]
-        let idx = findDependencyForDep(g, m.pkg)
-        #echo "setting ", idx, " to active ", g.nodes[idx].pkg.url
-        g.nodes[idx].active = true
-        assert g.nodes[idx].activeVersion == -1, "too bad: " & g.nodes[idx].pkg.url
-        g.nodes[idx].activeVersion = m.index
-        debug c, m.pkg.projectName, "package satisfiable"
-        if m.commit != "" and g.nodes[idx].status == Ok:
-          assert g.nodes[idx].ondisk.len > 0, $(g.nodes[idx].pkg, idx)
-          withDir c, g.nodes[idx].ondisk:
-            checkoutGitCommit(c, m.pkg.projectName, m.commit)
-
-    if NoExec notin c.flags:
-      runBuildSteps(c, g)
-      #echo f
-
-    if ListVersions in c.flags:
-      info c, "../resolve", "selected:"
-      for n in items g.nodes:
-        if not n.isTopLevel:
-          for v in items(n.versions):
-            let item = f.mapping[v.v]
-            if s.isTrue(v.v):
-              info c, item.pkg.projectName, "[x] " & toString item
-            else:
-              info c, item.pkg.projectName, "[ ] " & toString item
-      info c, "../resolve", "end of selection"
-  else:
-    #echo "FORM: ", f.f
-    var notFound = 0
-    for p in mitems(g.nodes):
-      if p.isRoot and p.status != Ok:
-        error c, c.workspace, "cannot find package: " & p.pkg.projectName
-        inc notFound
-    if notFound > 0: return
-    error c, c.workspace, "version conflict; for more information use --showGraph"
-    for p in mitems(g.nodes):
-      var usedVersions = 0
-      for ver in mvalidVersions(p, g):
-        if s.isTrue(ver.v): inc usedVersions
-      if usedVersions > 1:
-        for ver in mvalidVersions(p, g):
-          if s.isTrue(ver.v):
-            error c, p.pkg.projectName, string(ver.version) & " required"
+  for pkg in allActiveNodes(graph):
+    debug pkg.url.projectName, "adding CfgPath:", $(toDestDir(graph, pkg) / getCfgPath(graph, pkg).Path)
+    result.add CfgPath(toDestDir(graph, pkg) / getCfgPath(graph, pkg).Path)

@@ -6,8 +6,8 @@
 #    distribution, for details about the copyright.
 #
 
-import std/[os, strutils]
-import context, osutils, parserequires, reporters
+import std/[os, strutils, dirs, files]
+import context, osutils, parse_requires, reporters
 
 export parse_requires
 
@@ -15,20 +15,16 @@ const
   configPatternBegin = "############# begin Atlas config section ##########\n"
   configPatternEnd =   "############# end Atlas config section   ##########\n"
 
-proc parseNimble*(c: var AtlasContext; nimble: string): NimbleFileInfo =
+proc parseNimble*(nimble: Path): NimbleFileInfo =
   result = extractRequiresInfo(nimble)
 
-proc findCfgDir*(c: var AtlasContext): CfgPath =
-  for nimbleFile in walkPattern(c.currentDir / "*.nimble"):
-    let nimbleInfo = parseNimble(c, nimbleFile)
-    return CfgPath c.currentDir / nimbleInfo.srcDir
-  return CfgPath c.currentDir
+proc findCfgDir*(dir: Path): CfgPath =
+  for nimbleFile in walkPattern($dir / "*.nimble"):
+    let nimbleInfo = parseNimble(Path nimbleFile)
+    return CfgPath dir / nimbleInfo.srcDir
+  return CfgPath dir
 
-proc findCfgDir*(c: var AtlasContext, dir: string): CfgPath =
-  c.withDir dir:
-    result = findCfgDir(c)
-
-proc patchNimCfg*(c: var AtlasContext; deps: seq[CfgPath]; cfgPath: CfgPath) =
+proc patchNimCfg*(deps: seq[CfgPath]; cfgPath: CfgPath) =
   var paths = "--noNimblePath\n"
   for d in deps:
     let x = relativePath(d.string, cfgPath.string, '/')
@@ -36,15 +32,15 @@ proc patchNimCfg*(c: var AtlasContext; deps: seq[CfgPath]; cfgPath: CfgPath) =
       paths.add "--path:\"" & x & "\"\n"
   var cfgContent = configPatternBegin & paths & configPatternEnd
 
-  let cfg = cfgPath.string / "nim.cfg"
+  let cfg = Path(cfgPath.string / "nim.cfg")
   assert cfgPath.string.len > 0
   if cfgPath.string.len > 0 and not dirExists(cfgPath.string):
-    error(c, c.projectDir, "could not write the nim.cfg")
+    error($context().workspace, "could not write the nim.cfg")
   elif not fileExists(cfg):
-    writeFile(cfg, cfgContent)
-    info(c, projectFromCurrentDir(), "created: " & cfg.readableFile)
+    writeFile($cfg, cfgContent)
+    info(context().workspace, "created: " & $cfg.readableFile(context().workspace))
   else:
-    let content = readFile(cfg)
+    let content = readFile($cfg)
     let start = content.find(configPatternBegin)
     if start >= 0:
       cfgContent = content.substr(0, start-1) & cfgContent
@@ -56,5 +52,5 @@ proc patchNimCfg*(c: var AtlasContext; deps: seq[CfgPath]; cfgPath: CfgPath) =
     if cfgContent != content:
       # do not touch the file if nothing changed
       # (preserves the file date information):
-      writeFile(cfg, cfgContent)
-      info(c, projectFromCurrentDir(), "updated: " & cfg.readableFile)
+      writeFile($cfg, cfgContent)
+      info(context().workspace, "updated: " & $cfg.readableFile(context().workspace))

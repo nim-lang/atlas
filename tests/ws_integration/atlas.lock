@@ -1,0 +1,35 @@
+{
+  "items": {},
+  "nimcfg": [
+    "############# begin Atlas config section ##########",
+    "--noNimblePath",
+    "--path:\"nitter/src\"",
+    "--path:\"jester\"",
+    "--path:\"karax\"",
+    "--path:\"sass/src\"",
+    "--path:\"nimcrypto\"",
+    "--path:\"nim-markdown/src\"",
+    "--path:\"packedjson\"",
+    "--path:\"supersnappy/src\"",
+    "--path:\"redpool/src\"",
+    "--path:\"redis/src\"",
+    "--path:\"zippy/src\"",
+    "--path:\"flatty/src\"",
+    "--path:\"jsony/src\"",
+    "--path:\"oauth/src\"",
+    "--path:\"ws/src\"",
+    "--path:\"dotenv.nim/src\"",
+    "--path:\"sha1\"",
+    "############# end Atlas config section   ##########",
+    ""
+  ],
+  "nimbleFile": {
+    "filename": "",
+    "content": []
+  },
+  "hostOS": "macosx",
+  "hostCPU": "arm64",
+  "nimVersion": "2.0.14 bf4de6a394e040d9810cba8c69fb2829ff04dcc6",
+  "gccVersion": "",
+  "clangVersion": ""
+}

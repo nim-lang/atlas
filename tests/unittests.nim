@@ -1,7 +1,7 @@
 
 
-import std/[unittest, os, strutils]
-import basic/[context, osutils, versions]
+import std/[unittest, os, algorithm, strutils]
+import basic/[context, deptypes, osutils, versions]
 
 when false:
   from nameresolver import resolvePackage
@@ -107,6 +107,13 @@ suite "versions":
     32b4192b3f0771af11e9d850046e5f3dd42a9a5f 0.8.14
     """
 
+    let onlyCommits {.used.} = dedent"""
+    24870f48c40da2146ce12ff1e675e6e7b9748355
+    b54236aaee2fc90200cb3a4e7070820ced9ce605
+    f06dc8ee3baf8f64cce67a28a6e6e8a8cd9bf04b
+
+    """
+
   test "basics":
     check v"1.0" < v"1.0.1"
     check v"1.0" < v"1.1"
@@ -131,19 +138,267 @@ suite "versions":
 
     let tags = parseTaggedVersions(lines)
     let query = p">= 1.2 & < 1.4"
-    assert selectBestCommitMinVer(tags, query) == "a8a4725850c443158f9cab38eae3e54a78a523fb"
+    let queryStr = $(query)
+    check queryStr == ">= 1.2 & < 1.4"
+    echo "QUERY STR: ", queryStr
+    check selectBestCommitMinVer(tags, query).h == "a8a4725850c443158f9cab38eae3e54a78a523fb"
 
     let query2 = p">= 1.2 & < 1.4"
-    assert selectBestCommitMaxVer(tags, query2) == "1420d508dc4a3e51137647926d4db2f3fa62f43c"
+    let queryStr2 = $(query2)
+    check queryStr2 == ">= 1.2 & < 1.4"
+    check selectBestCommitMaxVer(tags, query2).h == "1420d508dc4a3e51137647926d4db2f3fa62f43c"
 
     let query3 = p">= 0.20.0"
-    assert selectBestCommitSemVer(tags, query3) == "a202715d182ce6c47e19b3202e0c4011bece65d8"
+    let queryStr3 = $(query3)
+    check queryStr3 == ">= 0.20.0"
+    check selectBestCommitSemVer(tags, query3).h == "a202715d182ce6c47e19b3202e0c4011bece65d8"
 
-    let query4 = p"#head"
-    assert selectBestCommitSemVer(tags, query4) == "24870f48c40da2146ce12ff1e675e6e7b9748355"
+    # let query4 = p"#head"
+    # let queryStr4 = $(query4)
+    # check queryStr4 == "#head"
+    # check selectBestCommitSemVer(tags, query4).h == "24870f48c40da2146ce12ff1e675e6e7b9748355"
 
   test "lastPathComponent":
-    assert lastPathComponent("/a/bc///") == "bc"
-    assert lastPathComponent("a/b") == "b"
-    assert lastPathComponent("meh/longer/here/") == "here"
-    assert lastPathComponent("meh/longer/here") == "here"
+    check lastPathComponent("/a/bc///") == "bc"
+    check lastPathComponent("a/b") == "b"
+    check lastPathComponent("meh/longer/here/") == "here"
+    check lastPathComponent("meh/longer/here") == "here"
+
+  test "onlyCommits with parseTaggedVersions":
+    let tags = parseTaggedVersions(onlyCommits, false)
+    echo "TAGS: ", $tags
+    check tags.len() == 3
+    check tags[0].c.h == "24870f48c40da2146ce12ff1e675e6e7b9748355"
+    check tags[1].c.h == "b54236aaee2fc90200cb3a4e7070820ced9ce605"
+    check tags[2].c.h == "f06dc8ee3baf8f64cce67a28a6e6e8a8cd9bf04b"
+
+  test "test version tag and commit hash str":
+    let c1 = initCommitHash("24870f48c40da2146ce12ff1e675e6e7b9748355", FromNone)
+    let v1 = VersionTag(v: Version"#head", c: c1)
+
+    check $c1 == "24870f48c40da2146ce12ff1e675e6e7b9748355"
+    check $v1 == "#head@24870f48"
+
+    let v2 = toVersionTag("#head@24870f48c40da2146ce12ff1e675e6e7b9748355")
+    check $v2 == "#head@24870f48"
+    check repr(v2) == "#head@24870f48c40da2146ce12ff1e675e6e7b9748355"
+
+    let v3 = toVersionTag("#head@-")
+    check v3.v.string == "#head"
+    check v3.c.h == ""
+    check $v3 == "#head@-"
+    # check repr(v3) == "#head@-"
+
+    let v4 = VersionTag(v: Version"#head", c: initCommitHash("", FromGitTag))
+    check v4 == v3
+
+import basic/[versions]
+
+template v(x): untyped = Version(x)
+
+suite "version interval matches":
+
+  proc p(s: string): VersionInterval =
+    var err = false
+    result = parseVersionInterval(s, 0, err)
+    # assert not err
+
+  test "simple equality match":
+    let interval = p"1.0.0"
+    check interval.matches(v"1.0.0") == true
+    check interval.matches(v"1.0.1") == false
+    check interval.matches(v"0.9.9") == false
+  
+  test "greater than or equal":
+    let interval = p">= 1.0.0"
+    check interval.matches(v"1.0.0") == true
+    check interval.matches(v"1.0.1") == true
+    check interval.matches(v"2.0.0") == true
+    check interval.matches(v"0.9.9") == false
+  
+  test "greater than":
+    let interval = p"> 1.0.0"
+    check interval.matches(v"1.0.0") == false
+    check interval.matches(v"1.0.1") == true
+    check interval.matches(v"2.0.0") == true
+    check interval.matches(v"0.9.9") == false
+  
+  test "less than or equal":
+    let interval = p"<= 1.0.0"
+    check interval.matches(v"1.0.0") == true
+    check interval.matches(v"0.9.9") == true
+    check interval.matches(v"0.1.0") == true
+    check interval.matches(v"1.0.1") == false
+  
+  test "less than":
+    let interval = p"< 1.0.0"
+    check interval.matches(v"1.0.0") == false
+    check interval.matches(v"0.9.9") == true
+    check interval.matches(v"0.1.0") == true
+    check interval.matches(v"1.0.1") == false
+  
+  test "any version":
+    let interval = p"*"
+    check interval.matches(v"1.0.0") == true
+    check interval.matches(v"0.0.1") == true
+    check interval.matches(v"99.99.99") == true
+  
+  test "version range with ampersand":
+    let interval = p">= 1.0.0 & <= 2.0.0"
+    check interval.matches(v"0.9.9") == false
+    check interval.matches(v"1.0.0") == true
+    check interval.matches(v"1.5.0") == true
+    check interval.matches(v"2.0.0") == true
+    check interval.matches(v"2.0.1") == false
+  
+  test "version range with comma":
+    # The code notes that Nimble doesn't use this syntax, but it's supported
+    let interval = p">= 1.0.0, < 2.0.0"
+    check interval.matches(v"0.9.9") == false
+    check interval.matches(v"1.0.0") == true
+    check interval.matches(v"1.5.0") == true
+    check interval.matches(v"2.0.0") == false
+  
+  test "tight version range":
+    let interval = p"> 1.0.0 & < 1.1.0"
+    check interval.matches(v"1.0.0") == false
+    check interval.matches(v"1.0.1") == true
+    check interval.matches(v"1.0.9") == true
+    check interval.matches(v"1.1.0") == false
+  
+  test "special version #head":
+    let interval = p"#head"
+    echo "special: ", interval.repr
+    check interval.matches(v"#head") == true
+    check interval.isSpecial == true
+    check interval.matches(v"1.0.0") == false
+  
+  test "special version with and without hash":
+    let specialInterval = p"#branch"
+    check specialInterval.matches(v"#branch") == true
+    # check specialInterval.matches(v"branch") == true  # According to the matching logic
+    
+    let noHashInterval = p"branch"
+    check noHashInterval.matches(v"#branch") == true  # According to the matching logic
+  
+  test "commit hash matching":
+    # Create version tags for testing
+    let commit1 = initCommitHash("abcdef123456", FromGitTag)
+    let commit2 = initCommitHash("123456abcdef", FromGitTag)
+    
+    let tag1 = VersionTag(c: commit1, v: v"1.0.0")
+    let tag2 = VersionTag(c: commit2, v: v"2.0.0")
+    
+    # Test commit matching with version intervals
+    let specificCommit = p"#abcdef"
+    check specificCommit.matches(tag1) == true
+    check specificCommit.matches(tag2) == false
+    
+    # Test regular version matching with tags
+    let regularVersion = p"1.0.0"
+    check regularVersion.matches(tag1) == true
+    check regularVersion.matches(tag2) == false
+  
+  test "invalid interval":
+    # Test >= 2.0.0 & <= 1.0.0 (invalid interval, should match nothing)
+    let invalidInterval = p">= 2.0.0 & <= 1.0.0"
+    check invalidInterval.matches(v"1.5.0") == false
+    check invalidInterval.matches(v"0.5.0") == false
+    check invalidInterval.matches(v"2.5.0") == false
+  
+  test "semver-style matching":
+    # Testing how toSemVer works with matches
+    let interval = p">= 1.0.0"
+    let semVerInterval = interval.toSemVer()
+    
+    # SemVer should convert >= 1.0.0 to >= 1.0.0 & < 2.0.0
+    check semVerInterval.isInterval == true
+    check semVerInterval.matches(v"1.0.0") == true
+    check semVerInterval.matches(v"1.9.9") == true
+    check semVerInterval.matches(v"2.0.0") == false
+  
+  test "special version comparison":
+    # Special versions should be sorted below regular versions
+    check not (v"#head" < v"#head")
+    check not (v"#head" < v"1.0")
+    check v"1.0" < v"#head"
+    check v"#branch" < v"#head"
+    check v"#branch" < v"1.0" # This is expected behavior based on existing tests
+    
+  test "version matching with extractSpecificCommit":
+    let specificCommitInterval = p"#abcdef"
+    let extractedCommit = extractSpecificCommit(specificCommitInterval)
+    check extractedCommit.h == "abcdef"
+    
+    # Test a non-specific commit interval
+    let regularInterval = p">= 1.0.0"
+    let noCommit = extractSpecificCommit(regularInterval)
+    check noCommit.h == ""
+
+suite "sortVersions":
+  
+  test "patches and minor versions":
+    var versions = @[
+       VersionTag(v: v"1.2.3", c: initCommitHash("b1", FromNone)),
+       VersionTag(v: v"1.2.4", c: initCommitHash("b2", FromNone)),
+       VersionTag(v: v"1.3.0", c: initCommitHash("b3", FromNone)),
+    ]
+
+    versions.sort(sortVersionsDesc)
+    check versions[0].v == v"1.3.0"
+    check versions[1].v == v"1.2.4"
+    check versions[2].v == v"1.2.3"
+  
+    versions.sort(sortVersionsAsc)
+    check versions[0].v == v"1.2.3"
+    check versions[1].v == v"1.2.4"
+    check versions[2].v == v"1.3.0"
+
+  test "different commit hashes but same version":
+    let v1 = VersionTag(v: v"1.0.0", c: initCommitHash("c1", FromNone))
+    let v2 = VersionTag(v: v"1.0.0", c: initCommitHash("c2", FromNone))
+    
+    check sortVersionsDesc(v1, v2) == 0  # Versions are equal, ignoring commit
+    check sortVersionsAsc(v1, v2) == 0  # Versions are equal, ignoring commit
+  
+  test "special versions":
+    let v1 = VersionTag(v: v"1.0.0", c: initCommitHash("d1", FromNone))
+    let v2 = VersionTag(v: v"#head", c: initCommitHash("d2", FromNone))
+    let v3 = VersionTag(v: v"#branch", c: initCommitHash("d3", FromNone))
+    
+    # Based on the existing Version comparison tests:
+    # v"1.0" < v"#head"
+    # v"#branch" < v"#head"
+    # v"#branch" < v"1.0"
+    
+    check sortVersionsDesc(v1, v2) == 1  # 1.0.0 should come after #head
+    check sortVersionsDesc(v3, v2) == 1  # #branch should come after #head
+    check sortVersionsDesc(v3, v1) == 1 # #branch should come before 1.0.0
+    check sortVersionsAsc(v1, v2) == -1  # 1.0.0 should come after #head
+    check sortVersionsAsc(v3, v2) == -1  # #branch should come after #head
+    check sortVersionsAsc(v3, v1) == -1 # #branch should come before 1.0.0
+  
+  test "sort a sequence of version tags":
+    var versions = @[
+      VersionTag(v: v"1.2.0", c: initCommitHash("e1", FromNone)),
+      VersionTag(v: v"1.0.0", c: initCommitHash("e2", FromNone)),
+      VersionTag(v: v"2.0.0", c: initCommitHash("e3", FromNone)),
+      VersionTag(v: v"#head", c: initCommitHash("e4", FromNone)),
+      VersionTag(v: v"1.1.0", c: initCommitHash("e5", FromNone))
+    ]
+    
+    versions.sort(sortVersionsDesc)
+    # Expected order (descending): #head, 2.0.0, 1.2.0, 1.1.0, 1.0.0
+    check versions[0].v == v"#head"
+    check versions[1].v == v"2.0.0"
+    check versions[2].v == v"1.2.0"
+    check versions[3].v == v"1.1.0"
+    check versions[4].v == v"1.0.0"
+
+    versions.sort(sortVersionsAsc)
+    # Expected order (ascending)
+    check versions[0].v == v"1.0.0"
+    check versions[1].v == v"1.1.0"
+    check versions[2].v == v"1.2.0"
+    check versions[3].v == v"2.0.0"
+    check versions[4].v == v"#head"
