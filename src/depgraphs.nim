@@ -42,9 +42,6 @@ template withOpenBr(b, op, blk) =
   `blk`
   b.closeOpr()
 
-
-const useOldAtlastVer = true
-
 proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
   result = Form()
   var b = Builder()
