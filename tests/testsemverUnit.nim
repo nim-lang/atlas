@@ -187,7 +187,7 @@ suite "graph solve":
         # check graph.pkgs[""]
 
         check graph.validateDependencyGraph()
-        let topo = graph.topologicalSort()
+        let topo = graph.toposorted()
 
         check topo[0].url.projectName == "proj_d"
         check topo[1].url.projectName == "proj_c"

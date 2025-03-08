@@ -146,14 +146,14 @@ proc pinGraph*(g: var DepGraph; lockFile: Path; exportNimble = false) =
         let deps = nimbleDeps.getOrDefault(w.url.projectName)
         genLockEntry nlf, w, getCfgPath(g, w), deps
 
-  let nimcfgPath = context().currentDir / NimCfg
+  let nimcfgPath = workspace / NimCfg
   if fileExists(nimcfgPath):
     lf.nimcfg = readFile($nimcfgPath).splitLines()
 
-  let nimblePaths = findNimbleFile(startPkg)
+  let nimblePaths = findNimbleFile(workspace)
   if nimblePaths.len() == 1 and nimblePaths[0].string.len > 0 and nimblePaths[0].fileExists():
     lf.nimbleFile = LockedNimbleFile(
-      filename: nimblePaths[0].relativePath(context().currentDir),
+      filename: nimblePaths[0].relativePath(workspace),
       content: readFile($nimblePaths[0]).splitLines())
 
   if not exportNimble:
@@ -163,8 +163,8 @@ proc pinGraph*(g: var DepGraph; lockFile: Path; exportNimble = false) =
 
 proc pinWorkspace*(lockFile: Path) =
   info "pin", "pinning workspace: " & $context().workspace
-  var g = createGraphFromWorkspace()
-  var nc = createNimbleContext(context().depsDir)
+  var g = createGraphFromWorkspace(context().workspace)
+  var nc = createNimbleContext()
   expandWithoutClone g, nc
   pinGraph g, lockFile
 
@@ -174,7 +174,7 @@ proc pinProject*(lockFile: Path, exportNimble = false) =
   info "pin", "pinning project"
 
   var g = createGraph(createUrl($context().currentDir, context().overrides))
-  var nc = createNimbleContext(context().depsDir)
+  var nc = createNimbleContext()
   expandWithoutClone g, nc
   pinGraph g, lockFile
 
