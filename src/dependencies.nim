@@ -287,7 +287,7 @@ proc traverseDependency*(
 proc loadDependency*(
     nc: NimbleContext,
     pkg: var Package,
-    notFoundAction: PackageAction = DoClone,
+    onClone: PackageAction = DoClone,
 ) = 
   let (dest, todo) = pkgUrlToDirname(pkg)
   pkg.ondisk = dest
@@ -295,7 +295,7 @@ proc loadDependency*(
   debug pkg.url.projectName, "loading dependency todo:", $todo, "dest:", $dest
   case todo
   of DoClone:
-    if notFoundAction == DoNothing:
+    if onClone == DoNothing:
       pkg.state = Error
       pkg.errors.add "Not found"
     else:
@@ -316,7 +316,7 @@ proc loadDependency*(
       pkg.state = Error
       pkg.errors.add "ondisk location missing"
 
-proc expand*(path: Path, nc: var NimbleContext; mode: TraversalMode, notFoundAction: PackageAction): DepGraph =
+proc expand*(path: Path, nc: var NimbleContext; mode: TraversalMode, onClone: PackageAction): DepGraph =
   ## Expand the graph by adding all dependencies.
   
   let url = nc.createUrl(path)
@@ -338,7 +338,7 @@ proc expand*(path: Path, nc: var NimbleContext; mode: TraversalMode, notFoundAct
       case pkg.state:
       of NotInitialized:
         info pkg.projectName, "Initializing at:", $pkg
-        nc.loadDependency(pkg, notFoundAction)
+        nc.loadDependency(pkg, onClone)
         debug pkg.projectName, "expanded pkg:", pkg.repr
         processing = true
       of Found:

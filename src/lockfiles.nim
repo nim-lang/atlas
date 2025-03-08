@@ -117,7 +117,7 @@ proc genLockEntry(
 const
   NimCfg = Path "nim.cfg"
 
-proc pinGraph*(g: var DepGraph; lockFile: Path; exportNimble = false) =
+proc pinGraph*(g: DepGraph; lockFile: Path; exportNimble = false) =
   info "pin", "pinning project"
   var lf = newLockFile()
   let workspace = context().workspace # resolvePackage("file://" & context().currentDir)
@@ -129,7 +129,7 @@ proc pinGraph*(g: var DepGraph; lockFile: Path; exportNimble = false) =
   info workspace, "pinning lockfile: " & $lockFile
 
   var nc = createNimbleContext()
-  var graph = workspace.expand(nc, CurrentCommit, notFoundAction=DoNothing)
+  var graph = workspace.expand(nc, CurrentCommit, onClone=DoNothing)
 
   for w in toposorted(g):
     let dir = w.ondisk
@@ -162,21 +162,21 @@ proc pinGraph*(g: var DepGraph; lockFile: Path; exportNimble = false) =
     write nlf, $lockFile
 
 proc pinWorkspace*(lockFile: Path) =
-  info "pin", "pinning workspace: " & $context().workspace
-  var g = createGraphFromWorkspace(context().workspace)
+  let workspace = context().workspace
+  info "pin", "pinning workspace: " & $workspace
   var nc = createNimbleContext()
-  expandWithoutClone g, nc
-  pinGraph g, lockFile
+  let graph = workspace.expand(nc, CurrentCommit, onClone=DoNothing) 
+  pinGraph graph, lockFile
 
 proc pinProject*(lockFile: Path, exportNimble = false) =
   ## Pin project using deps starting from the current project directory.
   ##
   info "pin", "pinning project"
+  let workspace = context().workspace
 
-  var g = createGraph(createUrl($context().currentDir, context().overrides))
   var nc = createNimbleContext()
-  expandWithoutClone g, nc
-  pinGraph g, lockFile
+  let graph = workspace.expand(nc, CurrentCommit, onClone=DoNothing) 
+  pinGraph graph, lockFile
 
 proc compareVersion(key, wanted, got: string) =
   if wanted != got:
@@ -194,6 +194,8 @@ proc convertNimbleLock*(nimble: Path): LockFile =
     error nimble, "invalid nimble lockfile"
     return
 
+  var nc = createNimbleContext()
+
   result = newLockFile()
   for (name, info) in jsonTree["packages"].pairs:
     if name == "nim":
@@ -202,10 +204,10 @@ proc convertNimbleLock*(nimble: Path): LockFile =
       # lookup package using url
       let pkgurl = info["url"].getStr
       info name, " imported "
-      let u = createUrl(pkgurl, context().overrides)
+      let u = nc.createUrl(pkgurl)
       let dir = context().depsDir / u.projectName.Path 
       result.items[name] = LockFileEntry(
-        dir: dir.relativePath(context().projectDir),
+        dir: dir.relativePath(context().workspace),
         url: pkgurl,
         commit: info["vcsRevision"].getStr
       )
@@ -242,10 +244,10 @@ proc listChanged*(lockFile: Path) =
                        " lockfile has: " & v.url
 
       let commit = currentGitCommit(dir)
-      if commit != v.commit:
+      if commit.h != v.commit:
         #let info = parseNimble(pkg.nimble)
         warn dir, "commit differs;" &
-                     " found: " & commit &
+                     " found: " & $commit &
                      " lockfile has: " & v.commit
 
   if lf.hostOS == system.hostOS and lf.hostCPU == system.hostCPU:
@@ -264,6 +266,7 @@ proc replay*(lockFile: Path) =
   ## this also includes updating the nim.cfg and nimble file as well
   ## if they're included in the lockfile
   ##
+  let workspace = context().workspace
   let lf = if lockFile == NimbleLockFileName:
               convertNimbleLock(lockFile)
            else:
@@ -271,16 +274,17 @@ proc replay*(lockFile: Path) =
 
   #let lfBase = splitPath(lockFilePath).head
   var genCfg = CfgHere in context().flags
+  var nc = createNimbleContext()
 
   # update the nim.cfg file
   if lf.nimcfg.len > 0:
-    writeFile($(context().currentDir / NimCfg), lf.nimcfg.join("\n"))
+    writeFile($(workspace / NimCfg), lf.nimcfg.join("\n"))
   else:
     genCfg = true
 
   # update the nimble file
   if lf.nimbleFile.filename.string.len > 0:
-    writeFile($(context().currentDir / lf.nimbleFile.filename),
+    writeFile($(workspace / lf.nimbleFile.filename),
               lf.nimbleFile.content.join("\n"))
 
   # update the the dependencies
@@ -289,28 +293,29 @@ proc replay*(lockFile: Path) =
     trace "replay", "replaying: " & v.repr
     let dir = fromPrefixedPath(v.dir)
     if not dirExists(dir):
-      let (status, err) = cloneUrl(createUrl(v.url, context().overrides), dir, false)
+      let (status, err) = gitops.clone(nc.createUrl(v.url).toUri, dir)
       if status != Ok:
         error lockFile, err
         continue
-    withDir $dir:
-      let url = $getRemoteUrl(dir)
-      if url.withoutSuffix(".git") != url:
-        if IgnoreUrls in context().flags:
-          warn v.dir, "remote URL differs from expected: got: " &
-            url & " but expected: " & v.url
-        else:
-          error v.dir, "remote URL has been compromised: got: " &
-            url & " but wanted: " & v.url
-      checkoutGitCommitFull(dir, v.commit, FullClones in context().flags)
+    
+    let url = $getRemoteUrl(dir)
+    if url.withoutSuffix(".git") != url:
+      if IgnoreUrls in context().flags:
+        warn v.dir, "remote URL differs from expected: got: " &
+          url & " but expected: " & v.url
+      else:
+        error v.dir, "remote URL has been compromised: got: " &
+          url & " but wanted: " & v.url
+    if not checkoutGitCommitFull(dir, v.commit, FullClones in context().flags):
+      error v.dir, "unable to convert to full clone:", $v.commit, "at:", $dir
 
-      if genCfg:
-        paths.add findCfgDir(dir)
+    if genCfg:
+      paths.add findCfgDir(dir)
 
   if genCfg:
     # this allows us to re-create a nim.cfg that uses the paths from the users workspace
     # without needing to do a `installDependencies` or `traverseLoop`
-    let cfgPath = if genCfg: CfgPath context().currentDir else: findCfgDir()
+    let cfgPath = CfgPath(workspace)
     patchNimCfg(paths, cfgPath)
 
   if lf.hostOS == system.hostOS and lf.hostCPU == system.hostCPU:

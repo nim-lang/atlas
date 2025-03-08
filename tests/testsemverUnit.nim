@@ -118,7 +118,7 @@ suite "graph solve":
 
         let dir = paths.getCurrentDir().absolutePath
 
-        var graph = dir.expand(nc, AllReleases, notFoundAction=DoClone)
+        var graph = dir.expand(nc, AllReleases, onClone=DoClone)
 
         let sp = graph.pkgs.values().toSeq()
         let sp0: Package = sp[0] # proj ws_testtraversal
