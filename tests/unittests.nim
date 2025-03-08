@@ -9,7 +9,7 @@ when false:
 let
   basicExamples = {
     "balls": (
-      input: "https://github.com/disruptek/balls",
+      input: "https://github.com/disruptek/balls.git",
       output: "https://github.com/disruptek/balls",
     ),
     "npeg": (
