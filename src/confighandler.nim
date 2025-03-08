@@ -52,7 +52,7 @@ type
     graph: JsonNode
 
 proc writeDefaultConfigFile*() =
-  let config = JsonConfig(deps: $context().origDepsDir, resolver: $SemVer, graph: newJNull())
+  let config = JsonConfig(deps: $context().depsDir, resolver: $SemVer, graph: newJNull())
   let configFile = context().workspace / AtlasWorkspace
   writeFile($configFile, pretty %*config)
 
@@ -67,7 +67,7 @@ proc readConfig*() =
   try:
     let m = j.to(JsonConfig)
     if m.deps.len > 0:
-      context().origDepsDir = m.deps.Path
+      context().depsDir = m.deps.Path
     if m.overrides.len > 0:
       context().overridesFile = m.overrides.Path
       parseOverridesFile(m.overrides.Path)
@@ -83,7 +83,7 @@ proc readConfig*() =
     close f
 
 proc writeConfig*(graph: JsonNode) =
-  let config = JsonConfig(deps: $context().origDepsDir, overrides: $context().overridesFile,
+  let config = JsonConfig(deps: $context().depsDir, overrides: $context().overridesFile,
     plugins: $context().pluginsFile, resolver: $context().defaultAlgo,
     graph: graph)
   let configFile = context().workspace / AtlasWorkspace
