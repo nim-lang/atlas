@@ -8,6 +8,7 @@ type
     hasPackageList*: bool
     nameToUrl: Table[string, PkgUrl]
     extraNameToUrl: Table[string, PkgUrl] # for non-packages projects, e.g. url only
+    urlToNames: Table[Uri, string]
 
 # proc createUrl*(nc: NimbleContext, orig: Path): PkgUrl =
 #   var didReplace = false
@@ -41,12 +42,16 @@ proc put*(nc: var NimbleContext, name: string, url: Uri, isExtra = false) =
   let inExtra = name in nc.extraNameToUrl
   let pkgUrl = url.toPkgUriRaw()
 
+  if isExtra and not inNames and not inExtra:
+    nc.extraNameToUrl[name] = pkgUrl
   if not inNames and not inExtra:
     nc.nameToUrl[name] = pkgUrl
   elif inNames and nc.nameToUrl[name] != pkgUrl:
     raise newException(ValueError, "name already in the database! ")
   elif inExtra and nc.extraNameToUrl[name] != pkgUrl:
     raise newException(ValueError, "name already in the extras-database! ")
+
+  nc.urlToNames[url] = name
 
 proc createUrl*(nc: NimbleContext, nameOrig: string): PkgUrl =
   ## primary point to createUrl's from a name or argument

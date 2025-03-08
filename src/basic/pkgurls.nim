@@ -27,10 +27,14 @@ proc isFileProtocol*(s: PkgUrl): bool = s.u.scheme == "file"
 proc isUrl*(s: string): bool = parseUri(s).scheme != ""
 proc isEmpty*(s: PkgUrl): bool = s.projectName.len() == 0
 
-proc extractProjectName*(s: Uri): string =
-  let (p, n, e) = s.path.splitFile()
-  if e == GitSuffix: result = n
-  else: result = n & e
+proc extractProjectName*(url: Uri): string =
+  var u = url
+  var (p, n, e) = u.path.splitFile()
+  p.removePrefix(DirSep)
+  if u.scheme.startswith("http") and e == GitSuffix:
+    e = ""
+  result = [n & e, p, u.hostname].join(".")
+    
 
 proc `$`*(u: PkgUrl): string = $u.u
 proc toJsonHook*(v: PkgUrl): JsonNode = %($(v))

@@ -11,7 +11,7 @@ let
     "balls": (
       input: "https://github.com/disruptek/balls.git",
       output: "https://github.com/disruptek/balls",
-      projectName: "com.github.disruptek.balls",
+      projectName: "balls.disruptek.github.com",
     ),
     "npeg": (
       input: "https://github.com/zevv/npeg.git",
@@ -26,7 +26,12 @@ let
     "bytes2human": (
       input: "https://github.com/juancarlospaco/nim-bytes2human",
       output: "https://github.com/juancarlospaco/nim-bytes2human",
-      projectName: "com.github.juancarlospaco.nim-bytes2human",
+      projectName: "nim-bytes2human.juancarlospaco.github.com",
+    ),
+    "atlas": (
+      input: "git@github.com:elcritch/atlas.git",
+      output: "git@github.com:elcritch/atlas.git",
+      projectName: "atlas.elcritch.github.com",
     )
   }
 
