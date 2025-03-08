@@ -116,7 +116,7 @@ proc clone*(url: Uri, dest: Path; retries = 5; fullClones=false): (CloneStatus, 
 
   # Try first clone with git output directly to the terminal
   # primarily to give the user feedback for clones that take a while
-  let cmd = $GitClone & join([extraArgs, quoteShell($url), quoteShell($dest)], " ")
+  let cmd = $GitClone & " " & join([extraArgs, quoteShell($url), quoteShell($dest)], " ")
   if execShellCmd(cmd) == 0:
     return (Ok, "")
 
