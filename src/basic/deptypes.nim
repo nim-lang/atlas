@@ -154,3 +154,7 @@ proc activeNimbleRelease*(pkg: Package): NimbleRelease =
   else:
     let av = pkg.activeVersion
     result = pkg.versions[av]
+
+proc toReporterName*(pkg: Package): string =
+  if pkg.isNil: "nil"
+  else: pkg.url.projectName

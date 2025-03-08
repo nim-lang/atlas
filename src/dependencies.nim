@@ -7,7 +7,7 @@
 #
 
 import std / [os, strutils, uri, tables, unicode, sequtils, sets, json, hashes, algorithm, paths, files, dirs]
-import basic/[context, deptypes, versions, osutils, nimbleparser, packageinfos, reporters, gitops, parse_requires, pkgurls, compiledpatterns]
+import basic/[context, deptypes, versions, osutils, nimbleparser, nimblecontext, packageinfos, reporters, gitops, parse_requires, pkgurls, compiledpatterns]
 
 export deptypes, versions
 
@@ -50,7 +50,7 @@ proc pkgUrlToDirname*(pkg: Package): (Path, PackageAction) =
   result = (dest, if dirExists(dest): DoNothing else: DoClone)
 
 proc copyFromDisk*(pkg: Package; destDir: Path): (CloneStatus, string) =
-  var dir = Path pkg.url.url
+  var dir = Path $pkg.url.url
   if dir.string.startsWith(FileWorkspace):
     dir = context().workspace / Path(dir.string.substr(FileWorkspace.len))
   #template selectDir(a, b: string): string =
@@ -104,7 +104,7 @@ proc processNimbleRelease(
       for pkgUrl, interval in items(result.requirements):
         # var pkgDep = pkgs.packageToDependency.getOrDefault(pkgUrl, nil)
         if pkgUrl notin nc.packageToDependency:
-          debug pkg.url.projectName, "Found new pkg:", pkgUrl.projectName, "url:", pkgUrl.url()
+          debug pkg, "Found new pkg:", pkgUrl.projectName, "url:", $pkgUrl.url
           let pkgDep = Package(url: pkgUrl, state: NotInitialized)
           nc.packageToDependency[pkgUrl] = pkgDep
           # TODO: enrich versions with hashes when added

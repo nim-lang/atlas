@@ -70,31 +70,16 @@ proc writeMessage(c: var Reporter; k: MsgKind; p: string, args: seq[string]) =
       stdout.styledWrite(colors[idx mod 2], " ", arg)
     stdout.styledWriteLine(resetStyle, "")
 
-proc message(c: var Reporter; k: MsgKind; p: string, args: varargs[string]) =
+proc message(c: var Reporter; k: MsgKind; p: string, args: openArray[string]) =
   ## collects messages or prints them out immediately
   # c.messages.add (k, p, arg)
-  writeMessage c, k, p, @args
-
-
-proc warn*(c: var Reporter; p: string, args: varargs[string]) =
-  c.message(Warning, p, @args)
-  # writeMessage c, Warning, p, arg
-  inc c.warnings
-
-proc error*(c: var Reporter; p: string, args: varargs[string]) =
   if c.assertOnError:
     raise newException(AssertionDefect, p & ": " & $args)
-  c.message(Error, p, @args)
-  inc c.errors
-
-proc info*(c: var Reporter; p: string, args: varargs[string]) =
-  c.message(Info, p, @args)
-
-proc trace*(c: var Reporter; p: string, args: varargs[string]) =
-  c.message(Trace, p, @args)
-
-proc debug*(c: var Reporter; p: string, args: varargs[string]) =
-  c.message(Debug, p, @args)
+  if k == Warning:
+    inc c.warnings
+  elif k == Error:
+    inc c.errors
+  writeMessage c, k, p, @args
 
 proc writePendingMessages*(c: var Reporter) =
   for i in 0..<c.messages.len:
@@ -122,44 +107,37 @@ when not compiles(len(Path("test"))):
   template len*(x: Path): int =
     x.string.len()
 
-proc warn*(c: var Reporter; p: Path, arg: string) =
-  warn(c, $p.splitFile().name, arg)
+proc toReporterName(s: string): string = s
+proc toReporterName(p: Path): string = $p.splitFile().name
 
-proc error*(c: var Reporter; p: Path, arg: string) =
-  error(c, $p.splitFile().name, arg)
+proc message*[T](k: MsgKind; p: T, args: varargs[string]) =
+  mixin toReporterName
+  message(atlasReporter, k, toReporterName(p), @args)
 
-proc info*(c: var Reporter; p: Path, arg: string) =
-  info(c, $p.splitFile().name, arg)
+proc warn*[T](p: T, args: varargs[string]) =
+  mixin toReporterName
+  message(atlasReporter, Warning, toReporterName(p), @args)
 
-proc trace*(c: var Reporter; p: Path, arg: string) =
-  trace(c, $p.splitFile().name, arg)
+proc error*[T](p: T, args: varargs[string]) =
+  mixin toReporterName
+  message(atlasReporter, Error, toReporterName(p), @args)
 
-proc debug*(c: var Reporter; p: Path, arg: string) =
-  debug(c, $p.splitFile().name, arg)
+proc info*[T](p: T, args: varargs[string]) =
+  mixin toReporterName
+  message(atlasReporter, Info, toReporterName(p), @args)
 
-proc toProj(s: string): string = s
-proc toProj(p: Path): string = $p.splitFile().name
+proc trace*[T](p: T, args: varargs[string]) =
+  mixin toReporterName
+  message(atlasReporter, Trace, toReporterName(p), @args)
 
-proc message*(k: MsgKind; p: Path | string, args: varargs[string]) =
-  message(atlasReporter, k, toProj(p), @args)
+proc debug*[T](p: T, args: varargs[string]) =
+  mixin toReporterName
+  message(atlasReporter, Debug, toReporterName(p), @args)
 
-proc warn*(p: Path | string, args: varargs[string]) =
-  warn(atlasReporter, toProj(p), @args)
+template fatal*(msg: string | Path, prefix = "fatal", code = 1) =
+  mixin toReporterName
+  message(atlasReporter, Fatal, toReporterName(p), @args)
 
-proc error*(p: Path | string, args: varargs[string]) =
-  error(atlasReporter, toProj(p), @args)
-
-proc info*(p: Path | string, args: varargs[string]) =
-  info(atlasReporter, toProj(p), @args)
-
-proc trace*(p: Path | string, args: varargs[string]) =
-  trace(atlasReporter, toProj(p), @args)
-
-proc debug*(p: Path | string, args: varargs[string]) =
-  debug(atlasReporter, toProj(p), @args)
-
-proc fatal*(msg: string | Path, prefix = "fatal", code = 1) =
-  fatal(atlasReporter, msg, prefix, code)
-
-proc infoNow*(p: Path | string, args: varargs[string]) =
-  infoNow(atlasReporter, toProj(p), @args)
+proc infoNow*[T](p: T, args: varargs[string]) =
+  mixin toReporterName
+  infoNow(atlasReporter, toReporterName(p), @args)
