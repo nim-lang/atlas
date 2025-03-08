@@ -11,18 +11,22 @@ let
     "balls": (
       input: "https://github.com/disruptek/balls.git",
       output: "https://github.com/disruptek/balls",
+      projectName: "com.github.disruptek.balls",
     ),
     "npeg": (
       input: "https://github.com/zevv/npeg.git",
       output: "https://github.com/zevv/npeg",
+      projectName: "npeg",
     ),
     "sync": (
       input: "https://github.com/planetis-m/sync",
       output: "https://github.com/planetis-m/sync",
+      projectName: "sync",
     ),
     "bytes2human": (
       input: "https://github.com/juancarlospaco/nim-bytes2human",
       output: "https://github.com/juancarlospaco/nim-bytes2human",
+      projectName: "com.github.juancarlospaco.nim-bytes2human",
     )
   }
 
@@ -37,20 +41,20 @@ suite "urls and naming":
     var nc = createUnfilledNimbleContext()
     nc.put("npeg", parseUri "https://github.com/zevv/npeg")
     nc.put("sync", parseUri "https://github.com/planetis-m/sync")
-    nc.put("bytes2human", parseUri "https://github.com/juancarlospaco/nim-bytes2human")
 
-    for name, url in basicExamples.items:
-      let upkg = nc.createUrl(url.input)
+    for name, item in basicExamples.items:
+      let upkg = nc.createUrl(item.input)
       check upkg.url.hostname == "github.com"
-      check $upkg.url == url.output
+      check $upkg.url == item.output
+      check $upkg.projectName == item.projectName
 
-      if name == "balls":
+      if name in ["balls", "bytes2human"]:
         expect ValueError:
           let npkg = nc.createUrl(name)
       else:
         let npkg = nc.createUrl(name)
         check npkg.url.hostname == "github.com"
-        check $npkg.url == url.output
+        check $npkg.url == item.output
 
 
 template v(x): untyped = Version(x)
