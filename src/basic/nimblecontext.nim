@@ -71,8 +71,8 @@ proc createUrl*(nc: NimbleContext, nameOrig: string): PkgUrl =
     var url = parseUri($result.url)
     url.path.removeSuffix(".git")
     result = toPkgUriRaw(url)
-  # if projectName != "":
-  #   result.projectName = projectName
+  if context().useShortNamesOnDisk:
+    result.projectName = nc.urlToNames.getOrDefault(result.url, result.projectName)
 
 proc fillPackageLookupTable(c: var NimbleContext) =
   let pkgsDir = packagesDirectory()
@@ -83,6 +83,7 @@ proc fillPackageLookupTable(c: var NimbleContext) =
     let packages = getPackageInfos(pkgsDir)
     for entry in packages:
       c.nameToUrl[unicode.toLower(entry.name)] = createUrlSkipPatterns(entry.url, skipDirTest=true)
+      c.urlToNames[entry.url.parseUri] = entry.name
 
 proc createUnfilledNimbleContext*(): NimbleContext =
   result = NimbleContext()

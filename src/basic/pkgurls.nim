@@ -24,7 +24,7 @@ type
 #   when defined(windows): c == '/' or c == '\\' else: c == '/'
 
 proc isFileProtocol*(s: PkgUrl): bool = s.u.scheme == "file"
-proc isUrl*(s: string): bool = parseUri(s).scheme != ""
+proc isUrl*(s: string): bool = s.startsWith("git@") or parseUri(s).scheme != ""
 proc isEmpty*(s: PkgUrl): bool = s.projectName.len() == 0
 
 proc extractProjectName*(url: Uri): string =
@@ -51,6 +51,9 @@ proc createUrlSkipPatterns*(x: string, skipDirTest = false): PkgUrl =
       result = PkgUrl(projectName: extractProjectName(u), u: u)
     else:
       raise newException(ValueError, "Invalid name or URL: " & x)
+  elif x.startsWith("git@"): # special case git@server.com
+    let u = parseUri("ssh://" & x.replace(":", "/"))
+    result = PkgUrl(projectName: extractProjectName(u), u: u)
   else:
     let u = parseUri(x)
     result = PkgUrl(projectName: extractProjectName(u), u: u)

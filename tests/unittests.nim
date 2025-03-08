@@ -30,7 +30,7 @@ let
     ),
     "atlas": (
       input: "git@github.com:elcritch/atlas.git",
-      output: "git@github.com:elcritch/atlas.git",
+      output: "ssh://git@github.com/elcritch/atlas",
       projectName: "atlas.elcritch.github.com",
     )
   }
@@ -46,6 +46,7 @@ suite "urls and naming":
     var nc = createUnfilledNimbleContext()
     nc.put("npeg", parseUri "https://github.com/zevv/npeg")
     nc.put("sync", parseUri "https://github.com/planetis-m/sync")
+    nc.put("npeg", parseUri "https://github.com/zevv/npeg")
 
     for name, item in basicExamples.items:
       let upkg = nc.createUrl(item.input)
@@ -53,7 +54,7 @@ suite "urls and naming":
       check $upkg.url == item.output
       check $upkg.projectName == item.projectName
 
-      if name in ["balls", "bytes2human"]:
+      if name in ["balls", "bytes2human", "atlas"]:
         expect ValueError:
           let npkg = nc.createUrl(name)
       else:
@@ -61,6 +62,9 @@ suite "urls and naming":
         check npkg.url.hostname == "github.com"
         check $npkg.url == item.output
 
+    context().useShortNamesOnDisk = false
+    let upkg = nc.createUrl("npeg")
+    check $upkg.projectName == "npeg.zevv.github.com"
 
 template v(x): untyped = Version(x)
 
