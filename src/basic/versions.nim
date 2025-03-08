@@ -185,6 +185,16 @@ proc `==`*(a, b: Version): bool =
   else:
     result = eq(a.string, b.string)
 
+proc sortVersionsAsc*(a, b: VersionTag): int =
+  (if a.v < b.v: -1
+  elif a.v == b.v: 0
+  else: 1)
+
+proc sortVersionsDesc*(a, b: VersionTag): int =
+  (if a.v < b.v: 1
+  elif a.v == b.v: 0
+  else: -1)
+
 proc hash*(a: Version): Hash {.borrow.}
 
 proc `==`*(a, b: VersionInterval): bool {.inline.} = system.`==`(a, b)

@@ -11,9 +11,6 @@ import basic/[context, deptypes, versions, osutils, nimbleparser, packageinfos, 
 
 export deptypes, versions
 
-const
-  DefaultPackagesSubDir* = Path"packages"
-
 type
   TraversalMode* = enum
     AllReleases,
@@ -23,62 +20,6 @@ when defined(nimAtlasBootstrap):
   import ../dist/sat/src/sat/satvars
 else:
   import sat/satvars
-
-proc packagesDirectory*(): Path =
-  context().depsDir / DefaultPackagesSubDir
-
-proc findNimbleFile*(nimbleFile: Path): seq[Path] =
-  if fileExists(nimbleFile):
-    result.add nimbleFile
-
-proc findNimbleFile*(dir: Path, projectName: string): seq[Path] =
-  var nimbleFile = dir / Path(projectName & ".nimble")
-  result = findNimbleFile(nimbleFile)
-  if result.len() == 0:
-    for file in walkFiles($dir / "*.nimble"):
-      result.add Path(file)
-  debug dir, "finding nimble file searching by name:", projectName, "found:", result.join(", ")
-
-proc findNimbleFile*(info: Package): seq[Path] =
-  doAssert(info.ondisk.string != "", "Package ondisk must be set before findNimbleFile can be called! Package: " & $(info))
-  result = findNimbleFile(info.ondisk, info.projectName() & ".nimble")
-
-proc getPackageInfos*(pkgsDir = packagesDirectory()): seq[PackageInfo] =
-  result = @[]
-  var uniqueNames = initHashSet[string]()
-  var jsonFiles = 0
-  for kind, path in walkDir(pkgsDir):
-    if kind == pcFile and path.string.endsWith(".json"):
-      inc jsonFiles
-      let packages = json.parseFile($path)
-      for p in packages:
-        let pkg = p.fromJson()
-        if pkg != nil and not uniqueNames.containsOrIncl(pkg.name):
-          result.add(pkg)
-
-proc updatePackages*(pkgsDir = packagesDirectory()) =
-  let pkgsDir = context().depsDir / DefaultPackagesSubDir
-  if dirExists(pkgsDir):
-    gitPull(pkgsDir)
-  else:
-    let res = clone(parseUri "https://github.com/nim-lang/packages", pkgsDir)
-    if res[0] != Ok:
-      error DefaultPackagesSubDir, "cannot clone packages repo: " & res[1]
-
-proc fillPackageLookupTable(c: var NimbleContext) =
-  let pkgsDir = packagesDirectory()
-  if not c.hasPackageList:
-    c.hasPackageList = true
-    if not fileExists(pkgsDir / Path"packages.json"):
-      updatePackages(pkgsDir)
-    let packages = getPackageInfos(pkgsDir)
-    for entry in packages:
-      c.nameToUrl[unicode.toLower(entry.name)] = createUrlSkipPatterns(entry.url, skipDirTest=true)
-
-proc createNimbleContext*(): NimbleContext =
-  result = NimbleContext()
-  result.overrides = context().overrides
-  fillPackageLookupTable(result)
 
 proc collectNimbleVersions*(nc: NimbleContext; pkg: Package): seq[VersionTag] =
   let nimbleFiles = findNimbleFile(pkg)

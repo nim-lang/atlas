@@ -6,8 +6,8 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [json, os, sets, strutils, httpclient, uri]
-import context, reporters
+import std / [json, os, sets, strutils, paths, files, dirs, httpclient, uri, json, jsonutils]
+import context, reporters, gitops
 
 const
   UnitTests = defined(atlasUnitTests)
@@ -32,6 +32,12 @@ type
     version*: string
     dvcsTag*: string
     web*: string # Info url for humans.
+
+const
+  DefaultPackagesSubDir* = Path"packages"
+
+proc packagesDirectory*(): Path =
+  context().depsDir / DefaultPackagesSubDir
 
 proc optionalField(obj: JsonNode, name: string, default = ""): string =
   if hasKey(obj, name) and obj[name].kind == JString:
@@ -73,3 +79,25 @@ proc toTags*(j: JsonNode): seq[string] =
   if j.kind == JArray:
     for elem in items j:
       result.add elem.getStr("")
+
+proc getPackageInfos*(pkgsDir = packagesDirectory()): seq[PackageInfo] =
+  result = @[]
+  var uniqueNames = initHashSet[string]()
+  var jsonFiles = 0
+  for kind, path in walkDir(pkgsDir):
+    if kind == pcFile and path.string.endsWith(".json"):
+      inc jsonFiles
+      let packages = json.parseFile($path)
+      for p in packages:
+        let pkg = p.fromJson()
+        if pkg != nil and not uniqueNames.containsOrIncl(pkg.name):
+          result.add(pkg)
+
+proc updatePackages*(pkgsDir = packagesDirectory()) =
+  let pkgsDir = context().depsDir / DefaultPackagesSubDir
+  if dirExists(pkgsDir):
+    gitPull(pkgsDir)
+  else:
+    let res = clone(parseUri "https://github.com/nim-lang/packages", pkgsDir)
+    if res[0] != Ok:
+      error DefaultPackagesSubDir, "cannot clone packages repo: " & res[1]

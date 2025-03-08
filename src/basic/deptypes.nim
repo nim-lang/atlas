@@ -42,12 +42,6 @@ type
     root*: Package
     pkgs*: OrderedTable[PkgUrl, Package]
 
-  NimbleContext* = object
-    packageToDependency*: Table[PkgUrl, Package]
-    overrides*: Patterns
-    hasPackageList*: bool
-    nameToUrl*: Table[string, PkgUrl]
-
 const
   EmptyReqs* = 0
   UnknownReqs* = 1
@@ -61,37 +55,6 @@ proc version*(pv: PackageVersion): Version =
   pv.vtag.version
 proc commit*(pv: PackageVersion): CommitHash =
   pv.vtag.commit
-
-proc createUrl*(nc: NimbleContext, orig: Path): PkgUrl =
-  var didReplace = false
-  result = createUrlSkipPatterns($orig)
-
-proc createUrl*(nc: NimbleContext, nameOrig: string; projectName: string = ""): PkgUrl =
-  ## primary point to createUrl's from a name or argument
-  ## TODO: add unit tests!
-  var didReplace = false
-  var name = substitute(nc.overrides, nameOrig, didReplace)
-  debug "createUrl", "name:", name, "orig:", nameOrig, "patterns:", $nc.overrides
-  if name.isUrl():
-    result = createUrlSkipPatterns(name)
-  else:
-    let lname = unicode.toLower(name)
-    if lname in nc.nameToUrl:
-      result = nc.nameToUrl[lname]
-    else:
-      raise newException(ValueError, "project name not found in packages database")
-  if projectName != "":
-    result.projectName = projectName
-
-proc sortVersionsAsc*(a, b: VersionTag): int =
-  (if a.v < b.v: -1
-  elif a.v == b.v: 0
-  else: 1)
-
-proc sortVersionsDesc*(a, b: VersionTag): int =
-  (if a.v < b.v: 1
-  elif a.v == b.v: 0
-  else: -1)
 
 proc sortVersionsDesc*(a, b: (VersionTag, NimbleRelease)): int =
   sortVersionsDesc(a[0], b[0])
