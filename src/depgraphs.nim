@@ -316,9 +316,9 @@ proc solve*(graph: var DepGraph; form: Form) =
   if context().dumpGraphs:
     dumpJson(graph, "graph-solved.json")
 
-proc traverseLoop*(nc: var NimbleContext, path: Path): seq[CfgPath] =
+proc loadWorkspaceConfigs*(path: Path, nc: var NimbleContext): seq[CfgPath] =
   result = @[]
-  var graph = expand(nc, TraversalMode.AllReleases, path, notFoundAction=DoClone)
+  var graph = path.expand(nc, TraversalMode.AllReleases, notFoundAction=DoClone)
   let form = graph.toFormular(context().defaultAlgo)
   
   solve(graph, form)

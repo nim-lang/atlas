@@ -117,21 +117,10 @@ proc genLockEntry(
 const
   NimCfg = Path "nim.cfg"
 
-proc expandWithoutClone*(g: var DepGraph; nc: NimbleContext) =
-  ## Expand the graph by adding all dependencies.
-  var processed = initHashSet[PkgUrl]()
-  for url, pkg in g.pkgs:
-    if not processed.containsOrIncl(url):
-      let (dest, todo) = pkgUrlToDirname(g, g.nodes[i])
-      if todo == DoNothing:
-        withDir $dest:
-          traverseDependency(nc, g, i, CurrentCommit)
-    inc i
-
 proc pinGraph*(g: var DepGraph; lockFile: Path; exportNimble = false) =
   info "pin", "pinning project"
   var lf = newLockFile()
-  let startPkg = context().currentDir # resolvePackage("file://" & context().currentDir)
+  let startPkg = context().workspace # resolvePackage("file://" & context().currentDir)
 
   # only used for exporting nimble locks
   var nlf = newNimbleLockFile()
@@ -139,8 +128,8 @@ proc pinGraph*(g: var DepGraph; lockFile: Path; exportNimble = false) =
 
   info startPkg, "pinning lockfile: " & $lockFile
 
-  var nc = createNimbleContext(context().depsDir)
-  expandWithoutClone g, nc
+  var nc = createNimbleContext()
+  var graph = expand(nc, CurrentCommit, context().workspace, notFoundAction=DoNothing)
 
   for w in toposorted(g):
     let dir = w.ondisk
