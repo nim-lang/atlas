@@ -146,27 +146,14 @@ proc afterGraphActions(g: DepGraph) =
 
   if ShowGraph in context().flags:
     generateDepGraph g
+
   if atlasErrors() == 0 and AutoEnv in context().flags:
     let v = g.bestNimVersion
     if v != Version"":
       setupNimEnv context().workspace, v.string, Keep in context().flags
 
-proc traverse(nc: var NimbleContext; start: string): seq[CfgPath] =
-  # returns the list of paths for the nim.cfg file.
-  let u = createUrl(start, context().overrides)
-  var g = createGraph(u)
-
-  #if $pkg.url == "":
-  #  error pkg, "cannot resolve package name"
-  #  return
-  #context().workspace = context().depsDir / u.projectName
-  for n in allNodes(g):
-    context().workspace = n.ondisk
-    break
-
-  result = traverseLoop(nc, g)
-  afterGraphActions g
-
+  if NoExec notin context().flags:
+    g.runBuildSteps()
 
 proc installDependencies(nc: var NimbleContext; nimbleFile: Path) =
   # 1. find .nimble file in CWD
@@ -176,13 +163,11 @@ proc installDependencies(nc: var NimbleContext; nimbleFile: Path) =
     dir = Path(".").absolutePath
   info pkgname, "installing dependencies for " & $pkgname & ".nimble"
   trace pkgname, "using nimble file at " & $nimbleFile
-  # var g = createGraph(createUrlSkipPatterns($dir))
-  # let paths = traverseLoop(nc, g)
-  let pkg = nc.createUrl(dir, projectName = pkgname)
-  discard expand(nc, AllReleases, pkg)
-  let cfgPath = if CfgHere in context().flags: CfgPath context().currentDir else: findCfgDir()
+  let graph = dir.expand(nc, AllReleases, onClone=DoClone)
+  let paths = graph.activateGraph()
+  let cfgPath = CfgPath context().workspace
   patchNimCfg(paths, cfgPath)
-  afterGraphActions g
+  afterGraphActions graph
 
 proc updateDir(dir, filter: string) =
   ## update the package's VCS
@@ -192,20 +177,24 @@ proc updateDir(dir, filter: string) =
       trace file, "updating directory"
       gitops.updateDir(file.Path, filter)
 
-proc detectWorkspace(currentDir: Path): Path =
+proc detectWorkspace(customWorkspace = Path ""): bool =
   ## find workspace by checking `currentDir` and its parents.
-  result = currentDir
-  while result.string.len > 0:
-    if fileExists(result / AtlasWorkspace):
-      return result
-    result = result.parentDir()
-  when false:
-    # That is a bad idea and I know no other tool (git etc.) that
-    # does such shenanigans.
-    # alternatively check for "sub-directory" workspace
-    for kind, file in walkDir(currentDir):
-      if kind == pcDir and fileExists(file / AtlasWorkspace):
-        return file
+  if customWorkspace.string.len() > 0:
+    context().workspace = customWorkspace
+  elif GlobalWorkspace in context().flags:
+    context().workspace = Path(getHomeDir() / ".atlas")
+    warn "atlas", "using global workspace:", $context().workspace
+  else:
+    var cwd = paths.getCurrentDir().absolutePath
+
+    while cwd.string.len() > 0:
+      if fileExists(cwd / context().depsDir / AtlasWorkspaceConfig):
+        break
+      cwd = cwd.parentDir() # returns "" when called on root
+    context().workspace = cwd
+  
+  if context().workspace.len() > 0:
+    result = context().workspace.fileExists
 
 proc autoWorkspace(currentDir: Path): Path =
   result = currentDir
@@ -327,21 +316,13 @@ proc mainRun() =
           createWorkspaceIn()
         elif val.len > 0:
           context().workspace = Path val
-          if not explicitProjectOverride:
-            context().currentDir = Path val
           createDir(val)
           createWorkspaceIn()
         else:
           writeHelp()
-      of "project":
-        explicitProjectOverride = true
-        if isAbsolute(val):
-          context().currentDir = Path val
-        else:
-          context().currentDir = paths.getCurrentDir() / Path val
       of "deps":
         if val.len > 0:
-          context().origDepsDir = Path val
+          context().depsDir = Path val
           explicitDepsDirOverride = true
         else:
           writeHelp()
@@ -388,22 +369,19 @@ proc mainRun() =
       fatal "Workspace directory '" & $context().workspace & "' not found."
     readConfig()
   elif action notin ["init", "tag"]:
-    if GlobalWorkspace in context().flags:
-      context().workspace = detectWorkspace(Path(getHomeDir() / ".atlas"))
-      warn context().workspace, "using global workspace"
-    else:
-      context().workspace = detectWorkspace(context().currentDir)
-    if context().workspace.len > 0:
+    context().workspace = detectWorkspace()
+
+    if context().workspace.fileExists():
       readConfig()
       info context().workspace.absolutePath, "is the current workspace"
     elif autoinit:
-      context().workspace = autoWorkspace(context().currentDir)
+      context().workspace = autoWorkspace(paths.getCurrentDir())
       createWorkspaceIn()
     elif action notin ["search", "list"]:
       fatal "No workspace found. Run `atlas init` if you want this current directory to be your workspace."
 
-  if not explicitDepsDirOverride and action notin ["init", "tag"] and context().origDepsDir.len == 0:
-    context().origDepsDir = Path ""
+  if not explicitDepsDirOverride and action notin ["init", "tag"] and context().depsDir.len == 0:
+    context().depsDir = Path "deps"
   if action != "tag":
     createDir(context().depsDir)
 
@@ -417,18 +395,34 @@ proc mainRun() =
     else:
       context().workspace = paths.getCurrentDir()
     createWorkspaceIn()
+  # TODO: does this make sense in a single project / single workspace?
+  #       maybe we want to clone and then setup the repo? like clone parent + install
   of "clone", "update":
     singleArg()
-    var nc = createNimbleContext(context().depsDir)
-    let deps = traverse(nc, args[0])
-    let cfgPath = if CfgHere in context().flags: CfgPath context().currentDir
-                  else: findCfgDir()
-    patchNimCfg deps, cfgPath
+    var nc = createNimbleContext()
+    let dir = args[0]
+    if dir.dirExists():
+      error "atlas", "'" & dir & "' already exists! Cowardly refusing to overwrite"
+      quit(1)
+
+    var purl: PkgUrl
+    try:
+      purl = nc.createUrl(args[0])
+    except CatchableError:
+      error "atlas", "'" & dir & "' is not a vaild project name!"
+      quit(1)
+
+    context().workspace = paths.getCurrentDir() / Path purl.projectName
+    let (status, msg) = gitops.clone(purl.toUri, context().workspace, fullClones = true)
+    if status != Ok:
+      error "atlas", "error cloning project:", dir, "message:", msg
+      quit(1)
+
   of "use":
     singleArg()
-    let currDirName = context().workspace.splitFile().name.string
+
     var nimbleFiles = findNimbleFile(context().workspace, currDirName)
-    var nc = createNimbleContext(context().depsDir)
+    var nc = createNimbleContext()
 
     if nimbleFiles.len() == 0:
       let nimbleFile = context().workspace / Path(extractProjectName($context().workspace) & ".nimble")

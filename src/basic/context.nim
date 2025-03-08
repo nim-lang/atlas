@@ -16,7 +16,7 @@ const
   TestsDir* = "atlas/tests"
 
 const
-  AtlasWorkspace* = Path "atlas.workspace"
+  AtlasWorkspaceConfig* = Path "atlas.workspace"
 
 type
   CfgPath* = distinct string # put into a config `--path:"../x"`
