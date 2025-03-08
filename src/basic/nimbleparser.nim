@@ -43,7 +43,7 @@ proc parseNimbleFile*(nc: NimbleContext;
       result.status = HasBrokenDep
       warn nimbleFile, "cannot resolve dependency package name: " & name & " error: " & $err
       result.err.addError $nimbleFile, "cannot resolve package name: " & name
-      url = toPkgUri(parseUri("error://" & name))
+      url = toPkgUriRaw(parseUri("error://" & name))
 
     var err = false
     let query = parseVersionInterval(r, i, err) # update err
@@ -83,7 +83,7 @@ proc patchNimbleFile*(nc: var NimbleContext;
   let release = parseNimbleFile(nc, nimbleFile, p)
   # see if we have this requirement already listed. If so, do nothing:
   for d in release.requirements:
-    if d[0].url == u:
+    if u == d[0].url:
       info(nimbleFile, "up to date")
       return
 
