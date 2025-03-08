@@ -318,8 +318,7 @@ proc solve*(graph: var DepGraph; form: Form) =
 
 proc traverseLoop*(nc: var NimbleContext, path: Path): seq[CfgPath] =
   result = @[]
-  let specs = expand(nc, TraversalMode.AllReleases, path)
-  var graph: DepGraph
+  var graph = expand(nc, TraversalMode.AllReleases, path, notFoundAction=DoClone)
   let form = graph.toFormular(context().defaultAlgo)
   
   solve(graph, form)
