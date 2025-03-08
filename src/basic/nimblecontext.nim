@@ -37,6 +37,12 @@ proc lookup*(nc: NimbleContext, name: string): PkgUrl =
   elif name in nc.extraNameToUrl:
     result = nc.extraNameToUrl[name]
 
+proc lookup*(nc: NimbleContext, url: Uri): string =
+  result = nc.urlToNames[url]
+
+proc lookup*(nc: NimbleContext, url: PkgUrl): string =
+  result = nc.urlToNames[url.url]
+
 proc put*(nc: var NimbleContext, name: string, url: Uri, isExtra = false) =
   let inNames = name in nc.nameToUrl
   let inExtra = name in nc.extraNameToUrl

@@ -7,7 +7,7 @@
 #
 
 import std / [os, sha1, uri, paths, strutils, tables, unicode, hashes, json, jsonutils]
-import sattypes, deptypes, versions, context, reporters, gitops, parse_requires, pkgurls, compiledpatterns
+import sattypes, deptypes, nimblecontext, versions, context, reporters, gitops, parse_requires, pkgurls, compiledpatterns
 
 proc addError*(err: var string; nimbleFile: string; msg: string) =
   if err.len > 0: err.add "\n"
@@ -65,29 +65,20 @@ proc genRequiresLine(u: string): string = "requires \"$1\"\n" % u.escape("", "")
 
 proc patchNimbleFile*(nc: var NimbleContext;
                       p: Patterns; nimbleFile: Path, name: string) =
-  var didReplace = false
-  var u = substitute(p, name, didReplace)
-  if not didReplace:
-    let ln = unicode.toLower(name) 
-    if name.isUrl:
-      u = name
-    elif ln in nc.nameToUrl:
-      u = $(nc.nameToUrl[ln])
-    else:
-      u = ""
+  let url = nc.createUrl(name)
 
-  if u.len == 0:
+  if url.isEmpty:
     error name, "cannot resolve package name: " & name
     return
 
   let release = parseNimbleFile(nc, nimbleFile, p)
   # see if we have this requirement already listed. If so, do nothing:
-  for d in release.requirements:
-    if u == d[0].url:
+  for (dep, ver) in release.requirements:
+    if url == dep:
       info(nimbleFile, "up to date")
       return
 
-  let line = genRequiresLine(if didReplace: name else: u)
+  let line = genRequiresLine(nc.lookup(url))
   var f = open($nimbleFile, fmAppend)
   try:
     f.writeLine line

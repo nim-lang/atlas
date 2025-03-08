@@ -66,13 +66,16 @@ proc setContext*(ctx: AtlasContext) =
 proc context*(): var AtlasContext =
   atlasContext
 
-proc getWorkspaceConfig*(): Path =
+proc getWorkspaceConfig*(workspace = context().workspace): Path =
   ## prefer workspace atlas.config if found
   ## otherwise default to one in deps/
   ## the deps path will be the default for auto-created ones
-  result = context().workspace / AtlasWorkspaceFile
+  result = workspace / AtlasWorkspaceFile
   if fileExists(result): return
-  result = context().depsDir / AtlasWorkspaceFile
+  result = workspace / context().depsDir / AtlasWorkspaceFile
+
+proc isWorkspace*(dir: Path): bool =
+  fileExists(getWorkspaceConfig(dir))
 
 proc `==`*(a, b: CfgPath): bool {.borrow.}
 

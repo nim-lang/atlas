@@ -188,7 +188,7 @@ proc detectWorkspace(customWorkspace = Path ""): bool =
     var cwd = paths.getCurrentDir().absolutePath
 
     while cwd.string.len() > 0:
-      if fileExists(cwd / getWorkspaceConfig()):
+      if cwd.isWorkspace():
         break
       cwd = cwd.parentDir()
     context().workspace = cwd
