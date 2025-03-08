@@ -190,18 +190,24 @@ proc detectWorkspace(customWorkspace = Path ""): bool =
     while cwd.string.len() > 0:
       if fileExists(cwd / context().depsDir / AtlasWorkspaceConfig):
         break
-      cwd = cwd.parentDir() # returns "" when called on root
+      cwd = cwd.parentDir()
     context().workspace = cwd
   
   if context().workspace.len() > 0:
     result = context().workspace.fileExists
 
-proc autoWorkspace(currentDir: Path): Path =
-  result = currentDir
-  while result.len > 0 and dirExists(result / Path ".git"):
-    result = result.parentDir()
+proc autoWorkspace(currentDir: Path): bool =
+  var cwd = currentDir
+  while cwd.len > 0:
+    if dirExists(cwd / Path ".git"):
+      break
+    result = cwd.parentDir()
+  context().workspace = cwd
 
-proc createWorkspaceIn() =
+  if result.workspace.len() > 0:
+    result = context().workspace.fileExists
+
+proc createWorkspace() =
   if not fileExists(context().workspace / AtlasWorkspace):
     writeDefaultConfigFile()
     info context().workspace, "created atlas.workspace"
@@ -267,6 +273,28 @@ proc newProject(projectName: string) =
     except IOError as e:
       error name, "Failed writing to file '$#': $#" % [fname, e.msg]
       quit(1)
+
+proc setupWorkspaceAndDepsDirs() =
+  if context().workspace.len > 0:
+    if not dirExists(context().workspace):
+      fatal "Workspace directory '" & $context().workspace & "' not found."
+    readConfig()
+  elif action notin ["init", "tag"]:
+    if detectWorkspace():
+      readConfig()
+      info context().workspace.absolutePath, "is the current workspace"
+    elif autoinit:
+      if autoWorkspace(paths.getCurrentDir()):
+        createWorkspace()
+      else:
+        fatal "No workspace found and unable to auto init workspace. Run `atlas init` if you want this current directory to be your workspace."
+    elif action notin ["search", "list"]:
+      fatal "No workspace found. Run `atlas init` if you want this current directory to be your workspace."
+
+  if not explicitDepsDirOverride and action notin ["init", "tag"] and context().depsDir.len == 0:
+    context().depsDir = Path "deps"
+  if action != "tag":
+    createDir(context().depsDir)
 
 proc mainRun() =
   var action = ""
@@ -364,26 +392,7 @@ proc mainRun() =
       else: writeHelp()
     of cmdEnd: assert false, "cannot happen"
 
-  if context().workspace.len > 0:
-    if not dirExists(context().workspace):
-      fatal "Workspace directory '" & $context().workspace & "' not found."
-    readConfig()
-  elif action notin ["init", "tag"]:
-    context().workspace = detectWorkspace()
-
-    if context().workspace.fileExists():
-      readConfig()
-      info context().workspace.absolutePath, "is the current workspace"
-    elif autoinit:
-      context().workspace = autoWorkspace(paths.getCurrentDir())
-      createWorkspaceIn()
-    elif action notin ["search", "list"]:
-      fatal "No workspace found. Run `atlas init` if you want this current directory to be your workspace."
-
-  if not explicitDepsDirOverride and action notin ["init", "tag"] and context().depsDir.len == 0:
-    context().depsDir = Path "deps"
-  if action != "tag":
-    createDir(context().depsDir)
+  setupWorkspaceAndDepsDirs()
 
   case action
   of "":
@@ -395,9 +404,10 @@ proc mainRun() =
     else:
       context().workspace = paths.getCurrentDir()
     createWorkspaceIn()
-  # TODO: does this make sense in a single project / single workspace?
-  #       maybe we want to clone and then setup the repo? like clone parent + install
-  of "clone", "update":
+  of "update":
+    discard # TODO: what to do here?
+    quit 1
+  of "clone":
     singleArg()
     var nc = createNimbleContext()
     let dir = args[0]
