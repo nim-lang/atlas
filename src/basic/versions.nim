@@ -42,7 +42,7 @@ type
     v*: Version
 
   CommitOrigin* = enum
-    FromNone, FromHead, FromGitTag, FromDep, FromNimbleFile
+    FromNone, FromHead, FromGitTag, FromDep, FromNimbleFile, FromLockfile
 
 const
   InvalidCommit* = "#head" #"<invalid commit>"

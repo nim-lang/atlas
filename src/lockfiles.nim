@@ -306,7 +306,9 @@ proc replay*(lockFile: Path) =
       else:
         error v.dir, "remote URL has been compromised: got: " &
           url & " but wanted: " & v.url
-    if not checkoutGitCommitFull(dir, v.commit, FullClones in context().flags):
+    
+    let commit = v.commit.initCommitHash(FromLockfile)
+    if not checkoutGitCommitFull(dir, commit, FullClones in context().flags):
       error v.dir, "unable to convert to full clone:", $v.commit, "at:", $dir
 
     if genCfg:
