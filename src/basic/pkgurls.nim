@@ -25,11 +25,12 @@ type
 
 proc isFileProtocol*(s: PkgUrl): bool = s.u.scheme == "file"
 proc isUrl*(s: string): bool = parseUri(s).scheme != ""
+proc isEmpty*(s: PkgUrl): bool = s.projectName.len() == 0
 
 proc extractProjectName*(s: Uri): string =
   let (p, n, e) = s.path.splitFile()
   if e == GitSuffix: result = n
-  else: result = n & "e"
+  else: result = n & e
 
 proc `$`*(u: PkgUrl): string = $u.u
 proc toJsonHook*(v: PkgUrl): JsonNode = %($(v))

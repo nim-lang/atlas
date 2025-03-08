@@ -9,12 +9,11 @@ when false:
 let
   basicExamples = {
     "balls": (
-      # input: "https://github.com/disruptek/balls/tree/master",
       input: "https://github.com/disruptek/balls",
       output: "https://github.com/disruptek/balls",
     ),
     "npeg": (
-      input: "https://github.com/zevv/npeg",
+      input: "https://github.com/zevv/npeg.git",
       output: "https://github.com/zevv/npeg",
     ),
     "sync": (
@@ -36,15 +35,22 @@ suite "urls and naming":
   test "basic urls":
 
     var nc = createUnfilledNimbleContext()
+    nc.put("npeg", parseUri "https://github.com/zevv/npeg")
+    nc.put("sync", parseUri "https://github.com/planetis-m/sync")
+    nc.put("bytes2human", parseUri "https://github.com/juancarlospaco/nim-bytes2human")
 
     for name, url in basicExamples.items:
-      let upkg = createUrl(nc, url.input)
+      let upkg = nc.createUrl(url.input)
       check upkg.url.hostname == "github.com"
       check $upkg.url == url.output
 
-      let npkg = createUrl(nc, name)
-      check npkg.url.hostname == "github.com"
-      check $npkg.url == url.output
+      if name == "balls":
+        expect ValueError:
+          let npkg = nc.createUrl(name)
+      else:
+        let npkg = nc.createUrl(name)
+        check npkg.url.hostname == "github.com"
+        check $npkg.url == url.output
 
 
 template v(x): untyped = Version(x)
