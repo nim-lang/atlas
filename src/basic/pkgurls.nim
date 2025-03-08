@@ -10,6 +10,8 @@ import std / [hashes, uri, os, strutils, json]
 from std / os import `/`, dirExists
 import compiledpatterns, gitops, reporters
 
+export uri
+
 const
   GitSuffix = ".git"
 
@@ -54,7 +56,7 @@ proc toPkgUriRaw*(u: Uri): PkgUrl =
 proc toUri*(u: PkgUrl): Uri =
   result = u.u
 
-proc url*(p: PkgUrl): string = $p.u
+proc url*(p: PkgUrl): Uri = p.u
 
 proc `==`*(a, b: PkgUrl): bool {.inline.} = a.u == b.u
 # proc hash*(a: PkgUrl): Hash {.inline.} = hash(a.u)

@@ -42,7 +42,7 @@ proc createUrl*(nc: NimbleContext, nameOrig: string; projectName: string = ""): 
     if lname in nc.nameToUrl:
       result = nc.nameToUrl[lname]
     else:
-      raise newException(ValueError, "project name not found in packages database")
+      raise newException(ValueError, "project name not found in packages database: " & $lname)
   if projectName != "":
     result.projectName = projectName
 
@@ -56,7 +56,10 @@ proc fillPackageLookupTable(c: var NimbleContext) =
     for entry in packages:
       c.nameToUrl[unicode.toLower(entry.name)] = createUrlSkipPatterns(entry.url, skipDirTest=true)
 
-proc createNimbleContext*(): NimbleContext =
+proc createUnfilledNimbleContext*(): NimbleContext =
   result = NimbleContext()
   result.overrides = context().overrides
+
+proc createNimbleContext*(): NimbleContext =
+  result = createUnfilledNimbleContext()
   fillPackageLookupTable(result)

@@ -1,7 +1,7 @@
 
 
 import std/[unittest, os, algorithm, strutils]
-import basic/[context, deptypes, nimblecontext, osutils, versions]
+import basic/[context, pkgurls, deptypes, nimblecontext, osutils, versions]
 
 when false:
   from nameresolver import resolvePackage
@@ -35,14 +35,14 @@ suite "urls and naming":
 
   test "basic urls":
 
-    var nc = createNimbleContext()
+    var nc = createUnfilledNimbleContext()
 
     for name, url in basicExamples.items:
-      let upkg = resolvePackage(c, url.input)
+      let upkg = createUrl(nc, url.input)
       check upkg.url.hostname == "github.com"
       check $upkg.url == url.output
 
-      let npkg = resolvePackage(c, name)
+      let npkg = createUrl(nc, name)
       check npkg.url.hostname == "github.com"
       check $npkg.url == url.output
 
