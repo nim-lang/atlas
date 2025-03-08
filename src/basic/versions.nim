@@ -76,6 +76,9 @@ proc isEmpty*(c: CommitHash): bool =
   c.h.len() == 0
 proc isFull*(c: CommitHash): bool =
   c.h.len() == 40
+proc isShort*(c: CommitHash): bool =
+  c.h.len() in [7, 8]
+
 proc short*(c: CommitHash): string =
   if c.h.len() == 40: c.h[0..7]
   elif c.h.len() == 0: "-"

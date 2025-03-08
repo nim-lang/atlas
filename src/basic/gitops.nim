@@ -162,9 +162,9 @@ proc versionToCommit*(path: Path, algo: ResolutionAlgorithm; query: VersionInter
   of MaxVer:
     result = selectBestCommitMaxVer(allVersions, query)
 
-proc shortToCommit*(path: Path, short: string): string =
-  let (cc, status) = exec(GitRevParse, path, [short])
-  result = if status == RES_OK: strutils.strip(cc) else: ""
+proc shortToCommit*(path: Path, short: CommitHash): CommitHash =
+  let (cc, status) = exec(GitRevParse, path, [short.h])
+  result = if status == RES_OK: initCommitHash(cc, FromHead) else: initCommitHash("", FromHead)
 
 proc listFiles*(path: Path): seq[string] =
   let (outp, status) = exec(GitLsFiles, path, [])
@@ -194,7 +194,7 @@ proc checkoutGitCommit*(path: Path, commit: CommitHash, errorReportLevel: MsgKin
   if currentCommit.isFull() and currentCommit == commit:
     return true
 
-  let (_, statusB) = exec(GitCheckout, path, [$commit], errorReportLevel)
+  let (_, statusB) = exec(GitCheckout, path, [commit.h], errorReportLevel)
   if statusB != RES_OK:
     message(errorReportLevel, path, "could not checkout commit " & $commit)
     result = false
@@ -202,25 +202,25 @@ proc checkoutGitCommit*(path: Path, commit: CommitHash, errorReportLevel: MsgKin
     debug path, "updated package to ", $commit
     result = true
 
-proc checkoutGitCommitFull*(path: Path; commit: string, fullClones: bool;
+proc checkoutGitCommitFull*(path: Path; commit: CommitHash, fullClones: bool;
                             errorReportLevel: MsgKind = Warning): bool =
   var smExtraArgs: seq[string] = @[]
   result = true
-  if not fullClones and commit.len == 40:
+  if not fullClones and commit.isFull():
     smExtraArgs.add "--depth=1"
 
     let extraArgs =
       if context().dumbProxy: ""
       elif not fullClones: "--update-shallow"
       else: ""
-    let (_, status) = exec(GitFetch, path, [extraArgs, "--tags", "origin", commit], errorReportLevel)
+    let (_, status) = exec(GitFetch, path, [extraArgs, "--tags", "origin", commit.h], errorReportLevel)
     if status != RES_OK:
-      message(errorReportLevel, $path, "could not fetch commit " & commit)
+      message(errorReportLevel, $path, "could not fetch commit " & $commit)
       result = false
     else:
-      trace($path, "fetched package commit " & commit)
-  elif commit.len != 40:
-    info($path, "found short commit id; doing full fetch to resolve " & commit)
+      trace($path, "fetched package commit " & $commit)
+  elif commit.isShort():
+    info($path, "found short commit id; doing full fetch to resolve " & $commit)
     let (outp, status) = exec(GitFetch, path, ["--unshallow"])
     if status != RES_OK:
       message(errorReportLevel, $path, "could not fetch: " & outp)
@@ -228,12 +228,12 @@ proc checkoutGitCommitFull*(path: Path; commit: string, fullClones: bool;
     else:
       trace($path, "fetched package updates ")
 
-  let (_, status) = exec(GitCheckout, path, [commit], errorReportLevel)
+  let (_, status) = exec(GitCheckout, path, [commit.h], errorReportLevel)
   if status != RES_OK:
-    message(errorReportLevel, $path, "could not checkout commit " & commit)
+    message(errorReportLevel, $path, "could not checkout commit " & $commit)
     result = false
   else:
-    trace $path, "updated package to:", commit
+    trace $path, "updated package to:", $commit
 
   let (_, subModStatus) = exec(GitSubModUpdate, path, smExtraArgs)
   if subModstatus != RES_OK:

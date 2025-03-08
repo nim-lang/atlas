@@ -144,12 +144,12 @@ iterator allActiveNodes*(g: DepGraph): Package =
 proc getCfgPath*(g: DepGraph; d: Package): lent CfgPath =
   result = CfgPath g.pkgs[d.url].activeNimbleRelease().srcDir
 
-# proc bestNimVersion*(g: DepGraph): Version =
-#   result = Version""
-#   for n in allNodes(g):
-#     if n.active and g.reqs[n.versions[n.activeRelease].req].nimVersion != Version"":
-#       let v = g.reqs[n.versions[n.activeRelease].req].nimVersion
-#       if v > result: result = v
+proc bestNimVersion*(g: DepGraph): Version =
+  result = Version""
+  for pkg in allNodes(g):
+    if pkg.active and pkg.activeNimbleRelease().nimVersion != Version"":
+      let v = pkg.activeNimbleRelease().nimVersion
+      if v > result: result = v
 
 # proc readOnDisk(result: var DepGraph) =
 #   let configFile = context().workspace / AtlasWorkspace

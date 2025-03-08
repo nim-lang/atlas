@@ -13,7 +13,7 @@ import std / [parseopt, files, dirs, strutils, os, osproc, tables, sets, json, j
 import basic / [versions, context, osutils, packageinfos,
                 configutils, nimblechecksums, reporters,
                 nimbleparser, gitops, pkgurls]
-import depgraphs, nimenv, lockfiles, confighandler, pkgcache, pkgsearch
+import depgraphs, nimenv, lockfiles, confighandler, dependencies, pkgsearch
 
 from std/terminal import isatty
 
@@ -111,18 +111,18 @@ proc writeVersion() =
   quit(0)
 
 proc tag(tag: string) =
-  gitTag(context().projectDir, tag)
-  pushTag(context().projectDir, tag)
+  gitTag(context().workspace, tag)
+  pushTag(context().workspace, tag)
 
 proc tag(field: Natural) =
   let oldErrors = atlasErrors()
-  let newTag = incrementLastTag(context().projectDir, field)
+  let newTag = incrementLastTag(context().workspace, field)
   if atlasErrors() == oldErrors:
     tag(newTag)
 
 proc generateDepGraph(g: DepGraph) =
-  proc repr(w: Package): string =
-    $(w.url.url / w.commit)
+  proc repr(pkg: Package): string =
+    $(pkg.url.url / $pkg.activeVersion.commit)
 
   var dotGraph = ""
   for n in allNodes(g):
@@ -130,7 +130,7 @@ proc generateDepGraph(g: DepGraph) =
   for n in allNodes(g):
     for child in directDependencies(g, n):
       dotGraph.addf("\"$1\" -> \"$2\";\n", [n.repr, child.repr])
-  let dotFile = context().currentDir / "deps.dot".Path
+  let dotFile = paths.getCurrentDir() / "deps.dot".Path
   writeFile($dotFile, "digraph deps {\n$1}\n" % dotGraph)
   let graphvizDotPath = findExe("dot")
   if graphvizDotPath.len == 0:
@@ -151,10 +151,6 @@ proc afterGraphActions(g: DepGraph) =
     if v != Version"":
       setupNimEnv context().workspace, v.string, Keep in context().flags
 
-proc getRequiredCommit*(w: Package): string =
-  if isShortCommitHash(w.commit): shortToCommit(w.ondisk, w.commit)
-  else: w.commit
-
 proc traverse(nc: var NimbleContext; start: string): seq[CfgPath] =
   # returns the list of paths for the nim.cfg file.
   let u = createUrl(start, context().overrides)
@@ -163,9 +159,9 @@ proc traverse(nc: var NimbleContext; start: string): seq[CfgPath] =
   #if $pkg.url == "":
   #  error pkg, "cannot resolve package name"
   #  return
-  #context().projectDir = context().depsDir / u.projectName
+  #context().workspace = context().depsDir / u.projectName
   for n in allNodes(g):
-    context().projectDir = n.ondisk
+    context().workspace = n.ondisk
     break
 
   result = traverseLoop(nc, g)
@@ -301,7 +297,7 @@ proc mainRun() =
       fatal action & " command takes no arguments"
 
   template projectCmd() =
-    if context().projectDir == context().workspace or context().projectDir == context().depsDir:
+    if context().workspace == context().workspace or context().workspace == context().depsDir:
       fatal action & " command must be executed in a project, not in the workspace"
 
   proc findCurrentNimble(): Path =
@@ -455,7 +451,7 @@ proc mainRun() =
 
   of "pin":
     optSingleArg($LockFileName)
-    if context().projectDir == context().workspace or context().projectDir == context().depsDir:
+    if context().workspace == context().workspace or context().workspace == context().depsDir:
       pinWorkspace Path(args[0])
     else:
       let exportNimble = Path(args[0]) == NimbleLockFileName
