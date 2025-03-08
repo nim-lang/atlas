@@ -112,11 +112,11 @@ suite "test expand with git tags":
         # var graph = DepGraph(nodes: @[], reqs: defaultReqs())
         let url = nc.createUrl(dir, projectName = "ws_testtraverse")
 
-        var dep0 = Package(url: url, isRoot: true, isTopLevel: true)
-        var dep1 = Package(url: nc.createUrl("proj_a"), isRoot: true)
-        var dep2 = Package(url: nc.createUrl("proj_b"), isRoot: true)
-        var dep3 = Package(url: nc.createUrl("proj_c"), isRoot: true)
-        var dep4 = Package(url: nc.createUrl("proj_d"), isRoot: true)
+        var dep0 = Package(url: url, isRoot: true)
+        var dep1 = Package(url: nc.createUrl("proj_a"))
+        var dep2 = Package(url: nc.createUrl("proj_b"))
+        var dep3 = Package(url: nc.createUrl("proj_c"))
+        var dep4 = Package(url: nc.createUrl("proj_d"))
 
         nc.loadDependency(dep0)
         nc.loadDependency(dep1)
@@ -289,11 +289,11 @@ suite "test expand with no git tags":
         # var graph = DepGraph(nodes: @[], reqs: defaultReqs())
         let url = nc.createUrl(dir, projectName = "ws_testtraverse")
 
-        var dep0 = Package(url: url, isRoot: true, isTopLevel: true)
-        var dep1 = Package(url: nc.createUrl("proj_a"), isRoot: true)
-        var dep2 = Package(url: nc.createUrl("proj_b"), isRoot: true)
-        var dep3 = Package(url: nc.createUrl("proj_c"), isRoot: true)
-        var dep4 = Package(url: nc.createUrl("proj_d"), isRoot: true)
+        var dep0 = Package(url: url, isRoot: true)
+        var dep1 = Package(url: nc.createUrl("proj_a"))
+        var dep2 = Package(url: nc.createUrl("proj_b"))
+        var dep3 = Package(url: nc.createUrl("proj_c"))
+        var dep4 = Package(url: nc.createUrl("proj_d"))
 
         nc.loadDependency(dep0)
         nc.loadDependency(dep1)

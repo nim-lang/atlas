@@ -98,8 +98,8 @@ proc pkgUrlToDirname*(pkg: Package): (Path, PackageAction) =
   # XXX implement namespace support here
   # var dest = Path g.ondisk.getOrDefault(d.url.url)
   var dest = Path ""
-  if pkg.isTopLevel:
-    trace pkg.url.projectName, "pkgUrlToDirName topLevel= " & $pkg.isTopLevel
+  if pkg.isRoot:
+    trace pkg.url.projectName, "pkgUrlToDirName topLevel= " & $pkg.isRoot
     dest = context().workspace
   else:
     let depsDir = context().workspace / context().depsDir
@@ -116,7 +116,7 @@ proc copyFromDisk*(pkg: Package; destDir: Path): (CloneStatus, string) =
   #  if dirExists(a): a else: b
 
   #let dir = selectDir(u & "@" & w.commit, u)
-  if pkg.isTopLevel:
+  if pkg.isRoot:
     trace dir, "copyFromDisk isTopLevel", $dir
     result = (Ok, $dir)
   elif dirExists(dir):
@@ -321,7 +321,7 @@ proc expand*(path: Path, nc: var NimbleContext; mode: TraversalMode, onClone: Pa
   
   let url = nc.createUrl(path)
   warn url.projectName, "expanding root package at:", $url
-  var root = Package(url: url, isRoot: true, isTopLevel: true)
+  var root = Package(url: url, isRoot: true)
   # nc.loadDependency(pkg)
 
   var processed = initHashSet[PkgUrl]()

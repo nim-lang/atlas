@@ -22,7 +22,6 @@ type
     ondisk*: Path
     active*: bool
     isRoot*: bool
-    isTopLevel*: bool
     errors*: seq[string]
 
   NimbleRelease* = ref object
