@@ -146,7 +146,7 @@ suite "test expand with git tags":
         let deps = setupGraph()
         let dir = paths.getCurrentDir().absolutePath
 
-        let graph = expand(nc, AllReleases, dir)
+        let graph = expand(nc, AllReleases, dir, notFoundAction=DoClone)
 
         echo "\tspec:\n", graph.toJson(ToJsonOptions(enumMode: joptEnumString))
         let sp = graph.pkgs.values().toSeq()
@@ -219,7 +219,7 @@ suite "test expand with git tags":
         # let deps = setupGraph()
         let dir = paths.getCurrentDir().absolutePath
 
-        let graph = expand(nc, AllReleases, dir)
+        let graph = expand(nc, AllReleases, dir, notFoundAction=DoClone)
 
         echo "\tspec:\n", graph.toJson(ToJsonOptions(enumMode: joptEnumString))
         let sp = graph.pkgs.values().toSeq()
@@ -324,7 +324,7 @@ suite "test expand with no git tags":
         let deps = setupGraphNoGitTags()
         let dir = paths.getCurrentDir().absolutePath
 
-        let graph = expand(nc, AllReleases, dir)
+        let graph = expand(nc, AllReleases, dir, notFoundAction=DoClone)
 
         echo "\tspec:\n", graph.toJson(ToJsonOptions(enumMode: joptEnumString))
         let sp = graph.pkgs.values().toSeq()
