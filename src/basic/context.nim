@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [os, uri, paths]
+import std / [os, uri, paths, files]
 import versions, parse_requires, compiledpatterns, reporters
 
 export reporters
@@ -66,7 +66,12 @@ proc context*(): var AtlasContext =
   atlasContext
 
 proc getWorkspaceConfig*(): Path =
-  context().depsDir / AtlasWorkspaceFile
+  ## prefer workspace atlas.config if found
+  ## otherwise default to one in deps/
+  ## the deps path will be the default for auto-created ones
+  result = context().workspace / AtlasWorkspaceFile
+  if fileExists(result): return
+  result = context().depsDir / AtlasWorkspaceFile
 
 proc `==`*(a, b: CfgPath): bool {.borrow.}
 

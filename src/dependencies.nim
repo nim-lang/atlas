@@ -319,8 +319,9 @@ proc loadDependency*(
 proc expand*(path: Path, nc: var NimbleContext; mode: TraversalMode, onClone: PackageAction): DepGraph =
   ## Expand the graph by adding all dependencies.
   
+  doAssert path.string != "."
   let url = nc.createUrl(path)
-  warn url.projectName, "expanding root package at:", $url
+  warn url.projectName, "expanding root package at:", $path, "url:", $url
   var root = Package(url: url, isRoot: true)
   # nc.loadDependency(pkg)
 

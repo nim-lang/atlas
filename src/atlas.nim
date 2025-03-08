@@ -158,7 +158,7 @@ proc afterGraphActions(g: DepGraph) =
 proc installDependencies(nc: var NimbleContext; nimbleFile: Path) =
   # 1. find .nimble file in CWD
   # 2. install deps from .nimble
-  var (dir, pkgname, _) = splitFile(nimbleFile)
+  var (dir, pkgname, _) = splitFile(nimbleFile.absolutePath)
   if dir == Path "":
     dir = Path(".").absolutePath
   info pkgname, "installing dependencies for " & $pkgname & ".nimble"
@@ -195,6 +195,8 @@ proc detectWorkspace(customWorkspace = Path ""): bool =
   
   if context().workspace.len() > 0:
     result = context().workspace.fileExists
+    if result:
+      context().workspace = context().workspace.absolutePath
 
 proc autoWorkspace(currentDir: Path): bool =
   var cwd = currentDir
@@ -394,6 +396,9 @@ proc mainRun() =
 
   parseAtlasOptions(action, args)
 
+  if action notin ["init", "tag"]:
+    doAssert context().workspace.string != "" and context().workspace.dirExists()
+
   case action
   of "":
     fatal "No action."
@@ -435,12 +440,12 @@ proc mainRun() =
     var nc = createNimbleContext()
 
     if nimbleFiles.len() == 0:
-      let nimbleFile = context().workspace / Path(extractProjectName($context().workspace) & ".nimble")
-      trace "use", "USE:nimbleFile:set: " & $nimbleFile
+      let nimbleFile = context().workspace / Path(extractProjectName($paths.getCurrentDir()) & ".nimble")
+      trace "atlas:use", "using nimble file:", $nimbleFile
       writeFile($nimbleFile, "")
       nimbleFiles.add(nimbleFile)
     elif nimbleFiles.len() > 1:
-      error "use", "Ambiguous Nimble files found: " & $nimbleFiles
+      error "atlas:use", "Ambiguous Nimble files found: " & $nimbleFiles
 
     patchNimbleFile(nc, context().overrides, nimbleFiles[0], args[0])
 
