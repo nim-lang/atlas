@@ -53,11 +53,11 @@ type
 
 proc writeDefaultConfigFile*() =
   let config = JsonConfig(deps: $context().depsDir, resolver: $SemVer, graph: newJNull())
-  let configFile = context().depsDir / AtlasWorkspaceConfig
+  let configFile = getWorkspaceConfig()
   writeFile($configFile, pretty %*config)
 
 proc readConfig*() =
-  let configFile = context().depsDir / AtlasWorkspaceConfig
+  let configFile = getWorkspaceConfig()
   var f = newFileStream($configFile, fmRead)
   if f == nil:
     error configFile, "cannot open: " & $configFile
@@ -86,5 +86,5 @@ proc writeConfig*(graph: JsonNode) =
   let config = JsonConfig(deps: $context().depsDir, overrides: $context().overridesFile,
     plugins: $context().pluginsFile, resolver: $context().defaultAlgo,
     graph: graph)
-  let configFile = context().depsDir / AtlasWorkspaceConfig
+  let configFile = getWorkspaceConfig()
   writeFile($configFile, pretty %*config)

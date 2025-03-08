@@ -16,7 +16,7 @@ const
   TestsDir* = "atlas/tests"
 
 const
-  AtlasWorkspaceConfig* = Path "atlas.workspace"
+  AtlasWorkspaceFile = Path "atlas.workspace"
 
 type
   CfgPath* = distinct string # put into a config `--path:"../x"`
@@ -64,6 +64,9 @@ proc setContext*(ctx: AtlasContext) =
   atlasContext = ctx
 proc context*(): var AtlasContext =
   atlasContext
+
+proc getWorkspaceConfig*(): Path =
+  context().depsDir / AtlasWorkspaceFile
 
 proc `==`*(a, b: CfgPath): bool {.borrow.}
 

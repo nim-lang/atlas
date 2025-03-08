@@ -181,7 +181,7 @@ proc bestNimVersion*(g: DepGraph): Version =
 
 proc createGraphFromWorkspace*(): DepGraph =
   result = DepGraph()
-  let configFile = context().depsDir / AtlasWorkspaceConfig
+  let configFile = getWorkspaceConfig()
   var f = newFileStream($configFile, fmRead)
   if f == nil:
     error configFile, "cannot open: " & $configFile
