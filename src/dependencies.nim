@@ -287,6 +287,7 @@ proc traverseDependency*(
 proc loadDependency*(
     nc: NimbleContext,
     pkg: var Package,
+    actionOnDoClone: PackageAction,
 ) = 
   let (dest, todo) = pkgUrlToDirname(pkg)
   pkg.ondisk = dest
@@ -294,16 +295,20 @@ proc loadDependency*(
   debug pkg.url.projectName, "loading dependency todo:", $todo, "dest:", $dest
   case todo
   of DoClone:
-    let (status, msg) =
-      if pkg.url.isFileProtocol:
-        copyFromDisk(pkg, dest)
-      else:
-        gitops.clone(pkg.url.toUri, dest)
-    if status == Ok:
-      pkg.state = Found
-    else:
+    if actionOnDoClone == DoNothing:
       pkg.state = Error
-      pkg.errors.add $status & ": " & msg
+      pkg.errors.add "Not found"
+    else:
+      let (status, msg) =
+        if pkg.url.isFileProtocol:
+          copyFromDisk(pkg, dest)
+        else:
+          gitops.clone(pkg.url.toUri, dest)
+      if status == Ok:
+        pkg.state = Found
+      else:
+        pkg.state = Error
+        pkg.errors.add $status & ": " & msg
   of DoNothing:
     if pkg.ondisk.dirExists():
       pkg.state = Found
@@ -333,7 +338,7 @@ proc expand*(nc: var NimbleContext; mode: TraversalMode, path: Path): DepGraph =
       case pkg.state:
       of NotInitialized:
         info pkg.projectName, "Initializing at:", $pkg
-        nc.loadDependency(pkg)
+        nc.loadDependency(pkg, DoClone)
         debug pkg.projectName, "expanded pkg:", pkg.repr
         processing = true
       of Found:

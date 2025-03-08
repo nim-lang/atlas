@@ -11,7 +11,7 @@
 import std / [sequtils, paths, dirs, files, strutils, tables, sets, os, json, jsonutils]
 import basic/[lockfiletypes, context, osutils, gitops, nimblechecksums, compilerversions,
   configutils, depgraphtypes, reporters, nimbleparser, pkgurls]
-import depgraphs, pkgcache
+import depgraphs, dependencies
 
 const
   NimbleLockFileName* = Path "nimble.lock"
@@ -41,7 +41,7 @@ proc genLockEntry(lf: var LockFile; w: Package) =
   lf.items[w.url.projectName] = LockFileEntry(
     dir: prefixedPath(w.ondisk),
     url: w.url.url,
-    commit: currentGitCommit(w.ondisk),
+    commit: $currentGitCommit(w.ondisk),
     version: ""
   )
 
@@ -107,7 +107,7 @@ proc genLockEntry(
   let chk = nimbleChecksum(w.url.projectName, w.ondisk)
   lf.packages[w.url.projectName] = NimbleLockFileEntry(
     version: info.version,
-    vcsRevision: commit,
+    vcsRevision: $commit,
     url: w.url.url,
     downloadMethod: "git",
     dependencies: deps.mapIt(it),
@@ -120,9 +120,8 @@ const
 proc expandWithoutClone*(g: var DepGraph; nc: NimbleContext) =
   ## Expand the graph by adding all dependencies.
   var processed = initHashSet[PkgUrl]()
-  var i = 0
-  while i < g.nodes.len:
-    if not processed.containsOrIncl(g.nodes[i].url):
+  for url, pkg in g.pkgs:
+    if not processed.containsOrIncl(url):
       let (dest, todo) = pkgUrlToDirname(g, g.nodes[i])
       if todo == DoNothing:
         withDir $dest:
