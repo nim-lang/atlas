@@ -316,13 +316,11 @@ proc solve*(graph: var DepGraph; form: Form) =
   if context().dumpGraphs:
     dumpJson(graph, "graph-solved.json")
 
-proc loadWorkspaceConfigs*(path: Path, nc: var NimbleContext): seq[CfgPath] =
-  result = @[]
-  var graph = path.expand(nc, TraversalMode.AllReleases, notFoundAction=DoClone)
-  let form = graph.toFormular(context().defaultAlgo)
-  
-  solve(graph, form)
+proc loadWorkspaceConfigs*(path: Path, nc: var NimbleContext): DepGraph =
+  result = path.expand(nc, TraversalMode.AllReleases, notFoundAction=DoClone)
 
+  let form = result.toFormular(context().defaultAlgo)
+  solve(result, form)
 
 proc runBuildSteps*(graph: DepGraph) =
   ## execute build steps for the dependency graph

@@ -185,3 +185,14 @@ suite "graph solve":
         check $graph.pkgs[nc.nameToUrl["proj_c"]].activeVersion == "1.2.0@9331e14f"
         check $graph.pkgs[nc.nameToUrl["proj_d"]].activeVersion == "1.0.0@0dec9c97"
         # check graph.pkgs[""]
+
+        check graph.validateDependencyGraph()
+        let topo = graph.topologicalSort()
+
+        check topo[0].url.projectName == "proj_d"
+        check topo[1].url.projectName == "proj_c"
+        check topo[2].url.projectName == "proj_b"
+        check topo[3].url.projectName == "proj_a"
+
+        for pkg in topo:
+          echo "PKG: ", pkg.url.projectName

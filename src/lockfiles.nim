@@ -120,16 +120,16 @@ const
 proc pinGraph*(g: var DepGraph; lockFile: Path; exportNimble = false) =
   info "pin", "pinning project"
   var lf = newLockFile()
-  let startPkg = context().workspace # resolvePackage("file://" & context().currentDir)
+  let workspace = context().workspace # resolvePackage("file://" & context().currentDir)
 
   # only used for exporting nimble locks
   var nlf = newNimbleLockFile()
   var nimbleDeps = newTable[string, HashSet[string]]()
 
-  info startPkg, "pinning lockfile: " & $lockFile
+  info workspace, "pinning lockfile: " & $lockFile
 
   var nc = createNimbleContext()
-  var graph = expand(nc, CurrentCommit, context().workspace, notFoundAction=DoNothing)
+  var graph = workspace.expand(nc, CurrentCommit, notFoundAction=DoNothing)
 
   for w in toposorted(g):
     let dir = w.ondisk
