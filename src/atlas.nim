@@ -9,10 +9,10 @@
 ## Simple tool to automate frequent workflows: Can "clone"
 ## a Nimble dependency and its dependencies recursively.
 
-import std / [parseopt, files, dirs, strutils, os, osproc, tables, sets, json, jsonutils, uri]
+import std / [parseopt, files, dirs, strutils, os, osproc, tables, sets, json, jsonutils, uri, paths]
 import basic / [versions, context, osutils, packageinfos,
                 configutils, nimblechecksums, reporters,
-                nimbleparser, gitops, pkgurls]
+                nimbleparser, gitops, pkgurls, nimblecontext]
 import depgraphs, nimenv, lockfiles, confighandler, dependencies, pkgsearch
 
 from std/terminal import isatty
@@ -330,21 +330,18 @@ proc parseAtlasOptions(action: var string, args: var seq[string]) =
         context().proxy = val.parseUri()
       of "dumbproxy":
         context().dumbProxy = true
+      of "resolver":
+        case val.normalize
+        of "minver": context().defaultAlgo = MinVer
+        of "maxver": context().defaultAlgo = MaxVer
+        of "semver": context().defaultAlgo = SemVer
+        else: writeHelp()
       of "verbosity":
         case val.normalize
-        of "quiet": setAtlasVerbosity(Ignore)
-        of "error": setAtlasVerbosity(Error)
-        of "warning": setAtlasVerbosity(Warning)
         of "normal": setAtlasVerbosity(Info)
         of "trace": setAtlasVerbosity(Trace)
         of "debug": setAtlasVerbosity(Debug)
         else: writeHelp()
-      of "assertonerror": setAtlasAssertOnError(true)
-      of "resolver":
-        try:
-          context().defaultAlgo = parseEnum[ResolutionAlgorithm](val)
-        except ValueError:
-          quit "unknown resolver: " & val
       else: writeHelp()
     of cmdEnd: assert false, "cannot happen"
 
@@ -412,7 +409,7 @@ proc mainRun() =
   of "update":
     discard # TODO: what to do here?
     quit 1
-  of "clone":
+  of "new":
     singleArg()
     var nc = createNimbleContext()
     let dir = args[0]
@@ -432,6 +429,8 @@ proc mainRun() =
     if status != Ok:
       error "atlas", "error cloning project:", dir, "message:", msg
       quit(1)
+    
+    newProject(args[0])
 
   of "use":
     singleArg()
@@ -440,7 +439,7 @@ proc mainRun() =
     var nc = createNimbleContext()
 
     if nimbleFiles.len() == 0:
-      let nimbleFile = workspace() / Path(extractProjectName($paths.getCurrentDir()) & ".nimble")
+      let nimbleFile = workspace() / Path(splitPath($paths.getCurrentDir()).tail & ".nimble")
       trace "atlas:use", "using nimble file:", $nimbleFile
       writeFile($nimbleFile, "")
       nimbleFiles.add(nimbleFile)
@@ -472,76 +471,17 @@ proc mainRun() =
     optSingleArg($LockFileName)
     listChanged(Path(args[0]))
   of "convert":
-    if args.len < 1:
-      fatal "convert command takes a nimble lockfile argument"
-    let lfn = if args.len == 1: LockFileName
-              else: Path(args[1])
-    convertAndSaveNimbleLock Path(args[0]), lfn
-  of "install", "setup":
-    # projectCmd()
-    if args.len > 1:
-      fatal "install command takes a single argument"
-    var nimbleFile = Path ""
     if args.len == 1:
-      nimbleFile = Path args[0]
+      convertAndSaveNimbleLock(Path(args[0]), LockFileName)
+    elif args.len == 2:
+      convertAndSaveNimbleLock(Path(args[0]), Path(args[1]))
     else:
-      nimbleFile = findCurrentNimble()
-    if nimbleFile.len == 0:
-      fatal "could not find a .nimble file"
-    else:
-      var nc = createNimbleContext()
-      installDependencies(nc, nimbleFile)
-  of "refresh":
-    noArgs()
-    updatePackages(context().depsDir)
-  of "search", "list":
-    if workspace().len != 0:
-      updatePackages(context().depsDir)
-      let pkgInfos = getPackageInfos(context().depsDir)
-      search pkgInfos, args
-    else:
-      search @[], args
-  of "updateprojects":
-    updateDir(workspace(), if args.len == 0: "" else: args[0])
-  of "updatedeps":
-    updateDir(context().depsDir, if args.len == 0: "" else: args[0])
-  of "extract":
-    singleArg()
-    if fileExists(args[0]):
-      echo toJson(extractRequiresInfo(Path args[0]))
-    else:
-      fatal "File does not exist: " & args[0]
-  of "tag":
-    projectCmd()
-    if args.len == 0:
-      tag(ord(patch))
-    elif args[0].len == 1 and args[0][0] in {'a'..'z'}:
-      let field = ord(args[0][0]) - ord('a')
-      tag(field)
-    elif args[0].len == 1 and args[0][0] in {'A'..'Z'}:
-      let field = ord(args[0][0]) - ord('A')
-      tag(field)
-    elif '.' in args[0]:
-      tag(args[0])
-    else:
-      var field: SemVerField
-      try: field = parseEnum[SemVerField](args[0])
-      except: fatal "tag command takes one of 'patch' 'minor' 'major', a SemVer tag, or a letter from 'a' to 'z'"
-      tag(ord(field))
-  of "build", "test", "doc", "tasks":
-    projectCmd()
-    nimbleExec(action, args)
-  of "task":
-    projectCmd()
-    nimbleExec("", args)
+      fatal "convert command takes one or two arguments"
   of "env":
     singleArg()
     setupNimEnv workspace(), args[0], Keep in context().flags
   of "outdated":
     listOutdated()
-  of "new":
-    singleArg()
-    newProject(args[0])
   else:
     fatal "Invalid action: " & action
 

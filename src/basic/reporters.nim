@@ -93,7 +93,7 @@ proc atlasWritePendingMessages*() =
 proc doInfoNow*(c: var Reporter; p: string, args: seq[string]) =
   writeMessage c, Info, p, @args
 
-proc fatal*(c: var Reporter, msg: string, prefix = "fatal", code = 1) =
+proc doFatal*(c: var Reporter, msg: string, prefix = "fatal", code = 1) =
   when defined(debug):
     writeStackTrace()
   writeMessage(c, Error, prefix, @[msg])
@@ -136,7 +136,7 @@ proc debug*[T](p: T, args: varargs[string]) =
 
 template fatal*(msg: string | Path, prefix = "fatal", code = 1) =
   mixin toReporterName
-  message(atlasReporter, Fatal, toReporterName(p), @args)
+  doFatal(atlasReporter, toReporterName(msg), prefix, code)
 
 proc infoNow*[T](p: T, args: varargs[string]) =
   mixin toReporterName

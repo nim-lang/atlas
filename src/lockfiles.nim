@@ -10,7 +10,7 @@
 
 import std / [sequtils, paths, dirs, files, strutils, tables, sets, os, json, jsonutils]
 import basic/[lockfiletypes, context, osutils, gitops, nimblechecksums, compilerversions,
-  configutils, depgraphtypes, reporters, nimbleparser, pkgurls]
+  configutils, depgraphtypes, reporters, nimbleparser, pkgurls, nimblecontext]
 import depgraphs, dependencies
 
 const
@@ -40,7 +40,7 @@ proc fromPrefixedPath*(path: Path): Path =
 proc genLockEntry(lf: var LockFile; w: Package) =
   lf.items[w.url.projectName] = LockFileEntry(
     dir: prefixedPath(w.ondisk),
-    url: w.url.url,
+    url: $w.url.url,
     commit: $currentGitCommit(w.ondisk),
     version: ""
   )
@@ -108,7 +108,7 @@ proc genLockEntry(
   lf.packages[w.url.projectName] = NimbleLockFileEntry(
     version: info.version,
     vcsRevision: $commit,
-    url: w.url.url,
+    url: $w.url.url,
     downloadMethod: "git",
     dependencies: deps.mapIt(it),
     checksums: {"sha1": chk}.toTable
@@ -120,7 +120,7 @@ const
 proc pinGraph*(g: DepGraph; lockFile: Path; exportNimble = false) =
   info "pin", "pinning project"
   var lf = newLockFile()
-  let workspace = workspace() # resolvePackage("file://" & context().currentDir)
+  let workspace = workspace()
 
   # only used for exporting nimble locks
   var nlf = newNimbleLockFile()
@@ -142,7 +142,7 @@ proc pinGraph*(g: DepGraph; lockFile: Path; exportNimble = false) =
         for nx in directDependencies(g, w):
           nimbleDeps.mgetOrPut(w.url.projectName,
                               initHashSet[string]()).incl(nx.url.projectName)
-        trace w.url.projectName, "exporting nimble " & w.url.url
+        trace w.url.projectName, "exporting nimble " & $w.url.url
         let deps = nimbleDeps.getOrDefault(w.url.projectName)
         genLockEntry nlf, w, getCfgPath(g, w), deps
 
@@ -213,7 +213,7 @@ proc convertNimbleLock*(nimble: Path): LockFile =
       )
 
 proc convertAndSaveNimbleLock*(nimble, lockFile: Path) =
-  ## convert and save a nimble.lock into an Atlast lockfile
+  ## convert and save a nimble.lock into an Atlas lockfile
   let lf = convertNimbleLock(nimble)
   write lf, $lockFile
 
@@ -245,7 +245,6 @@ proc listChanged*(lockFile: Path) =
 
       let commit = currentGitCommit(dir)
       if commit.h != v.commit:
-        #let info = parseNimble(pkg.nimble)
         warn dir, "commit differs;" &
                      " found: " & $commit &
                      " lockfile has: " & v.commit
@@ -272,7 +271,6 @@ proc replay*(lockFile: Path) =
            else:
               readLockFile(lockFile)
 
-  #let lfBase = splitPath(lockFilePath).head
   var genCfg = CfgHere in context().flags
   var nc = createNimbleContext()
 
