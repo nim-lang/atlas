@@ -102,7 +102,7 @@ suite "test expand with git tags":
         removeDir("deps")
         context().flags = {UsesOverrides, KeepWorkspace, ListVersions, FullClones}
         context().defaultAlgo = SemVer
-        discard context().overrides.addPattern("$+", "file://./buildGraph/$#")
+        # discard context().overrides.addPattern("$+", "file://./buildGraph/$#")
         workspace() = paths.getCurrentDir()
 
         let dir = paths.getCurrentDir()
@@ -110,6 +110,10 @@ suite "test expand with git tags":
 
         let deps = setupGraph()
         var nc = createNimbleContext()
+        nc.put("proj_a", parseUri "https://example.com/buildGraph/proj_a")
+        nc.put("proj_b", parseUri "https://example.com/buildGraph/proj_b")
+        nc.put("proj_c", parseUri "https://example.com/buildGraph/proj_c")
+        nc.put("proj_d", parseUri "https://example.com/buildGraph/proj_d")
         # var graph = DepGraph(nodes: @[], reqs: defaultReqs())
         echo "DIR: ", dir
         let url = nc.createUrlFromPath(dir)
