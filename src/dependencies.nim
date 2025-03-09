@@ -35,24 +35,16 @@ type
   PackageAction* = enum
     DoNothing, DoClone
 
-proc copyFromDisk*(pkg: Package; destDir: Path): (CloneStatus, string) =
-  var dir = Path $pkg.url.url
-  if pkg.url.url.scheme == "file":
-    dir = workspace() / Path(dir.string.substr(FileWorkspace.len))
-  #template selectDir(a, b: string): string =
-  #  if dirExists(a): a else: b
-
-  #let dir = selectDir(u & "@" & w.commit, u)
-  if pkg.isRoot:
-    trace dir, "copyFromDisk isTopLevel", $dir
-    result = (Ok, $dir)
-  elif dirExists(dir):
-    trace dir, "copyFromDisk cloning:", $dir
-    copyDir($dir, $destDir)
+proc copyFromDisk*(pkg: Package, dest: Path): (CloneStatus, string) =
+  let source = pkg.url.toOriginalPath()
+  info pkg, "copyFromDisk cloning:", $dest, "from:", $source
+  if dirExists(source) and not dirExists(dest):
+    trace pkg, "copyFromDisk cloning:", $dest, "from:", $source
+    copyDir(source.string, dest.string)
     result = (Ok, "")
   else:
-    error dir, "copyFromDisk not found:", $dir
-    result = (NotFound, $dir)
+    error pkg, "copyFromDisk not found:", $source
+    result = (NotFound, $dest)
   #writeFile destDir / ThisVersion, w.commit
   #echo "WRITTEN ", destDir / ThisVersion
 

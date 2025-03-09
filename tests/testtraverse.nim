@@ -153,7 +153,7 @@ suite "test expand with git tags":
         check collectNimbleVersions(nc, dep4).tolist() == projDnimbles.tolist()
 
   test "expand from file":
-      # setAtlasVerbosity(Info)
+      setAtlasVerbosity(Trace)
       withDir "tests/ws_testtraverse":
         removeDir("deps")
         workspace() = paths.getCurrentDir()

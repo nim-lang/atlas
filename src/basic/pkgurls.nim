@@ -46,6 +46,12 @@ proc extractProjectName*(url: Uri): string =
   else:
     result = [n & e, p, u.hostname].join(".")
 
+proc toOriginalPath*(pkgUrl: PkgUrl): Path =
+  if pkgUrl.url.scheme == "file":
+    result = Path(pkgUrl.url.hostname & pkgUrl.url.path)
+  else:
+    raise newException(ValueError, "Invalid file path: " & $pkgUrl.url)
+
 proc toDirectoryPath*(pkgUrl: PkgUrl, ): Path =
   if pkgUrl.url.scheme == "atlas":
     result = workspace()
