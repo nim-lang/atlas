@@ -10,11 +10,6 @@ type
     extraNameToUrl: Table[string, PkgUrl] # for non-packages projects, e.g. url only
     urlToNames: Table[Uri, string]
 
-# proc createUrl*(nc: NimbleContext, orig: Path): PkgUrl =
-#   var didReplace = false
-#   let pstr = $(orig)
-#   result = createUrlSkipPatterns(pstr)
-
 proc findNimbleFile*(nimbleFile: Path): seq[Path] =
   if fileExists(nimbleFile):
     result.add nimbleFile
@@ -79,6 +74,12 @@ proc createUrl*(nc: NimbleContext, nameOrig: string): PkgUrl =
     result = toPkgUriRaw(url)
   if context().useShortNamesOnDisk:
     result.projectName = nc.urlToNames.getOrDefault(result.url, result.projectName)
+
+proc createUrl*(nc: NimbleContext, orig: Path): PkgUrl =
+  let pstr = $(orig)
+  result = createUrlSkipPatterns(pstr)
+  # if result.url notin nc.urlToNames:
+  #   nc.urlToNames[result.url] = orig
 
 proc fillPackageLookupTable(c: var NimbleContext) =
   let pkgsDir = packagesDirectory()

@@ -13,7 +13,7 @@ import basic/[versions, context, reporters, compiledpatterns, parse_requires]
 
 proc parseOverridesFile(filename: Path) =
   const Separator = " -> "
-  let path = context().workspace / filename
+  let path = workspace() / filename
   var f: File
   if open(f, $path):
     info "overrides", "loading file: " & $path
@@ -39,7 +39,7 @@ proc parseOverridesFile(filename: Path) =
     error path, "cannot open: " & $path
 
 proc readPluginsDir(dir: Path) =
-  for k, f in walkDir($(context().workspace / dir)):
+  for k, f in walkDir($(workspace() / dir)):
     if k == pcFile and f.endsWith(".nims"):
       extractPluginInfo f, context().plugins
 

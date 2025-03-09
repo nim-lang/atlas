@@ -66,7 +66,10 @@ proc setContext*(ctx: AtlasContext) =
 proc context*(): var AtlasContext =
   atlasContext
 
-proc getWorkspaceConfig*(workspace = context().workspace): Path =
+proc workspace*(): var Path =
+  atlasContext.workspace
+
+proc getWorkspaceConfig*(workspace = workspace()): Path =
   ## prefer workspace atlas.config if found
   ## otherwise default to one in deps/
   ## the deps path will be the default for auto-created ones

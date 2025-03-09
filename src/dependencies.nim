@@ -29,30 +29,16 @@ proc collectNimbleVersions*(nc: NimbleContext; pkg: Package): seq[VersionTag] =
   if nimbleFiles.len() == 1:
     result = collectFileCommits(dir, nimbleFiles[0])
     result.reverse()
-    trace pkg.url.projectName, "collectNimbleVersions commits:", mapIt(result, it.c.short()).join(", "), "nimble:", $nimbleFiles[0]
+    trace pkg, "collectNimbleVersions commits:", mapIt(result, it.c.short()).join(", "), "nimble:", $nimbleFiles[0]
 
 type
   PackageAction* = enum
     DoNothing, DoClone
 
-proc pkgUrlToDirname*(pkg: Package): (Path, PackageAction) =
-  # XXX implement namespace support here
-  # var dest = Path g.ondisk.getOrDefault(d.url.url)
-  var dest = Path ""
-  if pkg.isRoot:
-    trace pkg.url.projectName, "pkgUrlToDirName topLevel= " & $pkg.isRoot
-    dest = context().workspace
-  else:
-    let depsDir = context().workspace / context().depsDir
-    dest = depsDir / Path(pkg.url.projectName)
-    trace pkg.url.projectName, "pkgUrlToDirName depsDir:", $depsDir, "projectName:", pkg.url.projectName
-  dest = dest.absolutePath
-  result = (dest, if dirExists(dest): DoNothing else: DoClone)
-
 proc copyFromDisk*(pkg: Package; destDir: Path): (CloneStatus, string) =
   var dir = Path $pkg.url.url
   if dir.string.startsWith(FileWorkspace):
-    dir = context().workspace / Path(dir.string.substr(FileWorkspace.len))
+    dir = workspace() / Path(dir.string.substr(FileWorkspace.len))
   #template selectDir(a, b: string): string =
   #  if dirExists(a): a else: b
 
@@ -224,13 +210,13 @@ proc traverseDependency*(
   # TODO: filter by unique versions first?
   pkg.state = Processed
 
-
 proc loadDependency*(
     nc: NimbleContext,
     pkg: var Package,
     onClone: PackageAction = DoClone,
 ) = 
   let (dest, todo) = pkgUrlToDirname(pkg)
+  result = (dest, if dirExists(dest): DoNothing else: DoClone)
   pkg.ondisk = dest
 
   debug pkg.url.projectName, "loading dependency todo:", $todo, "dest:", $dest

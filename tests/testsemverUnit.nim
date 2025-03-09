@@ -106,7 +106,7 @@ suite "graph solve":
       # setAtlasVerbosity(Info)
       withDir "tests/ws_semver_unit":
         removeDir("deps")
-        context().workspace = paths.getCurrentDir()
+        workspace() = paths.getCurrentDir()
         context().flags = {UsesOverrides, KeepWorkspace, ListVersions, FullClones}
         context().defaultAlgo = SemVer
 

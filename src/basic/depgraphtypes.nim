@@ -152,7 +152,7 @@ proc bestNimVersion*(g: DepGraph): Version =
       if v > result: result = v
 
 # proc readOnDisk(result: var DepGraph) =
-#   let configFile = context().workspace / AtlasWorkspace
+#   let configFile = workspace() / AtlasWorkspace
 #   var f = newFileStream($configFile, fmRead)
 #   if f == nil:
 #     return

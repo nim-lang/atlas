@@ -111,12 +111,12 @@ proc writeVersion() =
   quit(0)
 
 proc tag(tag: string) =
-  gitTag(context().workspace, tag)
-  pushTag(context().workspace, tag)
+  gitTag(workspace(), tag)
+  pushTag(workspace(), tag)
 
 proc tag(field: Natural) =
   let oldErrors = atlasErrors()
-  let newTag = incrementLastTag(context().workspace, field)
+  let newTag = incrementLastTag(workspace(), field)
   if atlasErrors() == oldErrors:
     tag(newTag)
 
@@ -150,7 +150,7 @@ proc afterGraphActions(g: DepGraph) =
   if atlasErrors() == 0 and AutoEnv in context().flags:
     let v = g.bestNimVersion
     if v != Version"":
-      setupNimEnv context().workspace, v.string, Keep in context().flags
+      setupNimEnv workspace(), v.string, Keep in context().flags
 
   if NoExec notin context().flags:
     g.runBuildSteps()
@@ -165,14 +165,14 @@ proc installDependencies(nc: var NimbleContext; nimbleFile: Path) =
   trace pkgname, "using nimble file at " & $nimbleFile
   let graph = dir.expand(nc, AllReleases, onClone=DoClone)
   let paths = graph.activateGraph()
-  let cfgPath = CfgPath context().workspace
+  let cfgPath = CfgPath workspace()
   patchNimCfg(paths, cfgPath)
   afterGraphActions graph
 
 proc updateDir(dir, filter: string) =
   ## update the package's VCS
   for kind, file in walkDir(dir):
-    debug (context().workspace / Path("updating")), "checking directory: " & $kind & " file: " & file.absolutePath
+    debug (workspace() / Path("updating")), "checking directory: " & $kind & " file: " & file.absolutePath
     if kind == pcDir and isGitDir(file):
       trace file, "updating directory"
       gitops.updateDir(file.Path, filter)
@@ -180,10 +180,10 @@ proc updateDir(dir, filter: string) =
 proc detectWorkspace(customWorkspace = Path ""): bool =
   ## find workspace by checking `currentDir` and its parents.
   if customWorkspace.string.len() > 0:
-    context().workspace = customWorkspace
+    workspace() = customWorkspace
   elif GlobalWorkspace in context().flags:
-    context().workspace = Path(getHomeDir() / ".atlas")
-    warn "atlas", "using global workspace:", $context().workspace
+    workspace() = Path(getHomeDir() / ".atlas")
+    warn "atlas", "using global workspace:", $workspace()
   else:
     var cwd = paths.getCurrentDir().absolutePath
 
@@ -191,12 +191,12 @@ proc detectWorkspace(customWorkspace = Path ""): bool =
       if cwd.isWorkspace():
         break
       cwd = cwd.parentDir()
-    context().workspace = cwd
+    workspace() = cwd
   
-  if context().workspace.len() > 0:
-    result = context().workspace.fileExists
+  if workspace().len() > 0:
+    result = workspace().fileExists
     if result:
-      context().workspace = context().workspace.absolutePath
+      workspace() = workspace().absolutePath
 
 proc autoWorkspace(currentDir: Path): bool =
   var cwd = currentDir
@@ -204,17 +204,17 @@ proc autoWorkspace(currentDir: Path): bool =
     if dirExists(cwd / Path ".git"):
       break
     cwd = cwd.parentDir()
-  context().workspace = cwd
+  workspace() = cwd
 
-  if context().workspace.len() > 0:
-    result = context().workspace.fileExists
+  if workspace().len() > 0:
+    result = workspace().fileExists
 
 proc createWorkspace() =
   if not fileExists(getWorkspaceConfig()):
     writeDefaultConfigFile()
-    info context().workspace, "created atlas.workspace"
-  if context().workspace != context().depsDir and context().depsDir != Path "":
-    createDir absoluteDepsDir(context().workspace, context().depsDir)
+    info workspace(), "created atlas.workspace"
+  if workspace() != context().depsDir and context().depsDir != Path "":
+    createDir absoluteDepsDir(workspace(), context().depsDir)
     info context().depsDir, "created deps dir"
 
 proc listOutdated(dir: Path) =
@@ -226,12 +226,12 @@ proc listOutdated(dir: Path) =
           inc updateable
 
   if updateable == 0:
-    info context().workspace, "all packages are up to date"
+    info workspace(), "all packages are up to date"
 
 proc listOutdated() =
-  if context().depsDir.string.len > 0 and context().depsDir != context().workspace:
+  if context().depsDir.string.len > 0 and context().depsDir != workspace():
     listOutdated context().depsDir
-  listOutdated context().workspace
+  listOutdated workspace()
 
 proc newProject(projectName: string) =
   ## Tries to create a new project directory in the current dir
@@ -296,10 +296,10 @@ proc parseAtlasOptions(action: var string, args: var seq[string]) =
       of "keepcommits": context().flags.incl KeepCommits
       of "workspace":
         if val == ".":
-          context().workspace = paths.getCurrentDir()
+          workspace() = paths.getCurrentDir()
           createWorkspace()
         elif val.len > 0:
-          context().workspace = Path val
+          workspace() = Path val
           createDir(val)
           createWorkspace()
         else:
@@ -348,14 +348,14 @@ proc parseAtlasOptions(action: var string, args: var seq[string]) =
       else: writeHelp()
     of cmdEnd: assert false, "cannot happen"
 
-  if context().workspace.len > 0:
-    if not dirExists(context().workspace):
-      fatal "Workspace directory '" & $context().workspace & "' not found."
+  if workspace().len > 0:
+    if not dirExists(workspace()):
+      fatal "Workspace directory '" & $workspace() & "' not found."
     readConfig()
   elif action notin ["init", "tag"]:
     if detectWorkspace():
       readConfig()
-      info context().workspace.absolutePath, "is the current workspace"
+      info workspace().absolutePath, "is the current workspace"
     elif autoinit:
       if autoWorkspace(paths.getCurrentDir()):
         createWorkspace()
@@ -387,7 +387,7 @@ proc mainRun() =
       fatal action & " command takes no arguments"
 
   template projectCmd() =
-    if context().workspace == context().workspace or context().workspace == context().depsDir:
+    if workspace() == workspace() or workspace() == context().depsDir:
       fatal action & " command must be executed in a project, not in the workspace"
 
   proc findCurrentNimble(): Path =
@@ -397,17 +397,17 @@ proc mainRun() =
   parseAtlasOptions(action, args)
 
   if action notin ["init", "tag"]:
-    doAssert context().workspace.string != "" and context().workspace.dirExists()
+    doAssert workspace().string != "" and workspace().dirExists()
 
   case action
   of "":
     fatal "No action."
   of "init":
     if GlobalWorkspace in context().flags:
-      context().workspace = Path(getHomeDir() / ".atlas")
-      createDir(context().workspace)
+      workspace() = Path(getHomeDir() / ".atlas")
+      createDir(workspace())
     else:
-      context().workspace = paths.getCurrentDir()
+      workspace() = paths.getCurrentDir()
     createWorkspace()
   of "update":
     discard # TODO: what to do here?
@@ -427,8 +427,8 @@ proc mainRun() =
       error "atlas", "'" & dir & "' is not a vaild project name!"
       quit(1)
 
-    context().workspace = paths.getCurrentDir() / Path purl.projectName
-    let (status, msg) = gitops.clone(purl.toUri, context().workspace, fullClones = true)
+    workspace() = paths.getCurrentDir() / Path purl.projectName
+    let (status, msg) = gitops.clone(purl.toUri, workspace(), fullClones = true)
     if status != Ok:
       error "atlas", "error cloning project:", dir, "message:", msg
       quit(1)
@@ -436,11 +436,11 @@ proc mainRun() =
   of "use":
     singleArg()
 
-    var nimbleFiles = findNimbleFile(context().workspace)
+    var nimbleFiles = findNimbleFile(workspace())
     var nc = createNimbleContext()
 
     if nimbleFiles.len() == 0:
-      let nimbleFile = context().workspace / Path(extractProjectName($paths.getCurrentDir()) & ".nimble")
+      let nimbleFile = workspace() / Path(extractProjectName($paths.getCurrentDir()) & ".nimble")
       trace "atlas:use", "using nimble file:", $nimbleFile
       writeFile($nimbleFile, "")
       nimbleFiles.add(nimbleFile)
@@ -460,7 +460,7 @@ proc mainRun() =
 
   of "pin":
     optSingleArg($LockFileName)
-    if context().workspace == context().workspace or context().workspace == context().depsDir:
+    if workspace() == workspace() or workspace() == context().depsDir:
       pinWorkspace Path(args[0])
     else:
       let exportNimble = Path(args[0]) == NimbleLockFileName
@@ -495,14 +495,14 @@ proc mainRun() =
     noArgs()
     updatePackages(context().depsDir)
   of "search", "list":
-    if context().workspace.len != 0:
+    if workspace().len != 0:
       updatePackages(context().depsDir)
       let pkgInfos = getPackageInfos(context().depsDir)
       search pkgInfos, args
     else:
       search @[], args
   of "updateprojects":
-    updateDir(context().workspace, if args.len == 0: "" else: args[0])
+    updateDir(workspace(), if args.len == 0: "" else: args[0])
   of "updatedeps":
     updateDir(context().depsDir, if args.len == 0: "" else: args[0])
   of "extract":
@@ -536,7 +536,7 @@ proc mainRun() =
     nimbleExec("", args)
   of "env":
     singleArg()
-    setupNimEnv context().workspace, args[0], Keep in context().flags
+    setupNimEnv workspace(), args[0], Keep in context().flags
   of "outdated":
     listOutdated()
   of "new":

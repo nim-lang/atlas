@@ -35,10 +35,10 @@ proc patchNimCfg*(deps: seq[CfgPath]; cfgPath: CfgPath) =
   let cfg = Path(cfgPath.string / "nim.cfg")
   assert cfgPath.string.len > 0
   if cfgPath.string.len > 0 and not dirExists(cfgPath.string):
-    error($context().workspace, "could not write the nim.cfg")
+    error($workspace(), "could not write the nim.cfg")
   elif not fileExists(cfg):
     writeFile($cfg, cfgContent)
-    info(context().workspace, "created: " & $cfg.readableFile(context().workspace))
+    info(workspace(), "created: " & $cfg.readableFile(workspace()))
   else:
     let content = readFile($cfg)
     let start = content.find(configPatternBegin)
@@ -53,4 +53,4 @@ proc patchNimCfg*(deps: seq[CfgPath]; cfgPath: CfgPath) =
       # do not touch the file if nothing changed
       # (preserves the file date information):
       writeFile($cfg, cfgContent)
-      info(context().workspace, "updated: " & $cfg.readableFile(context().workspace))
+      info(workspace(), "updated: " & $cfg.readableFile(workspace()))

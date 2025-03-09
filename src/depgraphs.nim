@@ -106,7 +106,7 @@ proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
 
           if not hasCompatible:
             allDepsCompatible = false
-            error pkg.url.projectName, "no versions matched requirements for this dep", $dep.projectName
+            error pkg, "no versions matched requirements for this dep", $dep.projectName
             break
 
         # If any dependency can't be satisfied, make this version unsatisfiable
@@ -300,11 +300,11 @@ proc solve*(graph: var DepGraph; form: Form) =
     var notFoundCount = 0
     for pkg in values(graph.pkgs):
       if pkg.isRoot and pkg.state != Processed:
-        error context().workspace, "invalid find package: " & pkg.url.projectName & " in state: " & $pkg.state & " error: " & $pkg.errors
+        error workspace(), "invalid find package: " & pkg.url.projectName & " in state: " & $pkg.state & " error: " & $pkg.errors
         inc notFoundCount
     if notFoundCount > 0:
       return
-    error context().workspace, "version conflict; for more information use --showGraph"
+    error workspace(), "version conflict; for more information use --showGraph"
     for pkg in mvalues(graph.pkgs):
       var usedVersionCount = 0
       for (ver, rel) in validVersions(pkg):
@@ -316,7 +316,7 @@ proc solve*(graph: var DepGraph; form: Form) =
   if context().dumpGraphs:
     dumpJson(graph, "graph-solved.json")
 
-proc loadWorkspaceConfigs*(path: Path, nc: var NimbleContext): DepGraph =
+proc loadWorkspace*(path: Path, nc: var NimbleContext): DepGraph =
   result = path.expand(nc, TraversalMode.AllReleases, onClone=DoClone)
 
   let form = result.toFormular(context().defaultAlgo)

@@ -21,7 +21,7 @@ proc prefixedPath*(path: Path): Path =
   let parts = splitPath($path)
   if path.isRelativeTo(context().depsDir):
     return Path("$deps" / parts.tail)
-  elif path.isRelativeTo(context().workspace):
+  elif path.isRelativeTo(workspace()):
     return Path("$workspace" / parts.tail)
   else:
     return Path($path)
@@ -33,7 +33,7 @@ proc fromPrefixedPath*(path: Path): Path =
     return context().depsDir / path
   elif path.string.startsWith("$workspace"):
     path.string.removePrefix("$workspace")
-    return context().workspace / path
+    return workspace() / path
   else:
     return context().depsDir / path
 
@@ -120,7 +120,7 @@ const
 proc pinGraph*(g: DepGraph; lockFile: Path; exportNimble = false) =
   info "pin", "pinning project"
   var lf = newLockFile()
-  let workspace = context().workspace # resolvePackage("file://" & context().currentDir)
+  let workspace = workspace() # resolvePackage("file://" & context().currentDir)
 
   # only used for exporting nimble locks
   var nlf = newNimbleLockFile()
@@ -162,7 +162,7 @@ proc pinGraph*(g: DepGraph; lockFile: Path; exportNimble = false) =
     write nlf, $lockFile
 
 proc pinWorkspace*(lockFile: Path) =
-  let workspace = context().workspace
+  let workspace = workspace()
   info "pin", "pinning workspace: " & $workspace
   var nc = createNimbleContext()
   let graph = workspace.expand(nc, CurrentCommit, onClone=DoNothing) 
@@ -172,7 +172,7 @@ proc pinProject*(lockFile: Path, exportNimble = false) =
   ## Pin project using deps starting from the current project directory.
   ##
   info "pin", "pinning project"
-  let workspace = context().workspace
+  let workspace = workspace()
 
   var nc = createNimbleContext()
   let graph = workspace.expand(nc, CurrentCommit, onClone=DoNothing) 
@@ -207,7 +207,7 @@ proc convertNimbleLock*(nimble: Path): LockFile =
       let u = nc.createUrl(pkgurl)
       let dir = context().depsDir / u.projectName.Path 
       result.items[name] = LockFileEntry(
-        dir: dir.relativePath(context().workspace),
+        dir: dir.relativePath(workspace()),
         url: pkgurl,
         commit: info["vcsRevision"].getStr
       )
@@ -266,7 +266,7 @@ proc replay*(lockFile: Path) =
   ## this also includes updating the nim.cfg and nimble file as well
   ## if they're included in the lockfile
   ##
-  let workspace = context().workspace
+  let workspace = workspace()
   let lf = if lockFile == NimbleLockFileName:
               convertNimbleLock(lockFile)
            else:

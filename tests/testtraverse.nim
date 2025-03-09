@@ -136,7 +136,7 @@ suite "test expand with git tags":
       # setAtlasVerbosity(Info)
       withDir "tests/ws_testtraverse":
         removeDir("deps")
-        context().workspace = paths.getCurrentDir()
+        workspace() = paths.getCurrentDir()
         context().flags = {UsesOverrides, KeepWorkspace, ListVersions, FullClones}
         context().defaultAlgo = SemVer
 
@@ -197,7 +197,7 @@ suite "test expand with git tags":
       withDir "tests/ws_testtraverse":
         # setAtlasVerbosity(Trace)
         removeDir("deps")
-        context().workspace = paths.getCurrentDir()
+        workspace() = paths.getCurrentDir()
         context().flags = {UsesOverrides, KeepWorkspace, ListVersions, FullClones}
         context().defaultAlgo = SemVer
         context().depsDir = Path "deps_http"
@@ -314,7 +314,7 @@ suite "test expand with no git tags":
       # setAtlasVerbosity(Info)
       withDir "tests/ws_testtraverse":
         removeDir("deps")
-        context().workspace = paths.getCurrentDir()
+        workspace() = paths.getCurrentDir()
         context().flags = {UsesOverrides, KeepWorkspace, ListVersions, FullClones}
         context().defaultAlgo = SemVer
 

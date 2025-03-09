@@ -19,6 +19,7 @@ type
     state*: PackageState
     versions*: OrderedTable[PackageVersion, NimbleRelease]
     activeVersion*: PackageVersion
+    module*: string
     ondisk*: Path
     active*: bool
     isRoot*: bool
