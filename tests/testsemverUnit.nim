@@ -2,7 +2,7 @@
 
 import std / [strutils, os, uri, jsonutils, json, tables, sequtils, strformat, unittest]
 import basic/[sattypes, context, reporters, pkgurls, compiledpatterns, versions]
-import basic/deptypes
+import basic/[deptypes, nimblecontext]
 import dependencies
 import depgraphs
 import testerutils
@@ -39,14 +39,14 @@ template testRequirements(sp: Package,
                           projTags: seq[VersionTag],
                           vers: openArray[(string, string)];
                           skipCount = false) =
-  echo "Checking Requirements: " & astToStr(sp)
+  checkpoint "Checking Requirements: " & astToStr(sp)
   if not skipCount:
     check sp.versions.len() == vers.len()
 
   for idx, vt in projTags:
     # let vt = projTags[idx]
     let vt = vt.toPkgVer
-    echo "Checking requirements item: " & $vers[idx] & " version: " & $vt
+    checkpoint "Checking requirements item: " & $vers[idx] & " version: " & $vt
     check idx < vers.len()
     let (url, ver) = vers[idx]
     check sp.state == Processed
@@ -65,7 +65,6 @@ template testRequirements(sp: Package,
         check $sp.versions[vt].requirements[0][0] == url
       if ver != "":
         check $sp.versions[vt].requirements[0][1] == ver
-
 
 suite "graph solve":
   setup:
@@ -101,7 +100,6 @@ suite "graph solve":
     """.parseTaggedVersions(false)
     let projDtags = projDnimbles.filterIt(it.v.string != "")
 
-
   test "ws_semver_unit traverseDependency":
       # setAtlasVerbosity(Info)
       withDir "tests/ws_semver_unit":
@@ -111,10 +109,10 @@ suite "graph solve":
         context().defaultAlgo = SemVer
 
         var nc = createNimbleContext()
-        nc.nameToUrl["proj_a"] = toPkgUri(parseUri "https://example.com/buildGraph/proj_a")
-        nc.nameToUrl["proj_b"] = toPkgUri(parseUri "https://example.com/buildGraph/proj_b")
-        nc.nameToUrl["proj_c"] = toPkgUri(parseUri "https://example.com/buildGraph/proj_c")
-        nc.nameToUrl["proj_d"] = toPkgUri(parseUri "https://example.com/buildGraph/proj_d")
+        nc.put("proj_a", parseUri "https://example.com/buildGraph/proj_a")
+        nc.put("proj_b", parseUri "https://example.com/buildGraph/proj_b")
+        nc.put("proj_c", parseUri "https://example.com/buildGraph/proj_c")
+        nc.put("proj_d", parseUri "https://example.com/buildGraph/proj_d")
 
         let dir = paths.getCurrentDir().absolutePath
 
@@ -128,9 +126,6 @@ suite "graph solve":
         ])
 
         let sp1: Package = sp[1] # proj A
-        # verify that the duplicate releases have been "reduced"
-        # check sp1.releases[projAtags[1]] == sp1.releases[projAtags[2]]
-        # check cast[pointer](sp1.releases[projAtags[1]]) == cast[pointer](sp1.releases[projAtags[2]])
         testRequirements(sp1, projAtags, [
           ("https://example.com/buildGraph/proj_b", ">= 1.1.0"),
           ("https://example.com/buildGraph/proj_b", ">= 1.0.0"),
@@ -152,27 +147,22 @@ suite "graph solve":
 
         echo "\tgraph:\n", graph.toJson(ToJsonOptions(enumMode: joptEnumString))
 
-        ## TODO: Figure out how to handle semver properly!
-        ## maybe need to select versions before hand?
-        ## 
-
         let form = graph.toFormular(SemVer)
         context().dumpGraphs = true
         var sol: Solution
-        # let expForm = "(&(1==v0) (1>=v1 v2) (1>=v3 v4) (1>=v5) (1>=v6 v7) (|(~v0) v0) (|(~v1) v0) (|(~v2) v0) (|(~v3) v0) (|(~v4) v0) (|(~v5) v0))"
         solve(graph, form)
 
         check graph.root.active
-        check graph.pkgs[nc.nameToUrl["proj_a"]].active
-        check graph.pkgs[nc.nameToUrl["proj_b"]].active
-        check graph.pkgs[nc.nameToUrl["proj_c"]].active
-        check graph.pkgs[nc.nameToUrl["proj_d"]].active
+        check graph.pkgs[nc.createUrl("proj_a")].active
+        check graph.pkgs[nc.createUrl("proj_b")].active
+        check graph.pkgs[nc.createUrl("proj_c")].active
+        check graph.pkgs[nc.createUrl("proj_d")].active
 
         check $graph.root.activeVersion == "#head@-"
-        check $graph.pkgs[nc.nameToUrl["proj_a"]].activeVersion == "1.1.0@fb3804df"
-        check $graph.pkgs[nc.nameToUrl["proj_b"]].activeVersion == "1.1.0@ee875bae"
-        check $graph.pkgs[nc.nameToUrl["proj_c"]].activeVersion == "1.2.0@9331e14f"
-        check $graph.pkgs[nc.nameToUrl["proj_d"]].activeVersion == "1.0.0@0dec9c97"
+        check $graph.pkgs[nc.createUrl("proj_a")].activeVersion == "1.1.0@fb3804df"
+        check $graph.pkgs[nc.createUrl("proj_b")].activeVersion == "1.1.0@ee875bae"
+        check $graph.pkgs[nc.createUrl("proj_c")].activeVersion == "1.2.0@9331e14f"
+        check $graph.pkgs[nc.createUrl("proj_d")].activeVersion == "1.0.0@0dec9c97"
 
         let formMinVer = graph.toFormular(MinVer)
         context().dumpGraphs = true
@@ -180,11 +170,10 @@ suite "graph solve":
         solve(graph, formMinVer)
 
         check $graph.root.activeVersion == "#head@-"
-        check $graph.pkgs[nc.nameToUrl["proj_a"]].activeVersion == "1.0.0@e479b438"
-        check $graph.pkgs[nc.nameToUrl["proj_b"]].activeVersion == "1.0.0@af427510"
-        check $graph.pkgs[nc.nameToUrl["proj_c"]].activeVersion == "1.2.0@9331e14f"
-        check $graph.pkgs[nc.nameToUrl["proj_d"]].activeVersion == "1.0.0@0dec9c97"
-        # check graph.pkgs[""]
+        check $graph.pkgs[nc.createUrl("proj_a")].activeVersion == "1.0.0@e479b438"
+        check $graph.pkgs[nc.createUrl("proj_b")].activeVersion == "1.0.0@af427510"
+        check $graph.pkgs[nc.createUrl("proj_c")].activeVersion == "1.2.0@9331e14f"
+        check $graph.pkgs[nc.createUrl("proj_d")].activeVersion == "1.0.0@0dec9c97"
 
         check graph.validateDependencyGraph()
         let topo = graph.toposorted()
@@ -196,3 +185,5 @@ suite "graph solve":
 
         for pkg in topo:
           echo "PKG: ", pkg.url.projectName
+
+infoNow "tester", "All tests run successfully"
