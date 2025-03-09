@@ -85,9 +85,7 @@ proc createUrlSkipPatterns*(x: string, skipDirTest = false): PkgUrl =
   else:
     var u = parseUri(x)
     if u.scheme == "file" and u.hostname != "":
-      echo "CREATE URL: ", u.repr
-      echo "CREATE URL: ", parseUri("file:///tmp/test").repr
-      echo "CREATE URL: ", parseUri("file://tmp/test").repr
+      # TODO: handle windows paths
       u = parseUri("file://" & (workspace().string / (u.hostname & u.path)).absolutePath)
     result = PkgUrl(projectName: extractProjectName(u), u: u)
 
