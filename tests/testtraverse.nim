@@ -105,13 +105,15 @@ suite "test expand with git tags":
         discard context().overrides.addPattern("$+", "file://./buildGraph/$#")
         workspace() = paths.getCurrentDir()
 
-        let dir = ospaths2.getCurrentDir()
+        let dir = paths.getCurrentDir()
         # writeFile("ws_testtraverse.nimble", "requires \"proj_a\"\n")
 
         let deps = setupGraph()
         var nc = createNimbleContext()
         # var graph = DepGraph(nodes: @[], reqs: defaultReqs())
-        let url = nc.createUrl(dir)
+        echo "DIR: ", dir
+        let url = nc.createUrlFromPath(dir)
+        echo "URL: ", url
 
         check url.toDirectoryPath() == Path(workspace())
 

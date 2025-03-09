@@ -78,12 +78,20 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
   if not result.isEmpty():
     nc.put(result.projectName, result.url)
 
-proc createUrl*(nc: var NimbleContext, orig: Path): PkgUrl =
+proc createUrlFromPath*(nc: var NimbleContext, orig: Path): PkgUrl =
   let absPath = absolutePath(orig)
-  # Check if this is an Atlas workspace
-  if isWorkspace(absPath):
-    let url = parseUri("atlas://workspace/" & $orig.splitPath().tail)
-    result = createUrlSkipPatterns($url)
+  # Check if this is an Atlas workspace or if it's the current workspace
+  if isWorkspace(absPath) or absPath == absolutePath(workspace()):
+    # Find nimble files in the workspace directory
+    let nimbleFiles = findNimbleFile(absPath, "")
+    if nimbleFiles.len > 0:
+      # Use the first nimble file found as the workspace identifier
+      let url = parseUri("atlas://workspace/" & $nimbleFiles[0].splitPath().tail)
+      result = toPkgUriRaw(url)
+    else:
+      # Fallback to directory name if no nimble file found
+      let url = parseUri("atlas://workspace/" & $orig.splitPath().tail)
+      result = toPkgUriRaw(url)
   else:
     let fileUrl = "file://" & $absPath
     result = createUrlSkipPatterns(fileUrl)

@@ -7,7 +7,7 @@
 #
 
 import std / [os, strutils, uri, tables, unicode, sequtils, sets, json, hashes, algorithm, paths, files, dirs]
-import basic/[context, deptypes, versions, osutils, nimbleparser, nimblecontext, packageinfos, reporters, gitops, parse_requires, pkgurls, compiledpatterns]
+import basic/[context, deptypes, versions, osutils, nimbleparser, packageinfos, reporters, gitops, parse_requires, pkgurls, compiledpatterns, sattypes, nimblecontext]
 
 export deptypes, versions
 
@@ -247,7 +247,7 @@ proc expand*(path: Path, nc: var NimbleContext; mode: TraversalMode, onClone: Pa
   ## Expand the graph by adding all dependencies.
   
   doAssert path.string != "."
-  let url = nc.createUrl(path)
+  let url = nc.createUrlFromPath(path)
   warn url.projectName, "expanding root package at:", $path, "url:", $url
   var root = Package(url: url, isRoot: true)
   # nc.loadDependency(pkg)

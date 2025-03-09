@@ -110,7 +110,7 @@ suite "urls and naming":
   test "createUrl with Path":
     var nc = createUnfilledNimbleContext()
     let testPath = Path(paths.getCurrentDir()) / Path"test_project"
-    let upkg = nc.createUrl(testPath)
+    let upkg = nc.createUrlFromPath(testPath)
 
     echo "upkg: ", upkg.url
     echo "upkg: ", upkg.projectName
@@ -124,14 +124,16 @@ suite "urls and naming":
 
     # Test with a more complex path
     let nestedPath = Path(paths.getCurrentDir()) / Path"parent" / Path"child_project"
-    let nestedPkg = nc.createUrl(nestedPath)
+    let nestedPkg = nc.createUrlFromPath(nestedPath)
     check nestedPkg.projectName == "child_project"
     check nestedPkg.url.path.endsWith("child_project")
     check nc.lookup(nestedPkg.projectName) == nestedPkg
 
     # Test Atlas workspace handling
     let wsPath = Path(paths.getCurrentDir()) / Path"tests" / Path"ws_basic"
-    let wsPkg = nc.createUrl(wsPath)
+    let wsPkg = nc.createUrlFromPath(wsPath)
+    echo "wsPkg: ", wsPkg.url
+    echo "wsPkg: ", wsPkg.projectName
     check wsPkg.url.scheme == "atlas"
     check wsPkg.url.hostname == "workspace"
     check wsPkg.projectName == "ws_basic"
