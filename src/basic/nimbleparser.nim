@@ -16,7 +16,7 @@ proc addError*(err: var string; nimbleFile: string; msg: string) =
 
 proc isUrl(s: string): bool {.inline.} = s.len > 5 and s.contains "://"
 
-proc parseNimbleFile*(nc: NimbleContext;
+proc parseNimbleFile*(nc: var NimbleContext;
                       nimbleFile: Path;
                       p: Patterns): NimbleRelease =
   let nimbleInfo = extractRequiresInfo(nimbleFile)

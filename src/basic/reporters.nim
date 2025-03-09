@@ -90,7 +90,7 @@ proc writePendingMessages*(c: var Reporter) =
 proc atlasWritePendingMessages*() =
   atlasReporter.writePendingMessages()
 
-proc infoNow*(c: var Reporter; p: string, args: varargs[string]) =
+proc doInfoNow*(c: var Reporter; p: string, args: seq[string]) =
   writeMessage c, Info, p, @args
 
 proc fatal*(c: var Reporter, msg: string, prefix = "fatal", code = 1) =
@@ -140,4 +140,4 @@ template fatal*(msg: string | Path, prefix = "fatal", code = 1) =
 
 proc infoNow*[T](p: T, args: varargs[string]) =
   mixin toReporterName
-  infoNow(atlasReporter, toReporterName(p), @args)
+  doInfoNow(atlasReporter, toReporterName(p), @args)

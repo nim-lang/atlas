@@ -2,7 +2,7 @@
 
 import std / [strutils, os, uri, jsonutils, json, tables, sequtils, algorithm, strformat, unittest]
 import basic/[sattypes, context, reporters, pkgurls, compiledpatterns, versions]
-import basic/deptypes
+import basic/[deptypes, nimblecontext]
 import dependencies
 import testerutils
 
@@ -110,7 +110,7 @@ suite "test expand with git tags":
         let deps = setupGraph()
         var nc = createNimbleContext()
         # var graph = DepGraph(nodes: @[], reqs: defaultReqs())
-        let url = nc.createUrl(dir, projectName = "ws_testtraverse")
+        let url = nc.createUrl(dir)
 
         var dep0 = Package(url: url, isRoot: true)
         var dep1 = Package(url: nc.createUrl("proj_a"))
@@ -206,10 +206,10 @@ suite "test expand with git tags":
         # discard context().overrides.addPattern("does_not_exist", "file://./buildGraph/does_not_exist")
         # discard context().overrides.addPattern("$+", "http://localhost:4242/buildGraph/$#")
         var nc = createNimbleContext()
-        nc.nameToUrl["proj_a"] = toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a")
-        nc.nameToUrl["proj_b"] = toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b")
-        nc.nameToUrl["proj_c"] = toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c")
-        nc.nameToUrl["proj_d"] = toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d")
+        nc.put("proj_a", parseUri "https://example.com/buildGraph/proj_a")
+        nc.put("proj_b", parseUri "https://example.com/buildGraph/proj_b")
+        nc.put("proj_c", parseUri "https://example.com/buildGraph/proj_c")
+        nc.put("proj_d", parseUri "https://example.com/buildGraph/proj_d")
         # nc.nameToUrl["does_not_exist"] = toPkgUri(parseUri "https://example.com/buildGraph/does_not_exist")
 
         let pkgA = nc.createUrl("proj_a")
@@ -287,7 +287,7 @@ suite "test expand with no git tags":
         let deps = setupGraphNoGitTags()
         var nc = createNimbleContext()
         # var graph = DepGraph(nodes: @[], reqs: defaultReqs())
-        let url = nc.createUrl(dir, projectName = "ws_testtraverse")
+        let url = nc.createUrl(dir)
 
         var dep0 = Package(url: url, isRoot: true)
         var dep1 = Package(url: nc.createUrl("proj_a"))

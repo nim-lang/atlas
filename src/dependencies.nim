@@ -37,7 +37,7 @@ type
 
 proc copyFromDisk*(pkg: Package; destDir: Path): (CloneStatus, string) =
   var dir = Path $pkg.url.url
-  if pkg.url.scheme == "file":
+  if pkg.url.url.scheme == "file":
     dir = workspace() / Path(dir.string.substr(FileWorkspace.len))
   #template selectDir(a, b: string): string =
   #  if dirExists(a): a else: b
@@ -215,11 +215,11 @@ proc loadDependency*(
     pkg: var Package,
     onClone: PackageAction = DoClone,
 ) = 
-  let (dest, todo) = pkgUrlToDirname(pkg)
-  result = (dest, if dirExists(dest): DoNothing else: DoClone)
-  pkg.ondisk = dest
+  doAssert pkg.ondisk.string == ""
+  pkg.ondisk = pkg.url.toDirectoryPath()
+  let todo = if dirExists(pkg.ondisk): DoNothing else: DoClone
 
-  debug pkg.url.projectName, "loading dependency todo:", $todo, "dest:", $dest
+  debug pkg.url.projectName, "loading dependency todo:", $todo, "dest:", $pkg.ondisk
   case todo
   of DoClone:
     if onClone == DoNothing:
@@ -228,9 +228,9 @@ proc loadDependency*(
     else:
       let (status, msg) =
         if pkg.url.isFileProtocol:
-          copyFromDisk(pkg, dest)
+          copyFromDisk(pkg, pkg.ondisk)
         else:
-          gitops.clone(pkg.url.toUri, dest)
+          gitops.clone(pkg.url.toUri, pkg.ondisk)
       if status == Ok:
         pkg.state = Found
       else:
