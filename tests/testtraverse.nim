@@ -103,6 +103,7 @@ suite "test expand with git tags":
         context().flags = {UsesOverrides, KeepWorkspace, ListVersions, FullClones}
         context().defaultAlgo = SemVer
         discard context().overrides.addPattern("$+", "file://./buildGraph/$#")
+        workspace() = paths.getCurrentDir()
 
         let dir = ospaths2.getCurrentDir()
         # writeFile("ws_testtraverse.nimble", "requires \"proj_a\"\n")
@@ -111,6 +112,8 @@ suite "test expand with git tags":
         var nc = createNimbleContext()
         # var graph = DepGraph(nodes: @[], reqs: defaultReqs())
         let url = nc.createUrl(dir)
+
+        check url.toDirectoryPath() == Path(workspace())
 
         var dep0 = Package(url: url, isRoot: true)
         var dep1 = Package(url: nc.createUrl("proj_a"))
@@ -123,6 +126,17 @@ suite "test expand with git tags":
         nc.loadDependency(dep2)
         nc.loadDependency(dep3)
         nc.loadDependency(dep4)
+
+        check dep0.state == Found
+        check dep0.ondisk == Path(workspace())
+        check dep1.state == Found
+        check dep1.ondisk == Path(workspace().string / "deps" / "proj_a")
+        check dep2.state == Found
+        check dep2.ondisk == Path(workspace().string / "deps" / "proj_b")
+        check dep3.state == Found
+        check dep3.ondisk == Path(workspace().string / "deps" / "proj_c")
+        check dep4.state == Found
+        check dep4.ondisk == Path(workspace().string / "deps" / "proj_d")
 
         check collectNimbleVersions(nc, dep0) == newSeq[VersionTag]()
         proc tolist(tags: seq[VersionTag]): seq[string] = tags.mapIt($VersionTag(v: Version"", c: it.c)).sorted()

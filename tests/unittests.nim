@@ -1,5 +1,3 @@
-
-
 import std/[unittest, os, algorithm, strutils, importutils]
 import basic/[context, pkgurls, deptypes, nimblecontext, osutils, versions]
 
@@ -108,6 +106,23 @@ suite "urls and naming":
     privateAccess(nc.type)
     for name, url in nc.nameToUrl:
       echo "\t", name, " ".repeat(50 - len($(name))), url
+
+  test "createUrl with Path":
+    var nc = createUnfilledNimbleContext()
+    let testPath = Path(paths.getCurrentDir()) / Path"test_project"
+    let upkg = nc.createUrl(testPath)
+
+    check upkg.url.scheme == "file"
+    check upkg.projectName == "test_project"
+    check upkg.url.path.endsWith("test_project")
+    check nc.lookup(upkg.projectName) == upkg
+
+    # Test with a more complex path
+    let nestedPath = Path(paths.getCurrentDir()) / Path"parent" / Path"child_project"
+    let nestedPkg = nc.createUrl(nestedPath)
+    check nestedPkg.projectName == "child_project"
+    check nestedPkg.url.path.endsWith("child_project")
+    check nc.lookup(nestedPkg.projectName) == nestedPkg
 
 template v(x): untyped = Version(x)
 
