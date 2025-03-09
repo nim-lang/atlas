@@ -53,6 +53,9 @@ suite "urls and naming":
       check upkg.url.hostname == "github.com"
       check $upkg.url == item.output
       check $upkg.projectName == item.projectName
+      echo "PKG:toDirectoryPath: ", upkg.toDirectoryPath()
+      check upkg.toDirectoryPath() == absolutePath(workspace() / Path"deps" / Path(item.projectName))
+      check upkg.toLinkPath() == absolutePath(workspace() / Path"deps" / Path(item.projectName & ".link"))
 
       if name in ["balls", "bytes2human", "atlas"]:
         expect ValueError:

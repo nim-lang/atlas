@@ -39,13 +39,17 @@ proc extractProjectName*(url: Uri): string =
     e = ""
   result = [n & e, p, u.hostname].join(".")
 
-proc toDirectoryPath*(pkgUrl: PkgUrl): Path =
+proc toDirectoryPath*(pkgUrl: PkgUrl, ): Path =
   if pkgUrl.url.scheme == "workspace":
     result = workspace()
   else:
     result = workspace() / context().depsDir / Path(pkgUrl.projectName)
   result = result.absolutePath
   trace pkgUrl.projectName, "found directory path:", $result
+  doAssert result.len() > 0
+
+proc toLinkPath*(pkgUrl: PkgUrl): Path =
+  Path(pkgUrl.toDirectoryPath().string & ".link")
 
 proc toPkgUriRaw*(u: Uri): PkgUrl =
   result = PkgUrl(projectName: extractProjectName(u), u: u)
