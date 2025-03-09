@@ -129,6 +129,14 @@ suite "urls and naming":
     check nestedPkg.url.path.endsWith("child_project")
     check nc.lookup(nestedPkg.projectName) == nestedPkg
 
+    # Test Atlas workspace handling
+    let wsPath = Path(paths.getCurrentDir()) / Path"tests" / Path"ws_basic"
+    let wsPkg = nc.createUrl(wsPath)
+    check wsPkg.url.scheme == "atlas"
+    check wsPkg.url.hostname == "workspace"
+    check wsPkg.projectName == "ws_basic"
+    check nc.lookup(wsPkg.projectName) == wsPkg
+
 template v(x): untyped = Version(x)
 
 suite "versions":

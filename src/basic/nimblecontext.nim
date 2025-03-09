@@ -80,8 +80,13 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
 
 proc createUrl*(nc: var NimbleContext, orig: Path): PkgUrl =
   let absPath = absolutePath(orig)
-  let fileUrl = "file://" & $absPath
-  result = createUrlSkipPatterns(fileUrl)
+  # Check if this is an Atlas workspace
+  if isWorkspace(absPath):
+    let url = parseUri("atlas://workspace/" & $orig.splitPath().tail)
+    result = createUrlSkipPatterns($url)
+  else:
+    let fileUrl = "file://" & $absPath
+    result = createUrlSkipPatterns(fileUrl)
   if not result.isEmpty():
     nc.put(result.projectName, result.url)
 
