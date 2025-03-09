@@ -1,6 +1,6 @@
 
 
-import std/[unittest, os, algorithm, strutils]
+import std/[unittest, os, algorithm, strutils, importutils]
 import basic/[context, pkgurls, deptypes, nimblecontext, osutils, versions]
 
 when false:
@@ -35,7 +35,7 @@ let
     ),
     "proj_a": (
       input: "file://./buildGraph/proj_a",
-      output: "file://./buildGraph/proj_a",
+      output: "file://$1/buildGraph/proj_a" % [ospaths2.getCurrentDir()],
       projectName: "proj_a",
     ),
     "proj_b": (
@@ -75,6 +75,8 @@ suite "urls and naming":
       check $upkg.url == item.output
       check $upkg.projectName == item.projectName
 
+      check nc.lookup(item.projectName) == upkg
+
       if name in ["workspace"]:
         check upkg.toDirectoryPath() == paths.getCurrentDir()
         check $upkg.toLinkPath() == ""
@@ -82,9 +84,12 @@ suite "urls and naming":
         check upkg.toDirectoryPath() == absolutePath(workspace() / Path"deps" / Path(item.projectName))
         check upkg.toLinkPath() == absolutePath(workspace() / Path"deps" / Path(item.projectName & ".link"))
 
-      if name in ["balls", "bytes2human", "atlas", "proj_a", "proj_b", "workspace"]:
+      if name in ["balls", "bytes2human", "atlas", "workspace"]:
+        # these aren't in the packages database, so it's expected they can't be lookup
         expect ValueError:
           let npkg = nc.createUrl(name)
+      elif name in ["proj_a", "proj_b"]:
+        discard
       else:
         let npkg = nc.createUrl(name)
         check npkg.url.hostname == "github.com"
@@ -93,6 +98,16 @@ suite "urls and naming":
     context().useShortNamesOnDisk = false
     let upkg = nc.createUrl("npeg")
     check $upkg.projectName == "npeg.zevv.github.com"
+
+    echo "\nNimbleContext:urlToNames: "
+    privateAccess(nc.type)
+    for url, name in nc.urlToNames:
+      echo "\t", url, " ".repeat(60 - len($(url))), name
+
+    echo "\nNimbleContext:nameToUrl: "
+    privateAccess(nc.type)
+    for name, url in nc.nameToUrl:
+      echo "\t", name, " ".repeat(50 - len($(name))), url
 
 template v(x): untyped = Version(x)
 

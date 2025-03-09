@@ -54,7 +54,7 @@ proc put*(nc: var NimbleContext, name: string, url: Uri, isExtra = false) =
 
   nc.urlToNames[url] = name
 
-proc createUrl*(nc: NimbleContext, nameOrig: string): PkgUrl =
+proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
   ## primary point to createUrl's from a name or argument
   ## TODO: add unit tests!
   var didReplace = false
@@ -75,11 +75,15 @@ proc createUrl*(nc: NimbleContext, nameOrig: string): PkgUrl =
   if context().useShortNamesOnDisk:
     result.projectName = nc.urlToNames.getOrDefault(result.url, result.projectName)
 
-proc createUrl*(nc: NimbleContext, orig: Path): PkgUrl =
-  let pstr = $(orig)
-  result = createUrlSkipPatterns(pstr)
+  if not result.isEmpty():
+    nc.put(result.projectName, result.url)
+
+proc createUrl*(nc: var NimbleContext, orig: Path): PkgUrl =
+  result = createUrlSkipPatterns($(orig))
+  if not result.isEmpty():
+    nc.put(result.projectName, result.url)
   # if result.url notin nc.urlToNames:
-  #   nc.urlToNames[result.url] = orig
+  #   nc.urlToNames[result.url()] = result.projectName
 
 proc fillPackageLookupTable(c: var NimbleContext) =
   let pkgsDir = packagesDirectory()

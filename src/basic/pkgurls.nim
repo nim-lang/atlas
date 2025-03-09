@@ -29,7 +29,7 @@ proc url*(p: PkgUrl): Uri = p.u
 proc `==`*(a, b: PkgUrl): bool {.inline.} = a.u == b.u
 proc `$`*(u: PkgUrl): string = $u.u
 proc toJsonHook*(v: PkgUrl): JsonNode = %($(v))
-# proc hash*(a: PkgUrl): Hash {.inline.} = hash(a.u)
+proc hash*(a: PkgUrl): Hash {.inline.} = hash(a.u)
 
 proc extractProjectName*(url: Uri): string =
   var u = url
@@ -83,7 +83,12 @@ proc createUrlSkipPatterns*(x: string, skipDirTest = false): PkgUrl =
     let u = parseUri("ssh://" & x.replace(":", "/"))
     result = PkgUrl(projectName: extractProjectName(u), u: u)
   else:
-    let u = parseUri(x)
+    var u = parseUri(x)
+    if u.scheme == "file" and u.hostname != "":
+      echo "CREATE URL: ", u.repr
+      echo "CREATE URL: ", parseUri("file:///tmp/test").repr
+      echo "CREATE URL: ", parseUri("file://tmp/test").repr
+      u = parseUri("file://" & (workspace().string / (u.hostname & u.path)).absolutePath)
     result = PkgUrl(projectName: extractProjectName(u), u: u)
 
 
