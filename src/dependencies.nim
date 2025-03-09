@@ -37,7 +37,7 @@ type
 
 proc copyFromDisk*(pkg: Package; destDir: Path): (CloneStatus, string) =
   var dir = Path $pkg.url.url
-  if dir.string.startsWith(FileWorkspace):
+  if pkg.url.scheme == "file":
     dir = workspace() / Path(dir.string.substr(FileWorkspace.len))
   #template selectDir(a, b: string): string =
   #  if dirExists(a): a else: b

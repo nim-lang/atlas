@@ -32,6 +32,16 @@ let
       input: "git@github.com:elcritch/atlas.git",
       output: "ssh://git@github.com/elcritch/atlas",
       projectName: "atlas.elcritch.github.com",
+    ),
+    "proj_a": (
+      input: "file://./buildGraph/proj_a",
+      output: "file://./buildGraph/proj_a",
+      projectName: "proj_a",
+    ),
+    "proj_b": (
+      input: "file://$1/buildGraph/proj_b" % [ospaths2.getCurrentDir()],
+      output: "file://$1/buildGraph/proj_b" % [ospaths2.getCurrentDir()],
+      projectName: "proj_b",
     )
   }
 
@@ -49,15 +59,22 @@ suite "urls and naming":
     nc.put("npeg", parseUri "https://github.com/zevv/npeg")
 
     for name, item in basicExamples.items:
+      echo ""
       let upkg = nc.createUrl(item.input)
-      check upkg.url.hostname == "github.com"
+
+      echo "pkg:url:  ", upkg.url
+      echo "pkg:name: ", upkg.projectName
+      echo "pkg:dir:  ", upkg.toDirectoryPath()
+
+      check upkg.url.hostname == "github.com" or name.startsWith("proj")
       check $upkg.url == item.output
       check $upkg.projectName == item.projectName
-      echo "PKG:toDirectoryPath: ", upkg.toDirectoryPath()
-      check upkg.toDirectoryPath() == absolutePath(workspace() / Path"deps" / Path(item.projectName))
-      check upkg.toLinkPath() == absolutePath(workspace() / Path"deps" / Path(item.projectName & ".link"))
 
-      if name in ["balls", "bytes2human", "atlas"]:
+      if name notin ["proj_a", "proj_b"]:
+        check upkg.toDirectoryPath() == absolutePath(workspace() / Path"deps" / Path(item.projectName))
+        check upkg.toLinkPath() == absolutePath(workspace() / Path"deps" / Path(item.projectName & ".link"))
+
+      if name in ["balls", "bytes2human", "atlas", "proj_a", "proj_b"]:
         expect ValueError:
           let npkg = nc.createUrl(name)
       else:

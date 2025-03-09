@@ -35,13 +35,19 @@ proc extractProjectName*(url: Uri): string =
   var u = url
   var (p, n, e) = u.path.splitFile()
   p.removePrefix(DirSep)
-  if u.scheme.startswith("http") and e == GitSuffix:
+  if u.scheme in ["http", "https"] and e == GitSuffix:
     e = ""
-  result = [n & e, p, u.hostname].join(".")
+
+  if u.scheme == "file":
+    result = n & e
+  else:
+    result = [n & e, p, u.hostname].join(".")
 
 proc toDirectoryPath*(pkgUrl: PkgUrl, ): Path =
   if pkgUrl.url.scheme == "workspace":
     result = workspace()
+  elif pkgUrl.url.scheme == "file":
+    result = workspace() / Path(pkgUrl.url.path)
   else:
     result = workspace() / context().depsDir / Path(pkgUrl.projectName)
   result = result.absolutePath
