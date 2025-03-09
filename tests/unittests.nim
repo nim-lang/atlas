@@ -42,6 +42,11 @@ let
       input: "file://$1/buildGraph/proj_b" % [ospaths2.getCurrentDir()],
       output: "file://$1/buildGraph/proj_b" % [ospaths2.getCurrentDir()],
       projectName: "proj_b",
+    ),
+    "workspace": (
+      input: "atlas://workspace/test.nimble" % [ospaths2.getCurrentDir()],
+      output: "atlas://workspace/test.nimble",
+      projectName: "test",
     )
   }
 
@@ -66,15 +71,18 @@ suite "urls and naming":
       echo "pkg:name: ", upkg.projectName
       echo "pkg:dir:  ", upkg.toDirectoryPath()
 
-      check upkg.url.hostname == "github.com" or name.startsWith("proj")
+      check upkg.url.hostname == "github.com" or name in ["proj_a", "proj_b", "workspace"]
       check $upkg.url == item.output
       check $upkg.projectName == item.projectName
 
-      if name notin ["proj_a", "proj_b"]:
+      if name notin ["proj_a", "proj_b", "workspace"]:
         check upkg.toDirectoryPath() == absolutePath(workspace() / Path"deps" / Path(item.projectName))
         check upkg.toLinkPath() == absolutePath(workspace() / Path"deps" / Path(item.projectName & ".link"))
+      elif name in ["workspace"]:
+        check upkg.toDirectoryPath() == paths.getCurrentDir()
+        check $upkg.toLinkPath() == ""
 
-      if name in ["balls", "bytes2human", "atlas", "proj_a", "proj_b"]:
+      if name in ["balls", "bytes2human", "atlas", "proj_a", "proj_b", "workspace"]:
         expect ValueError:
           let npkg = nc.createUrl(name)
       else:

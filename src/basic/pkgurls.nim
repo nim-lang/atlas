@@ -38,13 +38,16 @@ proc extractProjectName*(url: Uri): string =
   if u.scheme in ["http", "https"] and e == GitSuffix:
     e = ""
 
-  if u.scheme == "file":
+  if u.scheme == "atlas":
+    echo "EXTRACT: ", "p: ", p, " n: ", n, " e: ", e, " url: ", url.repr
+    result = n
+  elif u.scheme == "file":
     result = n & e
   else:
     result = [n & e, p, u.hostname].join(".")
 
 proc toDirectoryPath*(pkgUrl: PkgUrl, ): Path =
-  if pkgUrl.url.scheme == "workspace":
+  if pkgUrl.url.scheme == "atlas":
     result = workspace()
   elif pkgUrl.url.scheme == "file":
     result = workspace() / Path(pkgUrl.url.path)
@@ -55,7 +58,10 @@ proc toDirectoryPath*(pkgUrl: PkgUrl, ): Path =
   doAssert result.len() > 0
 
 proc toLinkPath*(pkgUrl: PkgUrl): Path =
-  Path(pkgUrl.toDirectoryPath().string & ".link")
+  if pkgUrl.url.scheme == "atlas":
+    Path""
+  else:
+    Path(pkgUrl.toDirectoryPath().string & ".link")
 
 proc toPkgUriRaw*(u: Uri): PkgUrl =
   result = PkgUrl(projectName: extractProjectName(u), u: u)
