@@ -153,7 +153,7 @@ suite "test expand with git tags":
         check collectNimbleVersions(nc, dep4).tolist() == projDnimbles.tolist()
 
   test "expand from file":
-      setAtlasVerbosity(Trace)
+      #setAtlasVerbosity(Trace)
       withDir "tests/ws_testtraverse":
         removeDir("deps")
         workspace() = paths.getCurrentDir()
@@ -180,16 +180,16 @@ suite "test expand with git tags":
         let sp3: Package = sp[3] # proj C
         let sp4: Package = sp[4] # proj D
 
-        check $sp0.url == "file://$1" % [$dir]
-        check $sp1.url == "file://./buildGraph/proj_a"
-        check $sp2.url == "file://./buildGraph/proj_b"
-        check $sp3.url == "file://./buildGraph/proj_c"
-        check $sp4.url == "file://./buildGraph/proj_d"
+        check $sp0.url == "atlas://workspace/ws_testtraverse.nimble"
+        check $sp1.url == "file://$1/buildGraph/proj_a" % [$dir]  
+        check $sp2.url == "file://$1/buildGraph/proj_b" % [$dir]
+        check $sp3.url == "file://$1/buildGraph/proj_c" % [$dir]
+        check $sp4.url == "file://$1/buildGraph/proj_d" % [$dir]
 
         let vt = toVersionTag
 
         testRequirements(sp0, @[vt"#head@-"], [
-          ("file://./buildGraph/proj_a", "*"),
+          ("file://$1/buildGraph/proj_a" % [$dir], "*"),
         ])
 
 
@@ -197,23 +197,21 @@ suite "test expand with git tags":
         # check sp1.releases[projAtags[1]] == sp1.releases[projAtags[2]]
         # check cast[pointer](sp1.releases[projAtags[1]]) == cast[pointer](sp1.releases[projAtags[2]])
         testRequirements(sp1, projAtags, [
-          ("file://./buildGraph/proj_b", ">= 1.1.0"),
-          # ("file://./buildGraph/proj_b", ">= 1.0.0"),
-          ("file://./buildGraph/proj_b", ">= 1.0.0"),
+          ("file://$1/buildGraph/proj_b" % [$dir], ">= 1.1.0"),
+          ("file://$1/buildGraph/proj_b" % [$dir], ">= 1.0.0"),
         ])
 
         testRequirements(sp2, projBtags, [
-          ("file://./buildGraph/proj_c", ">= 1.1.0"),
-          # ("file://./buildGraph/proj_c", ">= 1.0.0"),
-          ("file://./buildGraph/proj_c", ">= 1.0.0"),
+          ("file://$1/buildGraph/proj_c" % [$dir], ">= 1.1.0"),
+          ("file://$1/buildGraph/proj_c" % [$dir], ">= 1.0.0"),
         ])
 
         testRequirements(sp3, projCtags, [
-          ("file://./buildGraph/proj_d", ">= 1.0.0"),
+          ("file://$1/buildGraph/proj_d" % [$dir], ">= 1.0.0"),
         ])
 
         testRequirements(sp4, projDtags, [
-          ("file://./buildGraph/does_not_exist", ">= 1.2.0"),
+          ("file://$1/buildGraph/does_not_exist" % [$dir], ">= 1.2.0"),
           ("", ""),
         ], true)
 
@@ -250,11 +248,11 @@ suite "test expand with git tags":
         let vt = toVersionTag
 
         check sp.len() == 5
-        check $sp[0].url == "file://$1" % [$dir]
-        # check $sp[1][0] == "file://buildGraph/proj_a"
-        # check $sp[2][0] == "file://buildGraph/proj_b"
-        # check $sp[3][0] == "file://buildGraph/proj_c"
-        # check $sp[4][0] == "file://buildGraph/proj_d"
+        check $sp[0].url == "atlas://workspace/ws_testtraverse.nimble"
+        check $sp[1].url == "https://example.com/buildGraph/proj_a"
+        check $sp[2].url == "https://example.com/buildGraph/proj_b"
+        check $sp[3].url == "https://example.com/buildGraph/proj_c"
+        check $sp[4].url == "https://example.com/buildGraph/proj_d"
 
         let sp0: Package = sp[0] # proj ws_testtraversal
         testRequirements(sp0, @[vt"#head@-"], [
@@ -359,7 +357,7 @@ suite "test expand with no git tags":
         let sp3: Package = sp[3] # proj C
         let sp4: Package = sp[4] # proj D
 
-        check $sp[0].url == "file://$1" % [$dir]
+        check $sp[0].url == "atlas://workspace/ws_testtraverse.nimble"
         check $sp[1].url == "file://./buildGraphNoGitTags/proj_a"
         check $sp[2].url == "file://./buildGraphNoGitTags/proj_b"
         check $sp[3].url == "file://./buildGraphNoGitTags/proj_c"
@@ -373,24 +371,24 @@ suite "test expand with no git tags":
         ])
 
         testRequirements(sp1, projAtags, [
-          ("file://./buildGraphNoGitTags/proj_b", ">= 1.1.0"),
-          ("file://./buildGraphNoGitTags/proj_b", ">= 1.0.0"),
-          ("file://./buildGraphNoGitTags/proj_b", ">= 1.0.0"),
+          ("file://$1/buildGraphNoGitTags/proj_b" % [$dir], ">= 1.1.0"),
+          ("file://$1/buildGraphNoGitTags/proj_b" % [$dir], ">= 1.0.0"),
+          ("file://$1/buildGraphNoGitTags/proj_b" % [$dir], ">= 1.0.0"),
         ])
 
         testRequirements(sp2, projBtags, [
-          ("file://./buildGraphNoGitTags/proj_c", ">= 1.1.0"),
-          ("file://./buildGraphNoGitTags/proj_c", ">= 1.0.0"),
-          ("file://./buildGraphNoGitTags/proj_c", ">= 1.0.0"),
+          ("file://$1/buildGraphNoGitTags/proj_c" % [$dir], ">= 1.1.0"),
+          ("file://$1/buildGraphNoGitTags/proj_c" % [$dir], ">= 1.0.0"),
+          ("file://$1/buildGraphNoGitTags/proj_c" % [$dir], ">= 1.0.0"),
         ])
 
         testRequirements(sp3, projCtags, [
-          ("file://./buildGraphNoGitTags/proj_d", ">= 1.0.0"),
-          ("file://./buildGraphNoGitTags/proj_d", ">= 1.2.0"),
+          ("file://$1/buildGraphNoGitTags/proj_d" % [$dir], ">= 1.0.0"),
+          ("file://$1/buildGraphNoGitTags/proj_d" % [$dir], ">= 1.2.0"),
         ])
 
         testRequirements(sp4, projDtags, [
-          ("file://./buildGraphNoGitTags/does_not_exist", ">= 1.2.0"),
+          ("file://$1/buildGraphNoGitTags/does_not_exist" % [$dir], ">= 1.2.0"),
           ("", ""),
         ], true)
 
