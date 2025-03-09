@@ -98,6 +98,7 @@ suite "test expand with git tags":
     let projDtags = projDnimbles.filterIt(it.v.string != "")
 
   test "collect nimbles":
+      # setAtlasVerbosity(Trace)
       withDir "tests/ws_testtraverse":
         removeDir("deps")
         context().flags = {UsesOverrides, KeepWorkspace, ListVersions, FullClones}
@@ -295,22 +296,23 @@ suite "test expand with no git tags":
     """.parseTaggedVersions(false)
 
   test "collect nimbles":
+      setAtlasVerbosity(Trace)
       withDir "tests/ws_testtraverse":
-        # setAtlasVerbosity(Trace)
         removeDir("deps")
+        workspace() = paths.getCurrentDir()
         context().flags = {UsesOverrides, KeepWorkspace, ListVersions, FullClones}
         context().defaultAlgo = SemVer
 
         discard context().overrides.addPattern("$+", "file://./buildGraphNoGitTags/$#")
 
-        let dir = ospaths2.getCurrentDir()
         # writeFile("ws_testtraverse.nimble", "requires \"proj_a\"\n")
 
         let deps = setupGraphNoGitTags()
         var nc = createNimbleContext()
         # var graph = DepGraph(nodes: @[], reqs: defaultReqs())
-        let url = nc.createUrl(dir)
+        let url = nc.createUrlFromPath(workspace())
 
+        echo "URL: ", url
         var dep0 = Package(url: url, isRoot: true)
         var dep1 = Package(url: nc.createUrl("proj_a"))
         var dep2 = Package(url: nc.createUrl("proj_b"))
