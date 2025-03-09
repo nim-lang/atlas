@@ -38,14 +38,14 @@ template testRequirements(sp: Package,
                           projTags: seq[VersionTag],
                           vers: openArray[(string, string)];
                           skipCount = false) =
-  echo "Checking Requirements: " & astToStr(sp)
+  checkpoint "Checking Requirements: " & astToStr(sp)
   if not skipCount:
     check sp.versions.len() == vers.len()
 
   for idx, vt in projTags:
     # let vt = projTags[idx]
     let vt = vt.toPkgVer
-    echo "Checking requirements item: " & $vers[idx] & " version: " & $vt
+    checkpoint "Checking requirements item: " & $vers[idx] & " version: " & $vt
     check idx < vers.len()
     let (url, ver) = vers[idx]
     check sp.state == Processed
@@ -169,7 +169,7 @@ suite "test expand with git tags":
 
         let graph = dir.expand(nc, AllReleases, onClone=DoClone)
 
-        echo "\tspec:\n", graph.toJson(ToJsonOptions(enumMode: joptEnumString))
+        checkpoint "\tgraph:\n" & $graph.toJson(ToJsonOptions(enumMode: joptEnumString))
         let sp = graph.pkgs.values().toSeq()
 
         check sp.len() == 5
@@ -244,7 +244,7 @@ suite "test expand with git tags":
 
         let graph = dir.expand(nc, AllReleases, onClone=DoClone)
 
-        echo "\tspec:\n", graph.toJson(ToJsonOptions(enumMode: joptEnumString))
+        checkpoint "\tgraph:\n" & $graph.toJson(ToJsonOptions(enumMode: joptEnumString))
         let sp = graph.pkgs.values().toSeq()
         let vt = toVersionTag
 
@@ -296,7 +296,7 @@ suite "test expand with no git tags":
     """.parseTaggedVersions(false)
 
   test "collect nimbles":
-      setAtlasVerbosity(Trace)
+      # setAtlasVerbosity(Trace)
       withDir "tests/ws_testtraverse":
         removeDir("deps")
         workspace() = paths.getCurrentDir()
@@ -305,13 +305,12 @@ suite "test expand with no git tags":
 
         discard context().overrides.addPattern("$+", "file://./buildGraphNoGitTags/$#")
 
-        let dir = ospaths2.getCurrentDir()
         # writeFile("ws_testtraverse.nimble", "requires \"proj_a\"\n")
 
         let deps = setupGraphNoGitTags()
         var nc = createNimbleContext()
         # var graph = DepGraph(nodes: @[], reqs: defaultReqs())
-        let url = nc.createUrl(dir)
+        let url = nc.createUrlFromPath(workspace())
 
         echo "URL: ", url
         var dep0 = Package(url: url, isRoot: true)
@@ -351,7 +350,7 @@ suite "test expand with no git tags":
 
         let graph = dir.expand(nc, AllReleases, onClone=DoClone)
 
-        echo "\tspec:\n", graph.toJson(ToJsonOptions(enumMode: joptEnumString))
+        checkpoint "\tgraph:\n" & $graph.toJson(ToJsonOptions(enumMode: joptEnumString))
         let sp = graph.pkgs.values().toSeq()
 
         let sp0: Package = sp[0] # proj ws_testtraversal
