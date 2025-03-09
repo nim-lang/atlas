@@ -50,7 +50,8 @@ proc toDirectoryPath*(pkgUrl: PkgUrl, ): Path =
   if pkgUrl.url.scheme == "atlas":
     result = workspace()
   elif pkgUrl.url.scheme == "file":
-    result = workspace() / Path(pkgUrl.url.path)
+    # result = workspace() / Path(pkgUrl.url.path)
+    result = workspace() / context().depsDir / Path(pkgUrl.projectName)
   else:
     result = workspace() / context().depsDir / Path(pkgUrl.projectName)
   result = result.absolutePath

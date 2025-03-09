@@ -75,12 +75,12 @@ suite "urls and naming":
       check $upkg.url == item.output
       check $upkg.projectName == item.projectName
 
-      if name notin ["proj_a", "proj_b", "workspace"]:
-        check upkg.toDirectoryPath() == absolutePath(workspace() / Path"deps" / Path(item.projectName))
-        check upkg.toLinkPath() == absolutePath(workspace() / Path"deps" / Path(item.projectName & ".link"))
-      elif name in ["workspace"]:
+      if name in ["workspace"]:
         check upkg.toDirectoryPath() == paths.getCurrentDir()
         check $upkg.toLinkPath() == ""
+      else:
+        check upkg.toDirectoryPath() == absolutePath(workspace() / Path"deps" / Path(item.projectName))
+        check upkg.toLinkPath() == absolutePath(workspace() / Path"deps" / Path(item.projectName & ".link"))
 
       if name in ["balls", "bytes2human", "atlas", "proj_a", "proj_b", "workspace"]:
         expect ValueError:
