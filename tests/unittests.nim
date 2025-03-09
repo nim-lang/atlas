@@ -112,6 +112,11 @@ suite "urls and naming":
     let testPath = Path(paths.getCurrentDir()) / Path"test_project"
     let upkg = nc.createUrl(testPath)
 
+    echo "upkg: ", upkg.url
+    echo "upkg: ", upkg.projectName
+    echo "upkg: ", upkg.url.path
+    echo "upkg: ", nc.lookup(upkg.projectName)
+
     check upkg.url.scheme == "file"
     check upkg.projectName == "test_project"
     check upkg.url.path.endsWith("test_project")

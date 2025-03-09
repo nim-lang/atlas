@@ -79,11 +79,11 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
     nc.put(result.projectName, result.url)
 
 proc createUrl*(nc: var NimbleContext, orig: Path): PkgUrl =
-  result = createUrlSkipPatterns($(orig))
+  let absPath = absolutePath(orig)
+  let fileUrl = "file://" & $absPath
+  result = createUrlSkipPatterns(fileUrl)
   if not result.isEmpty():
     nc.put(result.projectName, result.url)
-  # if result.url notin nc.urlToNames:
-  #   nc.urlToNames[result.url()] = result.projectName
 
 proc fillPackageLookupTable(c: var NimbleContext) =
   let pkgsDir = packagesDirectory()
