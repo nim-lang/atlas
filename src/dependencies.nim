@@ -51,7 +51,7 @@ proc copyFromDisk*(pkg: Package; destDir: Path): (CloneStatus, string) =
     copyDir($dir, $destDir)
     result = (Ok, "")
   else:
-    warn dir, "copyFromDisk not found:", $dir
+    error dir, "copyFromDisk not found:", $dir
     result = (NotFound, $dir)
   #writeFile destDir / ThisVersion, w.commit
   #echo "WRITTEN ", destDir / ThisVersion

@@ -97,7 +97,7 @@ suite "test expand with git tags":
     """.parseTaggedVersions(false)
     let projDtags = projDnimbles.filterIt(it.v.string != "")
 
-  test "ws_testtraverse collect nimbles":
+  test "collect nimbles":
       withDir "tests/ws_testtraverse":
         removeDir("deps")
         context().flags = {UsesOverrides, KeepWorkspace, ListVersions, FullClones}
@@ -152,7 +152,7 @@ suite "test expand with git tags":
         check collectNimbleVersions(nc, dep3).tolist() == projCnimbles.tolist()
         check collectNimbleVersions(nc, dep4).tolist() == projDnimbles.tolist()
 
-  test "ws_testtraverse traverseDependency":
+  test "expand from file":
       # setAtlasVerbosity(Info)
       withDir "tests/ws_testtraverse":
         removeDir("deps")
@@ -171,21 +171,28 @@ suite "test expand with git tags":
         echo "\tspec:\n", graph.toJson(ToJsonOptions(enumMode: joptEnumString))
         let sp = graph.pkgs.values().toSeq()
 
-        check $sp[0].url == "file://$1" % [$dir]
-        check $sp[1].url == "file://./buildGraph/proj_a"
-        check $sp[2].url == "file://./buildGraph/proj_b"
-        check $sp[3].url == "file://./buildGraph/proj_c"
-        check $sp[4].url == "file://./buildGraph/proj_d"
+        check sp.len() == 5
+        doAssert sp.len() == 5
+
+        let sp0: Package = sp[0] # proj ws_testtraversal
+        let sp1: Package = sp[1] # proj A 
+        let sp2: Package = sp[2] # proj B
+        let sp3: Package = sp[3] # proj C
+        let sp4: Package = sp[4] # proj D
+
+        check $sp0.url == "file://$1" % [$dir]
+        check $sp1.url == "file://./buildGraph/proj_a"
+        check $sp2.url == "file://./buildGraph/proj_b"
+        check $sp3.url == "file://./buildGraph/proj_c"
+        check $sp4.url == "file://./buildGraph/proj_d"
 
         let vt = toVersionTag
 
-        let sp0: Package = sp[0] # proj ws_testtraversal
         testRequirements(sp0, @[vt"#head@-"], [
           ("file://./buildGraph/proj_a", "*"),
         ])
 
 
-        let sp1: Package = sp[1] # proj A
         # verify that the duplicate releases have been "reduced"
         # check sp1.releases[projAtags[1]] == sp1.releases[projAtags[2]]
         # check cast[pointer](sp1.releases[projAtags[1]]) == cast[pointer](sp1.releases[projAtags[2]])
@@ -195,25 +202,22 @@ suite "test expand with git tags":
           ("file://./buildGraph/proj_b", ">= 1.0.0"),
         ])
 
-        let sp2 = sp[2] # proj B
         testRequirements(sp2, projBtags, [
           ("file://./buildGraph/proj_c", ">= 1.1.0"),
           # ("file://./buildGraph/proj_c", ">= 1.0.0"),
           ("file://./buildGraph/proj_c", ">= 1.0.0"),
         ])
 
-        let sp3 = sp[3] # proj C
         testRequirements(sp3, projCtags, [
           ("file://./buildGraph/proj_d", ">= 1.0.0"),
         ])
 
-        let sp4 = sp[4] # proj C
         testRequirements(sp4, projDtags, [
           ("file://./buildGraph/does_not_exist", ">= 1.2.0"),
           ("", ""),
         ], true)
 
-  test "ws_testtraverse traverseDependency from http":
+  test "expand from http":
       withDir "tests/ws_testtraverse":
         # setAtlasVerbosity(Trace)
         removeDir("deps")
@@ -292,7 +296,7 @@ suite "test expand with no git tags":
     0bd0e77a8cbcc312185c2a1334f7bf2eb7b1241f 1.0.0
     """.parseTaggedVersions(false)
 
-  test "ws_testtraverse collect nimbles":
+  test "collect nimbles":
       withDir "tests/ws_testtraverse":
         # setAtlasVerbosity(Trace)
         removeDir("deps")
@@ -330,7 +334,7 @@ suite "test expand with no git tags":
         check collectNimbleVersions(nc, dep4).tolist() == projDtags.tolist()
 
 
-  test "ws_testtraverse traverseDependency no git tags":
+  test "expand no git tags":
       # setAtlasVerbosity(Info)
       withDir "tests/ws_testtraverse":
         removeDir("deps")
@@ -349,6 +353,12 @@ suite "test expand with no git tags":
         echo "\tspec:\n", graph.toJson(ToJsonOptions(enumMode: joptEnumString))
         let sp = graph.pkgs.values().toSeq()
 
+        let sp0: Package = sp[0] # proj ws_testtraversal
+        let sp1: Package = sp[1] # proj A
+        let sp2: Package = sp[2] # proj B
+        let sp3: Package = sp[3] # proj C
+        let sp4: Package = sp[4] # proj D
+
         check $sp[0].url == "file://$1" % [$dir]
         check $sp[1].url == "file://./buildGraphNoGitTags/proj_a"
         check $sp[2].url == "file://./buildGraphNoGitTags/proj_b"
@@ -358,32 +368,27 @@ suite "test expand with no git tags":
         let vt = toVersionTag
         proc stripcommits(tags: seq[VersionTag]): seq[VersionTag] = tags.mapIt(VersionTag(v: Version"", c: it.c))
 
-        let sp0: Package = sp[0] # proj ws_testtraversal
         testRequirements(sp0, @[vt"#head@-"], [
           ("file://./buildGraphNoGitTags/proj_a", "*"),
         ])
 
-        let sp1 = sp[1] # proj A
         testRequirements(sp1, projAtags, [
           ("file://./buildGraphNoGitTags/proj_b", ">= 1.1.0"),
           ("file://./buildGraphNoGitTags/proj_b", ">= 1.0.0"),
           ("file://./buildGraphNoGitTags/proj_b", ">= 1.0.0"),
         ])
 
-        let sp2 = sp[2] # proj B
         testRequirements(sp2, projBtags, [
           ("file://./buildGraphNoGitTags/proj_c", ">= 1.1.0"),
           ("file://./buildGraphNoGitTags/proj_c", ">= 1.0.0"),
           ("file://./buildGraphNoGitTags/proj_c", ">= 1.0.0"),
         ])
 
-        let sp3 = sp[3] # proj C
         testRequirements(sp3, projCtags, [
           ("file://./buildGraphNoGitTags/proj_d", ">= 1.0.0"),
           ("file://./buildGraphNoGitTags/proj_d", ">= 1.2.0"),
         ])
 
-        let sp4 = sp[4] # proj C
         testRequirements(sp4, projDtags, [
           ("file://./buildGraphNoGitTags/does_not_exist", ">= 1.2.0"),
           ("", ""),
