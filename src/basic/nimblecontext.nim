@@ -57,6 +57,8 @@ proc put*(nc: var NimbleContext, name: string, url: Uri, isExtra = false) =
 proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
   ## primary point to createUrl's from a name or argument
   ## TODO: add unit tests!
+  doAssert not nameOrig.isAbsolute(), "createUrl does not support absolute paths: " & $nameOrig
+
   var didReplace = false
   var name = substitute(nc.overrides, nameOrig, didReplace)
   debug "createUrl", "name:", name, "orig:", nameOrig, "patterns:", $nc.overrides

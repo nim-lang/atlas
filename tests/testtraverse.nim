@@ -305,12 +305,13 @@ suite "test expand with no git tags":
 
         discard context().overrides.addPattern("$+", "file://./buildGraphNoGitTags/$#")
 
+        let dir = ospaths2.getCurrentDir()
         # writeFile("ws_testtraverse.nimble", "requires \"proj_a\"\n")
 
         let deps = setupGraphNoGitTags()
         var nc = createNimbleContext()
         # var graph = DepGraph(nodes: @[], reqs: defaultReqs())
-        let url = nc.createUrlFromPath(workspace())
+        let url = nc.createUrl(dir)
 
         echo "URL: ", url
         var dep0 = Package(url: url, isRoot: true)
