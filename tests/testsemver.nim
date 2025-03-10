@@ -10,8 +10,9 @@ if execShellCmd("nim c -o:$# -d:release src/atlas.nim" % [atlasExe]) != 0:
 ensureGitHttpServer()
 
 template testSemVer2(name, expected: string) =
-  createDir name
-  withDir name:
+  # createDir name
+  # withDir name:
+  block:
     let cmd = atlasExe & " --full --proxy=http://localhost:4242 --dumbProxy --keepWorkspace --resolver=SemVer --colors:off --list use proj_a"
     let (outp, status) = execCmdEx(cmd)
     if status == 0:
@@ -31,8 +32,9 @@ template testSemVer2(name, expected: string) =
       check status == 0
 
 template testMinVer(name, expected: string) =
-  createDir name
-  withDir name:
+  # createDir name
+  # withDir name:
+  block:
     let cmd = atlasExe & " --keepWorkspace --resolver=MinVer --list use proj_a"
     let (outp, status) = execCmdEx(atlasExe & " --keepWorkspace --resolver=MinVer --list use proj_a")
     if status == 0:
@@ -82,8 +84,7 @@ proc setupGraphNoGitTags* =
 
 suite "basic repo tests":
   test "semproject1":
-      withDir "tests/ws_semver2":
-        removeDirs("semproject1")
+      withDir "ws_semproject1":
         removeDirs("deps")
         setupGraph()
         let semVerExpectedResult = dedent"""
@@ -100,7 +101,7 @@ suite "basic repo tests":
         testSemVer2("semproject1", semVerExpectedResult)
 
   test "semproject2":
-      withDir "tests/ws_semver2":
+      withDir "ws_semproject2":
         removeDirs("semproject2")
         removeDirs("deps")
         setupGraphNoGitTags()
@@ -124,8 +125,7 @@ suite "basic repo tests":
         testSemVer2("semproject2", semVerExpectedResultNoGitTags)
 
   test "minproject1":
-      withDir "tests/ws_semver2":
-        removeDirs("minproject")
+      withDir "ws_minproject1":
         removeDirs("deps")
         setupGraph()
         let minVerExpectedResult = dedent"""
