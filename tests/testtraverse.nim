@@ -353,6 +353,8 @@ suite "test expand with no git tags":
         checkpoint "\tgraph:\n" & $graph.toJson(ToJsonOptions(enumMode: joptEnumString))
         let sp = graph.pkgs.values().toSeq()
 
+        doAssert sp.len() == 5
+
         let sp0: Package = sp[0] # proj ws_testtraversal
         let sp1: Package = sp[1] # proj A
         let sp2: Package = sp[2] # proj B

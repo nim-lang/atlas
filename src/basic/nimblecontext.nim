@@ -33,10 +33,12 @@ proc lookup*(nc: NimbleContext, name: string): PkgUrl =
     result = nc.extraNameToUrl[name]
 
 proc lookup*(nc: NimbleContext, url: Uri): string =
-  result = nc.urlToNames[url]
+  if url in nc.urlToNames:
+    result = nc.urlToNames[url]
 
 proc lookup*(nc: NimbleContext, url: PkgUrl): string =
-  result = nc.urlToNames[url.url]
+  if url.url in nc.urlToNames:
+    result = nc.urlToNames[url.url]
 
 proc put*(nc: var NimbleContext, name: string, url: Uri, isExtra = false) =
   let inNames = name in nc.nameToUrl
@@ -58,6 +60,12 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
   ## primary point to createUrl's from a name or argument
   ## TODO: add unit tests!
   doAssert not nameOrig.isAbsolute(), "createUrl does not support absolute paths: " & $nameOrig
+
+  if nameOrig.isUrl():
+    let url = createUrlSkipPatterns(nameOrig)
+    let name = nc.lookup(url)
+    if name != "":
+      result = nc.lookup(name)
 
   var didReplace = false
   var name = substitute(nc.overrides, nameOrig, didReplace)

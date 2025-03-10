@@ -89,6 +89,7 @@ suite "urls and naming":
     check upkg.toDirectoryPath() == ws / Path"deps" / Path("proj_b")
     check upkg.toLinkPath() == ws / Path"deps" / Path("proj_b.link")
 
+
   test "workspace atlas url":
     let upkg = nc.createUrl("atlas://workspace/test.nimble")
     echo "upkg: ", upkg.repr

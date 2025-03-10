@@ -40,6 +40,12 @@ proc projectName*(u: PkgUrl): string =
   else:
     u.qualifiedName.name & "." & u.qualifiedName.user & "." & u.qualifiedName.host
 
+proc requiresName*(u: PkgUrl): string =
+  if u.hasShortName:
+    u.qualifiedName.name
+  else:
+    $u.u
+
 proc toUri*(u: PkgUrl): Uri = result = u.u
 proc url*(p: PkgUrl): Uri = p.u
 proc `==`*(a, b: PkgUrl): bool {.inline.} = a.u == b.u
