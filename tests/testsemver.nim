@@ -106,20 +106,18 @@ suite "basic repo tests":
         removeDirs("deps")
         setupGraphNoGitTags()
         let semVerExpectedResultNoGitTags = dedent"""
-        [Info] (Resolve) selected:
-        [Info] (proj_a) [ ] (proj_a, #head)
-        [Info] (proj_a) [ ] (proj_a, 1.1.0)
-        [Info] (proj_a) [x] (proj_a, 1.0.0)
-        [Info] (proj_b) [ ] (proj_b, #head)
-        [Info] (proj_b) [ ] (proj_b, 1.1.0)
-        [Info] (proj_b) [x] (proj_b, 1.0.0)
-        [Info] (proj_c) [ ] (proj_c, #head)
-        [Info] (proj_c) [x] (proj_c, 1.2.0)
-        [Info] (proj_c) [ ] (proj_c, 1.0.0)
-        [Info] (proj_d) [ ] (proj_d, #head)
-        [Info] (proj_d) [ ] (proj_d, 2.0.0)
-        [Info] (proj_d) [x] (proj_d, 1.0.0)
-        [Info] (Resolve) end of selection
+        [Warn]   (Resolved) selected: 
+        [Warn]   (proj_a.buildGraphNoGitTags.example.com) [ ] (proj_a.buildGraphNoGitTags.example.com, 1.0.0@88d1801b) 
+        [Warn]   (proj_a.buildGraphNoGitTags.example.com) [ ] (proj_a.buildGraphNoGitTags.example.com, 1.0.0@6a1cc178) 
+        [Warn]   (proj_a.buildGraphNoGitTags.example.com) [x] (proj_a.buildGraphNoGitTags.example.com, 1.1.0@61eacba5) 
+        [Warn]   (proj_b.buildGraphNoGitTags.example.com) [ ] (proj_b.buildGraphNoGitTags.example.com, 1.0.0@289ae9ee) 
+        [Warn]   (proj_b.buildGraphNoGitTags.example.com) [ ] (proj_b.buildGraphNoGitTags.example.com, 1.0.0@bbb208a9) 
+        [Warn]   (proj_b.buildGraphNoGitTags.example.com) [x] (proj_b.buildGraphNoGitTags.example.com, 1.1.0@c70824d8) 
+        [Warn]   (proj_c.buildGraphNoGitTags.example.com) [ ] (proj_c.buildGraphNoGitTags.example.com, 1.0.0@8756fa45) 
+        [Warn]   (proj_c.buildGraphNoGitTags.example.com) [x] (proj_c.buildGraphNoGitTags.example.com, 1.2.0@d6c04d67) 
+        [Warn]   (proj_d.buildGraphNoGitTags.example.com) [x] (proj_d.buildGraphNoGitTags.example.com, 1.0.0@0bd0e77a) 
+        [Warn]   (proj_d.buildGraphNoGitTags.example.com) [!] (HasBrokenDep; pkg: proj_d.buildGraphNoGitTags.example.com, 2.0.0@7ee36fec) 
+        [Warn]   (Resolved) end of selection 
         """
         
         testSemVer2("semproject2", semVerExpectedResultNoGitTags)
