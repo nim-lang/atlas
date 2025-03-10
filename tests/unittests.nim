@@ -4,68 +4,27 @@ import basic/[context, pkgurls, deptypes, nimblecontext, osutils, versions]
 when false:
   from nameresolver import resolvePackage
 
-let
-  basicExamples = {
-    "balls": (
-      input: "https://github.com/disruptek/balls.git",
-      output: "https://github.com/disruptek/balls",
-      projectName: "balls.disruptek.github.com",
-    ),
-    "npeg": (
-      input: "https://github.com/zevv/npeg.git",
-      output: "https://github.com/zevv/npeg",
-      projectName: "npeg",
-    ),
-    "sync": (
-      input: "https://github.com/planetis-m/sync",
-      output: "https://github.com/planetis-m/sync",
-      projectName: "sync",
-    ),
-    "bytes2human": (
-      input: "https://github.com/juancarlospaco/nim-bytes2human",
-      output: "https://github.com/juancarlospaco/nim-bytes2human",
-      projectName: "nim-bytes2human.juancarlospaco.github.com",
-    ),
-    "atlas": (
-      input: "git@github.com:elcritch/atlas.git",
-      output: "ssh://git@github.com/elcritch/atlas",
-      projectName: "atlas.elcritch.github.com",
-    ),
-    "proj_a": (
-      input: "file://./buildGraph/proj_a",
-      output: "file://$1/buildGraph/proj_a" % [ospaths2.getCurrentDir()],
-      projectName: "proj_a",
-    ),
-    "proj_b": (
-      input: "file://$1/buildGraph/proj_b" % [ospaths2.getCurrentDir()],
-      output: "file://$1/buildGraph/proj_b" % [ospaths2.getCurrentDir()],
-      projectName: "proj_b",
-    ),
-    "workspace": (
-      input: "atlas://workspace/test.nimble" % [ospaths2.getCurrentDir()],
-      output: "atlas://workspace/test.nimble",
-      projectName: "test",
-    )
-  }
-
 proc initBasicWorkspace(typ: type AtlasContext): AtlasContext =
   result.workspace = currentSourcePath().parentDir / "ws_basic"
   result.origDepsDir = result.workspace
 
 suite "urls and naming":
-  var nc: NimbleContext
+  var 
+    nc: NimbleContext
+    ws: Path
 
   setup:
     nc = createUnfilledNimbleContext()
     setAtlasVerbosity(Trace)
+    ws = absolutePath(workspace())
 
   test "balls url":
     let upkg = nc.createUrl("https://github.com/disruptek/balls.git")
     check upkg.url.hostname == "github.com"
     check $upkg.url == "https://github.com/disruptek/balls"
     check $upkg.projectName == "balls.disruptek.github.com"
-    check upkg.toDirectoryPath() == absolutePath(workspace() / Path"deps" / Path("balls.disruptek.github.com"))
-    check upkg.toLinkPath() == absolutePath(workspace() / Path"deps" / Path("balls.disruptek.github.com.link"))
+    check upkg.toDirectoryPath() == ws / Path"deps" / Path("balls.disruptek.github.com")
+    check upkg.toLinkPath() == ws / Path"deps" / Path("balls.disruptek.github.com.link")
     expect ValueError:
       discard nc.createUrl("balls")
 
@@ -75,8 +34,8 @@ suite "urls and naming":
     check upkg.url.hostname == "github.com"
     check $upkg.url == "https://github.com/zevv/npeg"
     check $upkg.projectName == "npeg"
-    check upkg.toDirectoryPath() == absolutePath(workspace() / Path"deps" / Path("npeg"))
-    check upkg.toLinkPath() == absolutePath(workspace() / Path"deps" / Path("npeg.link"))
+    check upkg.toDirectoryPath() == ws / Path"deps" / Path("npeg")
+    check upkg.toLinkPath() == ws / Path"deps" / Path("npeg.link")
     let npkg = nc.createUrl("npeg")
     check npkg.url.hostname == "github.com"
     check $npkg.url == "https://github.com/zevv/npeg"
@@ -87,8 +46,8 @@ suite "urls and naming":
     check upkg.url.hostname == "github.com"
     check $upkg.url == "https://github.com/planetis-m/sync"
     check $upkg.projectName == "sync"
-    check upkg.toDirectoryPath() == absolutePath(workspace() / Path"deps" / Path("sync"))
-    check upkg.toLinkPath() == absolutePath(workspace() / Path"deps" / Path("sync.link"))
+    check upkg.toDirectoryPath() == ws / Path"deps" / Path("sync")
+    check upkg.toLinkPath() == ws / Path"deps" / Path("sync.link")
     let npkg = nc.createUrl("sync")
     check npkg.url.hostname == "github.com"
     check $npkg.url == "https://github.com/planetis-m/sync"
@@ -98,8 +57,8 @@ suite "urls and naming":
     check upkg.url.hostname == "github.com"
     check $upkg.url == "https://github.com/juancarlospaco/nim-bytes2human"
     check $upkg.projectName == "nim-bytes2human.juancarlospaco.github.com"
-    check upkg.toDirectoryPath() == absolutePath(workspace() / Path"deps" / Path("nim-bytes2human.juancarlospaco.github.com"))
-    check upkg.toLinkPath() == absolutePath(workspace() / Path"deps" / Path("nim-bytes2human.juancarlospaco.github.com.link"))
+    check upkg.toDirectoryPath() == ws / Path"deps" / Path("nim-bytes2human.juancarlospaco.github.com")
+    check upkg.toLinkPath() == ws / Path"deps" / Path("nim-bytes2human.juancarlospaco.github.com.link")
     expect ValueError:
       discard nc.createUrl("bytes2human")
 
@@ -108,8 +67,8 @@ suite "urls and naming":
     check upkg.url.hostname == "github.com"
     check $upkg.url == "ssh://git@github.com/elcritch/atlas"
     check $upkg.projectName == "atlas.elcritch.github.com"
-    check upkg.toDirectoryPath() == absolutePath(workspace() / Path"deps" / Path("atlas.elcritch.github.com"))
-    check upkg.toLinkPath() == absolutePath(workspace() / Path"deps" / Path("atlas.elcritch.github.com.link"))
+    check upkg.toDirectoryPath() == ws / Path"deps" / Path("atlas.elcritch.github.com")
+    check upkg.toLinkPath() == ws / Path"deps" / Path("atlas.elcritch.github.com.link")
     expect ValueError:
       discard nc.createUrl("atlas")
 
@@ -118,23 +77,23 @@ suite "urls and naming":
     check upkg.url.hostname == ""
     check $upkg.url == "file://$1/buildGraph/proj_a" % [ospaths2.getCurrentDir()]
     check $upkg.projectName == "proj_a"
-    check upkg.toDirectoryPath() == absolutePath(workspace() / Path"deps" / Path("proj_a"))
-    check upkg.toLinkPath() == absolutePath(workspace() / Path"deps" / Path("proj_a.link"))
+    check upkg.toDirectoryPath() == ws / Path"deps" / Path("proj_a")
+    check upkg.toLinkPath() == ws / Path"deps" / Path("proj_a.link")
 
   test "proj_b file url":
     let upkg = nc.createUrl("file://$1/buildGraph/proj_b" % [ospaths2.getCurrentDir()])
     check upkg.url.hostname == ""
     check $upkg.url == "file://$1/buildGraph/proj_b" % [ospaths2.getCurrentDir()]
     check $upkg.projectName == "proj_b"
-    check upkg.toDirectoryPath() == absolutePath(workspace() / Path"deps" / Path("proj_b"))
-    check upkg.toLinkPath() == absolutePath(workspace() / Path"deps" / Path("proj_b.link"))
+    check upkg.toDirectoryPath() == ws / Path"deps" / Path("proj_b")
+    check upkg.toLinkPath() == ws / Path"deps" / Path("proj_b.link")
 
   test "workspace atlas url":
     let upkg = nc.createUrl("atlas://workspace/test.nimble")
     check upkg.url.hostname == "workspace"
     check $upkg.url == "atlas://workspace/test.nimble"
     check $upkg.projectName == "test"
-    check upkg.toDirectoryPath() == absolutePath(workspace())
+    check upkg.toDirectoryPath() == ws
     check upkg.toLinkPath() == Path""
 
   test "use short names on disk":
