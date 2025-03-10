@@ -27,6 +27,7 @@ proc findNimbleFile*(info: Package): seq[Path] =
   result = findNimbleFile(info.ondisk, info.projectName() & ".nimble")
 
 proc lookup*(nc: NimbleContext, name: string): PkgUrl =
+  let name = unicode.toLower(name)
   if name in nc.nameToUrl:
     result = nc.nameToUrl[name]
   elif name in nc.extraNameToUrl:
@@ -41,6 +42,7 @@ proc lookup*(nc: NimbleContext, url: PkgUrl): string =
     result = nc.urlToNames[url.url]
 
 proc put*(nc: var NimbleContext, name: string, url: Uri, isExtra = false) =
+  let name = unicode.toLower(name)
   let inNames = name in nc.nameToUrl
   let inExtra = name in nc.extraNameToUrl
   let pkgUrl = url.toPkgUriRaw()
@@ -74,12 +76,12 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
     trace "atlas:createUrl", "name is url:", name
     result = createUrlSkipPatterns(name)
   else:
-    let lname = unicode.toLower(name)
-    if lname in nc.nameToUrl:
-      trace "atlas:createUrl", "name is in nameToUrl:", lname
-      result = nc.nameToUrl[lname]
+    let lname = nc.lookup(name)
+    if not lname.isEmpty():
+      trace "atlas:createUrl", "name is in nameToUrl:", $lname
+      result = lname
     else:
-      warn "atlas:createUrl", "name is not in nameToUrl:", lname
+      warn "atlas:createUrl", "name is not in nameToUrl:", $lname
       raise newException(ValueError, "project name not found in packages database: " & $lname)
   if result.url.path.splitFile().ext == ".git":
     var url = parseUri($result.url)
@@ -95,6 +97,9 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
   debug "atlas:createUrl", "name:", name, "orig:", nameOrig, "projectName:", $result.projectName, "hasShortName:", $result.hasShortName, "url:", $result.url 
   if not result.isEmpty():
     nc.put(result.projectName, result.url)
+    if didReplace:
+      nc.put(nameOrig, result.url)
+      
 
 proc createUrlFromPath*(nc: var NimbleContext, orig: Path): PkgUrl =
   let absPath = absolutePath(orig)
