@@ -86,27 +86,28 @@ suite "basic repo tests":
   test "semproject1":
       withDir "tests/ws_semver2":
         removeDirs("semproject1")
+        removeDirs("deps")
         setupGraph()
         let semVerExpectedResult = dedent"""
-        [Info] (../resolve) selected:
-        [Info] (proj_a) [x] (proj_a, 1.1.0)
-        [Info] (proj_a) [ ] (proj_a, 1.0.0)
-        [Info] (proj_b) [ ] (proj_b, 1.1.0)
-        [Info] (proj_b) [x] (proj_b, 1.1.0)
-        [Info] (proj_c) [x] (proj_c, 1.2.0)
-        [Info] (proj_d) [ ] (proj_d, 2.0.0)
-        [Info] (proj_d) [x] (proj_d, 1.0.0)
-        [Info] (../resolve) end of selection
-
+        [Warn]   (Resolved) selected: 
+        [Warn]   (proj_a.buildGraph.example.com) [ ] (proj_a.buildGraph.example.com, 1.0.0@e479b438) 
+        [Warn]   (proj_a.buildGraph.example.com) [x] (proj_a.buildGraph.example.com, 1.1.0@fb3804df) 
+        [Warn]   (proj_b.buildGraph.example.com) [ ] (proj_b.buildGraph.example.com, 1.0.0@af427510) 
+        [Warn]   (proj_b.buildGraph.example.com) [x] (proj_b.buildGraph.example.com, 1.1.0@ee875bae) 
+        [Warn]   (proj_c.buildGraph.example.com) [x] (proj_c.buildGraph.example.com, 1.2.0@9331e14f) 
+        [Warn]   (proj_d.buildGraph.example.com) [x] (proj_d.buildGraph.example.com, 1.0.0@0dec9c97) 
+        [Warn]   (proj_d.buildGraph.example.com) [!] (HasBrokenDep; pkg: proj_d.buildGraph.example.com, 2.0.0@dd98f775) 
+        [Warn]   (Resolved) end of selection 
         """
         testSemVer2("semproject1", semVerExpectedResult)
 
   test "semproject2":
       withDir "tests/ws_semver2":
         removeDirs("semproject2")
+        removeDirs("deps")
         setupGraphNoGitTags()
         let semVerExpectedResultNoGitTags = dedent"""
-        [Info] (../resolve) selected:
+        [Info] (Resolve) selected:
         [Info] (proj_a) [ ] (proj_a, #head)
         [Info] (proj_a) [ ] (proj_a, 1.1.0)
         [Info] (proj_a) [x] (proj_a, 1.0.0)
@@ -119,7 +120,7 @@ suite "basic repo tests":
         [Info] (proj_d) [ ] (proj_d, #head)
         [Info] (proj_d) [ ] (proj_d, 2.0.0)
         [Info] (proj_d) [x] (proj_d, 1.0.0)
-        [Info] (../resolve) end of selection
+        [Info] (Resolve) end of selection
         """
         
         testSemVer2("semproject2", semVerExpectedResultNoGitTags)
@@ -127,16 +128,17 @@ suite "basic repo tests":
   test "minproject1":
       withDir "tests/ws_semver2":
         removeDirs("minproject")
+        removeDirs("deps")
         setupGraph()
         let minVerExpectedResult = dedent"""
-        [Info] (../resolve) selected:
-        [Info] (proj_a) [ ] (proj_a, 1.1.0)
-        [Info] (proj_a) [x] (proj_a, 1.0.0)
-        [Info] (proj_b) [ ] (proj_b, 1.1.0)
-        [Info] (proj_b) [x] (proj_b, 1.0.0)
-        [Info] (proj_c) [x] (proj_c, 1.2.0)
-        [Info] (proj_d) [ ] (proj_d, 2.0.0)
-        [Info] (proj_d) [x] (proj_d, 1.0.0)
-        [Info] (../resolve) end of selection
+        [Info] (Resolve) selected:
+        [Info] (proj_a.buildGraph.example.com) [ ] (proj_a, 1.1.0)
+        [Info] (proj_a.buildGraph.example.com) [x] (proj_a, 1.0.0)
+        [Info] (proj_b.buildGraph.example.com) [ ] (proj_b, 1.1.0)
+        [Info] (proj_b.buildGraph.example.com) [x] (proj_b, 1.0.0)
+        [Info] (proj_c.buildGraph.example.com) [x] (proj_c, 1.2.0)
+        [Info] (proj_d.buildGraph.example.com) [ ] (proj_d, 2.0.0)
+        [Info] (proj_d.buildGraph.example.com) [x] (proj_d, 1.0.0)
+        [Info] (Resolve) end of selection
         """
         testMinVer("minproject", minVerExpectedResult)
