@@ -41,7 +41,7 @@ proc parseNimbleFile*(nc: var NimbleContext;
     except ValueError, IOError, OSError:
       let err = getCurrentExceptionMsg()
       result.status = HasBrokenDep
-      warn nimbleFile, "cannot resolve dependency package name: " & name & " error: " & $err
+      warn nimbleFile, "cannot resolve dependency package name:", name, "error:", $err
       result.err.addError $nimbleFile, "cannot resolve package name: " & name
       url = toPkgUriRaw(parseUri("error://" & name))
 

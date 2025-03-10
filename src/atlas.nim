@@ -446,7 +446,7 @@ proc mainRun() =
     elif nimbleFiles.len() > 1:
       error "atlas:use", "Ambiguous Nimble files found: " & $nimbleFiles
 
-    info "atlas:use", "modifying nimble file to use package:", args[0], "at", $nimbleFiles[0]
+    info "atlas:use", "modifying nimble file to use package:", args[0], "at:", $nimbleFiles[0]
     patchNimbleFile(nc, context().overrides, nimbleFiles[0], args[0])
 
     if atlasErrors() > 0:

@@ -43,7 +43,9 @@ proc atlasErrors*(): int =
 proc writeMessageRaw(c: var Reporter; category: string; p: string, args: seq[string]) =
   var msg = category
   if p.len > 0: msg.add "(" & p & ") "
-  for arg in args: msg.add arg
+  for arg in args:
+    msg.add arg
+    msg.add " "
   stdout.writeLine msg
 
 proc writeMessage(c: var Reporter; k: MsgKind; p: string, args: seq[string]) =
