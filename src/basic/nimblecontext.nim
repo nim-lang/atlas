@@ -85,14 +85,15 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
   if not nc.lookup(result.shortName()).isEmpty():
     result.hasShortName = true
 
-  if didReplace and nameOrig.isUrl():
-    result.hasShortName = true
+  # if didReplace and nameOrig.isUrl():
+  #   result.hasShortName = true
 
-  debug "atlas:createUrl", "name:", name, "orig:", nameOrig, "projectName:", $result.projectName, "hasShortName:", $result.hasShortName, "url:", $result.url 
   if not result.isEmpty():
     nc.put(result.projectName, result.url)
     if didReplace:
       nc.put(nameOrig, result.url)
+
+  debug "atlas:createUrl", "created url with name:", name, "orig:", nameOrig, "projectName:", $result.projectName, "hasShortName:", $result.hasShortName, "url:", $result.url 
       
 
 proc createUrlFromPath*(nc: var NimbleContext, orig: Path): PkgUrl =
