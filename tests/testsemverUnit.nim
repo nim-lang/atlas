@@ -343,8 +343,9 @@ suite "test expand with no git tags":
         let sp3 = sp[3] # proj C
         testRequirements(sp3, projCtags, [
           ("https://example.com/buildGraphNoGitTags/proj_d", ">= 1.0.0"),
+          ("https://example.com/buildGraphNoGitTags/proj_d", ">= 1.2.0"),
         ])
-        let sp4 = sp[4] # proj C
+        let sp4 = sp[4] # proj D
         testRequirements(sp4, projDtags, [
           ("https://example.com/buildGraphNoGitTags/does_not_exist", ">= 1.2.0"),
           ("", ""),
@@ -364,10 +365,10 @@ suite "test expand with no git tags":
         check graph.pkgs[nc.createUrl("proj_d")].active
 
         check $graph.root.activeVersion == "#head@-"
-        check $graph.pkgs[nc.createUrl("proj_a")].activeVersion == "1.1.0@fb3804df"
-        check $graph.pkgs[nc.createUrl("proj_b")].activeVersion == "1.1.0@ee875bae"
-        check $graph.pkgs[nc.createUrl("proj_c")].activeVersion == "1.2.0@9331e14f"
-        check $graph.pkgs[nc.createUrl("proj_d")].activeVersion == "1.0.0@0dec9c97"
+        check $graph.pkgs[nc.createUrl("proj_a")].activeVersion.version == "1.1.0"
+        check $graph.pkgs[nc.createUrl("proj_b")].activeVersion.version == "1.1.0"
+        check $graph.pkgs[nc.createUrl("proj_c")].activeVersion.version == "1.2.0"
+        check $graph.pkgs[nc.createUrl("proj_d")].activeVersion.version == "1.0.0"
 
         let formMinVer = graph.toFormular(MinVer)
         context().dumpGraphs = true
@@ -375,10 +376,10 @@ suite "test expand with no git tags":
         solve(graph, formMinVer)
 
         check $graph.root.activeVersion == "#head@-"
-        check $graph.pkgs[nc.createUrl("proj_a")].activeVersion == "1.0.0@e479b438"
-        check $graph.pkgs[nc.createUrl("proj_b")].activeVersion == "1.0.0@af427510"
-        check $graph.pkgs[nc.createUrl("proj_c")].activeVersion == "1.2.0@9331e14f"
-        check $graph.pkgs[nc.createUrl("proj_d")].activeVersion == "1.0.0@0dec9c97"
+        check $graph.pkgs[nc.createUrl("proj_a")].activeVersion.version == "1.0.0"
+        check $graph.pkgs[nc.createUrl("proj_b")].activeVersion.version == "1.0.0"
+        check $graph.pkgs[nc.createUrl("proj_c")].activeVersion.version == "1.2.0"
+        check $graph.pkgs[nc.createUrl("proj_d")].activeVersion.version == "1.0.0"
 
         check graph.validateDependencyGraph()
         let topo = graph.toposorted()
