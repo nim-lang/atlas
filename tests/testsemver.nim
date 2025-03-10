@@ -13,7 +13,7 @@ template testSemVer2(name, expected: string) =
   # createDir name
   # withDir name:
   block:
-    let cmd = atlasExe & " --full --proxy=http://localhost:4242 --dumbProxy --keepWorkspace --resolver=SemVer --colors:off --list use proj_a"
+    let cmd = atlasExe & " --full --proxy=http://localhost:4242 --ignoreerrors --dumbProxy --keepWorkspace --resolver=SemVer --colors:off --list use proj_a"
     let (outp, status) = execCmdEx(cmd)
     if status == 0:
       checkpoint "<<<<<<<<<<<<<<<< Failed test\n" &

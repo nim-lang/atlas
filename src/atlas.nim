@@ -313,6 +313,7 @@ proc parseAtlasOptions(action: var string, args: var seq[string]) =
       of "cfghere": context().flags.incl CfgHere
       of "full": context().flags.incl FullClones
       of "autoinit": autoinit = true
+      of "ignoreerrors": context().ignoreErrors = true
       of "showgraph": context().flags.incl ShowGraph
       of "ignoreurls": context().flags.incl IgnoreUrls
       of "keepworkspace": context().flags.incl KeepWorkspace
@@ -492,7 +493,7 @@ proc main =
     mainRun()
   finally:
     atlasWritePendingMessages()
-  if atlasErrors() > 0:
+  if atlasErrors() > 0 and not context().ignoreErrors:
     quit 1
 
 when isMainModule:

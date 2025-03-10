@@ -54,6 +54,7 @@ type
     overridesFile*: Path
     pluginsFile*: Path
     proxy*: Uri
+    ignoreErrors*: bool = false
     dumbProxy*: bool = false
     forceGitToHttps*: bool = false
     includeTagsAndNimbleCommits*: bool = false
