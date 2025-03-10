@@ -163,7 +163,7 @@ proc installDependencies(nc: var NimbleContext; nimbleFile: Path) =
     dir = Path(".").absolutePath
   info pkgname, "installing dependencies for " & $pkgname & ".nimble"
   trace pkgname, "using nimble file at " & $nimbleFile
-  let graph = dir.expand(nc, AllReleases, onClone=DoClone)
+  let graph = dir.loadWorkspace(nc, AllReleases, onClone=DoClone)
   let paths = graph.activateGraph()
   let cfgPath = CfgPath workspace()
   patchNimCfg(paths, cfgPath)
