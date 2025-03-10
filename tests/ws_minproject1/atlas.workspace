@@ -2,6 +2,6 @@
   "deps": "",
   "overrides": "url.rules",
   "plugins": "",
-  "resolver": "SemVer",
+  "resolver": "MinVeer",
   "graph": null
 }
