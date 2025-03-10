@@ -65,7 +65,7 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
 
   var didReplace = false
   var name = substitute(nc.overrides, nameOrig, didReplace)
-  debug "atlas:createUrl", "name:", name, "orig:", nameOrig, "patterns:", $nc.overrides
+  trace "atlas:createUrl", "name:", name, "orig:", nameOrig, "patterns:", $nc.overrides
   if name.isUrl():
     trace "atlas:createUrl", "name is url:", name
     result = createUrlSkipPatterns(name)
