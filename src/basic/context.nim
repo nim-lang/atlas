@@ -54,7 +54,6 @@ type
     overridesFile*: Path
     pluginsFile*: Path
     proxy*: Uri
-    useShortNamesOnDisk*: bool = true
     dumbProxy*: bool = false
     forceGitToHttps*: bool = false
     includeTagsAndNimbleCommits*: bool = false

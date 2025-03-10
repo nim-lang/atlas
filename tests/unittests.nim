@@ -15,8 +15,9 @@ suite "urls and naming":
 
   setup:
     nc = createUnfilledNimbleContext()
-    setAtlasVerbosity(Trace)
+    # setAtlasVerbosity(Trace)
     ws = absolutePath(workspace())
+    nc.put("npeg", parseUri "https://github.com/zevv/npeg")
 
   test "balls url":
     let upkg = nc.createUrl("https://github.com/disruptek/balls.git")
@@ -29,7 +30,6 @@ suite "urls and naming":
       discard nc.createUrl("balls")
 
   test "npeg url":
-    nc.put("npeg", parseUri "https://github.com/zevv/npeg")
     let upkg = nc.createUrl("https://github.com/zevv/npeg.git")
     check upkg.url.hostname == "github.com"
     check $upkg.url == "https://github.com/zevv/npeg"
@@ -81,6 +81,7 @@ suite "urls and naming":
     check upkg.toLinkPath() == ws / Path"deps" / Path("proj_a.link")
 
   test "proj_b file url":
+    # setAtlasVerbosity(Trace)
     let upkg = nc.createUrl("file://$1/buildGraph/proj_b" % [ospaths2.getCurrentDir()])
     check upkg.url.hostname == ""
     check $upkg.url == "file://$1/buildGraph/proj_b" % [ospaths2.getCurrentDir()]
@@ -90,17 +91,20 @@ suite "urls and naming":
 
   test "workspace atlas url":
     let upkg = nc.createUrl("atlas://workspace/test.nimble")
+    echo "upkg: ", upkg.repr
     check upkg.url.hostname == "workspace"
     check $upkg.url == "atlas://workspace/test.nimble"
     check $upkg.projectName == "test"
     check upkg.toDirectoryPath() == ws
     check upkg.toLinkPath() == Path""
 
-  test "use short names on disk":
-    context().useShortNamesOnDisk = false
-    let upkg = nc.createUrl("npeg")
-    check $upkg.projectName == "npeg.zevv.github.com"
+  # test "use short names on disk":
+  #   context().alwaysUseLongNamesOnDisk = false
+  #   let upkg = nc.createUrl("npeg")
+  #   echo "upkg: ", upkg.repr
+  #   check $upkg.projectName == "npeg.zevv.github.com"
 
+  test "print names":
     echo "\nNimbleContext:urlToNames: "
     privateAccess(nc.type)
     for url, name in nc.urlToNames:

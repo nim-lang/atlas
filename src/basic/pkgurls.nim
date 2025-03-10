@@ -35,7 +35,7 @@ proc shortName*(u: PkgUrl): string =
   u.qualifiedName.name
 
 proc projectName*(u: PkgUrl): string =
-  if u.hasShortName:
+  if u.hasShortName or u.qualifiedName.host == "":
     u.qualifiedName.name
   else:
     u.qualifiedName.name & "." & u.qualifiedName.user & "." & u.qualifiedName.host
@@ -100,7 +100,7 @@ proc createUrlSkipPatterns*(raw: string, skipDirTest = false): PkgUrl =
         else:
           ("file://" & raw)
       let u = parseUri(raw)
-      result = PkgUrl(qualifiedName: extractProjectName(u), u: u, hasShortName: false)
+      result = PkgUrl(qualifiedName: extractProjectName(u), u: u, hasShortName: true)
     else:
       raise newException(ValueError, "Invalid name or URL: " & raw)
   elif raw.startsWith("git@"): # special case git@server.com
