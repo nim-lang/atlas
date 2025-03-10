@@ -70,10 +70,10 @@ proc sortVersionsAsc*(a, b: (PackageVersion, NimbleRelease)): int =
   sortVersionsAsc(a[0].vtag, b[0].vtag)
 
 proc `$`*(d: Package): string =
-  d.url.projectName
+  d.url.fullName()
 
 proc projectName*(d: Package): string =
-  d.url.projectName
+  d.url.projectName()
 
 proc toJsonHook*(v: (PkgUrl, VersionInterval), opt: ToJsonOptions): JsonNode =
   result = newJObject()
@@ -158,4 +158,4 @@ proc activeNimbleRelease*(pkg: Package): NimbleRelease =
 
 proc toReporterName*(pkg: Package): string =
   if pkg.isNil: "nil"
-  else: pkg.url.projectName
+  else: pkg.url.fullName()

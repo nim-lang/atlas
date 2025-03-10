@@ -56,6 +56,8 @@ suite "urls and naming":
 
   test "basic urls":
 
+    setAtlasVerbosity(Trace)
+
     var nc = createUnfilledNimbleContext()
     nc.put("npeg", parseUri "https://github.com/zevv/npeg")
     nc.put("sync", parseUri "https://github.com/planetis-m/sync")
@@ -65,7 +67,7 @@ suite "urls and naming":
       echo ""
       let upkg = nc.createUrl(item.input)
 
-      echo "pkg:url:  ", upkg.url
+      echo "pkg:url: ", upkg.repr
       echo "pkg:name: ", upkg.projectName
       echo "pkg:dir:  ", upkg.toDirectoryPath()
 

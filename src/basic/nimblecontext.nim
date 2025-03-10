@@ -63,21 +63,25 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
   var name = substitute(nc.overrides, nameOrig, didReplace)
   debug "createUrl", "name:", name, "orig:", nameOrig, "patterns:", $nc.overrides
   if name.isUrl():
+    trace "createUrl", "name is url:", name
     result = createUrlSkipPatterns(name)
   else:
     let lname = unicode.toLower(name)
     if lname in nc.nameToUrl:
+      trace "createUrl", "name is in nameToUrl:", lname
       result = nc.nameToUrl[lname]
     else:
+      error "createUrl", "name is not in nameToUrl:", lname
       raise newException(ValueError, "project name not found in packages database: " & $lname)
   if result.url.path.splitFile().ext == ".git":
     var url = parseUri($result.url)
     url.path.removeSuffix(".git")
     result = toPkgUriRaw(url)
-  if context().useShortNamesOnDisk:
-    result.projectName = nc.urlToNames.getOrDefault(result.url, result.projectName)
 
-  debug "createUrl", "name:", name, "orig:", nameOrig, "result:", $result.projectName
+  if not nc.lookup(result.shortName()).isEmpty():
+    result.hasShortName = true
+
+  debug "createUrl", "name:", name, "orig:", nameOrig, "projectName:", $result.projectName, "hasShortName:", $result.hasShortName, "url:", $result.url 
   if not result.isEmpty():
     nc.put(result.projectName, result.url)
 

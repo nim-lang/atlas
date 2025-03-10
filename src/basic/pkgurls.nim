@@ -18,11 +18,12 @@ const
 type
   PkgUrl* = object
     qualifiedName*: tuple[name: string, user: string, host: string]
+    hasShortName*: bool
     u: Uri
 
 proc isFileProtocol*(s: PkgUrl): bool = s.u.scheme == "file"
 proc isUrl*(s: string): bool = s.startsWith("git@") or parseUri(s).scheme != ""
-proc isEmpty*(s: PkgUrl): bool = s.qualifiedName[0].len() == 0
+proc isEmpty*(s: PkgUrl): bool = s.qualifiedName[0].len() == 0 or $s.u == ""
 
 proc fullName*(u: PkgUrl): string =
   if u.qualifiedName.host.len() > 0 or u.qualifiedName.user.len() > 0:  
@@ -30,8 +31,14 @@ proc fullName*(u: PkgUrl): string =
   else:
     result = u.qualifiedName.name
 
-proc projName*(u: PkgUrl): string = u.qualifiedName.name
+proc shortName*(u: PkgUrl): string =
+  u.qualifiedName.name
 
+proc projectName*(u: PkgUrl): string =
+  if u.hasShortName:
+    u.qualifiedName.name
+  else:
+    u.qualifiedName.name & "." & u.qualifiedName.user & "." & u.qualifiedName.host
 
 proc toUri*(u: PkgUrl): Uri = result = u.u
 proc url*(p: PkgUrl): Uri = p.u
@@ -68,11 +75,11 @@ proc toDirectoryPath*(pkgUrl: PkgUrl, ): Path =
     result = workspace()
   elif pkgUrl.url.scheme == "file":
     # result = workspace() / Path(pkgUrl.url.path)
-    result = workspace() / context().depsDir / Path(pkgUrl.fullName())
+    result = workspace() / context().depsDir / Path(pkgUrl.projectName())
   else:
-    result = workspace() / context().depsDir / Path(pkgUrl.fullName())
+    result = workspace() / context().depsDir / Path(pkgUrl.projectName())
   result = result.absolutePath
-  trace pkgUrl.projName, "found directory path:", $result
+  trace pkgUrl, "found directory path:", $result
   doAssert result.len() > 0
 
 proc toLinkPath*(pkgUrl: PkgUrl): Path =
@@ -82,30 +89,31 @@ proc toLinkPath*(pkgUrl: PkgUrl): Path =
     Path(pkgUrl.toDirectoryPath().string & ".link")
 
 proc toPkgUriRaw*(u: Uri): PkgUrl =
-  result = PkgUrl(qualifiedName: extractProjectName(u), u: u)
+  result = PkgUrl(qualifiedName: extractProjectName(u), u: u, hasShortName: false)
 
-proc createUrlSkipPatterns*(x: string, skipDirTest = false): PkgUrl =
-  if not x.isUrl():
-    if dirExists(x) or skipDirTest:
-      let x =
-        if isGitDir(x):
-          getRemoteUrl(Path(x))
+proc createUrlSkipPatterns*(raw: string, skipDirTest = false): PkgUrl =
+  if not raw.isUrl():
+    if dirExists(raw) or skipDirTest:
+      let raw =
+        if isGitDir(raw):
+          getRemoteUrl(Path(raw))
         else:
-          ("file://" & x)
-      let u = parseUri(x)
-      result = PkgUrl(qualifiedName: extractProjectName(u), u: u)
+          ("file://" & raw)
+      let u = parseUri(raw)
+      result = PkgUrl(qualifiedName: extractProjectName(u), u: u, hasShortName: false)
     else:
-      raise newException(ValueError, "Invalid name or URL: " & x)
-  elif x.startsWith("git@"): # special case git@server.com
-    let u = parseUri("ssh://" & x.replace(":", "/"))
-    result = PkgUrl(qualifiedName: extractProjectName(u), u: u)
+      raise newException(ValueError, "Invalid name or URL: " & raw)
+  elif raw.startsWith("git@"): # special case git@server.com
+    let u = parseUri("ssh://" & raw.replace(":", "/"))
+    result = PkgUrl(qualifiedName: extractProjectName(u), u: u, hasShortName: false)
   else:
-    var u = parseUri(x)
+    var u = parseUri(raw)
     if u.scheme == "file" and u.hostname != "":
       # TODO: handle windows paths
       u = parseUri("file://" & (workspace().string / (u.hostname & u.path)).absolutePath)
-    result = PkgUrl(qualifiedName: extractProjectName(u), u: u)
+    result = PkgUrl(qualifiedName: extractProjectName(u), u: u, hasShortName: false)
 
+  debug result, "created url raw:", repr(raw), "url:", repr(result)
 
 # proc dir*(s: PkgUrl): string =
 #   if isFileProtocol(s):
