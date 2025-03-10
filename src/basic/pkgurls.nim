@@ -114,7 +114,7 @@ proc createUrlSkipPatterns*(raw: string, skipDirTest = false): PkgUrl =
       hasShortName = true
     result = PkgUrl(qualifiedName: extractProjectName(u), u: u, hasShortName: hasShortName)
 
-  debug result, "created url raw:", repr(raw), "url:", repr(result)
+  # debug result, "created url raw:", repr(raw), "url:", repr(result)
 
 # proc dir*(s: PkgUrl): string =
 #   if isFileProtocol(s):

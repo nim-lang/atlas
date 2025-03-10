@@ -283,7 +283,9 @@ proc solve*(graph: var DepGraph; form: Form) =
 
     if ListVersions in context().flags:
       warn "Resolved", "selected:"
-      for pkg in values(graph.pkgs):
+      var topo = toposorted(graph)
+      topo.reverse()
+      for pkg in topo:
         if not pkg.isRoot:
           for ver, rel in pkg.versions:
             if ver.vid in form.mapping:
