@@ -10,11 +10,6 @@ import testerutils
 if not dirExists("tests/ws_testtraverse/buildGraph"):
   ensureGitHttpServer()
 
-# proc createGraph*(s: PkgUrl): DepGraph =
-#   result = DepGraph(nodes: @[], reqs: defaultReqs())
-#   result.packageToDependency[s] = result.nodes.len
-#   result.nodes.add Package(pkg: s, versions: @[], isRoot: true, isTopLevel: true, activeRelease: -1)
-
 proc setupGraph*(): seq[string] =
   let projs = @["proj_a", "proj_b", "proj_c", "proj_d"]
   if not dirExists("buildGraph"):
@@ -187,6 +182,7 @@ suite "graph solve":
           echo "PKG: ", pkg.url.projectName
 
   test "ws_semver_unit with patterns":
+      ## Supporting Patterns suck, so here's a test to ensure they work
       # setAtlasVerbosity(Info)
       withDir "tests/ws_semver_unit":
         removeDir("deps")
