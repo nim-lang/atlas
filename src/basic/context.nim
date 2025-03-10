@@ -49,7 +49,7 @@ type
     dumpGraphs*: bool = true # TODO: debugging, plumb cli option later
     dumpFormular*: bool = true # TODO: debugging, plumb cli option later
     overrides*: Patterns
-    defaultAlgo*: ResolutionAlgorithm
+    defaultAlgo*: ResolutionAlgorithm = SemVer
     plugins*: PluginInfo
     overridesFile*: Path
     pluginsFile*: Path
