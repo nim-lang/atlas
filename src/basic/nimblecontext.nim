@@ -77,6 +77,7 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
   if context().useShortNamesOnDisk:
     result.projectName = nc.urlToNames.getOrDefault(result.url, result.projectName)
 
+  debug "createUrl", "name:", name, "orig:", nameOrig, "result:", $result.projectName
   if not result.isEmpty():
     nc.put(result.projectName, result.url)
 

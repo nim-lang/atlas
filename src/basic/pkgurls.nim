@@ -17,12 +17,21 @@ const
 
 type
   PkgUrl* = object
-    projectName*: string
+    qualifiedName*: tuple[name: string, user: string, host: string]
     u: Uri
 
 proc isFileProtocol*(s: PkgUrl): bool = s.u.scheme == "file"
 proc isUrl*(s: string): bool = s.startsWith("git@") or parseUri(s).scheme != ""
-proc isEmpty*(s: PkgUrl): bool = s.projectName.len() == 0
+proc isEmpty*(s: PkgUrl): bool = s.qualifiedName[0].len() == 0
+
+proc fullName*(u: PkgUrl): string =
+  if u.qualifiedName.host.len() > 0 or u.qualifiedName.user.len() > 0:  
+    result = u.qualifiedName.name & "." & u.qualifiedName.user & "." & u.qualifiedName.host
+  else:
+    result = u.qualifiedName.name
+
+proc projName*(u: PkgUrl): string = u.qualifiedName.name
+
 
 proc toUri*(u: PkgUrl): Uri = result = u.u
 proc url*(p: PkgUrl): Uri = p.u
@@ -31,7 +40,9 @@ proc `$`*(u: PkgUrl): string = $u.u
 proc toJsonHook*(v: PkgUrl): JsonNode = %($(v))
 proc hash*(a: PkgUrl): Hash {.inline.} = hash(a.u)
 
-proc extractProjectName*(url: Uri): string =
+proc toReporterName(u: PkgUrl): string = u.fullName()
+
+proc extractProjectName*(url: Uri): tuple[name: string, user: string, host: string] =
   var u = url
   var (p, n, e) = u.path.splitFile()
   p.removePrefix(DirSep)
@@ -40,11 +51,11 @@ proc extractProjectName*(url: Uri): string =
 
   if u.scheme == "atlas":
     echo "EXTRACT: ", "p: ", p, " n: ", n, " e: ", e, " url: ", url.repr
-    result = n
+    result = (n, "", "")
   elif u.scheme == "file":
-    result = n & e
+    result = (n & e, "", "")
   else:
-    result = [n & e, p, u.hostname].join(".")
+    result = (n & e, p, u.hostname)
 
 proc toOriginalPath*(pkgUrl: PkgUrl): Path =
   if pkgUrl.url.scheme == "file":
@@ -57,11 +68,11 @@ proc toDirectoryPath*(pkgUrl: PkgUrl, ): Path =
     result = workspace()
   elif pkgUrl.url.scheme == "file":
     # result = workspace() / Path(pkgUrl.url.path)
-    result = workspace() / context().depsDir / Path(pkgUrl.projectName)
+    result = workspace() / context().depsDir / Path(pkgUrl.fullName())
   else:
-    result = workspace() / context().depsDir / Path(pkgUrl.projectName)
+    result = workspace() / context().depsDir / Path(pkgUrl.fullName())
   result = result.absolutePath
-  trace pkgUrl.projectName, "found directory path:", $result
+  trace pkgUrl.projName, "found directory path:", $result
   doAssert result.len() > 0
 
 proc toLinkPath*(pkgUrl: PkgUrl): Path =
@@ -71,7 +82,7 @@ proc toLinkPath*(pkgUrl: PkgUrl): Path =
     Path(pkgUrl.toDirectoryPath().string & ".link")
 
 proc toPkgUriRaw*(u: Uri): PkgUrl =
-  result = PkgUrl(projectName: extractProjectName(u), u: u)
+  result = PkgUrl(qualifiedName: extractProjectName(u), u: u)
 
 proc createUrlSkipPatterns*(x: string, skipDirTest = false): PkgUrl =
   if not x.isUrl():
@@ -82,18 +93,18 @@ proc createUrlSkipPatterns*(x: string, skipDirTest = false): PkgUrl =
         else:
           ("file://" & x)
       let u = parseUri(x)
-      result = PkgUrl(projectName: extractProjectName(u), u: u)
+      result = PkgUrl(qualifiedName: extractProjectName(u), u: u)
     else:
       raise newException(ValueError, "Invalid name or URL: " & x)
   elif x.startsWith("git@"): # special case git@server.com
     let u = parseUri("ssh://" & x.replace(":", "/"))
-    result = PkgUrl(projectName: extractProjectName(u), u: u)
+    result = PkgUrl(qualifiedName: extractProjectName(u), u: u)
   else:
     var u = parseUri(x)
     if u.scheme == "file" and u.hostname != "":
       # TODO: handle windows paths
       u = parseUri("file://" & (workspace().string / (u.hostname & u.path)).absolutePath)
-    result = PkgUrl(projectName: extractProjectName(u), u: u)
+    result = PkgUrl(qualifiedName: extractProjectName(u), u: u)
 
 
 # proc dir*(s: PkgUrl): string =

@@ -61,11 +61,13 @@ proc parseNimbleFile*(nc: var NimbleContext;
         result.requirements.add (url, query)
 
 
-proc genRequiresLine(u: string): string = "requires \"$1\"\n" % u.escape("", "")
+proc genRequiresLine(u: string): string =
+  result = "requires \"$1\"\n" % u.escape("", "")
 
 proc patchNimbleFile*(nc: var NimbleContext;
                       p: Patterns; nimbleFile: Path, name: string) =
   let url = nc.createUrl(name)
+  debug nimbleFile, "patching nimble file to use package:", name, "url:", $url
 
   if url.isEmpty:
     error name, "cannot resolve package name: " & name
@@ -74,11 +76,14 @@ proc patchNimbleFile*(nc: var NimbleContext;
   let release = parseNimbleFile(nc, nimbleFile, p)
   # see if we have this requirement already listed. If so, do nothing:
   for (dep, ver) in release.requirements:
+    debug nimbleFile, "checking if dep url:", $url, "matches:", $dep
     if url == dep:
-      info(nimbleFile, "up to date")
+      info(nimbleFile, "nimble fileup to date")
       return
 
-  let line = genRequiresLine(nc.lookup(url))
+  debug nimbleFile, "patching nimble file using:", $url.projectName
+
+  let line = genRequiresLine(url.projectName)
   var f = open($nimbleFile, fmAppend)
   try:
     f.writeLine line
