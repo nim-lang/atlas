@@ -10,9 +10,8 @@ if execShellCmd("nim c -o:$# -d:release src/atlas.nim" % [atlasExe]) != 0:
 ensureGitHttpServer()
 
 template testSemVer2(name, expected: string) =
-  # createDir name
-  # withDir name:
-  block:
+  createDir name
+  withDir name:
     let cmd = atlasExe & " --full --proxy=http://localhost:4242 --dumbProxy --keepWorkspace --resolver=SemVer --colors:off --list use proj_a"
     let (outp, status) = execCmdEx(cmd)
     if status == 0:
@@ -32,9 +31,8 @@ template testSemVer2(name, expected: string) =
       check status == 0
 
 template testMinVer(name, expected: string) =
-  # createDir name
-  # withDir name:
-  block:
+  createDir name
+  withDir name:
     let cmd = atlasExe & " --keepWorkspace --resolver=MinVer --list use proj_a"
     let (outp, status) = execCmdEx(atlasExe & " --keepWorkspace --resolver=MinVer --list use proj_a")
     if status == 0:
