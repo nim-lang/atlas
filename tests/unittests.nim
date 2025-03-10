@@ -53,48 +53,91 @@ proc initBasicWorkspace(typ: type AtlasContext): AtlasContext =
   result.origDepsDir = result.workspace
 
 suite "urls and naming":
+  var nc: NimbleContext
 
-  test "basic urls":
-
+  setup:
+    nc = createUnfilledNimbleContext()
     setAtlasVerbosity(Trace)
 
-    var nc = createUnfilledNimbleContext()
+  test "balls url":
+    let upkg = nc.createUrl("https://github.com/disruptek/balls.git")
+    check upkg.url.hostname == "github.com"
+    check $upkg.url == "https://github.com/disruptek/balls"
+    check $upkg.projectName == "balls.disruptek.github.com"
+    check upkg.toDirectoryPath() == absolutePath(workspace() / Path"deps" / Path("balls.disruptek.github.com"))
+    check upkg.toLinkPath() == absolutePath(workspace() / Path"deps" / Path("balls.disruptek.github.com.link"))
+    expect ValueError:
+      discard nc.createUrl("balls")
+
+  test "npeg url":
     nc.put("npeg", parseUri "https://github.com/zevv/npeg")
+    let upkg = nc.createUrl("https://github.com/zevv/npeg.git")
+    check upkg.url.hostname == "github.com"
+    check $upkg.url == "https://github.com/zevv/npeg"
+    check $upkg.projectName == "npeg"
+    check upkg.toDirectoryPath() == absolutePath(workspace() / Path"deps" / Path("npeg"))
+    check upkg.toLinkPath() == absolutePath(workspace() / Path"deps" / Path("npeg.link"))
+    let npkg = nc.createUrl("npeg")
+    check npkg.url.hostname == "github.com"
+    check $npkg.url == "https://github.com/zevv/npeg"
+
+  test "sync url":
     nc.put("sync", parseUri "https://github.com/planetis-m/sync")
-    nc.put("npeg", parseUri "https://github.com/zevv/npeg")
+    let upkg = nc.createUrl("https://github.com/planetis-m/sync")
+    check upkg.url.hostname == "github.com"
+    check $upkg.url == "https://github.com/planetis-m/sync"
+    check $upkg.projectName == "sync"
+    check upkg.toDirectoryPath() == absolutePath(workspace() / Path"deps" / Path("sync"))
+    check upkg.toLinkPath() == absolutePath(workspace() / Path"deps" / Path("sync.link"))
+    let npkg = nc.createUrl("sync")
+    check npkg.url.hostname == "github.com"
+    check $npkg.url == "https://github.com/planetis-m/sync"
 
-    for name, item in basicExamples.items:
-      echo ""
-      let upkg = nc.createUrl(item.input)
+  test "bytes2human url":
+    let upkg = nc.createUrl("https://github.com/juancarlospaco/nim-bytes2human")
+    check upkg.url.hostname == "github.com"
+    check $upkg.url == "https://github.com/juancarlospaco/nim-bytes2human"
+    check $upkg.projectName == "nim-bytes2human.juancarlospaco.github.com"
+    check upkg.toDirectoryPath() == absolutePath(workspace() / Path"deps" / Path("nim-bytes2human.juancarlospaco.github.com"))
+    check upkg.toLinkPath() == absolutePath(workspace() / Path"deps" / Path("nim-bytes2human.juancarlospaco.github.com.link"))
+    expect ValueError:
+      discard nc.createUrl("bytes2human")
 
-      echo "pkg:url: ", upkg.repr
-      echo "pkg:name: ", upkg.projectName
-      echo "pkg:dir:  ", upkg.toDirectoryPath()
+  test "atlas ssh url":
+    let upkg = nc.createUrl("git@github.com:elcritch/atlas.git")
+    check upkg.url.hostname == "github.com"
+    check $upkg.url == "ssh://git@github.com/elcritch/atlas"
+    check $upkg.projectName == "atlas.elcritch.github.com"
+    check upkg.toDirectoryPath() == absolutePath(workspace() / Path"deps" / Path("atlas.elcritch.github.com"))
+    check upkg.toLinkPath() == absolutePath(workspace() / Path"deps" / Path("atlas.elcritch.github.com.link"))
+    expect ValueError:
+      discard nc.createUrl("atlas")
 
-      check upkg.url.hostname == "github.com" or name in ["proj_a", "proj_b", "workspace"]
-      check $upkg.url == item.output
-      check $upkg.projectName == item.projectName
+  test "proj_a file url":
+    let upkg = nc.createUrl("file://./buildGraph/proj_a")
+    check upkg.url.hostname == ""
+    check $upkg.url == "file://$1/buildGraph/proj_a" % [ospaths2.getCurrentDir()]
+    check $upkg.projectName == "proj_a"
+    check upkg.toDirectoryPath() == absolutePath(workspace() / Path"deps" / Path("proj_a"))
+    check upkg.toLinkPath() == absolutePath(workspace() / Path"deps" / Path("proj_a.link"))
 
-      check nc.lookup(item.projectName) == upkg
+  test "proj_b file url":
+    let upkg = nc.createUrl("file://$1/buildGraph/proj_b" % [ospaths2.getCurrentDir()])
+    check upkg.url.hostname == ""
+    check $upkg.url == "file://$1/buildGraph/proj_b" % [ospaths2.getCurrentDir()]
+    check $upkg.projectName == "proj_b"
+    check upkg.toDirectoryPath() == absolutePath(workspace() / Path"deps" / Path("proj_b"))
+    check upkg.toLinkPath() == absolutePath(workspace() / Path"deps" / Path("proj_b.link"))
 
-      if name in ["workspace"]:
-        check upkg.toDirectoryPath() == paths.getCurrentDir()
-        check $upkg.toLinkPath() == ""
-      else:
-        check upkg.toDirectoryPath() == absolutePath(workspace() / Path"deps" / Path(item.projectName))
-        check upkg.toLinkPath() == absolutePath(workspace() / Path"deps" / Path(item.projectName & ".link"))
+  test "workspace atlas url":
+    let upkg = nc.createUrl("atlas://workspace/test.nimble")
+    check upkg.url.hostname == "workspace"
+    check $upkg.url == "atlas://workspace/test.nimble"
+    check $upkg.projectName == "test"
+    check upkg.toDirectoryPath() == absolutePath(workspace())
+    check upkg.toLinkPath() == Path""
 
-      if name in ["balls", "bytes2human", "atlas", "workspace"]:
-        # these aren't in the packages database, so it's expected they can't be lookup
-        expect ValueError:
-          let npkg = nc.createUrl(name)
-      elif name in ["proj_a", "proj_b"]:
-        discard
-      else:
-        let npkg = nc.createUrl(name)
-        check npkg.url.hostname == "github.com"
-        check $npkg.url == item.output
-
+  test "use short names on disk":
     context().useShortNamesOnDisk = false
     let upkg = nc.createUrl("npeg")
     check $upkg.projectName == "npeg.zevv.github.com"
@@ -110,7 +153,6 @@ suite "urls and naming":
       echo "\t", name, " ".repeat(50 - len($(name))), url
 
   test "createUrl with Path":
-    var nc = createUnfilledNimbleContext()
     let testPath = Path(paths.getCurrentDir()) / Path"test_project"
     let upkg = nc.createUrlFromPath(testPath)
 
@@ -130,16 +172,6 @@ suite "urls and naming":
     check nestedPkg.projectName == "child_project"
     check nestedPkg.url.path.endsWith("child_project")
     check nc.lookup(nestedPkg.projectName) == nestedPkg
-
-    # Test Atlas workspace handling
-    let wsPath = Path(paths.getCurrentDir()) / Path"tests" / Path"ws_basic"
-    let wsPkg = nc.createUrlFromPath(wsPath)
-    echo "wsPkg: ", wsPkg.url
-    echo "wsPkg: ", wsPkg.projectName
-    check wsPkg.url.scheme == "atlas"
-    check wsPkg.url.hostname == "workspace"
-    check wsPkg.projectName == "ws_basic"
-    check nc.lookup(wsPkg.projectName) == wsPkg
 
 template v(x): untyped = Version(x)
 
