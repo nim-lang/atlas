@@ -193,7 +193,7 @@ suite "graph solve":
         workspace() = paths.getCurrentDir()
         context().flags = {UsesOverrides, KeepWorkspace, ListVersions, FullClones}
         context().defaultAlgo = SemVer
-        discard context().overrides.addPattern("$+", "-> http://example.com/buildGraph/$#")
+        discard context().overrides.addPattern("proj$+", "https://example.com/buildGraph/proj$#")
 
         var nc = createNimbleContext()
 
@@ -266,10 +266,10 @@ suite "graph solve":
         check graph.validateDependencyGraph()
         let topo = graph.toposorted()
 
-        check topo[0].url.projectName == "proj_d"
-        check topo[1].url.projectName == "proj_c"
-        check topo[2].url.projectName == "proj_b"
-        check topo[3].url.projectName == "proj_a"
+        check topo[0].url.projectName == "proj_d.buildGraph.example.com"
+        check topo[1].url.projectName == "proj_c.buildGraph.example.com"
+        check topo[2].url.projectName == "proj_b.buildGraph.example.com"
+        check topo[3].url.projectName == "proj_a.buildGraph.example.com"
 
         for pkg in topo:
           echo "PKG: ", pkg.url.projectName

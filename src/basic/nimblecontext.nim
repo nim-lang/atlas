@@ -63,12 +63,6 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
   ## TODO: add unit tests!
   doAssert not nameOrig.isAbsolute(), "createUrl does not support absolute paths: " & $nameOrig
 
-  if nameOrig.isUrl():
-    let url = createUrlSkipPatterns(nameOrig)
-    let name = nc.lookup(url)
-    if name != "":
-      result = nc.lookup(name)
-
   var didReplace = false
   var name = substitute(nc.overrides, nameOrig, didReplace)
   debug "atlas:createUrl", "name:", name, "orig:", nameOrig, "patterns:", $nc.overrides
@@ -81,7 +75,7 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
       trace "atlas:createUrl", "name is in nameToUrl:", $lname
       result = lname
     else:
-      warn "atlas:createUrl", "name is not in nameToUrl:", $lname
+      warn "atlas:createUrl", "name is not in nameToUrl:", $name
       raise newException(ValueError, "project name not found in packages database: " & $lname)
   if result.url.path.splitFile().ext == ".git":
     var url = parseUri($result.url)
