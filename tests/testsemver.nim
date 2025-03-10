@@ -81,7 +81,7 @@ proc setupGraphNoGitTags* =
     exec "git clone http://localhost:4242/buildGraphNoGitTags/proj_d"
 
 suite "basic repo tests":
-  test "tests/ws_semver2":
+  test "semproject1":
       withDir "tests/ws_semver2":
         removeDirs("semproject1")
         setupGraph()
@@ -99,7 +99,7 @@ suite "basic repo tests":
         """
         testSemVer2("semproject1", semVerExpectedResult)
 
-  test "tests/ws_semver2":
+  test "semproject2":
       withDir "tests/ws_semver2":
         removeDirs("semproject2")
         setupGraphNoGitTags()
@@ -122,7 +122,7 @@ suite "basic repo tests":
         
         testSemVer2("semproject2", semVerExpectedResultNoGitTags)
 
-  test "tests/ws_semver2":
+  test "minproject1":
       withDir "tests/ws_semver2":
         removeDirs("minproject")
         setupGraph()

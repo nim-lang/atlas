@@ -71,7 +71,7 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
       trace "atlas:createUrl", "name is in nameToUrl:", lname
       result = nc.nameToUrl[lname]
     else:
-      error "atlas:createUrl", "name is not in nameToUrl:", lname
+      warn "atlas:createUrl", "name is not in nameToUrl:", lname
       raise newException(ValueError, "project name not found in packages database: " & $lname)
   if result.url.path.splitFile().ext == ".git":
     var url = parseUri($result.url)
