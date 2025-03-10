@@ -84,7 +84,7 @@ proc setupGraphNoGitTags* =
 
 suite "basic repo tests":
   test "semproject1":
-      withDir "ws_semproject1":
+      withDir "tests/ws_semproject1":
         removeDirs("deps")
         setupGraph()
         let semVerExpectedResult = dedent"""
@@ -101,7 +101,7 @@ suite "basic repo tests":
         testSemVer2("semproject1", semVerExpectedResult)
 
   test "semproject2":
-      withDir "ws_semproject2":
+      withDir "tests/ws_semproject2":
         removeDirs("semproject2")
         removeDirs("deps")
         setupGraphNoGitTags()
@@ -125,7 +125,7 @@ suite "basic repo tests":
         testSemVer2("semproject2", semVerExpectedResultNoGitTags)
 
   test "minproject1":
-      withDir "ws_minproject1":
+      withDir "tests/ws_minproject1":
         removeDirs("deps")
         setupGraph()
         let minVerExpectedResult = dedent"""
