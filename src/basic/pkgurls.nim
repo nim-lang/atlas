@@ -57,7 +57,6 @@ proc extractProjectName*(url: Uri): tuple[name: string, user: string, host: stri
     e = ""
 
   if u.scheme == "atlas":
-    echo "EXTRACT: ", "p: ", p, " n: ", n, " e: ", e, " url: ", url.repr
     result = (n, "", "")
   elif u.scheme == "file":
     result = (n & e, "", "")

@@ -18,6 +18,7 @@ suite "urls and naming":
     # setAtlasVerbosity(Trace)
     ws = absolutePath(workspace())
     nc.put("npeg", parseUri "https://github.com/zevv/npeg")
+    nc.put("sync", parseUri "https://github.com/planetis-m/sync")
 
   test "balls url":
     let upkg = nc.createUrl("https://github.com/disruptek/balls.git")
@@ -41,7 +42,6 @@ suite "urls and naming":
     check $npkg.url == "https://github.com/zevv/npeg"
 
   test "sync url":
-    nc.put("sync", parseUri "https://github.com/planetis-m/sync")
     let upkg = nc.createUrl("https://github.com/planetis-m/sync")
     check upkg.url.hostname == "github.com"
     check $upkg.url == "https://github.com/planetis-m/sync"
@@ -105,6 +105,7 @@ suite "urls and naming":
   #   check $upkg.projectName == "npeg.zevv.github.com"
 
   test "print names":
+    let upkg = nc.createUrl("https://github.com/disruptek/balls.git")
     echo "\nNimbleContext:urlToNames: "
     privateAccess(nc.type)
     for url, name in nc.urlToNames:
@@ -119,10 +120,10 @@ suite "urls and naming":
     let testPath = Path(paths.getCurrentDir()) / Path"test_project"
     let upkg = nc.createUrlFromPath(testPath)
 
-    echo "upkg: ", upkg.url
-    echo "upkg: ", upkg.projectName
-    echo "upkg: ", upkg.url.path
-    echo "upkg: ", nc.lookup(upkg.projectName)
+    echo "\tupkg: ", upkg.url
+    echo "\tupkg: ", upkg.projectName
+    echo "\tupkg: ", upkg.url.path
+    echo "\tupkg: ", nc.lookup(upkg.projectName)
 
     check upkg.url.scheme == "file"
     check upkg.projectName == "test_project"
