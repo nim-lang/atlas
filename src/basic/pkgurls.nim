@@ -108,10 +108,12 @@ proc createUrlSkipPatterns*(raw: string, skipDirTest = false): PkgUrl =
     result = PkgUrl(qualifiedName: extractProjectName(u), u: u, hasShortName: false)
   else:
     var u = parseUri(raw)
+    var hasShortName = false
     if u.scheme == "file" and u.hostname != "":
       # TODO: handle windows paths
       u = parseUri("file://" & (workspace().string / (u.hostname & u.path)).absolutePath)
-    result = PkgUrl(qualifiedName: extractProjectName(u), u: u, hasShortName: false)
+      hasShortName = true
+    result = PkgUrl(qualifiedName: extractProjectName(u), u: u, hasShortName: hasShortName)
 
   debug result, "created url raw:", repr(raw), "url:", repr(result)
 
