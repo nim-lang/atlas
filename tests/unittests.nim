@@ -1,5 +1,5 @@
 import std/[unittest, os, algorithm, strutils, importutils]
-import basic/[context, pkgurls, deptypes, nimblecontext, osutils, versions]
+import basic/[context, pkgurls, deptypes, nimblecontext, compiledpatterns, osutils, versions]
 
 when false:
   from nameresolver import resolvePackage
@@ -17,8 +17,8 @@ suite "urls and naming":
     nc = createUnfilledNimbleContext()
     # setAtlasVerbosity(Trace)
     ws = absolutePath(workspace())
-    nc.put("npeg", parseUri "https://github.com/zevv/npeg")
-    nc.put("sync", parseUri "https://github.com/planetis-m/sync")
+    nc.put("npeg", toPkgUriRaw(parseUri "https://github.com/zevv/npeg"))
+    nc.put("sync", toPkgUriRaw(parseUri "https://github.com/planetis-m/sync"))
 
   test "balls url":
     let upkg = nc.createUrl("https://github.com/disruptek/balls.git")
@@ -30,8 +30,17 @@ suite "urls and naming":
     expect ValueError:
       discard nc.createUrl("balls")
 
-  test "balls url using packageOverrides":
-    nc.put("balls", parseUri "https://github.com/disruptek/balls.git")
+  test "balls url using packageExtras":
+    nc.put("balls", toPkgUriRaw(parseUri "https://github.com/disruptek/balls.git"))
+    let upkg = nc.createUrl("balls")
+    check upkg.url.hostname == "github.com"
+    check $upkg.url == "https://github.com/disruptek/balls"
+    check $upkg.projectName == "balls"
+    check upkg.toDirectoryPath() == ws / Path"deps" / Path("balls")
+    check upkg.toLinkPath() == ws / Path"deps" / Path("balls.link")
+
+  test "balls url using nameOverrides":
+    discard nc.nameOverrides.addPattern("balls", "https://github.com/disruptek/balls.git")
     let upkg = nc.createUrl("balls")
     check upkg.url.hostname == "github.com"
     check $upkg.url == "https://github.com/disruptek/balls"

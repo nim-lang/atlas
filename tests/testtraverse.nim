@@ -63,7 +63,7 @@ template testRequirements(sp: Package,
 suite "test expand with git tags":
   setup:
     setAtlasVerbosity(Info)
-    context().packageOverrides = initTable[string, Uri]()
+    context().nameOverrides = Patterns()
     context().urlOverrides = Patterns()
     context().proxy = parseUri "http://localhost:4242"
     context().dumbProxy = true
@@ -161,9 +161,9 @@ suite "test expand with git tags":
         workspace() = paths.getCurrentDir()
         context().flags = {UsesOverrides, KeepWorkspace, ListVersions, FullClones}
         context().defaultAlgo = SemVer
+        discard context().packageOverrides.addPattern("$+", "file://./buildGraph/$#")
 
         var nc = createNimbleContext()
-        discard nc.packageOverrides("$+", "file://./buildGraph/$#")
 
         let deps = setupGraph()
         let dir = paths.getCurrentDir().absolutePath
