@@ -67,12 +67,12 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
   trace "atlas:createUrl", "name:", name, "orig:", nameOrig, "namePatterns:", $nc.packageExtras, "urlPatterns:", $nc.urlOverrides
   
   if name.isUrl():
-    trace "atlas:createUrl", "name is url:", name
+    # trace "atlas:createUrl", "name is url:", name
     result = createUrlSkipPatterns(name)
   else:
     let lname = nc.lookup(name)
     if not lname.isEmpty():
-      trace "atlas:createUrl", "name is in nameToUrl:", $lname
+      # trace "atlas:createUrl", "name is in nameToUrl:", $lname
       result = lname
     else:
       warn "atlas:createUrl", "name is not in nameToUrl:", $name
@@ -89,7 +89,7 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
   if not result.isEmpty():
     nc.put(result.projectName, result)
 
-  debug "atlas:createUrl", "created url with name:", name, "orig:", nameOrig, "projectName:", $result.projectName, "hasShortName:", $result.hasShortName, "url:", $result.url
+  trace "atlas:createUrl", "created url with name:", name, "orig:", nameOrig, "projectName:", $result.projectName, "hasShortName:", $result.hasShortName, "url:", $result.url
 
 proc createUrlFromPath*(nc: var NimbleContext, orig: Path): PkgUrl =
   let absPath = absolutePath(orig)

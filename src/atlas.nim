@@ -340,6 +340,8 @@ proc parseAtlasOptions(action: var string, args: var seq[string]) =
       of "verbosity":
         case val.normalize
         of "normal": setAtlasVerbosity(Info)
+        of "info": setAtlasVerbosity(Info)
+        of "error": setAtlasVerbosity(Error)
         of "trace": setAtlasVerbosity(Trace)
         of "debug": setAtlasVerbosity(Debug)
         else: writeHelp()

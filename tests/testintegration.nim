@@ -11,12 +11,13 @@ proc integrationTest() =
   # Test installation of some "important_packages" which we are sure
   # won't disappear in the near or far future. Turns out `nitter` has
   # quite some dependencies so it suffices:
+  let args = " --proxy=http://localhost:4242/ --dumbproxy --full --verbosity:debug --keepWorkspace "
 
-  let cmd = atlasExe & " --proxy=http://localhost:4242/ --dumbproxy --full --verbosity:trace --keepWorkspace use https://github.com/zedeus/nitter"
+  let cmd = atlasExe & args & " use https://github.com/zedeus/nitter"
   let res = execShellCmd cmd
   # exec atlasExe & " --verbosity:trace --keepWorkspace use https://github.com/zedeus/nitter"
   block:
-    let cmd = atlasExe & " --proxy=http://localhost:4242/ --dumbproxy --full --verbosity:trace --keepWorkspace pin"
+    let cmd = atlasExe & args & " pin"
     let res = execShellCmd cmd
 
   sameDirContents("expected", ".")
