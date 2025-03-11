@@ -27,7 +27,7 @@ type
     GitCurrentCommit = "git -C $DIR log -n 1 --format=%H"
     GitMergeBase = "git -C $DIR merge-base"
     GitLsFiles = "git -C $DIR ls-files"
-    GitLog = "git -C $DIR log --format=%H"
+    GitLog = "git -C $DIR log --format=%H origin/HEAD"
     GitCurrentBranch = "git rev-parse --abbrev-ref HEAD"
     GitLsRemote = "git -C $DIR ls-remote --quiet --tags"
 
@@ -146,9 +146,28 @@ proc collectTaggedVersions*(path: Path): seq[VersionTag] =
     result = @[]
 
 proc collectFileCommits*(path, file: Path, errorReportLevel: MsgKind = Warning): seq[VersionTag] =
-  let (outp, status) = exec(GitLog, path, [$file], Warning)
+  let (outp1, status1) = exec(GitLog, path, [], Warning)
+  var allVersions: seq[VersionTag]
+  if status1 == RES_OK:
+    allVersions = parseTaggedVersions(outp1, requireVersions = false)
+  else:
+    message(errorReportLevel, file, "could not collect file commits at:", $file)
+
+  if allVersions.len == 0:
+    return @[]
+
+  let headCommit = allVersions[0]
+  echo "HEAD COMMIT: ", headCommit, " for file: ", $file
+
+  let (outp, status) = exec(GitLog, path, ["--",$file], Warning)
   if status == RES_OK:
     result = parseTaggedVersions(outp, requireVersions = false)
+    if result.len > 0:
+      echo "RESULT: ", result[0], " HEAD COMMIT: ", headCommit
+      if result[0].c == headCommit.c:
+        echo "HEAD COMMIT: ", headCommit, " for file: ", $file
+        result[0].v = Version"#head"
+        echo "RESULT: ", result[0]
   else:
     message(errorReportLevel, file, "could not collect file commits at:", $file)
 

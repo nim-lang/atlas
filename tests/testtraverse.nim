@@ -149,6 +149,7 @@ suite "test expand with git tags":
         check collectNimbleVersions(nc, dep0) == newSeq[VersionTag]()
         proc tolist(tags: seq[VersionTag]): seq[string] = tags.mapIt($VersionTag(v: Version"", c: it.c)).sorted()
 
+        echo "projAnimbles: ", collectNimbleVersions(nc, dep1)
         check collectNimbleVersions(nc, dep1).tolist() == projAnimbles.tolist()
         check collectNimbleVersions(nc, dep2).tolist() == projBnimbles.tolist()
         check collectNimbleVersions(nc, dep3).tolist() == projCnimbles.tolist()
@@ -329,6 +330,9 @@ suite "test expand with no git tags":
         check collectNimbleVersions(nc, dep0) == newSeq[VersionTag]()
         proc tolist(tags: seq[VersionTag]): seq[string] = tags.mapIt($VersionTag(v: Version"", c: it.c)).sorted()
 
+        echo "projAtags: ", collectNimbleVersions(nc, dep1)
+        check collectNimbleVersions(nc, dep1).len() == 3
+        check collectNimbleVersions(nc, dep1)[2].v == Version"#head"
         check collectNimbleVersions(nc, dep1).tolist() == projAtags.tolist()
         check collectNimbleVersions(nc, dep2).tolist() == projBtags.tolist()
         check collectNimbleVersions(nc, dep3).tolist() == projCtags.tolist()

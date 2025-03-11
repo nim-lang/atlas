@@ -106,12 +106,12 @@ proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
 
           if not hasCompatible:
             allDepsCompatible = false
-            error pkg, "no versions matched requirements for the dependency:", $dep.projectName
+            warn pkg, "no versions matched requirements for the dependency:", $dep.projectName
             break
 
         # If any dependency can't be satisfied, make this version unsatisfiable
         if not allDepsCompatible:
-          error pkg.url.projectName, "all requirements needed for this Nimble release were not able to be satisfied", $rel.requirements
+          warn pkg.url.projectName, "all requirements needed for this Nimble release were not able to be satisfied", $rel.requirements
           b.addNegated(ver.vid)
           continue
 

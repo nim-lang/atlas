@@ -184,7 +184,7 @@ suite "graph solve":
 
   test "ws_semver_unit with patterns":
       ## Supporting Patterns suck, so here's a test to ensure they work
-      # setAtlasVerbosity(Info)
+      setAtlasVerbosity(Trace)
       withDir "tests/ws_semver_unit":
         removeDir("deps")
         workspace() = paths.getCurrentDir()
