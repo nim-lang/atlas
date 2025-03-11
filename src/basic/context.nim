@@ -46,7 +46,7 @@ type
     depsDir*: Path = Path"deps"
     flags*: set[Flag]
     dumpGraphs*: bool = true # TODO: debugging, plumb cli option later
-    dumpFormular*: bool = true # TODO: debugging, plumb cli option later
+    dumpFormular*: bool = false
     nameOverrides*: Patterns
     urlOverrides*: Patterns
     defaultAlgo*: ResolutionAlgorithm = SemVer

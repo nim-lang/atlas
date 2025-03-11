@@ -90,6 +90,7 @@ proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
 
     # This simpler deps loop was copied from Nimble after it was first ported from Atlas :)
     # It appears to acheive the same results, but it's a lot simpler
+    var anyReleaseSatisfied = false
     for pkg in graph.pkgs.mvalues():
       for ver, rel in validVersions(pkg):
         var allDepsCompatible = true
@@ -111,9 +112,11 @@ proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
 
         # If any dependency can't be satisfied, make this version unsatisfiable
         if not allDepsCompatible:
-          warn pkg.url.projectName, "all requirements needed for this Nimble release were not able to be satisfied", $rel.requirements
+          warn pkg.url.projectName, "all requirements needed for this Nimble release:", $rel.version, "were not able to be satisfied", $rel.requirements.mapIt(it[0].projectName & " " & $it[1]).join("; ")
           b.addNegated(ver.vid)
           continue
+
+        anyReleaseSatisfied = true
 
         # Add implications for each dependency
         # for dep, q in items graph.reqs[ver.req].deps:
@@ -131,6 +134,10 @@ proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
             withOpenBr(b, OrForm):
               for compatVer in compatibleVersions:
                 b.add(compatVer)
+
+      if not anyReleaseSatisfied:
+        error pkg.url.projectName, "no versions satisfied for this package:", $pkg.url
+        break
 
     when false:
       # Note this original ran, but seems to have problems now with minver...
@@ -285,8 +292,11 @@ proc solve*(graph: var DepGraph; form: Form) =
       warn "Resolved", "selected:"
       for pkg in values(graph.pkgs):
         if not pkg.isRoot:
-          pkg.versions.sort(sortVersionsAsc)
-          for ver, rel in pkg.versions:
+          var versions = pkg.versions.pairs().toSeq()
+          versions.sort(sortVersionsDesc)
+          versions.setLen(min(versions.len, 5))
+          versions.reverse()
+          for (ver, rel) in versions:
             if ver.vid in form.mapping:
               let item = form.mapping[ver.vid]
               doAssert pkg.url == item.pkg.url

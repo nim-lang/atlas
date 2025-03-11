@@ -61,7 +61,7 @@ proc processNimbleRelease(
     error pkg.url.projectName, "processRelease missing commit ", $release, "at:", $pkg.ondisk
     result = NimbleRelease(status: HasBrokenRelease, err: "no commit")
     return
-  elif not checkoutGitCommit(pkg.ondisk, release.commit, Error):
+  elif not checkoutGitCommit(pkg.ondisk, release.commit, Warning):
     warn pkg.url.projectName, "processRelease unable to checkout commit ", $release, "at:", $pkg.ondisk
     result = NimbleRelease(status: HasBrokenRelease, err: "error checking out release")
     return
@@ -262,7 +262,7 @@ proc expand*(path: Path, nc: var NimbleContext; mode: TraversalMode, onClone: Pa
         trace pkg.projectName, "expanded pkg:", pkg.repr
         processing = true
       of Found:
-        info pkg.projectName, "Processing at:", $pkg.ondisk
+        debug pkg.projectName, "Processing package at:", $pkg.ondisk
         # processing = true
         let mode = if pkg.isRoot: CurrentCommit else: mode
         nc.traverseDependency(pkg, mode, @[])
