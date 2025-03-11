@@ -8,7 +8,6 @@ type
     urlOverrides*: Patterns
     hasPackageList*: bool
     nameToUrl: Table[string, PkgUrl]
-    extraNameToUrl: Table[string, PkgUrl] # for non-packages projects, e.g. url only
     urlToNames: Table[Uri, string]
 
 proc findNimbleFile*(nimbleFile: Path): seq[Path] =
@@ -29,10 +28,10 @@ proc findNimbleFile*(info: Package): seq[Path] =
 
 proc lookup*(nc: NimbleContext, name: string): PkgUrl =
   let name = unicode.toLower(name)
-  if name in nc.nameToUrl:
+  if name in nc.packageOverrides:
+    result = nc.packageOverrides[name]
+  elif name in nc.nameToUrl:
     result = nc.nameToUrl[name]
-  elif name in nc.extraNameToUrl:
-    result = nc.extraNameToUrl[name]
 
 proc lookup*(nc: NimbleContext, url: Uri): string =
   if url in nc.urlToNames:
@@ -45,16 +44,16 @@ proc lookup*(nc: NimbleContext, url: PkgUrl): string =
 proc put*(nc: var NimbleContext, name: string, url: Uri, isExtra = false) =
   let name = unicode.toLower(name)
   let inNames = name in nc.nameToUrl
-  let inExtra = name in nc.extraNameToUrl
+  let inExtra = name in nc.packageOverrides
   let pkgUrl = url.toPkgUriRaw()
 
   if isExtra and not inNames and not inExtra:
-    nc.extraNameToUrl[name] = pkgUrl
+    nc.packageOverrides[name] = pkgUrl
   if not inNames and not inExtra:
     nc.nameToUrl[name] = pkgUrl
   elif inNames and nc.nameToUrl[name] != pkgUrl:
     raise newException(ValueError, "name already in the database! ")
-  elif inExtra and nc.extraNameToUrl[name] != pkgUrl:
+  elif inExtra and nc.packageOverrides[name] != pkgUrl:
     raise newException(ValueError, "name already in the extras-database! ")
 
   nc.urlToNames[url] = name
@@ -70,11 +69,8 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
   # First try URL overrides if it looks like a URL
   if nameOrig.isUrl():
     name = substitute(nc.urlOverrides, nameOrig, didReplace)
-  else:
-    # Otherwise try name overrides
-    name = substitute(nc.nameOverrides, nameOrig, didReplace)
   
-  trace "atlas:createUrl", "name:", name, "orig:", nameOrig, "namePatterns:", $nc.nameOverrides, "urlPatterns:", $nc.urlOverrides
+  trace "atlas:createUrl", "name:", name, "orig:", nameOrig, "namePatterns:", $nc.packageOverrides, "urlPatterns:", $nc.urlOverrides
   
   if name.isUrl():
     trace "atlas:createUrl", "name is url:", name
@@ -134,8 +130,11 @@ proc fillPackageLookupTable(c: var NimbleContext) =
 
 proc createUnfilledNimbleContext*(): NimbleContext =
   result = NimbleContext()
-  result.nameOverrides = context().nameOverrides
   result.urlOverrides = context().urlOverrides
+  for key, val in context().packageOverrides: 
+    let url = createUrlSkipPatterns($val)
+    result.packageOverrides[key] = url
+    result.urlToNames[url.url()] = key
 
 proc createNimbleContext*(): NimbleContext =
   result = createUnfilledNimbleContext()

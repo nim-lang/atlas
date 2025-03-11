@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [os, uri, paths, files]
+import std / [os, uri, paths, files, tables]
 import versions, parse_requires, compiledpatterns, reporters
 
 export reporters
@@ -47,7 +47,7 @@ type
     flags*: set[Flag]
     dumpGraphs*: bool = true # TODO: debugging, plumb cli option later
     dumpFormular*: bool = true # TODO: debugging, plumb cli option later
-    nameOverrides*: Patterns
+    packageOverrides*: Table[string, Uri]
     urlOverrides*: Patterns
     defaultAlgo*: ResolutionAlgorithm = SemVer
     plugins*: PluginInfo
