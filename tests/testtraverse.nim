@@ -49,7 +49,7 @@ template testRequirements(sp: Package,
     check idx < vers.len()
     let (url, ver) = vers[idx]
     check sp.state == Processed
-    checkpoint "Checking sp versions: " & $sp.versions
+    checkpoint "Checking sp versions: " & $sp.versions.keys.toSeq.mapIt(it.vtag)
     check vt in sp.versions
     if vt in sp.versions:
       check sp.versions[vt].status == Normal
@@ -333,7 +333,7 @@ suite "test expand with no git tags":
 
         echo "projAtags: ", collectNimbleVersions(nc, dep1)
         check collectNimbleVersions(nc, dep1).len() == 3
-        check collectNimbleVersions(nc, dep1)[2].v == Version"#head"
+        check collectNimbleVersions(nc, dep1)[2].isTip
         check collectNimbleVersions(nc, dep1).tolist() == projAtags.tolist()
         check collectNimbleVersions(nc, dep2).tolist() == projBtags.tolist()
         check collectNimbleVersions(nc, dep3).tolist() == projCtags.tolist()

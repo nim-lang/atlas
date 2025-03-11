@@ -40,6 +40,7 @@ type
   VersionTag* = object
     c*: CommitHash
     v*: Version
+    isTip*: bool
 
   CommitOrigin* = enum
     FromNone, FromHead, FromGitTag, FromDep, FromNimbleFile, FromLockfile
@@ -89,12 +90,16 @@ proc `$`*(vt: VersionTag): string =
     result = $vt.v
   else: result = "~"
   result &= "@" & vt.c.short()
+  if vt.isTip:
+    result &= "^"
 
 proc repr*(vt: VersionTag): string =
   if vt.v.string != "":
     result = $vt.v
   else: result = "~" 
   result &= "@" & $vt.c
+  if vt.isTip:
+    result &= "^"
 
 proc commit*(vt: VersionTag): CommitHash = vt.c
 proc version*(vt: VersionTag): Version = vt.v
@@ -463,3 +468,6 @@ proc hash*(v: VersionTag): Hash =
   h = h !& hash(v.v)
   h = h !& hash(v.c)
   result = !$h
+
+proc `==`*(a, b: VersionTag): bool =
+  result = a.v == b.v and a.c == b.c

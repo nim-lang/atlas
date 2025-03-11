@@ -163,7 +163,7 @@ proc collectFileCommits*(path, file: Path, errorReportLevel: MsgKind = Warning):
     result = parseTaggedVersions(outp, requireVersions = false)
     if result.len > 0:
       if result[0].c == headCommit.c:
-        result[0].v = Version"#head"
+        result[0].isTip = true
   else:
     message(errorReportLevel, file, "could not collect file commits at:", $file)
 
