@@ -43,13 +43,15 @@ proc lookup*(nc: NimbleContext, url: PkgUrl): string =
   if url.url in nc.urlToNames:
     result = nc.urlToNames[url.url]
 
-proc put*(nc: var NimbleContext, name: string, url: PkgUrl) =
+proc put*(nc: var NimbleContext, name: string, url: PkgUrl, isFromPath = false) =
   let name = unicode.toLower(name)
   if name notin nc.packageExtras:
     nc.packageExtras[name] = url
   else:
     if nc.packageExtras[name] != url:
-      error "atlas:nimblecontext", "name already exists in packageExtras: " & $name & " with different url: " & $nc.packageExtras[name] & " and " & $url
+      # TODO: need to handle this better, the user needs to choose which url to use
+      #       if the solver can't resolve the conflict
+      error "atlas:nimblecontext", "name already exists in packageExtras:", $name, "isFromPath:", $isFromPath, "with different url:", $nc.packageExtras[name], "and url:", $url
 
 proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
   ## primary point to createUrl's from a name or argument
@@ -115,7 +117,7 @@ proc createUrlFromPath*(nc: var NimbleContext, orig: Path): PkgUrl =
     let fileUrl = "file://" & $absPath
     result = createUrlSkipPatterns(fileUrl)
   if not result.isEmpty():
-    nc.put(result.projectName, result)
+    nc.put(result.projectName, result, isFromPath=true)
 
 proc fillPackageLookupTable(c: var NimbleContext) =
   let pkgsDir = packagesDirectory()
