@@ -280,25 +280,31 @@ suite "test expand with no git tags":
     # These will change if atlas-tests is regnerated!
     # To update run and use commits not adding a proj_x.nim file
     #    curl http://localhost:4242/buildGraph/ws_generated-logs.txt
-    let projAtags = dedent"""
+    let projAnimbles = dedent"""
     61eacba5453392d06ed0e839b52cf17462d94648 1.1.0
+    6a1cc178670d372f21c21329d35579e96283eab0
     88d1801bff2e72cdaf2d29b438472336df6aa66d 1.0.0
     """.parseTaggedVersions(false)
+    let projAtags = projAnimbles.filterIt(it.v.string != "")
 
-    let projBtags = dedent"""
+    let projBnimbles = dedent"""
     c70824d8b9b669cc37104d35055fd8c11ecdd680 1.1.0
+    bbb208a9cad0d58f85bd00339c85dfeb8a4f7ac0
     289ae9eea432cdab9d681ab69444ae9d439eb6ae 1.0.0
     """.parseTaggedVersions(false)
+    let projBtags = projBnimbles.filterIt(it.v.string != "")
 
-    let projCtags = dedent"""
+    let projCnimbles = dedent"""
     d6c04d67697df7807b8e2b6028d167b517d13440 1.2.0
     8756fa4575bf750d4472ac78ba91520f05a1de60 1.0.0
     """.parseTaggedVersions(false)
+    let projCtags = projCnimbles.filterIt(it.v.string != "")
 
-    let projDtags = dedent"""
+    let projDnimbles = dedent"""
     7ee36fecb09ef33024d3aa198ed87d18c28b3548 2.0.0
     0bd0e77a8cbcc312185c2a1334f7bf2eb7b1241f 1.0.0
     """.parseTaggedVersions(false)
+    let projDtags = projDnimbles.filterIt(it.v.string != "")
 
   test "collect nimbles":
       # setAtlasVerbosity(Trace)
@@ -335,14 +341,13 @@ suite "test expand with no git tags":
         echo "projAtags: ", collectNimbleVersions(nc, dep1)
         check collectNimbleVersions(nc, dep1).len() == 3
         check collectNimbleVersions(nc, dep1)[2].isTip
-        check collectNimbleVersions(nc, dep1).tolist() == projAtags.tolist()
-        check collectNimbleVersions(nc, dep2).tolist() == projBtags.tolist()
-        check collectNimbleVersions(nc, dep3).tolist() == projCtags.tolist()
-        check collectNimbleVersions(nc, dep4).tolist() == projDtags.tolist()
-
+        check collectNimbleVersions(nc, dep1).tolist() == projAnimbles.tolist()
+        check collectNimbleVersions(nc, dep2).tolist() == projBnimbles.tolist()
+        check collectNimbleVersions(nc, dep3).tolist() == projCnimbles.tolist()
+        check collectNimbleVersions(nc, dep4).tolist() == projDnimbles.tolist()
 
   test "expand no git tags":
-      setAtlasVerbosity(Trace)
+      # setAtlasVerbosity(Trace)
       withDir "tests/ws_testtraverse":
         removeDir("deps")
         workspace() = paths.getCurrentDir()
@@ -383,13 +388,11 @@ suite "test expand with no git tags":
 
         testRequirements(sp1, projAtags, [
           ("file://$1/buildGraphNoGitTags/proj_b" % [$dir], ">= 1.1.0"),
-          # ("file://$1/buildGraphNoGitTags/proj_b" % [$dir], ">= 1.0.0"),
           ("file://$1/buildGraphNoGitTags/proj_b" % [$dir], ">= 1.0.0"),
         ])
 
         testRequirements(sp2, projBtags, [
           ("file://$1/buildGraphNoGitTags/proj_c" % [$dir], ">= 1.1.0"),
-          # ("file://$1/buildGraphNoGitTags/proj_c" % [$dir], ">= 1.0.0"),
           ("file://$1/buildGraphNoGitTags/proj_c" % [$dir], ">= 1.0.0"),
         ])
 
@@ -403,6 +406,106 @@ suite "test expand with no git tags":
           ("", ""),
         ], true)
 
+suite "test expand with no git tags and nimble commits max":
+
+  setup:
+    setAtlasVerbosity(Warning)
+    context().nameOverrides = Patterns()
+    context().urlOverrides = Patterns()
+    context().proxy = parseUri "http://localhost:4242"
+    context().dumbProxy = true
+    context().depsDir = Path "deps"
+    setAtlasErrorsColor(fgMagenta)
+
+    # These will change if atlas-tests is regnerated!
+    # To update run and use commits not adding a proj_x.nim file
+    #    curl http://localhost:4242/buildGraph/ws_generated-logs.txt
+    let projAnimbles = dedent"""
+    61eacba5453392d06ed0e839b52cf17462d94648 1.1.0
+    6a1cc178670d372f21c21329d35579e96283eab0 1.0.0
+    88d1801bff2e72cdaf2d29b438472336df6aa66d
+    """.parseTaggedVersions(false)
+    let projAtags = projAnimbles.filterIt(it.v.string != "")
+
+    let projBnimbles = dedent"""
+    c70824d8b9b669cc37104d35055fd8c11ecdd680 1.1.0
+    bbb208a9cad0d58f85bd00339c85dfeb8a4f7ac0 1.0.0
+    289ae9eea432cdab9d681ab69444ae9d439eb6ae
+    """.parseTaggedVersions(false)
+    let projBtags = projBnimbles.filterIt(it.v.string != "")
+
+    let projCnimbles = dedent"""
+    d6c04d67697df7807b8e2b6028d167b517d13440 1.2.0
+    8756fa4575bf750d4472ac78ba91520f05a1de60 1.0.0
+    """.parseTaggedVersions(false)
+    let projCtags = projCnimbles.filterIt(it.v.string != "")
+
+    let projDnimbles = dedent"""
+    7ee36fecb09ef33024d3aa198ed87d18c28b3548 2.0.0
+    0bd0e77a8cbcc312185c2a1334f7bf2eb7b1241f 1.0.0
+    """.parseTaggedVersions(false)
+    let projDtags = projDnimbles.filterIt(it.v.string != "")
+
+  test "expand no git tags and nimble commits max":
+      # setAtlasVerbosity(Trace)
+      withDir "tests/ws_testtraverse":
+        removeDir("deps")
+        context().nimbleCommitsMax = true
+        workspace() = paths.getCurrentDir()
+        context().flags = {UsesOverrides, KeepWorkspace, ListVersions, FullClones}
+        context().defaultAlgo = SemVer
+
+        var nc = createNimbleContext()
+        discard nc.nameOverrides.addPattern("$+", "file://./buildGraphNoGitTags/$#")
+
+        let deps = setupGraphNoGitTags()
+        let dir = paths.getCurrentDir().absolutePath
+
+        let graph = dir.expand(nc, AllReleases, onClone=DoClone)
+
+        checkpoint "\tgraph:\n" & $graph.toJson(ToJsonOptions(enumMode: joptEnumString))
+        let sp = graph.pkgs.values().toSeq()
+
+        doAssert sp.len() == 5
+
+        let sp0: Package = sp[0] # proj ws_testtraversal
+        let sp1: Package = sp[1] # proj A
+        let sp2: Package = sp[2] # proj B
+        let sp3: Package = sp[3] # proj C
+        let sp4: Package = sp[4] # proj D
+
+        check $sp[0].url == "atlas://workspace/ws_testtraverse.nimble"
+        check $sp[1].url == "file://$1/buildGraphNoGitTags/proj_a" % [$dir]
+        check $sp[2].url == "file://$1/buildGraphNoGitTags/proj_b" % [$dir]
+        check $sp[3].url == "file://$1/buildGraphNoGitTags/proj_c" % [$dir]
+        check $sp[4].url == "file://$1/buildGraphNoGitTags/proj_d" % [$dir]
+
+        let vt = toVersionTag
+        proc stripcommits(tags: seq[VersionTag]): seq[VersionTag] = tags.mapIt(VersionTag(v: Version"", c: it.c))
+
+        testRequirements(sp0, @[vt"#head@-"], [
+          ("file://$1/buildGraphNoGitTags/proj_a" % [$dir], "*"),
+        ])
+
+        testRequirements(sp1, projAtags, [
+          ("file://$1/buildGraphNoGitTags/proj_b" % [$dir], ">= 1.1.0"),
+          ("file://$1/buildGraphNoGitTags/proj_b" % [$dir], ">= 1.0.0"),
+        ])
+
+        testRequirements(sp2, projBtags, [
+          ("file://$1/buildGraphNoGitTags/proj_c" % [$dir], ">= 1.1.0"),
+          ("file://$1/buildGraphNoGitTags/proj_c" % [$dir], ">= 1.0.0"),
+        ])
+
+        testRequirements(sp3, projCtags, [
+          ("file://$1/buildGraphNoGitTags/proj_d" % [$dir], ">= 1.0.0"),
+          ("file://$1/buildGraphNoGitTags/proj_d" % [$dir], ">= 1.2.0"),
+        ])
+
+        testRequirements(sp4, projDtags, [
+          ("file://$1/buildGraphNoGitTags/does_not_exist" % [$dir], ">= 1.2.0"),
+          ("", ""),
+        ], true)
 
 infoNow "tester", "All tests run successfully"
 
