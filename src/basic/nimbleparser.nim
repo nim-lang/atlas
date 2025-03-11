@@ -81,9 +81,10 @@ proc patchNimbleFile*(nc: var NimbleContext;
       info(nimbleFile, "nimble file up to date")
       return
 
-  debug nimbleFile, "patching nimble file using:", $url.projectName
+  let name = if url.hasShortName: url.shortName() else: $url.url
+  debug nimbleFile, "patching nimble file using:", $name
 
-  let line = genRequiresLine(url.projectName)
+  let line = genRequiresLine(name)
   var f = open($nimbleFile, fmAppend)
   try:
     f.writeLine line
