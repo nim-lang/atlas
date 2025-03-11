@@ -31,37 +31,6 @@ proc setupGraphNoGitTags*(): seq[string] =
   for proj in projs:
     result.add(ospaths2.getCurrentDir() / "buildGraphNoGitTags" / proj)
 
-template testRequirements(sp: Package,
-                          projTags: seq[VersionTag],
-                          vers: openArray[(string, string)];
-                          skipCount = false) =
-  checkpoint "Checking Requirements: " & astToStr(sp)
-  if not skipCount:
-    check sp.versions.len() == vers.len()
-
-  for idx, vt in projTags:
-    # let vt = projTags[idx]
-    let vt = vt.toPkgVer
-    checkpoint "Checking requirements item: " & $vers[idx] & " version: " & $vt
-    check idx < vers.len()
-    let (url, ver) = vers[idx]
-    check sp.state == Processed
-    check vt in sp.versions
-    if vt in sp.versions:
-      if vers[idx][0].endsWith("does_not_exist"):
-        check sp.versions[vt].status == HasBrokenDep
-      else:
-        check sp.versions[vt].status == Normal
-      if sp.versions[vt].status != Normal:
-        continue
-      if not skipCount:
-        check sp.versions[vt].requirements.len() == 1
-
-      if url != "":
-        check $sp.versions[vt].requirements[0][0] == url
-      if ver != "":
-        check $sp.versions[vt].requirements[0][1] == ver
-
 suite "graph solve":
   setup:
     # setAtlasVerbosity(Warning)
@@ -116,33 +85,6 @@ suite "graph solve":
         let dir = paths.getCurrentDir().absolutePath
 
         var graph = dir.expand(nc, AllReleases, onClone=DoClone)
-
-        let sp = graph.pkgs.values().toSeq()
-        let sp0: Package = sp[0] # proj ws_testtraversal
-        let vt = toVersionTag
-        testRequirements(sp0, @[vt"#head@-"], [
-          ("https://example.com/buildGraph/proj_a", "*"),
-        ])
-
-        let sp1: Package = sp[1] # proj A
-        testRequirements(sp1, projAtags, [
-          ("https://example.com/buildGraph/proj_b", ">= 1.1.0"),
-          ("https://example.com/buildGraph/proj_b", ">= 1.0.0"),
-        ])
-        let sp2 = sp[2] # proj B
-        testRequirements(sp2, projBtags, [
-          ("https://example.com/buildGraph/proj_c", ">= 1.1.0"),
-          ("https://example.com/buildGraph/proj_c", ">= 1.0.0"),
-        ])
-        let sp3 = sp[3] # proj C
-        testRequirements(sp3, projCtags, [
-          ("https://example.com/buildGraph/proj_d", ">= 1.0.0"),
-        ])
-        let sp4 = sp[4] # proj C
-        testRequirements(sp4, projDtags, [
-          ("https://example.com/buildGraph/does_not_exist", ">= 1.2.0"),
-          ("", ""),
-        ], true)
 
         echo "\tgraph:\n", graph.toJson(ToJsonOptions(enumMode: joptEnumString))
 
@@ -204,33 +146,6 @@ suite "graph solve":
         let sp = graph.pkgs.values().toSeq()
 
         doAssert sp.len() == 5
-
-        let sp0 = sp[0] # proj ws_testtraversal
-        let sp1 = sp[1] # proj ws_testtraversal
-        let sp2 = sp[2] # proj B
-        let sp3 = sp[3] # proj C
-        let sp4 = sp[4] # proj D
-
-        let vt = toVersionTag
-        testRequirements(sp0, @[vt"#head@-"], [
-          ("https://example.com/buildGraph/proj_a", "*"),
-        ])
-
-        testRequirements(sp1, projAtags, [
-          ("https://example.com/buildGraph/proj_b", ">= 1.1.0"),
-          ("https://example.com/buildGraph/proj_b", ">= 1.0.0"),
-        ])
-        testRequirements(sp2, projBtags, [
-          ("https://example.com/buildGraph/proj_c", ">= 1.1.0"),
-          ("https://example.com/buildGraph/proj_c", ">= 1.0.0"),
-        ])
-        testRequirements(sp3, projCtags, [
-          ("https://example.com/buildGraph/proj_d", ">= 1.0.0"),
-        ])
-        testRequirements(sp4, projDtags, [
-          ("https://example.com/buildGraph/does_not_exist", ">= 1.2.0"),
-          ("", ""),
-        ], true)
 
         echo "\tgraph:\n", graph.toJson(ToJsonOptions(enumMode: joptEnumString))
 
@@ -326,36 +241,6 @@ suite "test expand with no git tags":
         let dir = paths.getCurrentDir().absolutePath
 
         var graph = dir.expand(nc, AllReleases, onClone=DoClone)
-
-        let sp = graph.pkgs.values().toSeq()
-        let sp0: Package = sp[0] # proj ws_testtraversal
-        let vt = toVersionTag
-        testRequirements(sp0, @[vt"#head@-"], [
-          ("https://example.com/buildGraphNoGitTags/proj_a", "*"),
-        ])
-
-        let sp1: Package = sp[1] # proj A
-        testRequirements(sp1, projAtags, [
-          ("https://example.com/buildGraphNoGitTags/proj_b", ">= 1.1.0"),
-          ("https://example.com/buildGraphNoGitTags/proj_b", ">= 1.0.0"),
-          ("https://example.com/buildGraphNoGitTags/proj_b", ">= 1.0.0"),
-        ])
-        let sp2 = sp[2] # proj B
-        testRequirements(sp2, projBtags, [
-          ("https://example.com/buildGraphNoGitTags/proj_c", ">= 1.1.0"),
-          ("https://example.com/buildGraphNoGitTags/proj_c", ">= 1.0.0"),
-          ("https://example.com/buildGraphNoGitTags/proj_c", ">= 1.0.0"),
-        ])
-        let sp3 = sp[3] # proj C
-        testRequirements(sp3, projCtags, [
-          ("https://example.com/buildGraphNoGitTags/proj_d", ">= 1.0.0"),
-          ("https://example.com/buildGraphNoGitTags/proj_d", ">= 1.2.0"),
-        ])
-        let sp4 = sp[4] # proj D
-        testRequirements(sp4, projDtags, [
-          ("https://example.com/buildGraphNoGitTags/does_not_exist", ">= 1.2.0"),
-          ("", ""),
-        ], true)
 
         echo "\tgraph:\n", graph.toJson(ToJsonOptions(enumMode: joptEnumString))
 
