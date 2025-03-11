@@ -266,9 +266,9 @@ proc expand*(path: Path, nc: var NimbleContext; mode: TraversalMode, onClone: Pa
         # processing = true
         let mode = if pkg.isRoot: CurrentCommit else: mode
         nc.traverseDependency(pkg, mode, @[])
-        # debug pkg.projectName, "processed pkg:", $pkg
-        for vtag, reqs in pkg.versions:
-          debug pkg.projectName, "pkg version:", $vtag, "reqs:", $(toJsonHook(reqs))
+        debug pkg.projectName, "processed pkg:", $pkg
+        # for vtag, reqs in pkg.versions:
+        #   trace pkg.projectName, "pkg version:", $vtag, "reqs:", $(toJsonHook(reqs))
         processing = true
         result.pkgs[pkgUrl] = pkg
       else:
