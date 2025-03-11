@@ -1,4 +1,4 @@
-import std/[paths, tables, files, os, uri, dirs, sets, strutils, unicode]
+import std/[paths, tables, files, os, uri, sequtils, dirs, sets, strutils, unicode]
 import context, packageinfos, reporters, pkgurls, gitops, compiledpatterns, deptypes
 
 type
@@ -28,11 +28,13 @@ proc findNimbleFile*(info: Package): seq[Path] =
   result = findNimbleFile(info.ondisk, info.projectName() & ".nimble")
 
 proc lookup*(nc: NimbleContext, name: string): PkgUrl =
-  let name = unicode.toLower(name)
-  if name in nc.packageExtras:
-    result = nc.packageExtras[name]
-  elif name in nc.nameToUrl:
-    result = nc.nameToUrl[name]
+  let lname = unicode.toLower(name)
+  if lname in nc.packageExtras:
+    result = nc.packageExtras[lname]
+  elif lname in nc.nameToUrl:
+    result = nc.nameToUrl[lname]
+  else:
+    info "atlas:nimblecontext", "name not found in nameToUrl: " & $name, "lname:", $lname
 
 proc lookup*(nc: NimbleContext, url: Uri): string =
   if url in nc.urlToNames:
@@ -64,7 +66,7 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
   else:
     name = substitute(nc.nameOverrides, nameOrig, didReplace)
   
-  trace "atlas:createUrl", "name:", name, "orig:", nameOrig, "namePatterns:", $nc.packageExtras, "urlPatterns:", $nc.urlOverrides
+  trace "atlas:createUrl", "name:", name, "orig:", nameOrig, "namePatterns:", $nc.packageExtras, "isUrl:", $name.isUrl()
   
   if name.isUrl():
     # trace "atlas:createUrl", "name is url:", name
@@ -75,7 +77,8 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
       # trace "atlas:createUrl", "name is in nameToUrl:", $lname
       result = lname
     else:
-      error "atlas:createUrl", "name is not in nameToUrl:", $name
+      error "atlas:createUrl", "name is not in nameToUrl:", $name, "result:", repr(result)
+      # error "atlas:createUrl", "nameToUrl:", $nc.nameToUrl.keys().toSeq().join(", ")
       raise newException(ValueError, "project name not found in packages database: " & $lname)
   
   if result.url.path.splitFile().ext == ".git":

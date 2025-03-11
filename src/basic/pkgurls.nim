@@ -22,8 +22,8 @@ type
     u: Uri
 
 proc isFileProtocol*(s: PkgUrl): bool = s.u.scheme == "file"
-proc isUrl*(s: string): bool = s.startsWith("git@") or parseUri(s).scheme != ""
 proc isEmpty*(s: PkgUrl): bool = s.qualifiedName[0].len() == 0 or $s.u == ""
+proc isUrl*(s: string): bool = s.startsWith("git@") or "://" in s
 
 proc fullName*(u: PkgUrl): string =
   if u.qualifiedName.host.len() > 0 or u.qualifiedName.user.len() > 0:  
