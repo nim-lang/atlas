@@ -63,7 +63,7 @@ template testRequirements(sp: Package,
 suite "test expand with git tags":
   setup:
     setAtlasVerbosity(Info)
-    context().nameOverrides = Patterns()
+    context().packageOverrides = initTable[string, Uri]()
     context().urlOverrides = Patterns()
     context().proxy = parseUri "http://localhost:4242"
     context().dumbProxy = true
@@ -112,10 +112,10 @@ suite "test expand with git tags":
 
         let deps = setupGraph()
         var nc = createNimbleContext()
-        nc.put("proj_a", parseUri "https://example.com/buildGraph/proj_a")
-        nc.put("proj_b", parseUri "https://example.com/buildGraph/proj_b")
-        nc.put("proj_c", parseUri "https://example.com/buildGraph/proj_c")
-        nc.put("proj_d", parseUri "https://example.com/buildGraph/proj_d")
+        nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a"))
+        nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b"))
+        nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c"))
+        nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d"))
         # var graph = DepGraph(nodes: @[], reqs: defaultReqs())
         echo "DIR: ", dir
         let url = nc.createUrlFromPath(dir)
@@ -163,7 +163,7 @@ suite "test expand with git tags":
         context().defaultAlgo = SemVer
 
         var nc = createNimbleContext()
-        discard nc.nameOverrides.addPattern("$+", "file://./buildGraph/$#")
+        discard nc.packageOverrides("$+", "file://./buildGraph/$#")
 
         let deps = setupGraph()
         let dir = paths.getCurrentDir().absolutePath
@@ -226,7 +226,7 @@ suite "test expand with git tags":
         context().defaultAlgo = SemVer
         context().depsDir = Path "deps_http"
 
-        context().nameOverrides = Patterns()
+        context().packageOverrides = Patterns()
         # discard context().overrides.addPattern("does_not_exist", "file://./buildGraph/does_not_exist")
         # discard context().overrides.addPattern("$+", "http://localhost:4242/buildGraph/$#")
         var nc = createNimbleContext()
@@ -266,7 +266,7 @@ suite "test expand with no git tags":
 
   setup:
     setAtlasVerbosity(Warning)
-    context().nameOverrides = Patterns()
+    context().packageOverrides = Patterns()
     context().urlOverrides = Patterns()
     context().proxy = parseUri "http://localhost:4242"
     context().dumbProxy = true
@@ -305,7 +305,7 @@ suite "test expand with no git tags":
         context().flags = {UsesOverrides, KeepWorkspace, ListVersions, FullClones}
         context().defaultAlgo = SemVer
 
-        discard context().nameOverrides.addPattern("$+", "file://./buildGraphNoGitTags/$#")
+        discard context().packageOverrides.addPattern("$+", "file://./buildGraphNoGitTags/$#")
 
         # writeFile("ws_testtraverse.nimble", "requires \"proj_a\"\n")
 
@@ -345,7 +345,7 @@ suite "test expand with no git tags":
         context().defaultAlgo = SemVer
 
         var nc = createNimbleContext()
-        discard nc.nameOverrides.addPattern("$+", "file://./buildGraphNoGitTags/$#")
+        discard nc.packageOverrides.addPattern("$+", "file://./buildGraphNoGitTags/$#")
 
         let deps = setupGraphNoGitTags()
         let dir = paths.getCurrentDir().absolutePath

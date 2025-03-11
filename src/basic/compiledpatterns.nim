@@ -266,3 +266,7 @@ when isMainModule:
   var pat2 = initPatterns()
   discard pat2.addPattern("proj$+", "file://./source/proj$#")
   echo "proj_a: ", substitute(pat2, "proj_a")
+
+  var pat3 = initPatterns()
+  discard pat3.addPattern("proj_a", "file://./source/proj_a")
+  echo "proj_a: ", substitute(pat3, "proj_a")

@@ -30,6 +30,15 @@ suite "urls and naming":
     expect ValueError:
       discard nc.createUrl("balls")
 
+  test "balls url using packageOverrides":
+    nc.put("balls", parseUri "https://github.com/disruptek/balls.git")
+    let upkg = nc.createUrl("balls")
+    check upkg.url.hostname == "github.com"
+    check $upkg.url == "https://github.com/disruptek/balls"
+    check $upkg.projectName == "balls.disruptek.github.com"
+    check upkg.toDirectoryPath() == ws / Path"deps" / Path("balls.disruptek.github.com")
+    check upkg.toLinkPath() == ws / Path"deps" / Path("balls.disruptek.github.com.link")
+
   test "npeg url":
     let upkg = nc.createUrl("https://github.com/zevv/npeg.git")
     check upkg.url.hostname == "github.com"
@@ -80,7 +89,7 @@ suite "urls and naming":
     check upkg.toDirectoryPath() == ws / Path"deps" / Path("proj_a")
     check upkg.toLinkPath() == ws / Path"deps" / Path("proj_a.link")
 
-  test "proj_b file url":
+  test "proj_b file url absolute path":
     # setAtlasVerbosity(Trace)
     let upkg = nc.createUrl("file://$1/buildGraph/proj_b" % [ospaths2.getCurrentDir()])
     check upkg.url.hostname == ""

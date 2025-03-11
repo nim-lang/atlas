@@ -4,7 +4,8 @@ import context, packageinfos, reporters, pkgurls, gitops, compiledpatterns, dept
 type
   NimbleContext* = object
     packageToDependency*: Table[PkgUrl, Package]
-    packageOverrides*: Table[string, PkgUrl]
+    packageExtras*: Table[string, PkgUrl]
+    nameOverrides*: Patterns
     urlOverrides*: Patterns
     hasPackageList*: bool
     nameToUrl: Table[string, PkgUrl]
@@ -28,8 +29,8 @@ proc findNimbleFile*(info: Package): seq[Path] =
 
 proc lookup*(nc: NimbleContext, name: string): PkgUrl =
   let name = unicode.toLower(name)
-  if name in nc.packageOverrides:
-    result = nc.packageOverrides[name]
+  if name in nc.packageExtras:
+    result = nc.packageExtras[name]
   elif name in nc.nameToUrl:
     result = nc.nameToUrl[name]
 
@@ -41,22 +42,13 @@ proc lookup*(nc: NimbleContext, url: PkgUrl): string =
   if url.url in nc.urlToNames:
     result = nc.urlToNames[url.url]
 
-proc put*(nc: var NimbleContext, name: string, url: Uri, isExtra = false) =
+proc put*(nc: var NimbleContext, name: string, url: PkgUrl) =
   let name = unicode.toLower(name)
-  let inNames = name in nc.nameToUrl
-  let inExtra = name in nc.packageOverrides
-  let pkgUrl = url.toPkgUriRaw()
-
-  if isExtra and not inNames and not inExtra:
-    nc.packageOverrides[name] = pkgUrl
-  if not inNames and not inExtra:
-    nc.nameToUrl[name] = pkgUrl
-  elif inNames and nc.nameToUrl[name] != pkgUrl:
-    raise newException(ValueError, "name already in the database! ")
-  elif inExtra and nc.packageOverrides[name] != pkgUrl:
-    raise newException(ValueError, "name already in the extras-database! ")
-
-  nc.urlToNames[url] = name
+  if name notin nc.packageExtras:
+    nc.packageExtras[name] = url
+  else:
+    if nc.packageExtras[name] != url:
+      error "atlas:nimblecontext", "name already exists in packageExtras: " & $name & " with different url: " & $nc.packageExtras[name] & " and " & $url
 
 proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
   ## primary point to createUrl's from a name or argument
@@ -69,8 +61,10 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
   # First try URL overrides if it looks like a URL
   if nameOrig.isUrl():
     name = substitute(nc.urlOverrides, nameOrig, didReplace)
+  else:
+    name = substitute(nc.nameOverrides, nameOrig, didReplace)
   
-  trace "atlas:createUrl", "name:", name, "orig:", nameOrig, "namePatterns:", $nc.packageOverrides, "urlPatterns:", $nc.urlOverrides
+  trace "atlas:createUrl", "name:", name, "orig:", nameOrig, "namePatterns:", $nc.packageExtras, "urlPatterns:", $nc.urlOverrides
   
   if name.isUrl():
     trace "atlas:createUrl", "name is url:", name
@@ -93,7 +87,7 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
     result.hasShortName = true
 
   if not result.isEmpty():
-    nc.put(result.projectName, result.url)
+    nc.put(result.projectName, result)
 
   debug "atlas:createUrl", "created url with name:", name, "orig:", nameOrig, "projectName:", $result.projectName, "hasShortName:", $result.hasShortName, "url:", $result.url
 
@@ -115,7 +109,7 @@ proc createUrlFromPath*(nc: var NimbleContext, orig: Path): PkgUrl =
     let fileUrl = "file://" & $absPath
     result = createUrlSkipPatterns(fileUrl)
   if not result.isEmpty():
-    nc.put(result.projectName, result.url)
+    nc.put(result.projectName, result)
 
 proc fillPackageLookupTable(c: var NimbleContext) =
   let pkgsDir = packagesDirectory()
@@ -131,10 +125,10 @@ proc fillPackageLookupTable(c: var NimbleContext) =
 proc createUnfilledNimbleContext*(): NimbleContext =
   result = NimbleContext()
   result.urlOverrides = context().urlOverrides
-  for key, val in context().packageOverrides: 
-    let url = createUrlSkipPatterns($val)
-    result.packageOverrides[key] = url
-    result.urlToNames[url.url()] = key
+  # for key, val in context().packageNameOverrides: 
+  #   let url = createUrlSkipPatterns($val)
+  #   result.packageExtras[key] = url
+  #   result.urlToNames[url.url()] = key
 
 proc createNimbleContext*(): NimbleContext =
   result = createUnfilledNimbleContext()

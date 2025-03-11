@@ -47,7 +47,7 @@ type
     flags*: set[Flag]
     dumpGraphs*: bool = true # TODO: debugging, plumb cli option later
     dumpFormular*: bool = true # TODO: debugging, plumb cli option later
-    packageOverrides*: Table[string, Uri]
+    nameOverrides*: Patterns
     urlOverrides*: Patterns
     defaultAlgo*: ResolutionAlgorithm = SemVer
     plugins*: PluginInfo

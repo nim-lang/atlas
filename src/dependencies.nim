@@ -76,7 +76,7 @@ proc processNimbleRelease(
     result = NimbleRelease(status: HasUnknownNimbleFile, err: "ambiguous nimble file")
   else:
     let nimbleFile = nimbleFiles[0]
-    result = nc.parseNimbleFile(nimbleFile, context().overrides)
+    result = nc.parseNimbleFile(nimbleFile)
 
     if result.status == Normal:
       for pkgUrl, interval in items(result.requirements):
