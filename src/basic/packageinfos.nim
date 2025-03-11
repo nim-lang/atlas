@@ -20,18 +20,26 @@ when UnitTests:
       assert result != "", "atlas dir not found!"
 
 type
+  PackageKind* = enum
+    pkPackage,
+    pkAlias
+
   PackageInfo* = ref object
-    # Required fields in a PackageInfo.
     name*: string
-    url*: string # Download location.
-    license*: string
-    downloadMethod*: string
-    description*: string
-    tags*: seq[string] # \
-    # From here on, optional fields set to the empty string if not available.
-    version*: string
-    dvcsTag*: string
-    web*: string # Info url for humans.
+    case kind*: PackageKind
+    of pkAlias:
+      alias*: string
+    of pkPackage:
+      # Required fields in a PackageInfo.
+      url*: string # Download location.
+      license*: string
+      downloadMethod*: string
+      description*: string
+      tags*: seq[string] # \
+      # From here on, optional fields set to the empty string if not available.
+      version*: string
+      dvcsTag*: string
+      web*: string # Info url for humans.
 
 const
   DefaultPackagesSubDir* = Path"packages"
@@ -45,25 +53,30 @@ proc optionalField(obj: JsonNode, name: string, default = ""): string =
   else:
     result = default
 
-proc requiredField(obj: JsonNode, name: string): string =
-  result = optionalField(obj, name, "")
+template requiredField(obj: JsonNode, name: string): string =
+  block:
+    let result = optionalField(obj, name, "")
+    if result.len == 0:
+      return nil
+    result
 
-proc fromJson*(obj: JSonNode): PackageInfo =
-  result = PackageInfo()
-  result.name = obj.requiredField("name")
-  if result.name.len == 0: return nil
-  result.version = obj.optionalField("version")
-  result.url = obj.requiredField("url")
-  if result.url.len == 0: return nil
-  result.downloadMethod = obj.requiredField("method")
-  if result.downloadMethod.len == 0: return nil
-  result.dvcsTag = obj.optionalField("dvcs-tag")
-  result.license = obj.optionalField("license")
-  result.tags = @[]
-  for t in obj["tags"]:
-    result.tags.add(t.str)
-  result.description = obj.requiredField("description")
-  result.web = obj.optionalField("web")
+proc fromJson*(obj: JsonNode): PackageInfo =
+  if "alias" in obj:
+    result = PackageInfo(kind: pkAlias)
+    result.name = obj.requiredField("name")
+    result.alias = obj.requiredField("alias")
+  else:
+    result = PackageInfo(kind: pkPackage)
+    result.name = obj.requiredField("name")
+    result.version = obj.optionalField("version")
+    result.url = obj.requiredField("url")
+    result.downloadMethod = obj.requiredField("method")
+    result.dvcsTag = obj.optionalField("dvcs-tag")
+    result.license = obj.optionalField("license")
+    result.tags = @[]
+    for t in obj["tags"]: result.tags.add(t.str)
+    result.description = obj.requiredField("description")
+    result.web = obj.optionalField("web")
 
 proc `$`*(pkg: PackageInfo): string =
   result = pkg.name & ":\n"

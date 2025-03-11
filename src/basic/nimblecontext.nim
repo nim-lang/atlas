@@ -126,12 +126,26 @@ proc fillPackageLookupTable(c: var NimbleContext) =
     if not fileExists(pkgsDir / Path"packages.json"):
       updatePackages(pkgsDir)
     let packages = getPackageInfos(pkgsDir)
+    var aliases: seq[PackageInfo] = @[]
+    # add all packages to the lookup table
     for pkgInfo in packages:
-      var pkgUrl = createUrlSkipPatterns(pkgInfo.url, skipDirTest=true)
-      pkgUrl.hasShortName = true
-      pkgUrl.qualifiedName.name = pkgInfo.name
-      c.nameToUrl[unicode.toLower(pkgInfo.name)] = pkgUrl
-      c.urlToNames[pkgUrl.url] = pkgInfo.name
+      if pkgInfo.kind == pkAlias:
+        aliases.add(pkgInfo)
+      else:
+        var pkgUrl = createUrlSkipPatterns(pkgInfo.url, skipDirTest=true)
+        pkgUrl.hasShortName = true
+        pkgUrl.qualifiedName.name = pkgInfo.name
+        c.nameToUrl[unicode.toLower(pkgInfo.name)] = pkgUrl
+        c.urlToNames[pkgUrl.url] = pkgInfo.name
+    # now we add aliases to the lookup table
+    for pkgAlias in aliases:
+      # first lookup the alias name
+      let aliasName = unicode.toLower(pkgAlias.alias)
+      let url = c.nameToUrl[aliasName]
+      if url.isEmpty():
+        warn "atlas:nimblecontext", "alias name not found in nameToUrl: " & $pkgAlias, "lname:", $aliasName
+      else:
+        c.nameToUrl[pkgAlias.name] = url
 
 proc createUnfilledNimbleContext*(): NimbleContext =
   result = NimbleContext()
