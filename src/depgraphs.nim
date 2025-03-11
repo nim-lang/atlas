@@ -290,23 +290,44 @@ proc solve*(graph: var DepGraph; form: Form) =
 
     if ListVersions in context().flags:
       warn "Resolved", "selected:"
+      var selections: seq[(string, string)]
       for pkg in values(graph.pkgs):
         if not pkg.isRoot:
           var versions = pkg.versions.pairs().toSeq()
-          versions.sort(sortVersionsDesc)
-          versions.setLen(min(versions.len, 5))
-          versions.reverse()
-          for (ver, rel) in versions:
+          versions.sort(sortVersionsAsc)
+          var selectedIdx = -1
+          for idx, (ver, rel) in versions:
+            if ver.vid in form.mapping:
+              if solution.isTrue(ver.vid):
+                selectedIdx = idx
+                break
+          if selectedIdx == -1:
+            continue
+
+          let startIdx = max(0, selectedIdx - 1)
+          let endIdx = min(versions.len - 1, selectedIdx + 1)
+          var idxs = (startIdx .. endIdx).toSeq() 
+          idxs.addUnique(0)
+          idxs.addUnique(versions.len - 1)
+
+          for idx in idxs:
+            if idx < 0 or idx >= versions.len: continue
+            let (ver, rel) = versions[idx]
             if ver.vid in form.mapping:
               let item = form.mapping[ver.vid]
               doAssert pkg.url == item.pkg.url
               if solution.isTrue(ver.vid):
-                warn item.pkg.url.projectName, "[x] " & toString item
+                selections.add((item.pkg.url.projectName, "[x] " & toString item))
               else:
-                warn item.pkg.url.projectName, "[ ] " & toString item
+                selections.add((item.pkg.url.projectName, "[ ] " & toString item))
             else:
-              warn pkg.url.projectName, "[!] " & "(" & $rel.status & "; pkg: " & pkg.url.projectName & ", " & $ver & ")"
+              selections.add((pkg.url.projectName, "[!] " & "(" & $rel.status & "; pkg: " & pkg.url.projectName & ", " & $ver & ")"))
       warn "Resolved", "end of selection"
+      var longestPkgName = 0
+      for (pkg, str) in selections:
+        longestPkgName = max(longestPkgName, pkg.len)
+      for (pkg, str) in selections:
+        warn "Resolved", str
   else:
     var notFoundCount = 0
     for pkg in values(graph.pkgs):
