@@ -1,6 +1,8 @@
 {
   "deps": "",
-  "overrides": "url.rules",
+  "nameOverrides": {
+    "proj$+": "http://example.com/buildGraphNoGitTags/proj$#",
+  },
   "plugins": "",
   "resolver": "SemVer",
   "graph": null
