@@ -94,7 +94,7 @@ proc addRelease(
     nc: var NimbleContext;
     pkg: Package,
     vtag: VersionTag
-) =
+): PackageVersion =
   var pkgver = vtag.toPkgVer()
   trace pkg.url.projectName, "Adding Nimble version:", $vtag
   let release = nc.processNimbleRelease(pkg, vtag)
@@ -108,7 +108,8 @@ proc addRelease(
   elif vtag.v != release.version:
     warn pkg.url.projectName, "version mismatch between:", $vtag.v, "nimble version:", $release.version
   
-  versions.add((pkgver, release,))
+  versions.add((pkgver, release))
+  result = pkgver
 
 proc traverseDependency*(
     nc: var NimbleContext;
@@ -140,12 +141,13 @@ proc traverseDependency*(
   of CurrentCommit:
     trace pkg.url.projectName, "traversing dependency for only current commit"
     let vtag = VersionTag(v: Version"#head", c: initCommitHash(currentCommit, FromHead))
-    versions.addRelease(nc, pkg, vtag)
+    discard versions.addRelease(nc, pkg, vtag)
 
   of AllReleases:
     try:
       var uniqueCommits: HashSet[CommitHash]
-      let nimbleCommits = nc.collectNimbleVersions(pkg)
+      var nimbleVersions: HashSet[Version]
+      var nimbleCommits = nc.collectNimbleVersions(pkg)
 
       trace pkg.url.projectName, "traverseDependency nimble explicit versions:", $explicitVersions
       for version in explicitVersions:
@@ -154,28 +156,38 @@ proc traverseDependency*(
             not uniqueCommits.containsOrIncl(version.commit):
             let vtag = VersionTag(v: Version"", c: version.commit)
             assert vtag.commit.orig == FromDep, "maybe this needs to be overriden like before: " & $vtag.commit.orig
-            versions.addRelease(nc, pkg, vtag)
+            discard versions.addRelease(nc, pkg, vtag)
 
       ## Note: always prefer tagged versions
       let tags = collectTaggedVersions(pkg.ondisk)
       trace pkg.url.projectName, "traverseDependency nimble tags:", $tags
       for tag in tags:
         if not uniqueCommits.containsOrIncl(tag.c):
-          versions.addRelease(nc, pkg, tag)
+          discard versions.addRelease(nc, pkg, tag)
           assert tag.commit.orig == FromGitTag, "maybe this needs to be overriden like before: " & $tag.commit.orig
 
       if tags.len() == 0 or context().includeTagsAndNimbleCommits:
         ## Note: skip nimble commit versions unless explicitly enabled
         ## package maintainers may delete a tag to skip a versions, which we'd override here
-        trace pkg.url.projectName, "traverseDependency nimble commits:", $nimbleCommits
+        if context().nimbleCommitsMax:
+          # reverse the order so the newest commit is preferred for new versions
+          nimbleCommits.reverse()
+
+        debug pkg.url.projectName, "traverseDependency nimble commits:", $nimbleCommits
         for tag in nimbleCommits:
           if not uniqueCommits.containsOrIncl(tag.c):
-            versions.addRelease(nc, pkg, tag)
+            warn pkg.url.projectName, "traverseDependency adding nimble commit:", $tag
+            var vers: seq[(PackageVersion, NimbleRelease)]
+            let pver = vers.addRelease(nc, pkg, tag)
+            if not nimbleVersions.containsOrIncl(pver.vtag.v):
+              versions.add(vers)
+          else:
+            error pkg.url.projectName, "traverseDependency skipping nimble commit:", $tag, "uniqueCommits:", $(tag.c in uniqueCommits), "nimbleVersions:", $(tag.v in nimbleVersions)
 
       if versions.len() == 0:
         let vtag = VersionTag(v: Version"#head", c: initCommitHash(currentCommit, FromHead))
         trace pkg.url.projectName, "traverseDependency no versions found, using default #head", "at", $pkg.ondisk
-        versions.addRelease(nc, pkg, vtag)
+        discard versions.addRelease(nc, pkg, vtag)
 
     finally:
       if not checkoutGitCommit(pkg.ondisk, currentCommit, Warning):

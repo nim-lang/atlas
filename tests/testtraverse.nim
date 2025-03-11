@@ -282,13 +282,11 @@ suite "test expand with no git tags":
     #    curl http://localhost:4242/buildGraph/ws_generated-logs.txt
     let projAtags = dedent"""
     61eacba5453392d06ed0e839b52cf17462d94648 1.1.0
-    6a1cc178670d372f21c21329d35579e96283eab0 1.0.0
     88d1801bff2e72cdaf2d29b438472336df6aa66d 1.0.0
     """.parseTaggedVersions(false)
 
     let projBtags = dedent"""
     c70824d8b9b669cc37104d35055fd8c11ecdd680 1.1.0
-    bbb208a9cad0d58f85bd00339c85dfeb8a4f7ac0 1.0.0
     289ae9eea432cdab9d681ab69444ae9d439eb6ae 1.0.0
     """.parseTaggedVersions(false)
 
@@ -344,7 +342,7 @@ suite "test expand with no git tags":
 
 
   test "expand no git tags":
-      # setAtlasVerbosity(Info)
+      setAtlasVerbosity(Trace)
       withDir "tests/ws_testtraverse":
         removeDir("deps")
         workspace() = paths.getCurrentDir()
@@ -385,13 +383,13 @@ suite "test expand with no git tags":
 
         testRequirements(sp1, projAtags, [
           ("file://$1/buildGraphNoGitTags/proj_b" % [$dir], ">= 1.1.0"),
-          ("file://$1/buildGraphNoGitTags/proj_b" % [$dir], ">= 1.0.0"),
+          # ("file://$1/buildGraphNoGitTags/proj_b" % [$dir], ">= 1.0.0"),
           ("file://$1/buildGraphNoGitTags/proj_b" % [$dir], ">= 1.0.0"),
         ])
 
         testRequirements(sp2, projBtags, [
           ("file://$1/buildGraphNoGitTags/proj_c" % [$dir], ">= 1.1.0"),
-          ("file://$1/buildGraphNoGitTags/proj_c" % [$dir], ">= 1.0.0"),
+          # ("file://$1/buildGraphNoGitTags/proj_c" % [$dir], ">= 1.0.0"),
           ("file://$1/buildGraphNoGitTags/proj_c" % [$dir], ">= 1.0.0"),
         ])
 

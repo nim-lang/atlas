@@ -58,6 +58,7 @@ type
     dumbProxy*: bool = false
     forceGitToHttps*: bool = false
     includeTagsAndNimbleCommits*: bool = false
+    nimbleCommitsMax*: bool = false # takes the newest commit for each version
 
 var atlasContext = AtlasContext()
 
