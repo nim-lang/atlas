@@ -220,7 +220,7 @@ proc checkoutGitCommit*(path: Path, commit: CommitHash, errorReportLevel: MsgKin
     message(errorReportLevel, path, "could not checkout commit " & $commit)
     result = false
   else:
-    debug path, "updated package to ", $commit
+    trace path, "updated package to ", $commit
     result = true
 
 proc checkoutGitCommitFull*(path: Path; commit: CommitHash, fullClones: bool;

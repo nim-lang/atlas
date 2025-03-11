@@ -101,7 +101,7 @@ proc addRelease(
 
   if vtag.v.string == "":
     pkgver.vtag.v = release.version
-    debug pkg.url.projectName, "updating release tag information:", $pkgver.vtag
+    trace pkg.url.projectName, "updating release tag information:", $pkgver.vtag
   elif release.version.string == "":
     warn pkg.url.projectName, "nimble file missing version information:", $pkgver.vtag
     release.version = vtag.version
@@ -147,7 +147,7 @@ proc traverseDependency*(
       var uniqueCommits: HashSet[CommitHash]
       let nimbleCommits = nc.collectNimbleVersions(pkg)
 
-      info pkg.url.projectName, "traverseDependency nimble explicit versions:", $explicitVersions
+      trace pkg.url.projectName, "traverseDependency nimble explicit versions:", $explicitVersions
       for version in explicitVersions:
         if version.version == Version"" and
             not version.commit.isEmpty() and
@@ -158,7 +158,7 @@ proc traverseDependency*(
 
       ## Note: always prefer tagged versions
       let tags = collectTaggedVersions(pkg.ondisk)
-      info pkg.url.projectName, "traverseDependency nimble tags:", $tags
+      trace pkg.url.projectName, "traverseDependency nimble tags:", $tags
       for tag in tags:
         if not uniqueCommits.containsOrIncl(tag.c):
           versions.addRelease(nc, pkg, tag)
@@ -167,14 +167,14 @@ proc traverseDependency*(
       if tags.len() == 0 or context().includeTagsAndNimbleCommits:
         ## Note: skip nimble commit versions unless explicitly enabled
         ## package maintainers may delete a tag to skip a versions, which we'd override here
-        info pkg.url.projectName, "traverseDependency nimble commits:", $nimbleCommits
+        trace pkg.url.projectName, "traverseDependency nimble commits:", $nimbleCommits
         for tag in nimbleCommits:
           if not uniqueCommits.containsOrIncl(tag.c):
             versions.addRelease(nc, pkg, tag)
 
       if versions.len() == 0:
         let vtag = VersionTag(v: Version"#head", c: initCommitHash(currentCommit, FromHead))
-        info pkg.url.projectName, "traverseDependency no versions found, using default #head", "at", $pkg.ondisk
+        trace pkg.url.projectName, "traverseDependency no versions found, using default #head", "at", $pkg.ondisk
         versions.addRelease(nc, pkg, vtag)
 
     finally:
@@ -259,14 +259,14 @@ proc expand*(path: Path, nc: var NimbleContext; mode: TraversalMode, onClone: Pa
       of NotInitialized:
         info pkg.projectName, "Initializing at:", $pkg
         nc.loadDependency(pkg, onClone)
-        debug pkg.projectName, "expanded pkg:", pkg.repr
+        trace pkg.projectName, "expanded pkg:", pkg.repr
         processing = true
       of Found:
         info pkg.projectName, "Processing at:", $pkg.ondisk
         # processing = true
         let mode = if pkg.isRoot: CurrentCommit else: mode
         nc.traverseDependency(pkg, mode, @[])
-        debug pkg.projectName, "processed pkg:", $pkg
+        trace pkg.projectName, "processed pkg:", $pkg
         # for vtag, reqs in pkg.versions:
         #   trace pkg.projectName, "pkg version:", $vtag, "reqs:", $(toJsonHook(reqs))
         processing = true

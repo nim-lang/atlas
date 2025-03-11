@@ -10,6 +10,7 @@ type
     hasPackageList*: bool
     nameToUrl: Table[string, PkgUrl]
     urlToNames: Table[Uri, string]
+    notFoundNames: HashSet[string]
 
 proc findNimbleFile*(nimbleFile: Path): seq[Path] =
   if fileExists(nimbleFile):
@@ -21,7 +22,7 @@ proc findNimbleFile*(dir: Path, projectName: string): seq[Path] =
   if result.len() == 0:
     for file in walkFiles($dir / "*.nimble"):
       result.add Path(file)
-  debug dir, "finding nimble file searching by name:", projectName, "found:", result.join(", ")
+  trace dir, "finding nimble file searching by name:", projectName, "found:", result.join(", ")
 
 proc findNimbleFile*(info: Package): seq[Path] =
   doAssert(info.ondisk.string != "", "Package ondisk must be set before findNimbleFile can be called! Package: " & $(info))
@@ -33,8 +34,6 @@ proc lookup*(nc: NimbleContext, name: string): PkgUrl =
     result = nc.packageExtras[lname]
   elif lname in nc.nameToUrl:
     result = nc.nameToUrl[lname]
-  else:
-    info "atlas:nimblecontext", "name not found in nameToUrl: " & $name, "lname:", $lname
 
 proc lookup*(nc: NimbleContext, url: Uri): string =
   if url in nc.urlToNames:
@@ -77,7 +76,11 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
       # trace "atlas:createUrl", "name is in nameToUrl:", $lname
       result = lname
     else:
-      error "atlas:createUrl", "name is not in nameToUrl:", $name, "result:", repr(result)
+      let lname = unicode.toLower(name)
+      if lname notin nc.notFoundNames:
+        error "atlas:nimblecontext", "name not found in nameToUrl: " & $name, "lname:", $lname
+        nc.notFoundNames.incl lname
+      # error "atlas:createUrl", "name is not in nameToUrl:", $name, "result:", repr(result)
       # error "atlas:createUrl", "nameToUrl:", $nc.nameToUrl.keys().toSeq().join(", ")
       raise newException(ValueError, "project name not found in packages database: " & $lname)
   
