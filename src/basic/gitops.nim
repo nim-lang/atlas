@@ -138,31 +138,37 @@ proc gitDescribeRefTag*(path: Path, commit: string): string =
   let (lt, status) = exec(GitDescribe, path, ["--tags", commit])
   result = if status == RES_OK: strutils.strip(lt) else: ""
 
-proc collectTaggedVersions*(path: Path): seq[VersionTag] =
-  let (outp, status) = exec(GitTags, path, [], Trace)
-  if status == RES_OK:
-    result = parseTaggedVersions(outp)
-  else:
-    result = @[]
-
-proc collectFileCommits*(path, file: Path, errorReportLevel: MsgKind = Warning): seq[VersionTag] =
+proc gitFindOriginTip*(path: Path, errorReportLevel: MsgKind = Warning): VersionTag =
   let (outp1, status1) = exec(GitLog, path, ["-n1"], Warning)
   var allVersions: seq[VersionTag]
   if status1 == RES_OK:
     allVersions = parseTaggedVersions(outp1, requireVersions = false)
+    if allVersions.len > 0:
+      result = allVersions[0]
+      result.isTip = true
   else:
-    message(errorReportLevel, file, "could not collect file commits at:", $file)
+    message(errorReportLevel, "could not collect file commits at:", $path)
 
-  if allVersions.len == 0:
-    return @[]
+proc collectTaggedVersions*(path: Path, errorReportLevel: MsgKind = Debug): seq[VersionTag] =
+  let tip = gitFindOriginTip(path, errorReportLevel)
 
-  let headCommit = allVersions[0]
+  let (outp, status) = exec(GitTags, path, [], errorReportLevel)
+  if status == RES_OK:
+    result = parseTaggedVersions(outp)
+    if result.len > 0 and tip.isTip:
+      if result[0].c == tip.c:
+        result[0].isTip = true
+  else:
+    message(errorReportLevel, "could not collect file commits at:", $path)
+
+proc collectFileCommits*(path, file: Path, errorReportLevel: MsgKind = Warning): seq[VersionTag] =
+  let tip = gitFindOriginTip(path, errorReportLevel)
 
   let (outp, status) = exec(GitLog, path, ["--",$file], Warning)
   if status == RES_OK:
     result = parseTaggedVersions(outp, requireVersions = false)
-    if result.len > 0:
-      if result[0].c == headCommit.c:
+    if result.len > 0 and tip.isTip:
+      if result[0].c == tip.c:
         result[0].isTip = true
   else:
     message(errorReportLevel, file, "could not collect file commits at:", $file)
