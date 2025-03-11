@@ -53,7 +53,7 @@ proc processNimbleRelease(
     pkg: Package,
     release: VersionTag
 ): NimbleRelease =
-  info pkg.url.projectName, "Processing release:", $release
+  trace pkg.url.projectName, "Processing release:", $release
 
   if release.version == Version"#head":
     trace pkg.url.projectName, "processRelease using current commit"
