@@ -35,8 +35,8 @@ template testMinVer(name, expected: string) =
   # createDir name
   # withDir name:
   block:
-    let cmd = atlasExe & " --keepWorkspace --resolver=MinVer --list use proj_a"
-    let (outp, status) = execCmdEx(atlasExe & " --keepWorkspace --resolver=MinVer --list use proj_a")
+    let cmd = atlasExe & " --full --proxy=http://localhost:4242 --ignoreerrors --dumbProxy --keepWorkspace --resolver=MinVer --colors:off --list use proj_a"
+    let (outp, status) = execCmdEx(cmd)
     if status == 0:
       checkpoint "<<<<<<<<<<<<<<<< Failed test\n" &
                   "\nExpected contents:\n\t" & expected.replace("\n", "\n\t") &
@@ -128,13 +128,14 @@ suite "basic repo tests":
         setupGraph()
         let minVerExpectedResult = dedent"""
         [Info] (Resolve) selected:
-        [Info] (proj_a.buildGraph.example.com) [ ] (proj_a, 1.1.0)
-        [Info] (proj_a.buildGraph.example.com) [x] (proj_a, 1.0.0)
-        [Info] (proj_b.buildGraph.example.com) [ ] (proj_b, 1.1.0)
-        [Info] (proj_b.buildGraph.example.com) [x] (proj_b, 1.0.0)
-        [Info] (proj_c.buildGraph.example.com) [x] (proj_c, 1.2.0)
-        [Info] (proj_d.buildGraph.example.com) [ ] (proj_d, 2.0.0)
-        [Info] (proj_d.buildGraph.example.com) [x] (proj_d, 1.0.0)
-        [Info] (Resolve) end of selection
+        [Warn]   (Resolved) selected: 
+        [Warn]   (proj_a.buildGraph.example.com) [x] (proj_a.buildGraph.example.com, 1.0.0@e479b438) 
+        [Warn]   (proj_a.buildGraph.example.com) [ ] (proj_a.buildGraph.example.com, 1.1.0@fb3804df^) 
+        [Warn]   (proj_b.buildGraph.example.com) [x] (proj_b.buildGraph.example.com, 1.0.0@af427510) 
+        [Warn]   (proj_b.buildGraph.example.com) [ ] (proj_b.buildGraph.example.com, 1.1.0@ee875bae^) 
+        [Warn]   (proj_c.buildGraph.example.com) [x] (proj_c.buildGraph.example.com, 1.2.0@9331e14f^) 
+        [Warn]   (proj_d.buildGraph.example.com) [x] (proj_d.buildGraph.example.com, 1.0.0@0dec9c97) 
+        [Warn]   (proj_d.buildGraph.example.com) [!] (HasBrokenDep; pkg: proj_d.buildGraph.example.com, 2.0.0@dd98f775^) 
+        [Warn]   (Resolved) end of selection 
         """
         testMinVer("minproject", minVerExpectedResult)
