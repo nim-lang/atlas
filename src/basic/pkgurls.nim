@@ -53,7 +53,7 @@ proc `$`*(u: PkgUrl): string = $u.u
 proc toJsonHook*(v: PkgUrl): JsonNode = %($(v))
 proc hash*(a: PkgUrl): Hash {.inline.} = hash(a.u)
 
-proc toReporterName(u: PkgUrl): string = u.fullName()
+proc toReporterName(u: PkgUrl): string = u.projectName()
 
 proc extractProjectName*(url: Uri): tuple[name: string, user: string, host: string] =
   var u = url
