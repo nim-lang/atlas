@@ -281,15 +281,14 @@ suite "test expand with git tags":
 
       # TODO: add a specific version to the requirements for a to include non-tagged 7ca5581cd
       # TODO: then check that the expanded graph has the correct version
-      let sp0: Package = sp[0] # proj ws_testtraversal
-      let sp1: Package = sp[1] # proj A
-
       let graph = workspace().expand(nc, AllReleases, onClone=DoClone)
-
 
       checkpoint "\tgraph:\n" & $graph.toJson(ToJsonOptions(enumMode: joptEnumString))
 
-      let sp = graph.pkgs.values().toSeq() 
+      let sp = graph.pkgs.values().toSeq()
+      doAssert sp.len() == 5
+      let sp0: Package = sp[0] # proj ws_testtraversal
+      let sp1: Package = sp[1] # proj A
 
       check false
       
@@ -392,7 +391,6 @@ suite "test expand with no git tags":
 
         checkpoint "\tgraph:\n" & $graph.toJson(ToJsonOptions(enumMode: joptEnumString))
         let sp = graph.pkgs.values().toSeq()
-
         doAssert sp.len() == 5
 
         let sp0: Package = sp[0] # proj ws_testtraversal
