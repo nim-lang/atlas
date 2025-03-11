@@ -1,6 +1,7 @@
 # Small program that runs the test cases
 
 import std / [strutils, os, uri, jsonutils, json, tables, sequtils, strformat, unittest]
+import std/terminal
 import basic/[sattypes, context, reporters, pkgurls, compiledpatterns, versions]
 import basic/[deptypes, nimblecontext]
 import dependencies
@@ -63,12 +64,14 @@ template testRequirements(sp: Package,
 
 suite "graph solve":
   setup:
-    setAtlasVerbosity(Debug)
+    # setAtlasVerbosity(Warning)
+    # setAtlasVerbosity(Trace)
     context().nameOverrides = Patterns()
     context().urlOverrides = Patterns()
     context().proxy = parseUri "http://localhost:4242"
     context().dumbProxy = true
     context().depsDir = Path "deps"
+    setAtlasErrorsColor(fgMagenta)
 
     let projAnimbles = dedent"""
     fb3804df03c3c414d98d1f57deeb44c8a223ba44 1.1.0
@@ -155,9 +158,9 @@ suite "graph solve":
         check graph.pkgs[nc.createUrl("proj_d")].active
 
         check $graph.root.activeVersion == "#head@-"
-        check $graph.pkgs[nc.createUrl("proj_a")].activeVersion == "1.1.0@fb3804df"
-        check $graph.pkgs[nc.createUrl("proj_b")].activeVersion == "1.1.0@ee875bae"
-        check $graph.pkgs[nc.createUrl("proj_c")].activeVersion == "1.2.0@9331e14f"
+        check $graph.pkgs[nc.createUrl("proj_a")].activeVersion == "1.1.0@fb3804df^"
+        check $graph.pkgs[nc.createUrl("proj_b")].activeVersion == "1.1.0@ee875bae^"
+        check $graph.pkgs[nc.createUrl("proj_c")].activeVersion == "1.2.0@9331e14f^"
         check $graph.pkgs[nc.createUrl("proj_d")].activeVersion == "1.0.0@0dec9c97"
 
         let formMinVer = graph.toFormular(MinVer)
@@ -168,7 +171,7 @@ suite "graph solve":
         check $graph.root.activeVersion == "#head@-"
         check $graph.pkgs[nc.createUrl("proj_a")].activeVersion == "1.0.0@e479b438"
         check $graph.pkgs[nc.createUrl("proj_b")].activeVersion == "1.0.0@af427510"
-        check $graph.pkgs[nc.createUrl("proj_c")].activeVersion == "1.2.0@9331e14f"
+        check $graph.pkgs[nc.createUrl("proj_c")].activeVersion == "1.2.0@9331e14f^"
         check $graph.pkgs[nc.createUrl("proj_d")].activeVersion == "1.0.0@0dec9c97"
 
         check graph.validateDependencyGraph()
@@ -184,7 +187,7 @@ suite "graph solve":
 
   test "ws_semver_unit with patterns":
       ## Supporting Patterns suck, so here's a test to ensure they work
-      setAtlasVerbosity(Trace)
+      # setAtlasVerbosity(Trace)
       withDir "tests/ws_semver_unit":
         removeDir("deps")
         workspace() = paths.getCurrentDir()
@@ -243,9 +246,9 @@ suite "graph solve":
         check graph.pkgs[nc.createUrl("proj_d")].active
 
         check $graph.root.activeVersion == "#head@-"
-        check $graph.pkgs[nc.createUrl("proj_a")].activeVersion == "1.1.0@fb3804df"
-        check $graph.pkgs[nc.createUrl("proj_b")].activeVersion == "1.1.0@ee875bae"
-        check $graph.pkgs[nc.createUrl("proj_c")].activeVersion == "1.2.0@9331e14f"
+        check $graph.pkgs[nc.createUrl("proj_a")].activeVersion == "1.1.0@fb3804df^"
+        check $graph.pkgs[nc.createUrl("proj_b")].activeVersion == "1.1.0@ee875bae^"
+        check $graph.pkgs[nc.createUrl("proj_c")].activeVersion == "1.2.0@9331e14f^"
         check $graph.pkgs[nc.createUrl("proj_d")].activeVersion == "1.0.0@0dec9c97"
 
         let formMinVer = graph.toFormular(MinVer)
@@ -257,7 +260,7 @@ suite "graph solve":
         check $graph.root.activeVersion == "#head@-"
         check $graph.pkgs[nc.createUrl("proj_a")].activeVersion == "1.0.0@e479b438"
         check $graph.pkgs[nc.createUrl("proj_b")].activeVersion == "1.0.0@af427510"
-        check $graph.pkgs[nc.createUrl("proj_c")].activeVersion == "1.2.0@9331e14f"
+        check $graph.pkgs[nc.createUrl("proj_c")].activeVersion == "1.2.0@9331e14f^"
         check $graph.pkgs[nc.createUrl("proj_d")].activeVersion == "1.0.0@0dec9c97"
 
         check graph.validateDependencyGraph()
@@ -279,6 +282,7 @@ suite "test expand with no git tags":
     context().proxy = parseUri "http://localhost:4242"
     context().dumbProxy = true
     context().depsDir = Path "deps"
+    setAtlasErrorsColor(fgMagenta)
 
     # These will change if atlas-tests is regnerated!
     # To update run and use commits not adding a proj_x.nim file
