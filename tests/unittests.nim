@@ -19,6 +19,7 @@ suite "urls and naming":
     ws = absolutePath(workspace())
     nc.put("npeg", toPkgUriRaw(parseUri "https://github.com/zevv/npeg"))
     nc.put("sync", toPkgUriRaw(parseUri "https://github.com/planetis-m/sync"))
+    nc.put("regex", toPkgUriRaw(parseUri "https://github.com/nitely/nim-regex"))
 
   test "balls url":
     let upkg = nc.createUrl("https://github.com/disruptek/balls.git")

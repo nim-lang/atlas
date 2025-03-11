@@ -96,7 +96,7 @@ proc addRelease(
     vtag: VersionTag
 ) =
   var pkgver = vtag.toPkgVer()
-  info pkg.url.projectName, "Adding Nimble version:", $vtag
+  trace pkg.url.projectName, "Adding Nimble version:", $vtag
   let release = nc.processNimbleRelease(pkg, vtag)
 
   if vtag.v.string == "":

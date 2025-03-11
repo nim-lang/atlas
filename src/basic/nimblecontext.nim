@@ -66,7 +66,7 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
   else:
     name = substitute(nc.nameOverrides, nameOrig, didReplace)
   
-  trace "atlas:createUrl", "name:", name, "orig:", nameOrig, "namePatterns:", $nc.packageExtras, "isUrl:", $name.isUrl()
+  trace "atlas:createUrl", "name:", name, "orig:", nameOrig, "isUrl:", $name.isUrl()
   
   if name.isUrl():
     # trace "atlas:createUrl", "name is url:", name
@@ -121,9 +121,12 @@ proc fillPackageLookupTable(c: var NimbleContext) =
     if not fileExists(pkgsDir / Path"packages.json"):
       updatePackages(pkgsDir)
     let packages = getPackageInfos(pkgsDir)
-    for entry in packages:
-      c.nameToUrl[unicode.toLower(entry.name)] = createUrlSkipPatterns(entry.url, skipDirTest=true)
-      c.urlToNames[entry.url.parseUri] = entry.name
+    for pkgInfo in packages:
+      var pkgUrl = createUrlSkipPatterns(pkgInfo.url, skipDirTest=true)
+      pkgUrl.hasShortName = true
+      pkgUrl.qualifiedName.name = pkgInfo.name
+      c.nameToUrl[unicode.toLower(pkgInfo.name)] = pkgUrl
+      c.urlToNames[pkgUrl.url] = pkgInfo.name
 
 proc createUnfilledNimbleContext*(): NimbleContext =
   result = NimbleContext()
