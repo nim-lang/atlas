@@ -57,7 +57,7 @@ type
     ignoreErrors*: bool = false
     dumbProxy*: bool = false
     forceGitToHttps*: bool = false
-    includeTagsAndNimbleCommits*: bool = false
+    includeTagsAndNimbleCommits*: bool = false # include nimble commits and tags in the solver
     nimbleCommitsMax*: bool = false # takes the newest commit for each version
 
 var atlasContext = AtlasContext()
