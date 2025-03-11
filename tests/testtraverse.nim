@@ -49,6 +49,7 @@ template testRequirements(sp: Package,
     check idx < vers.len()
     let (url, ver) = vers[idx]
     check sp.state == Processed
+    checkpoint "Checking sp versions: " & $sp.versions
     check vt in sp.versions
     if vt in sp.versions:
       check sp.versions[vt].status == Normal
