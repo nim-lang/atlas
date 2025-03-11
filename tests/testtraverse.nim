@@ -1,6 +1,7 @@
 # Small program that runs the test cases
 
 import std / [strutils, os, uri, jsonutils, json, tables, sequtils, algorithm, strformat, unittest]
+import std/terminal
 import basic/[sattypes, context, reporters, pkgurls, compiledpatterns, versions]
 import basic/[deptypes, nimblecontext]
 import dependencies
@@ -69,6 +70,7 @@ suite "test expand with git tags":
     context().proxy = parseUri "http://localhost:4242"
     context().dumbProxy = true
     context().depsDir = Path "deps"
+    setAtlasErrorsColor(fgMagenta)
 
     # These will change if atlas-tests is regnerated!
     # To update run and use commits not adding a proj_x.nim file
@@ -273,6 +275,7 @@ suite "test expand with no git tags":
     context().proxy = parseUri "http://localhost:4242"
     context().dumbProxy = true
     context().depsDir = Path "deps"
+    setAtlasErrorsColor(fgMagenta)
 
     # These will change if atlas-tests is regnerated!
     # To update run and use commits not adding a proj_x.nim file

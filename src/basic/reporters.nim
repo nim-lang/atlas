@@ -22,6 +22,7 @@ type
     verbosity*: MsgKind
     noColors*: bool
     assertOnError*: bool
+    errorsColor* = fgRed
     warnings*: int
     errors*: int
     messages: seq[(MsgKind, string, seq[string])] # delayed output
@@ -39,6 +40,9 @@ proc setAtlasAssertOnError*(err: bool) =
 
 proc atlasErrors*(): int =
   atlasReporter.errors
+
+proc setAtlasErrorsColor*(color: ForegroundColor) =
+  atlasReporter.errorsColor = color
 
 proc writeMessageRaw(c: var Reporter; category: string; p: string, args: seq[string]) =
   var msg = category
@@ -64,7 +68,7 @@ proc writeMessage(c: var Reporter; k: MsgKind; p: string, args: seq[string]) =
       of Debug: (fgBlue, styleBright)
       of Info: (fgGreen, styleBright)
       of Warning: (fgYellow, styleBright)
-      of Error: (fgRed, styleBright)
+      of Error: (c.errorsColor, styleBright)
     
     stdout.styledWrite(color, style, $k, resetStyle, fgCyan, "(", p, ")", resetStyle)
     let colors = [fgWhite, fgMagenta]
