@@ -265,6 +265,28 @@ suite "test expand with git tags":
           ("https://example.com/buildGraph/proj_a", "*"),
         ])
 
+  test "expand and then enrich with specific versions from requirements":
+    withDir "tests/ws_testtraverse":
+      removeDir("deps")
+      workspace() = paths.getCurrentDir()
+      context().flags = {UsesOverrides, KeepWorkspace, ListVersions, FullClones}
+      context().defaultAlgo = SemVer
+
+      let deps = setupGraph()
+      var nc = createNimbleContext()
+      nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a"))
+      nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b"))
+      nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c"))
+      nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d"))
+
+      let graph = workspace().expand(nc, AllReleases, onClone=DoClone)
+
+      checkpoint "\tgraph:\n" & $graph.toJson(ToJsonOptions(enumMode: joptEnumString))
+
+      let sp = graph.pkgs.values().toSeq() 
+
+      check false
+      
 
 suite "test expand with no git tags":
 
