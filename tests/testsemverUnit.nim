@@ -105,10 +105,10 @@ suite "graph solve":
         context().defaultAlgo = SemVer
 
         var nc = createNimbleContext()
-        nc.put("proj_a", parseUri "https://example.com/buildGraph/proj_a")
-        nc.put("proj_b", parseUri "https://example.com/buildGraph/proj_b")
-        nc.put("proj_c", parseUri "https://example.com/buildGraph/proj_c")
-        nc.put("proj_d", parseUri "https://example.com/buildGraph/proj_d")
+        nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a"))
+        nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b"))
+        nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c"))
+        nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d"))
 
         let dir = paths.getCurrentDir().absolutePath
 
@@ -314,10 +314,10 @@ suite "test expand with no git tags":
         context().defaultAlgo = SemVer
 
         var nc = createNimbleContext()
-        nc.put("proj_a", parseUri "https://example.com/buildGraphNoGitTags/proj_a")
-        nc.put("proj_b", parseUri "https://example.com/buildGraphNoGitTags/proj_b")
-        nc.put("proj_c", parseUri "https://example.com/buildGraphNoGitTags/proj_c")
-        nc.put("proj_d", parseUri "https://example.com/buildGraphNoGitTags/proj_d")
+        nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraphNoGitTags/proj_a"))
+        nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraphNoGitTags/proj_b"))
+        nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraphNoGitTags/proj_c"))
+        nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraphNoGitTags/proj_d"))
 
         let dir = paths.getCurrentDir().absolutePath
 
