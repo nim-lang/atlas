@@ -83,6 +83,7 @@ proc githubSearch(seen: var HashSet[string]; terms: seq[string]) =
   for term in terms:
     for j in items(singleGithubSearch(term)):
       let p = PackageInfo(
+        kind: pkPackage,
         name: j.getOrDefault("name").getStr,
         url: j.getOrDefault("html_url").getStr,
         downloadMethod: "git",
