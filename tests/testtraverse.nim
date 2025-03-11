@@ -161,7 +161,7 @@ suite "test expand with git tags":
         workspace() = paths.getCurrentDir()
         context().flags = {UsesOverrides, KeepWorkspace, ListVersions, FullClones}
         context().defaultAlgo = SemVer
-        discard context().packageOverrides.addPattern("$+", "file://./buildGraph/$#")
+        discard context().nameOverrides.addPattern("$+", "file://./buildGraph/$#")
 
         var nc = createNimbleContext()
 
@@ -225,15 +225,15 @@ suite "test expand with git tags":
         context().flags = {UsesOverrides, KeepWorkspace, ListVersions, FullClones}
         context().defaultAlgo = SemVer
         context().depsDir = Path "deps_http"
+        context().nameOverrides = Patterns()
 
-        context().packageOverrides = Patterns()
         # discard context().overrides.addPattern("does_not_exist", "file://./buildGraph/does_not_exist")
         # discard context().overrides.addPattern("$+", "http://localhost:4242/buildGraph/$#")
         var nc = createNimbleContext()
-        nc.put("proj_a", parseUri "https://example.com/buildGraph/proj_a")
-        nc.put("proj_b", parseUri "https://example.com/buildGraph/proj_b")
-        nc.put("proj_c", parseUri "https://example.com/buildGraph/proj_c")
-        nc.put("proj_d", parseUri "https://example.com/buildGraph/proj_d")
+        nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a"))
+        nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b"))
+        nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c"))
+        nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d"))
         # nc.nameToUrl["does_not_exist"] = toPkgUri(parseUri "https://example.com/buildGraph/does_not_exist")
 
         let pkgA = nc.createUrl("proj_a")
@@ -266,7 +266,7 @@ suite "test expand with no git tags":
 
   setup:
     setAtlasVerbosity(Warning)
-    context().packageOverrides = Patterns()
+    context().nameOverrides = Patterns()
     context().urlOverrides = Patterns()
     context().proxy = parseUri "http://localhost:4242"
     context().dumbProxy = true
@@ -304,8 +304,7 @@ suite "test expand with no git tags":
         workspace() = paths.getCurrentDir()
         context().flags = {UsesOverrides, KeepWorkspace, ListVersions, FullClones}
         context().defaultAlgo = SemVer
-
-        discard context().packageOverrides.addPattern("$+", "file://./buildGraphNoGitTags/$#")
+        discard context().nameOverrides.addPattern("$+", "file://./buildGraphNoGitTags/$#")
 
         # writeFile("ws_testtraverse.nimble", "requires \"proj_a\"\n")
 
@@ -345,7 +344,7 @@ suite "test expand with no git tags":
         context().defaultAlgo = SemVer
 
         var nc = createNimbleContext()
-        discard nc.packageOverrides.addPattern("$+", "file://./buildGraphNoGitTags/$#")
+        discard nc.nameOverrides.addPattern("$+", "file://./buildGraphNoGitTags/$#")
 
         let deps = setupGraphNoGitTags()
         let dir = paths.getCurrentDir().absolutePath

@@ -124,6 +124,7 @@ proc fillPackageLookupTable(c: var NimbleContext) =
 
 proc createUnfilledNimbleContext*(): NimbleContext =
   result = NimbleContext()
+  result.nameOverrides = context().nameOverrides
   result.urlOverrides = context().urlOverrides
   # for key, val in context().packageNameOverrides: 
   #   let url = createUrlSkipPatterns($val)
