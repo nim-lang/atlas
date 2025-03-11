@@ -1,7 +1,9 @@
 {
   "deps": "",
-  "overrides": "url.rules",
+  "nameOverrides": {
+    "proj$+": "http://example.com/buildGraph/proj$#",
+  },
   "plugins": "",
-  "resolver": "MinVeer",
+  "resolver": "MinVer",
   "graph": null
 }
