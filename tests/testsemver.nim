@@ -90,12 +90,12 @@ suite "basic repo tests":
         let semVerExpectedResult = dedent"""
         [Warn]   (Resolved) selected: 
         [Warn]   (proj_a.buildGraph.example.com) [ ] (proj_a.buildGraph.example.com, 1.0.0@e479b438) 
-        [Warn]   (proj_a.buildGraph.example.com) [x] (proj_a.buildGraph.example.com, 1.1.0@fb3804df) 
+        [Warn]   (proj_a.buildGraph.example.com) [x] (proj_a.buildGraph.example.com, 1.1.0@fb3804df^) 
         [Warn]   (proj_b.buildGraph.example.com) [ ] (proj_b.buildGraph.example.com, 1.0.0@af427510) 
-        [Warn]   (proj_b.buildGraph.example.com) [x] (proj_b.buildGraph.example.com, 1.1.0@ee875bae) 
-        [Warn]   (proj_c.buildGraph.example.com) [x] (proj_c.buildGraph.example.com, 1.2.0@9331e14f) 
+        [Warn]   (proj_b.buildGraph.example.com) [x] (proj_b.buildGraph.example.com, 1.1.0@ee875bae^) 
+        [Warn]   (proj_c.buildGraph.example.com) [x] (proj_c.buildGraph.example.com, 1.2.0@9331e14f^) 
         [Warn]   (proj_d.buildGraph.example.com) [x] (proj_d.buildGraph.example.com, 1.0.0@0dec9c97) 
-        [Warn]   (proj_d.buildGraph.example.com) [!] (HasBrokenDep; pkg: proj_d.buildGraph.example.com, 2.0.0@dd98f775) 
+        [Warn]   (proj_d.buildGraph.example.com) [!] (HasBrokenDep; pkg: proj_d.buildGraph.example.com, 2.0.0@dd98f775^) 
         [Warn]   (Resolved) end of selection 
         """
         testSemVer2("semproject1", semVerExpectedResult)
@@ -109,14 +109,14 @@ suite "basic repo tests":
         [Warn]   (Resolved) selected: 
         [Warn]   (proj_a.buildGraphNoGitTags.example.com) [ ] (proj_a.buildGraphNoGitTags.example.com, 1.0.0@88d1801b) 
         [Warn]   (proj_a.buildGraphNoGitTags.example.com) [ ] (proj_a.buildGraphNoGitTags.example.com, 1.0.0@6a1cc178) 
-        [Warn]   (proj_a.buildGraphNoGitTags.example.com) [x] (proj_a.buildGraphNoGitTags.example.com, 1.1.0@61eacba5) 
+        [Warn]   (proj_a.buildGraphNoGitTags.example.com) [x] (proj_a.buildGraphNoGitTags.example.com, 1.1.0@61eacba5^) 
         [Warn]   (proj_b.buildGraphNoGitTags.example.com) [ ] (proj_b.buildGraphNoGitTags.example.com, 1.0.0@289ae9ee) 
         [Warn]   (proj_b.buildGraphNoGitTags.example.com) [ ] (proj_b.buildGraphNoGitTags.example.com, 1.0.0@bbb208a9) 
-        [Warn]   (proj_b.buildGraphNoGitTags.example.com) [x] (proj_b.buildGraphNoGitTags.example.com, 1.1.0@c70824d8) 
+        [Warn]   (proj_b.buildGraphNoGitTags.example.com) [x] (proj_b.buildGraphNoGitTags.example.com, 1.1.0@c70824d8^) 
         [Warn]   (proj_c.buildGraphNoGitTags.example.com) [ ] (proj_c.buildGraphNoGitTags.example.com, 1.0.0@8756fa45) 
-        [Warn]   (proj_c.buildGraphNoGitTags.example.com) [x] (proj_c.buildGraphNoGitTags.example.com, 1.2.0@d6c04d67) 
+        [Warn]   (proj_c.buildGraphNoGitTags.example.com) [x] (proj_c.buildGraphNoGitTags.example.com, 1.2.0@d6c04d67^) 
         [Warn]   (proj_d.buildGraphNoGitTags.example.com) [x] (proj_d.buildGraphNoGitTags.example.com, 1.0.0@0bd0e77a) 
-        [Warn]   (proj_d.buildGraphNoGitTags.example.com) [!] (HasBrokenDep; pkg: proj_d.buildGraphNoGitTags.example.com, 2.0.0@7ee36fec) 
+        [Warn]   (proj_d.buildGraphNoGitTags.example.com) [!] (HasBrokenDep; pkg: proj_d.buildGraphNoGitTags.example.com, 2.0.0@7ee36fec^) 
         [Warn]   (Resolved) end of selection 
         """
         
