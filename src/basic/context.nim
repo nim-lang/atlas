@@ -45,10 +45,10 @@ type
     workspace*: Path = Path"."
     depsDir*: Path = Path"deps"
     flags*: set[Flag]
-    #urlMapping*: Table[string, Package] # name -> url mapping
     dumpGraphs*: bool = true # TODO: debugging, plumb cli option later
     dumpFormular*: bool = true # TODO: debugging, plumb cli option later
-    overrides*: Patterns
+    nameOverrides*: Patterns
+    urlOverrides*: Patterns
     defaultAlgo*: ResolutionAlgorithm = SemVer
     plugins*: PluginInfo
     overridesFile*: Path

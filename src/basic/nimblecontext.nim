@@ -4,7 +4,8 @@ import context, packageinfos, reporters, pkgurls, gitops, compiledpatterns, dept
 type
   NimbleContext* = object
     packageToDependency*: Table[PkgUrl, Package]
-    overrides*: Patterns
+    packageOverrides*: Table[string, PkgUrl]
+    urlOverrides*: Patterns
     hasPackageList*: bool
     nameToUrl: Table[string, PkgUrl]
     extraNameToUrl: Table[string, PkgUrl] # for non-packages projects, e.g. url only
@@ -64,8 +65,17 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
   doAssert not nameOrig.isAbsolute(), "createUrl does not support absolute paths: " & $nameOrig
 
   var didReplace = false
-  var name = substitute(nc.overrides, nameOrig, didReplace)
-  trace "atlas:createUrl", "name:", name, "orig:", nameOrig, "patterns:", $nc.overrides
+  var name = nameOrig
+  
+  # First try URL overrides if it looks like a URL
+  if nameOrig.isUrl():
+    name = substitute(nc.urlOverrides, nameOrig, didReplace)
+  else:
+    # Otherwise try name overrides
+    name = substitute(nc.nameOverrides, nameOrig, didReplace)
+  
+  trace "atlas:createUrl", "name:", name, "orig:", nameOrig, "namePatterns:", $nc.nameOverrides, "urlPatterns:", $nc.urlOverrides
+  
   if name.isUrl():
     trace "atlas:createUrl", "name is url:", name
     result = createUrlSkipPatterns(name)
@@ -77,6 +87,7 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
     else:
       warn "atlas:createUrl", "name is not in nameToUrl:", $name
       raise newException(ValueError, "project name not found in packages database: " & $lname)
+  
   if result.url.path.splitFile().ext == ".git":
     var url = parseUri($result.url)
     url.path.removeSuffix(".git")
@@ -85,16 +96,10 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
   if not nc.lookup(result.shortName()).isEmpty():
     result.hasShortName = true
 
-  # if didReplace and nameOrig.isUrl():
-  #   result.hasShortName = true
-
   if not result.isEmpty():
     nc.put(result.projectName, result.url)
-    # if didReplace:
-    #   nc.put(nameOrig, result.url)
 
-  debug "atlas:createUrl", "created url with name:", name, "orig:", nameOrig, "projectName:", $result.projectName, "hasShortName:", $result.hasShortName, "url:", $result.url 
-      
+  debug "atlas:createUrl", "created url with name:", name, "orig:", nameOrig, "projectName:", $result.projectName, "hasShortName:", $result.hasShortName, "url:", $result.url
 
 proc createUrlFromPath*(nc: var NimbleContext, orig: Path): PkgUrl =
   let absPath = absolutePath(orig)
@@ -129,7 +134,8 @@ proc fillPackageLookupTable(c: var NimbleContext) =
 
 proc createUnfilledNimbleContext*(): NimbleContext =
   result = NimbleContext()
-  result.overrides = context().overrides
+  result.nameOverrides = context().nameOverrides
+  result.urlOverrides = context().urlOverrides
 
 proc createNimbleContext*(): NimbleContext =
   result = createUnfilledNimbleContext()

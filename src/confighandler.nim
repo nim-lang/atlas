@@ -8,35 +8,35 @@
 
 ## Configuration handling.
 
-import std / [strutils, os, streams, json]
+import std / [strutils, os, streams, json, tables, jsonutils]
 import basic/[versions, context, reporters, compiledpatterns, parse_requires]
 
-proc parseOverridesFile(filename: Path) =
-  const Separator = " -> "
-  let path = workspace() / filename
-  var f: File
-  if open(f, $path):
-    info "overrides", "loading file: " & $path
-    context().flags.incl UsesOverrides
-    try:
-      var lineCount = 1
-      for line in lines($path):
-        let splitPos = line.find(Separator)
-        if splitPos >= 0 and line[0] != '#':
-          let key = line.substr(0, splitPos-1)
-          let val = line.substr(splitPos+len(Separator))
-          if key.len == 0 or val.len == 0:
-            error path, "key/value must not be empty"
-          let err = context().overrides.addPattern(key, val)
-          if err.len > 0:
-            error path, "(" & $lineCount & "): " & err
-        else:
-          discard "ignore the line"
-        inc lineCount
-    finally:
-      close f
-  else:
-    error path, "cannot open: " & $path
+# proc parseOverridesFile(filename: Path) =
+#   const Separator = " -> "
+#   let path = workspace() / filename
+#   var f: File
+#   if open(f, $path):
+#     info "overrides", "loading file: " & $path
+#     context().flags.incl UsesOverrides
+#     try:
+#       var lineCount = 1
+#       for line in lines($path):
+#         let splitPos = line.find(Separator)
+#         if splitPos >= 0 and line[0] != '#':
+#           let key = line.substr(0, splitPos-1)
+#           let val = line.substr(splitPos+len(Separator))
+#           if key.len == 0 or val.len == 0:
+#             error path, "key/value must not be empty"
+#           let err = context().overrides.addPattern(key, val)
+#           if err.len > 0:
+#             error path, "(" & $lineCount & "): " & err
+#         else:
+#           discard "ignore the line"
+#         inc lineCount
+#     finally:
+#       close f
+#   else:
+#     error path, "cannot open: " & $path
 
 proc readPluginsDir(dir: Path) =
   for k, f in walkDir($(workspace() / dir)):
@@ -46,13 +46,20 @@ proc readPluginsDir(dir: Path) =
 type
   JsonConfig = object
     deps: string
-    overrides: string
+    nameOverrides: Table[string, string]
+    urlOverrides: Table[string, string]
     plugins: string
     resolver: string
     graph: JsonNode
 
 proc writeDefaultConfigFile*() =
-  let config = JsonConfig(deps: $context().depsDir, resolver: $SemVer, graph: newJNull())
+  let config = JsonConfig(
+    deps: $context().depsDir,
+    nameOverrides: initTable[string, string](),
+    urlOverrides: initTable[string, string](),
+    resolver: $SemVer,
+    graph: newJNull()
+  )
   let configFile = getWorkspaceConfig()
   writeFile($configFile, pretty %*config)
 
@@ -68,9 +75,19 @@ proc readConfig*() =
     let m = j.to(JsonConfig)
     if m.deps.len > 0:
       context().depsDir = m.deps.Path
-    if m.overrides.len > 0:
-      context().overridesFile = m.overrides.Path
-      parseOverridesFile(m.overrides.Path)
+    
+    # Handle package name overrides
+    for key, val in m.nameOverrides:
+      let err = context().nameOverrides.addPattern(key, val)
+      if err.len > 0:
+        error configFile, "invalid name override pattern: " & err
+
+    # Handle URL overrides  
+    for key, val in m.urlOverrides:
+      let err = context().urlOverrides.addPattern(key, val)
+      if err.len > 0:
+        error configFile, "invalid URL override pattern: " & err
+
     if m.resolver.len > 0:
       try:
         context().defaultAlgo = parseEnum[ResolutionAlgorithm](m.resolver)
@@ -83,8 +100,13 @@ proc readConfig*() =
     close f
 
 proc writeConfig*(graph: JsonNode) =
-  let config = JsonConfig(deps: $context().depsDir, overrides: $context().overridesFile,
-    plugins: $context().pluginsFile, resolver: $context().defaultAlgo,
-    graph: graph)
+  let config = JsonConfig(
+    deps: $context().depsDir,
+    nameOverrides: context().nameOverrides.toTable(),
+    urlOverrides: context().urlOverrides.toTable(),
+    plugins: $context().pluginsFile,
+    resolver: $context().defaultAlgo,
+    graph: graph
+  )
   let configFile = getWorkspaceConfig()
   writeFile($configFile, pretty %*config)

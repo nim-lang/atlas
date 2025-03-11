@@ -64,7 +64,8 @@ template testRequirements(sp: Package,
 suite "graph solve":
   setup:
     setAtlasVerbosity(Debug)
-    context().overrides = Patterns()
+    context().nameOverrides = Patterns()
+    context().urlOverrides = Patterns()
     context().proxy = parseUri "http://localhost:4242"
     context().dumbProxy = true
     context().depsDir = Path "deps"
@@ -189,7 +190,7 @@ suite "graph solve":
         workspace() = paths.getCurrentDir()
         context().flags = {UsesOverrides, KeepWorkspace, ListVersions, FullClones}
         context().defaultAlgo = SemVer
-        discard context().overrides.addPattern("proj$+", "https://example.com/buildGraph/proj$#")
+        discard context().nameOverrides.addPattern("proj$+", "https://example.com/buildGraph/proj$#")
 
         var nc = createNimbleContext()
 
@@ -273,7 +274,8 @@ suite "graph solve":
 suite "test expand with no git tags":
   setup:
     setAtlasVerbosity(Warning)
-    context().overrides = Patterns()
+    context().nameOverrides = Patterns()
+    context().urlOverrides = Patterns()
     context().proxy = parseUri "http://localhost:4242"
     context().dumbProxy = true
     context().depsDir = Path "deps"

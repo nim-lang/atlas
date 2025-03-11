@@ -17,8 +17,7 @@ proc addError*(err: var string; nimbleFile: string; msg: string) =
 proc isUrl(s: string): bool {.inline.} = s.len > 5 and s.contains "://"
 
 proc parseNimbleFile*(nc: var NimbleContext;
-                      nimbleFile: Path;
-                      p: Patterns): NimbleRelease =
+                      nimbleFile: Path): NimbleRelease =
   let nimbleInfo = extractRequiresInfo(nimbleFile)
   # let nimbleHash = secureHashFile($nimbleFile)
 
@@ -37,7 +36,7 @@ proc parseNimbleFile*(nc: var NimbleContext;
 
     var url: PkgUrl
     try:
-      url = nc.createUrl(name)
+      url = nc.createUrl(name)  # This will handle both name and URL overrides internally
     except ValueError, IOError, OSError:
       let err = getCurrentExceptionMsg()
       result.status = HasBrokenDep
@@ -65,25 +64,26 @@ proc genRequiresLine(u: string): string =
   result = "requires \"$1\"\n" % u.escape("", "")
 
 proc patchNimbleFile*(nc: var NimbleContext;
-                      p: Patterns; nimbleFile: Path, name: string) =
-  let url = nc.createUrl(name)
+                      nimbleFile: Path, name: string) =
+  var url = nc.createUrl(name)  # This will handle both name and URL overrides internally
+  
   debug nimbleFile, "patching nimble file to use package:", name, "url:", $url
 
   if url.isEmpty:
     error name, "cannot resolve package name: " & name
     return
 
-  let release = parseNimbleFile(nc, nimbleFile, p)
+  let release = parseNimbleFile(nc, nimbleFile)
   # see if we have this requirement already listed. If so, do nothing:
   for (dep, ver) in release.requirements:
     debug nimbleFile, "checking if dep url:", $url, "matches:", $dep
     if url == dep:
-      info(nimbleFile, "nimble fileup to date")
+      info(nimbleFile, "nimble file up to date")
       return
 
-  debug nimbleFile, "patching nimble file using:", $url.requiresName
+  debug nimbleFile, "patching nimble file using:", $url.projectName
 
-  let line = genRequiresLine(url.requiresName)
+  let line = genRequiresLine(url.projectName)
   var f = open($nimbleFile, fmAppend)
   try:
     f.writeLine line

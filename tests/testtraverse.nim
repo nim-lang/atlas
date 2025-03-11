@@ -63,7 +63,8 @@ template testRequirements(sp: Package,
 suite "test expand with git tags":
   setup:
     setAtlasVerbosity(Info)
-    context().overrides = Patterns()
+    context().nameOverrides = Patterns()
+    context().urlOverrides = Patterns()
     context().proxy = parseUri "http://localhost:4242"
     context().dumbProxy = true
     context().depsDir = Path "deps"
@@ -162,7 +163,7 @@ suite "test expand with git tags":
         context().defaultAlgo = SemVer
 
         var nc = createNimbleContext()
-        discard nc.overrides.addPattern("$+", "file://./buildGraph/$#")
+        discard nc.nameOverrides.addPattern("$+", "file://./buildGraph/$#")
 
         let deps = setupGraph()
         let dir = paths.getCurrentDir().absolutePath
@@ -225,7 +226,7 @@ suite "test expand with git tags":
         context().defaultAlgo = SemVer
         context().depsDir = Path "deps_http"
 
-        context().overrides = Patterns()
+        context().nameOverrides = Patterns()
         # discard context().overrides.addPattern("does_not_exist", "file://./buildGraph/does_not_exist")
         # discard context().overrides.addPattern("$+", "http://localhost:4242/buildGraph/$#")
         var nc = createNimbleContext()
@@ -265,7 +266,8 @@ suite "test expand with no git tags":
 
   setup:
     setAtlasVerbosity(Warning)
-    context().overrides = Patterns()
+    context().nameOverrides = Patterns()
+    context().urlOverrides = Patterns()
     context().proxy = parseUri "http://localhost:4242"
     context().dumbProxy = true
     context().depsDir = Path "deps"
@@ -303,7 +305,7 @@ suite "test expand with no git tags":
         context().flags = {UsesOverrides, KeepWorkspace, ListVersions, FullClones}
         context().defaultAlgo = SemVer
 
-        discard context().overrides.addPattern("$+", "file://./buildGraphNoGitTags/$#")
+        discard context().nameOverrides.addPattern("$+", "file://./buildGraphNoGitTags/$#")
 
         # writeFile("ws_testtraverse.nimble", "requires \"proj_a\"\n")
 
@@ -343,7 +345,7 @@ suite "test expand with no git tags":
         context().defaultAlgo = SemVer
 
         var nc = createNimbleContext()
-        discard nc.overrides.addPattern("$+", "file://./buildGraphNoGitTags/$#")
+        discard nc.nameOverrides.addPattern("$+", "file://./buildGraphNoGitTags/$#")
 
         let deps = setupGraphNoGitTags()
         let dir = paths.getCurrentDir().absolutePath

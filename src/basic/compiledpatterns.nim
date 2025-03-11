@@ -201,13 +201,15 @@ type
     s: seq[(Pattern, string)]
     t: Table[string, string]
     strings: seq[string]
+    patterns: seq[(string, string)]  # Store original (input, output) pattern pairs
 
 proc initPatterns*(): Patterns =
-  Patterns(s: @[], t: initTable[string, string](), strings: @[])
+  Patterns(s: @[], t: initTable[string, string](), strings: @[], patterns: @[])
 
 proc addPattern*(p: var Patterns; inputPattern, outputPattern: string): string =
   if '$' notin inputPattern and '$' notin outputPattern:
     p.t[inputPattern] = outputPattern
+    p.patterns.add((inputPattern, outputPattern))
     result = ""
   else:
     let code = compile(inputPattern, p.strings)
@@ -215,6 +217,7 @@ proc addPattern*(p: var Patterns; inputPattern, outputPattern: string): string =
       result = code.error
     else:
       p.s.add (code, outputPattern)
+      p.patterns.add((inputPattern, outputPattern))
       result = ""
 
 proc substitute*(p: Patterns; input: string; didReplace: var bool): string =
@@ -235,6 +238,12 @@ proc replacePattern*(inputPattern, outputPattern, input: string): string =
   var strings: seq[string] = @[]
   let code = compile(inputPattern, strings)
   result = replace(code, outputPattern, input)
+
+proc toTable*(p: Patterns): Table[string, string] =
+  ## Convert the patterns back to a table for serialization
+  result = initTable[string, string]()
+  for (input, output) in p.patterns:
+    result[input] = output
 
 when isMainModule:
   # foo$*bar -> https://gitlab.cross.de/$1
