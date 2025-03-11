@@ -72,7 +72,7 @@ proc readConfig*() =
 
   let j = parseJson(f, $configFile)
   try:
-    let m = j.to(JsonConfig)
+    let m = j.jsonTo(JsonConfig, Joptions(allowExtraKeys: true, allowMissingKeys: true))
     if m.deps.len > 0:
       context().depsDir = m.deps.Path
     

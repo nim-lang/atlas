@@ -1,6 +1,8 @@
 {
   "deps": "",
-  "overrides": "url.rules",
+  "nameOverrides": {
+    "proj$+": "http://example.com/buildGraph/proj$#",
+  },
   "plugins": "",
   "resolver": "SemVer",
   "graph": null
