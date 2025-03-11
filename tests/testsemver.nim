@@ -127,7 +127,6 @@ suite "basic repo tests":
         removeDirs("deps")
         setupGraph()
         let minVerExpectedResult = dedent"""
-        [Info] (Resolve) selected:
         [Warn]   (Resolved) selected: 
         [Warn]   (proj_a.buildGraph.example.com) [x] (proj_a.buildGraph.example.com, 1.0.0@e479b438) 
         [Warn]   (proj_a.buildGraph.example.com) [ ] (proj_a.buildGraph.example.com, 1.1.0@fb3804df^) 
