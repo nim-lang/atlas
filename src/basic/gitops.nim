@@ -146,7 +146,7 @@ proc collectTaggedVersions*(path: Path): seq[VersionTag] =
     result = @[]
 
 proc collectFileCommits*(path, file: Path, errorReportLevel: MsgKind = Warning): seq[VersionTag] =
-  let (outp1, status1) = exec(GitLog, path, [], Warning)
+  let (outp1, status1) = exec(GitLog, path, ["-n1"], Warning)
   var allVersions: seq[VersionTag]
   if status1 == RES_OK:
     allVersions = parseTaggedVersions(outp1, requireVersions = false)
@@ -315,8 +315,8 @@ proc incrementLastTag*(path: Path, field: Natural): string =
     else:
       incrementTag($path, lastTag, field)
 
-proc needsCommitLoRES_OKup*(commit: string): bool {.inline.} =
-  '.' in commit or commit == InvalidCommit
+# proc needsCommitLookup*(commit: string): bool {.inline.} =
+#   '.' in commit or commit == InvalidCommit
 
 proc isShortCommitHash*(commit: string): bool {.inline.} =
   commit.len >= 4 and commit.len < 40

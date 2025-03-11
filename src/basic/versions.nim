@@ -45,7 +45,7 @@ type
     FromNone, FromHead, FromGitTag, FromDep, FromNimbleFile, FromLockfile
 
 const
-  InvalidCommit* = "#head" #"<invalid commit>"
+  InvalidCommit* = "<invalid commit>"
 
 proc `$`*(v: Version): string =
   result = v.string
