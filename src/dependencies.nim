@@ -82,7 +82,7 @@ proc processNimbleRelease(
       for pkgUrl, interval in items(result.requirements):
         # var pkgDep = pkgs.packageToDependency.getOrDefault(pkgUrl, nil)
         if pkgUrl notin nc.packageToDependency:
-          debug pkg, "Found new pkg:", pkgUrl.projectName, "url:", $pkgUrl.url
+          debug pkg.url.projectName, "Found new pkg:", pkgUrl.projectName, "url:", $pkgUrl.url
           let pkgDep = Package(url: pkgUrl, state: NotInitialized)
           nc.packageToDependency[pkgUrl] = pkgDep
           # TODO: enrich versions with hashes when added
@@ -173,10 +173,10 @@ proc traverseDependency*(
           # reverse the order so the newest commit is preferred for new versions
           nimbleCommits.reverse()
 
-        debug pkg.url.projectName, "traverseDependency nimble commits:", $nimbleCommits
+        trace pkg.url.projectName, "traverseDependency nimble commits:", $nimbleCommits
         for tag in nimbleCommits:
           if not uniqueCommits.containsOrIncl(tag.c):
-            warn pkg.url.projectName, "traverseDependency adding nimble commit:", $tag
+            # trace pkg.url.projectName, "traverseDependency adding nimble commit:", $tag
             var vers: seq[(PackageVersion, NimbleRelease)]
             let pver = vers.addRelease(nc, pkg, tag)
             if not nimbleVersions.containsOrIncl(pver.vtag.v):
@@ -285,12 +285,3 @@ proc expand*(path: Path, nc: var NimbleContext; mode: TraversalMode, onClone: Pa
         result.pkgs[pkgUrl] = pkg
       else:
         discard
-
-  # for pkg in pkgs.pkgsToSpecs:
-  #   info pkg.url.projectName, "Processed:", $pkg.url.url
-  #   for vtag, reqs in pkg.versions:
-  #     info pkg.url.projectName, "pkg version:", $vtag, "reqs:", reqs.deps.mapIt($(it[0].projectName) & " " & $(it[1])).join(", "), "status:", $reqs.status
-
-
-  # if context().dumpGraphs:
-  #   dumpJson(graph, "graph-expanded.json")
