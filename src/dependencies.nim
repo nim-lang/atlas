@@ -149,8 +149,8 @@ proc traverseDependency*(
 
   of ExplicitVersions:
     info pkg.url.projectName, "traverseDependency nimble explicit versions:", $explicitVersions
-    for ver, rel in pkg.versions:
-      versions.add((ver, rel))
+    # for ver, rel in pkg.versions:
+    #   versions.add((ver, rel))
 
     var uniqueCommits: HashSet[CommitHash]
     for ver in pkg.versions.keys():
