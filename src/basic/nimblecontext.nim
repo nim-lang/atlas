@@ -1,10 +1,11 @@
 import std/[paths, tables, files, os, uri, sequtils, dirs, sets, strutils, unicode]
-import context, packageinfos, reporters, pkgurls, gitops, compiledpatterns, deptypes
+import context, packageinfos, reporters, pkgurls, gitops, compiledpatterns, deptypes, versions
 
 type
   NimbleContext* = object
     packageToDependency*: Table[PkgUrl, Package]
     packageExtras*: Table[string, PkgUrl]
+    explicitVersions*: Table[PkgUrl, HashSet[CommitHash]]
     nameOverrides*: Patterns
     urlOverrides*: Patterns
     hasPackageList*: bool

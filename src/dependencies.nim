@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [os, strutils, uri, tables, unicode, sequtils, sets, json, hashes, algorithm, paths, files, dirs]
+import std / [os, strutils, uri, tables, sequtils, unicode, sequtils, sets, json, hashes, algorithm, paths, files, dirs]
 import basic/[context, deptypes, versions, osutils, nimbleparser, packageinfos, reporters, gitops, parse_requires, pkgurls, compiledpatterns, sattypes, nimblecontext]
 
 export deptypes, versions
@@ -14,6 +14,7 @@ export deptypes, versions
 type
   TraversalMode* = enum
     AllReleases,
+    ExplicitVersions,
     CurrentCommit
 
 when defined(nimAtlasBootstrap):
@@ -81,6 +82,9 @@ proc processNimbleRelease(
     if result.status == Normal:
       for pkgUrl, interval in items(result.requirements):
         # var pkgDep = pkgs.packageToDependency.getOrDefault(pkgUrl, nil)
+        error pkgUrl.projectName, "INTERVAL: ", $interval, "isSpecial:", $interval.isSpecial, "explicit:", $interval.extractSpecificCommit()
+        if interval.isSpecial:
+          nc.explicitVersions.mgetOrPut(pkgUrl).incl(interval.extractSpecificCommit())
         if pkgUrl notin nc.packageToDependency:
           debug pkg.url.projectName, "Found new pkg:", pkgUrl.projectName, "url:", $pkgUrl.url
           let pkgDep = Package(url: pkgUrl, state: NotInitialized)
@@ -142,6 +146,16 @@ proc traverseDependency*(
     trace pkg.url.projectName, "traversing dependency for only current commit"
     let vtag = VersionTag(v: Version"#head", c: initCommitHash(currentCommit, FromHead))
     discard versions.addRelease(nc, pkg, vtag)
+
+  of ExplicitVersions:
+    info pkg.url.projectName, "traverseDependency nimble explicit versions:", $explicitVersions
+    var uniqueCommits: HashSet[CommitHash]
+    for version in explicitVersions:
+      uniqueCommits.incl(version.commit)
+    for version in explicitVersions:
+      if uniqueCommits.containsOrIncl(version.commit):
+        info pkg.url.projectName, "add explicit version:", $version
+        discard versions.addRelease(nc, pkg, version)
 
   of AllReleases:
     try:
@@ -285,3 +299,6 @@ proc expand*(path: Path, nc: var NimbleContext; mode: TraversalMode, onClone: Pa
         result.pkgs[pkgUrl] = pkg
       else:
         discard
+
+  for pkgUrl, versions in nc.explicitVersions:
+    info pkgUrl.projectName, "explicit versions: ", versions.toSeq().mapIt($it).join(", ")

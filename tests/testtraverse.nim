@@ -1,6 +1,6 @@
 # Small program that runs the test cases
 
-import std / [strutils, os, uri, jsonutils, json, tables, sequtils, algorithm, strformat, unittest]
+import std / [strutils, os, uri, jsonutils, json, sets, tables, sequtils, algorithm, strformat, unittest]
 import std/terminal
 import basic/[sattypes, context, reporters, pkgurls, compiledpatterns, versions]
 import basic/[deptypes, nimblecontext]
@@ -266,7 +266,7 @@ suite "test expand with git tags":
         ])
 
   test "expand and then enrich with specific versions from requirements":
-    withDir "tests/ws_testtraverse":
+    withDir "tests//ws_testtraverse_explicit":
       removeDir("deps")
       workspace() = paths.getCurrentDir()
       context().flags = {UsesOverrides, KeepWorkspace, ListVersions, FullClones}
@@ -291,6 +291,11 @@ suite "test expand with git tags":
       let sp1: Package = sp[1] # proj A
 
       check false
+
+      echo "explicit versions: "
+      for pkgUrl, commits in nc.explicitVersions.pairs:
+        echo "\tversions: ", pkgUrl, " commits: ", commits.toSeq().mapIt($it).join("; ")
+
       
 
 suite "test expand with no git tags":

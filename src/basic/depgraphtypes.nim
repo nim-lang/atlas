@@ -105,13 +105,13 @@ proc toJsonHook*(p: Path): JsonNode = toJson($(p))
 # proc initPackageVersion*(version: Version, commit: CommitHash, req = EmptyReqs, vid = NoVar): PackageVersion =
 #   result = PackageVersion(vtag: VersionTag(c: commit, v: version), reqIdx: req, vid: vid)
 
-# proc enrichVersionsViaExplicitHash*(releases: var seq[PackageVersion]; x: VersionInterval) =
-#   let commit = extractSpecificCommit(x)
-#   if not commit.isEmpty():
-#     for ver in releases:
-#       if ver.vtag.commit() == commit:
-#         return
-#     releases.add initPackageVersion(Version"", commit) 
+proc enrichVersionsViaExplicitHash*(releases: var seq[PackageVersion]; x: VersionInterval) =
+  let commit = extractSpecificCommit(x)
+  if not commit.isEmpty():
+    for ver in releases:
+      if ver.vtag.commit() == commit:
+        return
+    releases.add initPackageVersion(Version"", commit) 
 
 proc dumpJson*(d: DepGraph, filename: string, full = true, pretty = true) =
   let jn = toJson(d, ToJsonOptions(enumMode: joptEnumString))
