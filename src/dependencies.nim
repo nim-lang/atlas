@@ -84,7 +84,8 @@ proc processNimbleRelease(
         # var pkgDep = pkgs.packageToDependency.getOrDefault(pkgUrl, nil)
         error pkgUrl.projectName, "INTERVAL: ", $interval, "isSpecial:", $interval.isSpecial, "explicit:", $interval.extractSpecificCommit()
         if interval.isSpecial:
-          nc.explicitVersions.mgetOrPut(pkgUrl).incl(VersionTag(v: Version"", c: interval.extractSpecificCommit()))
+          let commit = interval.extractSpecificCommit()
+          nc.explicitVersions.mgetOrPut(pkgUrl).incl(VersionTag(v: Version("#" & $(commit)), c: commit))
         if pkgUrl notin nc.packageToDependency:
           debug pkg.url.projectName, "Found new pkg:", pkgUrl.projectName, "url:", $pkgUrl.url
           let pkgDep = Package(url: pkgUrl, state: NotInitialized)

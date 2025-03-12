@@ -99,6 +99,7 @@ proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
         for dep, query in items(rel.requirements):
           let depNode = graph.pkgs[dep]
 
+          info pkg.url.projectName, "checking dependency:", $dep.projectName, "query:", $query
           var hasCompatible = false
           for depVer, relVer in depNode.validVersions():
             if query.matches(depVer.version()):
