@@ -165,7 +165,7 @@ proc traverseDependency*(
       info pkg.url.projectName, "explicit version length:", $version.c, "len:", $version.c.h.string.len()
       if version.commit.isShort():
         info pkg.url.projectName, "short explicit version:", $version
-        let vtag = gitops.expandSpecial(pkg.ondisk, version.version)
+        let vtag = gitops.expandSpecial(pkg.ondisk, version)
         version = vtag
 
     for version in explicitVersions:
