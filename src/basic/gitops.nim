@@ -192,6 +192,16 @@ proc shortToCommit*(path: Path, short: CommitHash): CommitHash =
     if vtags.len() == 1:
       result = vtags[0].c
 
+proc expandSpecial*(path: Path, version: Version): VersionTag =
+  let (cc, status) = exec(GitRevParse, path, [$version])
+
+  result = VersionTag(v: version, c: initCommitHash("", FromHead))
+  if status == RES_OK:
+    let vtags = parseTaggedVersions(cc, requireVersions = false)
+    if vtags.len() == 1:
+      result.c = vtags[0].c
+  info path, "expandSpecial: ", $version, "result:", result
+
 proc listFiles*(path: Path): seq[string] =
   let (outp, status) = exec(GitLsFiles, path, [])
   if status == RES_OK:

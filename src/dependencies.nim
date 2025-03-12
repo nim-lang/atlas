@@ -59,7 +59,7 @@ proc processNimbleRelease(
   if release.version == Version"#head":
     trace pkg.url.projectName, "processRelease using current commit"
   elif release.commit.isEmpty():
-    error pkg.url.projectName, "processRelease missing commit ", $release, "at:", $pkg.ondisk
+    warn pkg.url.projectName, "processRelease missing commit ", $release, "at:", $pkg.ondisk
     result = NimbleRelease(status: HasBrokenRelease, err: "no commit")
     return
   elif not checkoutGitCommit(pkg.ondisk, release.commit, Warning):
@@ -81,17 +81,18 @@ proc processNimbleRelease(
 
     if result.status == Normal:
       for pkgUrl, interval in items(result.requirements):
-        # var pkgDep = pkgs.packageToDependency.getOrDefault(pkgUrl, nil)
-        error pkgUrl.projectName, "INTERVAL: ", $interval, "isSpecial:", $interval.isSpecial, "explicit:", $interval.extractSpecificCommit()
+        # debug pkgUrl.projectName, "INTERVAL: ", $interval, "isSpecial:", $interval.isSpecial, "explicit:", $interval.extractSpecificCommit()
         if interval.isSpecial:
           let commit = interval.extractSpecificCommit()
-          nc.explicitVersions.mgetOrPut(pkgUrl).incl(VersionTag(v: Version("#" & $(commit)), c: commit))
+          if not commit.isEmpty():
+            nc.explicitVersions.mgetOrPut(pkgUrl).incl(VersionTag(v: Version("#" & $(commit)), c: commit))
+          else:
+            error pkgUrl.projectName, "processRelease missing commit:", $release, "for:", $interval
+
         if pkgUrl notin nc.packageToDependency:
           debug pkg.url.projectName, "Found new pkg:", pkgUrl.projectName, "url:", $pkgUrl.url
           let pkgDep = Package(url: pkgUrl, state: NotInitialized)
           nc.packageToDependency[pkgUrl] = pkgDep
-          # TODO: enrich versions with hashes when added
-          # enrichVersionsViaExplicitHash graph[depIdx].versions, interval
 
 proc addRelease(
     versions: var seq[(PackageVersion, NimbleRelease)],
@@ -164,7 +165,7 @@ proc traverseDependency*(
       info pkg.url.projectName, "explicit version length:", $version.c, "len:", $version.c.h.string.len()
       if version.commit.isShort():
         info pkg.url.projectName, "short explicit version:", $version
-        let commit = gitops.shortToCommit(pkg.ondisk, version.commit)
+        let commit = gitops.expandSpecial(pkg.ondisk, version.verion)
         version.c = commit
 
     for version in explicitVersions:

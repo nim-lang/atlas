@@ -67,7 +67,9 @@ proc isLowerAlphaNum*(s: string): bool =
 
 proc initCommitHash*(raw: string, origin: CommitOrigin): CommitHash = 
   result = CommitHash(h: raw.toLower(), orig: origin)
-  doAssert result.h.isLowerAlphaNum(), "hash must hexdecimal but got: " & $raw
+  if not result.h.isLowerAlphaNum():
+    result = CommitHash(h: "", orig: FromNone)
+  # doAssert result.h.isLowerAlphaNum(), "hash must hexdecimal but got: " & $raw
 
 proc initCommitHash*(c: CommitHash, origin: CommitOrigin): CommitHash = 
   result = c
