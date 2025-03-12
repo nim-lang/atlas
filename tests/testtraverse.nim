@@ -266,6 +266,7 @@ suite "test expand with git tags":
         ])
 
   test "expand and then enrich with specific versions from requirements":
+    setAtlasVerbosity(Trace)
     withDir "tests//ws_testtraverse_explicit":
       removeDir("deps")
       workspace() = paths.getCurrentDir()

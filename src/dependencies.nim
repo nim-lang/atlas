@@ -84,7 +84,7 @@ proc processNimbleRelease(
         # var pkgDep = pkgs.packageToDependency.getOrDefault(pkgUrl, nil)
         error pkgUrl.projectName, "INTERVAL: ", $interval, "isSpecial:", $interval.isSpecial, "explicit:", $interval.extractSpecificCommit()
         if interval.isSpecial:
-          nc.explicitVersions.mgetOrPut(pkgUrl).incl(interval.extractSpecificCommit())
+          nc.explicitVersions.mgetOrPut(pkgUrl).incl(VersionTag(v: Version"", c: interval.extractSpecificCommit()))
         if pkgUrl notin nc.packageToDependency:
           debug pkg.url.projectName, "Found new pkg:", pkgUrl.projectName, "url:", $pkgUrl.url
           let pkgDep = Package(url: pkgUrl, state: NotInitialized)
@@ -149,9 +149,23 @@ proc traverseDependency*(
 
   of ExplicitVersions:
     info pkg.url.projectName, "traverseDependency nimble explicit versions:", $explicitVersions
+    for ver, rel in pkg.versions:
+      versions.add((ver, rel))
+
     var uniqueCommits: HashSet[CommitHash]
-    for version in explicitVersions:
-      uniqueCommits.incl(version.commit)
+    for ver in pkg.versions.keys():
+      uniqueCommits.incl(ver.vtag.c)
+
+    # get full hash from short hashes
+    # TODO: handle shallow clones here?
+    var explicitVersions = explicitVersions
+    for version in mitems(explicitVersions):
+      info pkg.url.projectName, "explicit version length:", $version.c, "len:", $version.c.h.string.len()
+      if version.commit.isShort():
+        info pkg.url.projectName, "short explicit version:", $version
+        let commit = gitops.shortToCommit(pkg.ondisk, version.commit)
+        version.c = commit
+
     for version in explicitVersions:
       if uniqueCommits.containsOrIncl(version.commit):
         info pkg.url.projectName, "add explicit version:", $version
@@ -302,3 +316,5 @@ proc expand*(path: Path, nc: var NimbleContext; mode: TraversalMode, onClone: Pa
 
   for pkgUrl, versions in nc.explicitVersions:
     info pkgUrl.projectName, "explicit versions: ", versions.toSeq().mapIt($it).join(", ")
+    var pkg = nc.packageToDependency[pkgUrl]
+    nc.traverseDependency(pkg, ExplicitVersions, versions.toSeq())

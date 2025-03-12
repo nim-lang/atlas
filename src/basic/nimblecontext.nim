@@ -5,7 +5,7 @@ type
   NimbleContext* = object
     packageToDependency*: Table[PkgUrl, Package]
     packageExtras*: Table[string, PkgUrl]
-    explicitVersions*: Table[PkgUrl, HashSet[CommitHash]]
+    explicitVersions*: Table[PkgUrl, HashSet[VersionTag]]
     nameOverrides*: Patterns
     urlOverrides*: Patterns
     hasPackageList*: bool

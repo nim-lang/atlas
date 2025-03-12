@@ -185,7 +185,12 @@ proc versionToCommit*(path: Path, algo: ResolutionAlgorithm; query: VersionInter
 
 proc shortToCommit*(path: Path, short: CommitHash): CommitHash =
   let (cc, status) = exec(GitRevParse, path, [short.h])
-  result = if status == RES_OK: initCommitHash(cc, FromHead) else: initCommitHash("", FromHead)
+  info path, "shortToCommit: ", $short, "result:", cc
+  result = initCommitHash("", FromHead)
+  if status == RES_OK:
+    let vtags = parseTaggedVersions(cc, requireVersions = false)
+    if vtags.len() == 1:
+      result = vtags[0].c
 
 proc listFiles*(path: Path): seq[string] =
   let (outp, status) = exec(GitLsFiles, path, [])
