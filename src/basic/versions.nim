@@ -123,7 +123,7 @@ proc isSpecial(v: Version): bool {.inline.} =
 proc isValidVersion*(v: string): bool {.inline.} =
   result = v.len > 0 and v[0] in {'#'} + Digits
 
-proc isHead(v: Version): bool {.inline.} = cmpIgnoreCase(v.string, "#head") == 0
+proc isHead*(v: Version): bool {.inline.} = cmpIgnoreCase(v.string, "#head") == 0
 
 template next(l, p, s: untyped) =
   if l > 0:
