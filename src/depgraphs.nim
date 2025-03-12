@@ -323,12 +323,12 @@ proc solve*(graph: var DepGraph; form: Form) =
                 selections.add((item.pkg.url.projectName, "[ ] " & toString item))
             else:
               selections.add((pkg.url.projectName, "[!] " & "(" & $rel.status & "; pkg: " & pkg.url.projectName & ", " & $ver & ")"))
-      warn "Resolved", "end of selection"
       var longestPkgName = 0
       for (pkg, str) in selections:
         longestPkgName = max(longestPkgName, pkg.len)
       for (pkg, str) in selections:
         warn "Resolved", str
+      warn "Resolved", "end of selection"
   else:
     var notFoundCount = 0
     for pkg in values(graph.pkgs):
