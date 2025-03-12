@@ -81,7 +81,7 @@ proc processNimbleRelease(
 
     if result.status == Normal:
       for pkgUrl, interval in items(result.requirements):
-        # debug pkgUrl.projectName, "INTERVAL: ", $interval, "isSpecial:", $interval.isSpecial, "explicit:", $interval.extractSpecificCommit()
+        debug pkg.url.projectName, "INTERVAL: ", $interval, "isSpecial:", $interval.isSpecial, "explicit:", $interval.extractSpecificCommit()
         if interval.isSpecial:
           let commit = interval.extractSpecificCommit()
           if not commit.isEmpty():
@@ -168,7 +168,9 @@ proc traverseDependency*(
 
     for version in explicitVersions:
       info pkg.url.projectName, "check explicit version:", repr version
-      if not uniqueCommits.containsOrIncl(version.commit):
+      if version.commit.isEmpty():
+        error pkg.url.projectName, "explicit version has empty commit:", $version
+      elif not uniqueCommits.containsOrIncl(version.commit):
         info pkg.url.projectName, "add explicit version:", $version
         discard versions.addRelease(nc, pkg, version)
 

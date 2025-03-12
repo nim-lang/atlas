@@ -147,7 +147,7 @@ proc gitFindOriginTip*(path: Path, errorReportLevel: MsgKind = Warning): Version
       result = allVersions[0]
       result.isTip = true
   else:
-    message(errorReportLevel, path, "could not collect file commits at:", $path)
+    message(errorReportLevel, path, "could not find origin head at:", $path)
 
 proc collectTaggedVersions*(path: Path, errorReportLevel: MsgKind = Debug): seq[VersionTag] =
   let tip = gitFindOriginTip(path, errorReportLevel)
@@ -159,7 +159,7 @@ proc collectTaggedVersions*(path: Path, errorReportLevel: MsgKind = Debug): seq[
       if result[0].c == tip.c:
         result[0].isTip = true
   else:
-    message(errorReportLevel, path, "could not collect file commits at:", $path)
+    message(errorReportLevel, path, "could not collect tagged commits at:", $path)
 
 proc collectFileCommits*(path, file: Path, errorReportLevel: MsgKind = Warning): seq[VersionTag] =
   let tip = gitFindOriginTip(path, errorReportLevel)
