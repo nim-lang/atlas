@@ -1,6 +1,6 @@
 # Small program that runs the test cases
 
-import std / [strutils, os, uri, jsonutils, json, tables, sequtils, strformat, unittest]
+import std / [strutils, os, uri, jsonutils, json, sets, tables, sequtils, strformat, unittest]
 import std/terminal
 import basic/[sattypes, context, reporters, pkgurls, compiledpatterns, versions]
 import basic/[deptypes, nimblecontext]
@@ -42,31 +42,6 @@ suite "graph solve":
     context().depsDir = Path "deps"
     setAtlasErrorsColor(fgMagenta)
 
-    let projAnimbles = dedent"""
-    fb3804df03c3c414d98d1f57deeb44c8a223ba44 1.1.0
-    7ca5581cd5355f6b5461a23f9683f19378bd268a
-    e479b438015e734bea67a9c63d783e78cab5746e 1.0.0
-    """.parseTaggedVersions(false)
-    let projAtags = projAnimbles.filterIt(it.v.string != "")
-
-    let projBnimbles = dedent"""
-    ee875baecee161ed053b87b583b2f08526838bd6 1.1.0
-    cd3ad76043e5f983f704be6bf61e57d187fe070f
-    af4275109d60caaeacf2912a37c2339aca40a922 1.0.0
-    """.parseTaggedVersions(false)
-    let projBtags = projBnimbles.filterIt(it.v.string != "")
-
-    let projCnimbles = dedent"""
-    9331e14f3fa20ed75b7d5c0ab93aa5fb0293192f 1.2.0
-    c7540297c01dc57a98cb1fce7660ab6f2a0cee5f
-    """.parseTaggedVersions(false)
-    let projCtags = projCnimbles.filterIt(it.v.string != "")
-
-    let projDnimbles = dedent"""
-    dd98f775ae33d450dc7f936f850e247e820e31ad 2.0.0
-    0dec9c9733129919972416f04e73b1fb2cbf3bd3 1.0.0
-    """.parseTaggedVersions(false)
-    let projDtags = projDnimbles.filterIt(it.v.string != "")
 
   test "expand using http urls":
       # setAtlasVerbosity(Info)
@@ -199,31 +174,6 @@ suite "test expand with no git tags":
     context().depsDir = Path "deps"
     setAtlasErrorsColor(fgMagenta)
 
-    # These will change if atlas-tests is regnerated!
-    # To update run and use commits not adding a proj_x.nim file
-    #    curl http://localhost:4242/buildGraph/ws_generated-logs.txt
-    let projAtags = dedent"""
-    61eacba5453392d06ed0e839b52cf17462d94648 1.1.0
-    6a1cc178670d372f21c21329d35579e96283eab0 1.0.0
-    88d1801bff2e72cdaf2d29b438472336df6aa66d 1.0.0
-    """.parseTaggedVersions(false)
-
-    let projBtags = dedent"""
-    c70824d8b9b669cc37104d35055fd8c11ecdd680 1.1.0
-    bbb208a9cad0d58f85bd00339c85dfeb8a4f7ac0 1.0.0
-    289ae9eea432cdab9d681ab69444ae9d439eb6ae 1.0.0
-    """.parseTaggedVersions(false)
-
-    let projCtags = dedent"""
-    d6c04d67697df7807b8e2b6028d167b517d13440 1.2.0
-    8756fa4575bf750d4472ac78ba91520f05a1de60 1.0.0
-    """.parseTaggedVersions(false)
-
-    let projDtags = dedent"""
-    7ee36fecb09ef33024d3aa198ed87d18c28b3548 2.0.0
-    0bd0e77a8cbcc312185c2a1334f7bf2eb7b1241f 1.0.0
-    """.parseTaggedVersions(false)
-
   test "expand using buildGraphNoGitTags":
       # setAtlasVerbosity(Info)
       withDir "tests/ws_semver_unit":
@@ -243,6 +193,70 @@ suite "test expand with no git tags":
         var graph = dir.expand(nc, AllReleases, onClone=DoClone)
 
         echo "\tgraph:\n", graph.toJson(ToJsonOptions(enumMode: joptEnumString))
+
+        let form = graph.toFormular(SemVer)
+        context().dumpGraphs = true
+        var sol: Solution
+        solve(graph, form)
+
+        check graph.root.active
+        check graph.pkgs[nc.createUrl("proj_a")].active
+        check graph.pkgs[nc.createUrl("proj_b")].active
+        check graph.pkgs[nc.createUrl("proj_c")].active
+        check graph.pkgs[nc.createUrl("proj_d")].active
+
+        check $graph.root.activeVersion == "#head@-"
+        check $graph.pkgs[nc.createUrl("proj_a")].activeVersion.version == "1.1.0"
+        check $graph.pkgs[nc.createUrl("proj_b")].activeVersion.version == "1.1.0"
+        check $graph.pkgs[nc.createUrl("proj_c")].activeVersion.version == "1.2.0"
+        check $graph.pkgs[nc.createUrl("proj_d")].activeVersion.version == "1.0.0"
+
+        let formMinVer = graph.toFormular(MinVer)
+        context().dumpGraphs = true
+        var solMinVer: Solution
+        solve(graph, formMinVer)
+
+        check $graph.root.activeVersion == "#head@-"
+        check $graph.pkgs[nc.createUrl("proj_a")].activeVersion.version == "1.0.0"
+        check $graph.pkgs[nc.createUrl("proj_b")].activeVersion.version == "1.0.0"
+        check $graph.pkgs[nc.createUrl("proj_c")].activeVersion.version == "1.2.0"
+        check $graph.pkgs[nc.createUrl("proj_d")].activeVersion.version == "1.0.0"
+
+        check graph.validateDependencyGraph()
+        let topo = graph.toposorted()
+
+        check topo[0].url.projectName == "proj_d"
+        check topo[1].url.projectName == "proj_c"
+        check topo[2].url.projectName == "proj_b"
+        check topo[3].url.projectName == "proj_a"
+
+        for pkg in topo:
+          echo "PKG: ", pkg.url.projectName
+
+
+  test "expand using buildGraphNoGitTags with explicit versions":
+      # setAtlasVerbosity(Info)
+      withDir "tests/ws_testtraverse_explicit":
+        removeDir("deps")
+        workspace() = paths.getCurrentDir()
+        context().flags = {UsesOverrides, KeepWorkspace, ListVersions, FullClones}
+        context().defaultAlgo = SemVer
+
+        var nc = createNimbleContext()
+        nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraphNoGitTags/proj_a"))
+        nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraphNoGitTags/proj_b"))
+        nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraphNoGitTags/proj_c"))
+        nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraphNoGitTags/proj_d"))
+
+        let dir = paths.getCurrentDir().absolutePath
+
+        var graph = dir.expand(nc, AllReleases, onClone=DoClone)
+
+        echo "\tgraph:\n", graph.toJson(ToJsonOptions(enumMode: joptEnumString))
+
+        echo "explicit versions: "
+        for pkgUrl, commits in nc.explicitVersions.pairs:
+          echo "\tversions: ", pkgUrl, " commits: ", commits.toSeq().mapIt($it).join("; ")
 
         let form = graph.toFormular(SemVer)
         context().dumpGraphs = true
