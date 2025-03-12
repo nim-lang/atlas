@@ -56,18 +56,20 @@ proc processNimbleRelease(
 ): NimbleRelease =
   trace pkg.url.projectName, "Processing release:", $release
 
+  var nimbleFiles: seq[Path]
   if release.version == Version"#head":
     trace pkg.url.projectName, "processRelease using current commit"
+    nimbleFiles = findNimbleFile(pkg)
   elif release.commit.isEmpty():
     warn pkg.url.projectName, "processRelease missing commit ", $release, "at:", $pkg.ondisk
     result = NimbleRelease(status: HasBrokenRelease, err: "no commit")
     return
-  elif not checkoutGitCommit(pkg.ondisk, release.commit, Warning):
-    warn pkg.url.projectName, "processRelease unable to checkout commit ", $release, "at:", $pkg.ondisk
-    result = NimbleRelease(status: HasBrokenRelease, err: "error checking out release")
-    return
+  else:
+    nimbleFiles = nc.cacheNimbleFilesFromGit(pkg, release.commit)
 
-  let nimbleFiles = findNimbleFile(pkg)
+    # warn pkg.url.projectName, "processRelease unable to checkout commit ", $release, "at:", $pkg.ondisk
+    # result = NimbleRelease(status: HasBrokenRelease, err: "error checking out release")
+
   var badNimbleFile = false
   if nimbleFiles.len() == 0:
     info "processRelease", "skipping release: missing nimble file:", $release

@@ -30,6 +30,7 @@ type
     GitLog = "git -C $DIR log --format=%H origin/HEAD"
     GitCurrentBranch = "git rev-parse --abbrev-ref HEAD"
     GitLsRemote = "git -C $DIR ls-remote --quiet --tags"
+    GitShowFiles = "git -C $DIR show"
 
 proc isGitDir*(path: Path): bool =
   let gitPath = path / Path(".git")
@@ -207,6 +208,20 @@ proc expandSpecial*(path: Path, vtag: VersionTag): VersionTag =
 
 proc listFiles*(path: Path): seq[string] =
   let (outp, status) = exec(GitLsFiles, path, [])
+  if status == RES_OK:
+    result = outp.splitLines().mapIt(it.strip())
+  else:
+    result = @[]
+
+proc showFile*(path: Path, commit: CommitHash, file: string): string =
+  let (outp, status) = exec(GitShowFiles, path, [commit.h, file])
+  if status == RES_OK:
+    result = outp
+  else:
+    result = ""
+
+proc listFiles*(path: Path, commit: CommitHash): seq[string] =
+  let (outp, status) = exec(GitShowFiles, path, ["--name-only", commit.h])
   if status == RES_OK:
     result = outp.splitLines().mapIt(it.strip())
   else:

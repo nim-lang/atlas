@@ -21,6 +21,7 @@ type
     activeVersion*: PackageVersion
     module*: string
     ondisk*: Path
+    nimbleFile*: Path
     active*: bool
     isRoot*: bool
     errors*: seq[string]

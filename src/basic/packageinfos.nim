@@ -43,9 +43,13 @@ type
 
 const
   DefaultPackagesSubDir* = Path"packages"
+  DefaultCachesSubDir* = Path"_caches"
 
 proc packagesDirectory*(): Path =
   context().depsDir / DefaultPackagesSubDir
+
+proc cachesDirectory*(): Path =
+  context().depsDir / DefaultCachesSubDir
 
 proc optionalField(obj: JsonNode, name: string, default = ""): string =
   if hasKey(obj, name) and obj[name].kind == JString:

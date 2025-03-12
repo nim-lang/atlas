@@ -29,6 +29,21 @@ proc findNimbleFile*(info: Package): seq[Path] =
   doAssert(info.ondisk.string != "", "Package ondisk must be set before findNimbleFile can be called! Package: " & $(info))
   result = findNimbleFile(info.ondisk, info.projectName() & ".nimble")
 
+proc cacheNimbleFilesFromGit*(pkg: Package, commit: CommitHash): seq[Path] =
+  let files = listFiles(pkg.ondisk, commit)
+  var nimbleFiles: seq[Path]
+  for file in files:
+    if file.endsWith(".nimble"):
+      if file == pkg.url.projectName & ".nimble":
+        return @[Path(file)]
+      nimbleFiles.add Path(file)
+  for nimbleFile in nimbleFiles:
+    let cachePath = cachesDirectory() / Path(pkg.url.projectName & "-" & commit.h & "-" & $nimbleFile.splitPath().tail)
+    if not fileExists(cachePath):
+      let contents = showFile(pkg.ondisk, commit, $nimbleFile)
+      writeFile($cachePath, contents)
+    result.add cachePath
+
 proc lookup*(nc: NimbleContext, name: string): PkgUrl =
   let lname = unicode.toLower(name)
   if lname in nc.packageExtras:
