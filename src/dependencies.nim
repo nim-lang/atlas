@@ -87,7 +87,7 @@ proc processNimbleRelease(
           if not commit.isEmpty():
             nc.explicitVersions.mgetOrPut(pkgUrl).incl(VersionTag(v: Version("#" & $(commit)), c: commit))
           else:
-            error pkgUrl.projectName, "processRelease missing commit:", $release, "for:", $interval
+            nc.explicitVersions.mgetOrPut(pkgUrl).incl(VersionTag(v: Version($(interval)), c: commit))
 
         if pkgUrl notin nc.packageToDependency:
           debug pkg.url.projectName, "Found new pkg:", pkgUrl.projectName, "url:", $pkgUrl.url
@@ -162,11 +162,9 @@ proc traverseDependency*(
     # TODO: handle shallow clones here?
     var explicitVersions = explicitVersions
     for version in mitems(explicitVersions):
-      info pkg.url.projectName, "explicit version length:", $version.c, "len:", $version.c.h.string.len()
-      if version.commit.isShort():
-        info pkg.url.projectName, "short explicit version:", $version
-        let vtag = gitops.expandSpecial(pkg.ondisk, version)
-        version = vtag
+      let vtag = gitops.expandSpecial(pkg.ondisk, version)
+      version = vtag
+      info pkg.url.projectName, "explicit version:", $version, "vtag:", repr vtag
 
     for version in explicitVersions:
       info pkg.url.projectName, "check explicit version:", repr version

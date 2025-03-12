@@ -118,7 +118,7 @@ proc extractGeQuery*(i: VersionInterval): Version =
     result = Version""
 
 proc isSpecial(v: Version): bool {.inline.} =
-  result = v.string.len > 0 and v.string[0] == '#'
+  result = v.string.len > 1 and v.string[0] == '#'
 
 proc isValidVersion*(v: string): bool {.inline.} =
   result = v.len > 0 and v[0] in {'#'} + Digits
@@ -356,7 +356,8 @@ const
   MinCommitLen = len("#baca3")
 
 proc extractSpecificCommit*(pattern: VersionInterval): CommitHash =
-  if not pattern.isInterval and pattern.a.r == verEq and pattern.a.v.isSpecial and pattern.a.v.string.len >= MinCommitLen:
+  echo "extractSpecificCommit", " pattern: ", $pattern, " isInterval: ", $pattern.isInterval, " a.r: ", $pattern.a.r, " a.v: ", $pattern.a.v, " a.v.isSpecial: ", $pattern.a.v.isSpecial
+  if not pattern.isInterval and pattern.a.r == verEq and pattern.a.v.isSpecial: # and pattern.a.v.string.len >= MinCommitLen:
     result = initCommitHash(pattern.a.v.string.substr(1), FromNimbleFile)
   else:
     result = initCommitHash("", FromNimbleFile)

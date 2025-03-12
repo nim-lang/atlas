@@ -196,7 +196,7 @@ proc expandSpecial*(path: Path, vtag: VersionTag): VersionTag =
   if vtag.version.isHead():
     return gitFindOriginTip(path)
 
-  let (cc, status) = exec(GitRevParse, path, [$vtag.version])
+  let (cc, status) = exec(GitRevParse, path, [vtag.version.string.substr(1)])
 
   result = VersionTag(v: vtag.version, c: initCommitHash("", FromHead))
   if status == RES_OK:
