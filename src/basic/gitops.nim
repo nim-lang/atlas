@@ -200,7 +200,7 @@ proc expandSpecial*(path: Path, version: Version): VersionTag =
     let vtags = parseTaggedVersions(cc, requireVersions = false)
     if vtags.len() == 1:
       result.c = vtags[0].c
-  info path, "expandSpecial: ", $version, "result:", result
+  info path, "expandSpecial: ", $version, "result:", $result
 
 proc listFiles*(path: Path): seq[string] =
   let (outp, status) = exec(GitLsFiles, path, [])
