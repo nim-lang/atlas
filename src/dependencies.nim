@@ -167,7 +167,8 @@ proc traverseDependency*(
         version.c = commit
 
     for version in explicitVersions:
-      if uniqueCommits.containsOrIncl(version.commit):
+      info pkg.url.projectName, "check explicit version:", repr version
+      if not uniqueCommits.containsOrIncl(version.commit):
         info pkg.url.projectName, "add explicit version:", $version
         discard versions.addRelease(nc, pkg, version)
 
@@ -232,7 +233,7 @@ proc traverseDependency*(
 
   info pkg.url.projectName, "unique versions found:", uniqueReleases.values().toSeq().mapIt($it.version).join(", ")
   for (ver, rel) in versions:
-    if ver in pkg.versions:
+    if mode != ExplicitVersions and ver in pkg.versions:
       error pkg.url.projectName, "duplicate release found:", $ver.vtag, "new:", repr(rel)
       error pkg.url.projectName, "... existing: ", repr(pkg.versions[ver])
       error pkg.url.projectName, "duplicate release found:", $ver.vtag, "new:", repr(rel), " existing: ", repr(pkg.versions[ver])
