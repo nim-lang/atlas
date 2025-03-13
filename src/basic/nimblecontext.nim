@@ -87,16 +87,15 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
   else:
     name = substitute(nc.nameOverrides, nameOrig, didReplace)
   
-  trace "atlas:createUrl", "name:", name, "orig:", nameOrig, "isUrl:", $name.isUrl()
+  # trace "atlas:createUrl", "name:", name, "orig:", nameOrig, "isUrl:", $name.isUrl()
   
   if name.isUrl():
-    trace "atlas:createUrl", "name is url:", name
+    # trace "atlas:createUrl", "name is url:", name
     result = createUrlSkipPatterns(name)
-    trace "atlas:createUrl", "createUrlSkipPatterns result:", $result
   else:
     let lname = nc.lookup(name)
     if not lname.isEmpty():
-      trace "atlas:createUrl", "name is in nameToUrl:", $lname
+      # trace "atlas:createUrl", "name is in nameToUrl:", $lname
       result = lname
     else:
       let lname = unicode.toLower(name)
