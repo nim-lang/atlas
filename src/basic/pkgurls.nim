@@ -93,8 +93,8 @@ proc toLinkPath*(pkgUrl: PkgUrl): Path =
   else:
     Path(pkgUrl.toDirectoryPath().string & ".link")
 
-proc toPkgUriRaw*(u: Uri): PkgUrl =
-  result = PkgUrl(qualifiedName: extractProjectName(u), u: u, hasShortName: false)
+proc toPkgUriRaw*(u: Uri, hasShortName: bool = false): PkgUrl =
+  result = PkgUrl(qualifiedName: extractProjectName(u), u: u, hasShortName: hasShortName)
 
 proc createUrlSkipPatterns*(raw: string, skipDirTest = false): PkgUrl =
   if not raw.isUrl():

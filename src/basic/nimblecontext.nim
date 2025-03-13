@@ -63,7 +63,7 @@ proc lookup*(nc: NimbleContext, name: string): PkgUrl =
 #   if url.url in nc.urlToNames:
 #     result = nc.urlToNames[url.url]
 
-proc put*(nc: var NimbleContext, name: string, url: PkgUrl, isFromPath = false) =
+proc putImpl*(nc: var NimbleContext, name: string, url: PkgUrl, isFromPath = false) =
   let name = unicode.toLower(name)
   if name in nc.nameToUrl:
     discard
@@ -74,6 +74,12 @@ proc put*(nc: var NimbleContext, name: string, url: PkgUrl, isFromPath = false) 
       # TODO: need to handle this better, the user needs to choose which url to use
       #       if the solver can't resolve the conflict
       error "atlas:nimblecontext", "name already exists in packageExtras:", $name, "isFromPath:", $isFromPath, "with different url:", $nc.packageExtras[name], "and url:", $url
+
+proc put*(nc: var NimbleContext, name: string, url: PkgUrl) =
+  nc.putImpl(name, url, false)
+
+proc putFromPath*(nc: var NimbleContext, name: string, url: PkgUrl) =
+  nc.putImpl(name, url, true)
 
 proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
   ## primary point to createUrl's from a name or argument
@@ -113,8 +119,9 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
     url.path.removeSuffix(".git")
     result = toPkgUriRaw(url)
 
-  if not nc.lookup(result.shortName()).isEmpty():
-    result.hasShortName = true
+  # let officialPkg = nc.lookup(result.shortName())
+  # if not officialPkg.isEmpty() and officialPkg.url == result.url:
+  #   result.hasShortName = true
 
   if not result.isEmpty():
     nc.put(result.projectName, result)
@@ -139,7 +146,7 @@ proc createUrlFromPath*(nc: var NimbleContext, orig: Path): PkgUrl =
     let fileUrl = "file://" & $absPath
     result = createUrlSkipPatterns(fileUrl)
   if not result.isEmpty():
-    nc.put(result.projectName, result, isFromPath=true)
+    nc.putFromPath(result.projectName, result)
 
 proc fillPackageLookupTable(c: var NimbleContext) =
   let pkgsDir = packagesDirectory()
