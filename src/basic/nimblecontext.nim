@@ -55,22 +55,24 @@ proc lookup*(nc: NimbleContext, name: string): PkgUrl =
   elif lname in nc.nameToUrl:
     result = nc.nameToUrl[lname]
 
-proc putImpl(nc: var NimbleContext, name: string, url: PkgUrl, isFromPath = false) =
+proc putImpl(nc: var NimbleContext, name: string, url: PkgUrl, isFromPath = false): bool =
   let name = unicode.toLower(name)
   if name in nc.nameToUrl:
-    discard
+    result = false
   elif name notin nc.packageExtras:
     nc.packageExtras[name] = url
+    result = true
   else:
     if nc.packageExtras[name] != url:
       # TODO: need to handle this better, the user needs to choose which url to use
       #       if the solver can't resolve the conflict
       error "atlas:nimblecontext", "name already exists in packageExtras:", $name, "isFromPath:", $isFromPath, "with different url:", $nc.packageExtras[name], "and url:", $url
+      result = false
 
-proc put*(nc: var NimbleContext, name: string, url: PkgUrl) =
+proc put*(nc: var NimbleContext, name: string, url: PkgUrl): bool =
   nc.putImpl(name, url, false)
 
-proc putFromPath*(nc: var NimbleContext, name: string, url: PkgUrl) =
+proc putFromPath*(nc: var NimbleContext, name: string, url: PkgUrl): bool =
   nc.putImpl(name, url, true)
 
 proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
@@ -111,9 +113,9 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
     result.hasShortName = true
 
   if not result.isEmpty():
-    nc.put(result.projectName, result)
+    if nc.put(result.projectName, result):
+      trace "atlas:createUrl", "created url with name:", name, "orig:", nameOrig, "projectName:", $result.projectName, "hasShortName:", $result.hasShortName, "url:", $result.url
 
-  trace "atlas:createUrl", "created url with name:", name, "orig:", nameOrig, "projectName:", $result.projectName, "hasShortName:", $result.hasShortName, "url:", $result.url
 
 proc createUrlFromPath*(nc: var NimbleContext, orig: Path): PkgUrl =
   let absPath = absolutePath(orig)
@@ -133,7 +135,7 @@ proc createUrlFromPath*(nc: var NimbleContext, orig: Path): PkgUrl =
     let fileUrl = "file://" & $absPath
     result = createUrlSkipPatterns(fileUrl)
   if not result.isEmpty():
-    nc.putFromPath(result.projectName, result)
+    discard nc.putFromPath(result.projectName, result)
 
 proc fillPackageLookupTable(c: var NimbleContext) =
   let pkgsDir = packagesDirectory()
