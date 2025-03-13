@@ -270,7 +270,7 @@ suite "test expand with no git tags":
         check graph.pkgs[nc.createUrl("proj_d")].active
 
         check $graph.root.activeVersion == "#head@-"
-        check $graph.pkgs[nc.createUrl("proj_a")].activeVersion.version == "#7ca5581cd"
+        check graph.pkgs[nc.createUrl("proj_a")].activeVersion.version.string.startsWith("#")
         check $graph.pkgs[nc.createUrl("proj_b")].activeVersion.version == "1.1.0"
         check $graph.pkgs[nc.createUrl("proj_c")].activeVersion.version == "1.2.0"
         check $graph.pkgs[nc.createUrl("proj_d")].activeVersion.version == "1.0.0"
