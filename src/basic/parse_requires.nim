@@ -100,20 +100,26 @@ proc extract(n: PNode; conf: ConfigRef; result: var NimbleFileInfo) =
       echo "when cond: ", repr cond
       echo "when body: ", repr body
 
-      if cond.kind == nkPrefix:
-        # handle not
+      if cond.kind == nkPrefix: # handle when not defined
         if cond[0].kind == nkIdent and cond[0].ident.s == "not":
           let notCond = cond[1]
           let name = getDefinedName(notCond)
-          trace "parse_requires", "when not cond: name: ", name
           if name.len > 0:
             if not evalBasicDefines(name):
               extract(body, conf, result)
-      elif getDefinedName(cond) != "":
+      elif getDefinedName(cond) != "": # handle when defined
         let name = getDefinedName(cond)
-        echo "when defined name: ", name
         if evalBasicDefines(name):
           extract(body, conf, result)
+      elif cond.kind == nkInfix: # handle when or
+        if cond[0].kind == nkIdent and cond[0].ident.s == "or":
+          let orLeft = getDefinedName(cond[1])
+          let orRight = getDefinedName(cond[2])
+          if orLeft.len > 0 or orRight.len > 0:
+            if evalBasicDefines(orLeft):
+              extract(body, conf, result)
+            elif evalBasicDefines(orRight):
+              extract(body, conf, result)
               
   else:
     discard

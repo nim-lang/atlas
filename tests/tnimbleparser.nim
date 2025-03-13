@@ -17,8 +17,7 @@ suite "nimbleparser":
     var res = extractRequiresInfo(nimbleFile)
     echo "Nimble release: ", repr res
     when defined(windows):
-      for req in res.requires:
-        check not req.contains("httpbeast")
+      check not doesContain(res, "httpbeast")
     else:
       check doesContain(res, "httpbeast")
 
@@ -27,7 +26,15 @@ suite "nimbleparser":
     var res = extractRequiresInfo(nimbleFile)
     echo "Nimble release: ", repr res
     when defined(windows):
-      for req in res.requires:
-        check not req.contains("httpbeast")
+      check not doesContain(res, "httpbeast")
     else:
       check doesContain(res, "httpbeast")
+
+  test "parse nimble file when macos or linux":
+    let nimbleFile = Path("tests" / "test_data" / "jester_combined.nimble")
+    var res = extractRequiresInfo(nimbleFile)
+    echo "Nimble release: ", repr res
+    when defined(macosx) or defined(linux):
+      check doesContain(res, "httpbeast")
+    else:
+      check not doesContain(res, "httpbeast")
