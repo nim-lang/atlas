@@ -163,6 +163,6 @@ proc toReporterName*(pkg: Package): string =
 
 proc findRelease*(pkg: Package, v: VersionInterval): NimbleRelease =
   for vtag, release in pkg.versions:
-    if v.matches(release.version):
+    if v.matches(vtag.vtag):
       return release
   result = nil

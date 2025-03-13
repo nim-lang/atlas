@@ -45,7 +45,6 @@ proc parseNimbleFile*(nc: var NimbleContext;
       url = toPkgUriRaw(parseUri("error://" & name))
 
     var err = false
-    echo "REQRRR: ", r, " i: ", i
     let query = parseVersionInterval(r, i, err) # update err
     if err:
       if result.status != HasBrokenDep:

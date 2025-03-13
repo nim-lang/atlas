@@ -4,7 +4,7 @@ import std / [strutils, os, uri, jsonutils, json, sets, tables, sequtils, algori
 import std/terminal
 import basic/[sattypes, context, reporters, pkgurls, compiledpatterns, versions]
 import basic/[deptypes, nimblecontext]
-import dependencies
+import dependencies, depgraphs
 import testerutils
 
 if not dirExists("tests/ws_testtraverse/buildGraph"):
@@ -293,11 +293,20 @@ suite "test expand with git tags":
       let sp1Commit = projAnimbles[1].c
 
       var err = false
-      let v = parseVersionInterval("#7ca5581cd", 0, err)
-      check not sp1.findRelease(v).isNil
+      let query = parseVersionInterval("#" & sp1Commit.h[0..7], 0, err)
 
-      echo "sp0:reqs: ", sp0.versions.pairs().toSeq()[0][1].requirements.repr
+      let reqs = sp0.versions.pairs().toSeq()[0][1].requirements
+      echo "reqs: ", reqs.repr
 
+      var foundMatch = false
+      for depVer, relVer in sp1.validVersions():
+        let matches = query.matches(depVer.vtag)
+        echo "MATCHES: ", matches, " ", depVer.version()
+        if matches:
+          foundMatch = true
+          
+
+      check foundMatch
       echo "explicit versions: "
       for pkgUrl, commits in nc.explicitVersions.pairs:
         echo "\tversions: ", pkgUrl, " commits: ", commits.toSeq().mapIt($it).join("; ")
