@@ -161,7 +161,7 @@ proc installDependencies(nc: var NimbleContext; nimbleFile: Path) =
   var (dir, pkgname, _) = splitFile(nimbleFile.absolutePath)
   if dir == Path "":
     dir = Path(".").absolutePath
-  info pkgname, "installing dependencies for " & $pkgname & ".nimble"
+  info pkgname, "installing dependencies"
   trace pkgname, "using nimble file at " & $nimbleFile
   let graph = dir.loadWorkspace(nc, AllReleases, onClone=DoClone)
   let paths = graph.activateGraph()
@@ -440,8 +440,18 @@ proc mainRun() =
 
   of "install":
 
+    var nimbleFiles = findNimbleFile(workspace(), workspace().splitPath().tail.string)
+
+    if nimbleFiles.len() == 0:
+      let nimbleFile = workspace() / Path(splitPath($paths.getCurrentDir()).tail & ".nimble")
+      error "atlas:install", "expected nimble file in workspace, but none found"
+      quit(1)
+    elif nimbleFiles.len() > 1:
+      error "atlas:install", "Ambiguous Nimble files found: " & $nimbleFiles
+      quit(1)
+
     var nc = createNimbleContext()
-    installDependencies(nc, workspace())
+    installDependencies(nc, nimbleFiles[0].Path)
 
   of "use":
     singleArg()
