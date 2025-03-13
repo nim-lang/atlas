@@ -214,8 +214,9 @@ proc createWorkspace() =
     writeDefaultConfigFile()
     info workspace(), "created atlas.workspace"
   if workspace() != context().depsDir and context().depsDir != Path "":
+    if not dirExists(absoluteDepsDir(workspace(), context().depsDir)):
+      info context().depsDir, "creating deps directory"
     createDir absoluteDepsDir(workspace(), context().depsDir)
-    info context().depsDir, "created deps dir"
 
 proc listOutdated(dir: Path) =
   var updateable = 0
@@ -438,25 +439,9 @@ proc mainRun() =
     newProject(args[0])
 
   of "install":
-    var nimbleFiles = findNimbleFile(workspace())
+
     var nc = createNimbleContext()
-
-    if nimbleFiles.len() == 0:
-      let nimbleFile = workspace() / Path(splitPath($paths.getCurrentDir()).tail & ".nimble")
-      trace "atlas:use", "using nimble file:", $nimbleFile
-      writeFile($nimbleFile, "")
-      nimbleFiles.add(nimbleFile)
-    elif nimbleFiles.len() > 1:
-      error "atlas:use", "Ambiguous Nimble files found: " & $nimbleFiles
-
-    if atlasErrors() > 0:
-      discard "don't continue for 'cannot resolve'"
-    elif nimbleFiles.len() == 1:
-      installDependencies(nc, nimbleFiles[0].Path)
-    elif nimbleFiles.len() > 1:
-      error args[0], "ambiguous .nimble file"
-    else:
-      error args[0], "cannot find .nimble file"
+    installDependencies(nc, workspace())
 
   of "use":
     singleArg()

@@ -67,7 +67,7 @@ proc readConfig*() =
   let configFile = getWorkspaceConfig()
   var f = newFileStream($configFile, fmRead)
   if f == nil:
-    error configFile, "cannot open: " & $configFile
+    warn configFile, "could not read workspace config:", $configFile
     return
 
   let j = parseJson(f, $configFile)
