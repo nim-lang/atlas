@@ -109,6 +109,11 @@ proc extract(n: PNode; conf: ConfigRef; result: var NimbleFileInfo) =
           if name.len > 0:
             if not evalBasicDefines(name):
               extract(body, conf, result)
+      elif getDefinedName(cond) != "":
+        let name = getDefinedName(cond)
+        echo "when defined name: ", name
+        if evalBasicDefines(name):
+          extract(body, conf, result)
               
   else:
     discard
