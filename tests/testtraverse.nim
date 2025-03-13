@@ -300,7 +300,7 @@ suite "test expand with git tags":
 
       var foundMatch = false
       for depVer, relVer in sp1.validVersions():
-        let matches = query.matches(depVer.vtag)
+        let matches = query.matches(depVer)
         echo "MATCHES: ", matches, " ", depVer.version()
         if matches:
           foundMatch = true

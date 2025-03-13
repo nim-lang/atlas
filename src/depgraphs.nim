@@ -102,7 +102,7 @@ proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
           info pkg.url.projectName, "checking dependency:", $dep.projectName, "query:", $query
           var hasCompatible = false
           for depVer, relVer in depNode.validVersions():
-            if query.matches(depVer.vtag):
+            if query.matches(depVer):
               hasCompatible = true
               break
 
@@ -126,7 +126,7 @@ proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
 
           var compatibleVersions: seq[VarId] = @[]
           for depVer, relVer in depNode.validVersions():
-            if query.matches(depVer.version()):
+            if query.matches(depVer):
               compatibleVersions.add(depVer.vid)
 
           # Add implication: if this version is selected, one of its compatible deps must be selected
