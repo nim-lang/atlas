@@ -69,7 +69,7 @@ proc putImpl(nc: var NimbleContext, name: string, url: PkgUrl, isFromPath = fals
       error "atlas:nimblecontext", "name already exists in packageExtras:", $name, "isFromPath:", $isFromPath, "with different url:", $nc.packageExtras[name], "and url:", $url
       result = false
 
-proc put*(nc: var NimbleContext, name: string, url: PkgUrl): bool =
+proc put*(nc: var NimbleContext, name: string, url: PkgUrl): bool {.discardable.} =
   nc.putImpl(name, url, false)
 
 proc putFromPath*(nc: var NimbleContext, name: string, url: PkgUrl): bool =
