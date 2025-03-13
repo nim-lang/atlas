@@ -126,7 +126,7 @@ proc createUrlSkipPatterns*(raw: string, skipDirTest = false): PkgUrl =
     cleanupUrl(u)
     result = PkgUrl(qualifiedName: extractProjectName(u), u: u, hasShortName: hasShortName)
 
-  debug result, "created url raw:", repr(raw), "url:", repr(result)
+  # trace result, "created url raw:", repr(raw), "url:", repr(result)
 
 proc toPkgUriRaw*(u: Uri, hasShortName: bool = false): PkgUrl =
   result = createUrlSkipPatterns($u, true)
