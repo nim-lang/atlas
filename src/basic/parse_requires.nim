@@ -28,6 +28,25 @@ proc handleError(cfg: ConfigRef, mk: TMsgKind, li: TLineInfo, msg: string) =
 proc handleError(cfg: ConfigRef, li: TLineInfo, msg: string) =
   handleError(cfg, warnUser, li, msg)
 
+proc getDefinedName(n: PNode): string =
+  if n.kind == nkCall and n[0].kind == nkIdent and n[0].ident.s == "defined":
+    return n[1].ident.s
+  else:
+    return ""
+
+proc evalBasicDefines(sym: string): bool =
+  case sym:
+  of "windows":
+    when defined(windows): result = true
+  of "posix":
+    when defined(posix): result = true
+  of "linux":
+    when defined(linux): result = true
+  of "macosx":
+    when defined(macosx): result = true
+  else:
+    discard
+
 proc extract(n: PNode; conf: ConfigRef; result: var NimbleFileInfo) =
   case n.kind
   of nkStmtList, nkStmtListExpr:
@@ -73,6 +92,24 @@ proc extract(n: PNode; conf: ConfigRef; result: var NimbleFileInfo) =
       else:
         handleError(conf, n[1].info, "assignments to 'version' must be string literals")
         result.hasErrors = true
+  of nkWhenStmt:
+    echo "Nimble extract: when: "
+    if n[0].kind == nkElifBranch:
+      let cond = n[0][0]
+      let body = n[0][1]
+      echo "when cond: ", repr cond
+      echo "when body: ", repr body
+
+      if cond.kind == nkPrefix:
+        # handle not
+        if cond[0].kind == nkIdent and cond[0].ident.s == "not":
+          let notCond = cond[1]
+          let name = getDefinedName(notCond)
+          trace "parse_requires", "when not cond: name: ", name
+          if name.len > 0:
+            if not evalBasicDefines(name):
+              extract(body, conf, result)
+              
   else:
     discard
 
