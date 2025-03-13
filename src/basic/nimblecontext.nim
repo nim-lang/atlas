@@ -5,12 +5,13 @@ type
   NimbleContext* = object
     packageToDependency*: Table[PkgUrl, Package]
     packageExtras*: Table[string, PkgUrl]
+    nameToUrl: Table[string, PkgUrl]
+    urlToNames: Table[Uri, string]
+
     explicitVersions*: Table[PkgUrl, HashSet[VersionTag]]
     nameOverrides*: Patterns
     urlOverrides*: Patterns
     hasPackageList*: bool
-    nameToUrl: Table[string, PkgUrl]
-    urlToNames: Table[Uri, string]
     notFoundNames: HashSet[string]
 
 proc findNimbleFile*(nimbleFile: Path): seq[Path] =
@@ -64,7 +65,9 @@ proc lookup*(nc: NimbleContext, url: PkgUrl): string =
 
 proc put*(nc: var NimbleContext, name: string, url: PkgUrl, isFromPath = false) =
   let name = unicode.toLower(name)
-  if name notin nc.packageExtras:
+  if name in nc.nameToUrl:
+    discard
+  elif name notin nc.packageExtras:
     nc.packageExtras[name] = url
   else:
     if nc.packageExtras[name] != url:

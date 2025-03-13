@@ -342,6 +342,8 @@ proc parseAtlasOptions(action: var string, args: var seq[string]) =
         of "normal": setAtlasVerbosity(Info)
         of "info": setAtlasVerbosity(Info)
         of "error": setAtlasVerbosity(Error)
+        of "warn": setAtlasVerbosity(Warning)
+        of "warning": setAtlasVerbosity(Warning)
         of "trace": setAtlasVerbosity(Trace)
         of "debug": setAtlasVerbosity(Debug)
         else: writeHelp()
