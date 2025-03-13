@@ -33,7 +33,10 @@ suite "urls and naming":
       discard nc.createUrl("balls")
 
   test "balls url using packageExtras":
-    nc.put("balls", toPkgUriRaw(parseUri "https://github.com/disruptek/balls.git"))
+    nc.put("balls", toPkgUriRaw(parseUri "https://github.com/disruptek/balls.git", true))
+    check nc.lookup("balls").projectName == "balls"
+    check $nc.lookup("balls").url == "https://github.com/disruptek/balls"
+
     let upkg = nc.createUrl("balls")
     check upkg.url.hostname == "github.com"
     check $upkg.url == "https://github.com/disruptek/balls"
@@ -51,6 +54,7 @@ suite "urls and naming":
     check upkg.toLinkPath() == ws / Path"deps" / Path("balls.disruptek.github.com.link")
 
   test "npeg url":
+    # setAtlasVerbosity(Trace)
     let upkg = nc.createUrl("https://github.com/zevv/npeg.git")
     check upkg.url.hostname == "github.com"
     check $upkg.url == "https://github.com/zevv/npeg"
@@ -140,8 +144,8 @@ suite "urls and naming":
     let upkg = nc.createUrl("https://github.com/disruptek/balls.git")
     echo "\nNimbleContext:urlToNames: "
     privateAccess(nc.type)
-    for url, name in nc.urlToNames:
-      echo "\t", url, " ".repeat(60 - len($(url))), name
+    # for url, name in nc.urlToNames:
+    #   echo "\t", url, " ".repeat(60 - len($(url))), name
 
     echo "\nNimbleContext:nameToUrl: "
     privateAccess(nc.type)

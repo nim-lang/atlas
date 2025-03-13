@@ -90,12 +90,13 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
   trace "atlas:createUrl", "name:", name, "orig:", nameOrig, "isUrl:", $name.isUrl()
   
   if name.isUrl():
-    # trace "atlas:createUrl", "name is url:", name
+    trace "atlas:createUrl", "name is url:", name
     result = createUrlSkipPatterns(name)
+    trace "atlas:createUrl", "createUrlSkipPatterns result:", $result
   else:
     let lname = nc.lookup(name)
     if not lname.isEmpty():
-      # trace "atlas:createUrl", "name is in nameToUrl:", $lname
+      trace "atlas:createUrl", "name is in nameToUrl:", $lname
       result = lname
     else:
       let lname = unicode.toLower(name)
@@ -106,14 +107,9 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
       # error "atlas:createUrl", "nameToUrl:", $nc.nameToUrl.keys().toSeq().join(", ")
       raise newException(ValueError, "project name not found in packages database: " & $lname)
   
-  if result.url.path.splitFile().ext == ".git":
-    var url = parseUri($result.url)
-    url.path.removeSuffix(".git")
-    result = toPkgUriRaw(url)
-
-  # let officialPkg = nc.lookup(result.shortName())
-  # if not officialPkg.isEmpty() and officialPkg.url == result.url:
-  #   result.hasShortName = true
+  let officialPkg = nc.lookup(result.shortName())
+  if not officialPkg.isEmpty() and officialPkg.url == result.url:
+    result.hasShortName = true
 
   if not result.isEmpty():
     nc.put(result.projectName, result)

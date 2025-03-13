@@ -123,7 +123,7 @@ proc traverseDependency*(
     mode: TraversalMode;
     explicitVersions: seq[VersionTag];
 ) =
-  doAssert pkg.ondisk.dirExists() and pkg.state != NotInitialized, "Package should've been found or cloned at this point"
+  doAssert pkg.ondisk.dirExists() and pkg.state != NotInitialized, "Package should've been found or cloned at this point. Package: " & $pkg.url & " on disk: " & $pkg.ondisk
 
   var versions: seq[(PackageVersion, NimbleRelease)]
 
@@ -320,4 +320,5 @@ proc expand*(path: Path, nc: var NimbleContext; mode: TraversalMode, onClone: Pa
   for pkgUrl, versions in nc.explicitVersions:
     info pkgUrl.projectName, "explicit versions: ", versions.toSeq().mapIt($it).join(", ")
     var pkg = nc.packageToDependency[pkgUrl]
-    nc.traverseDependency(pkg, ExplicitVersions, versions.toSeq())
+    if pkg.state == Processed:
+      nc.traverseDependency(pkg, ExplicitVersions, versions.toSeq())

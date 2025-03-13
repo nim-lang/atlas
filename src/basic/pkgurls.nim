@@ -6,8 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [hashes, uri, os, strutils, json]
-from std / os import `/`, dirExists
+import std / [hashes, uri, os, strutils, os, json]
 import compiledpatterns, gitops, reporters, context
 
 export uri
@@ -93,9 +92,6 @@ proc toLinkPath*(pkgUrl: PkgUrl): Path =
   else:
     Path(pkgUrl.toDirectoryPath().string & ".link")
 
-proc toPkgUriRaw*(u: Uri, hasShortName: bool = false): PkgUrl =
-  result = PkgUrl(qualifiedName: extractProjectName(u), u: u, hasShortName: hasShortName)
-
 proc createUrlSkipPatterns*(raw: string, skipDirTest = false): PkgUrl =
   if not raw.isUrl():
     if dirExists(raw) or skipDirTest:
@@ -109,18 +105,31 @@ proc createUrlSkipPatterns*(raw: string, skipDirTest = false): PkgUrl =
     else:
       raise newException(ValueError, "Invalid name or URL: " & raw)
   elif raw.startsWith("git@"): # special case git@server.com
-    let u = parseUri("ssh://" & raw.replace(":", "/"))
+    var u = parseUri("ssh://" & raw.replace(":", "/"))
+    if u.path.endsWith(".git") and (u.scheme in ["http", "https"] or u.hostname in ["github.com", "gitlab.com", "bitbucket.org"]):
+      u.path.removeSuffix(".git")
     result = PkgUrl(qualifiedName: extractProjectName(u), u: u, hasShortName: false)
   else:
     var u = parseUri(raw)
     var hasShortName = false
+
     if u.scheme == "file" and u.hostname != "":
       # TODO: handle windows paths
       u = parseUri("file://" & (workspace().string / (u.hostname & u.path)).absolutePath)
       hasShortName = true
+
+    if u.path.endsWith(".git") and (u.scheme in ["http", "https"] or u.hostname in ["github.com", "gitlab.com", "bitbucket.org"]):
+      u.path.removeSuffix(".git")
+
+    u.path = u.path.strip(leading=false, trailing=true, {'/'})
+
     result = PkgUrl(qualifiedName: extractProjectName(u), u: u, hasShortName: hasShortName)
 
-  # debug result, "created url raw:", repr(raw), "url:", repr(result)
+  debug result, "created url raw:", repr(raw), "url:", repr(result)
+
+proc toPkgUriRaw*(u: Uri, hasShortName: bool = false): PkgUrl =
+  result = createUrlSkipPatterns($u, true)
+  result.hasShortName = hasShortName
 
 # proc dir*(s: PkgUrl): string =
 #   if isFileProtocol(s):
