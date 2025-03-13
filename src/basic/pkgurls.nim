@@ -93,6 +93,12 @@ proc toLinkPath*(pkgUrl: PkgUrl): Path =
     Path(pkgUrl.toDirectoryPath().string & ".link")
 
 proc createUrlSkipPatterns*(raw: string, skipDirTest = false): PkgUrl =
+  template cleanupUrl(u: Uri) =
+    if u.path.endsWith(".git") and (u.scheme in ["http", "https"] or u.hostname in ["github.com", "gitlab.com", "bitbucket.org"]):
+      u.path.removeSuffix(".git")
+
+    u.path = u.path.strip(leading=false, trailing=true, {'/'})
+
   if not raw.isUrl():
     if dirExists(raw) or skipDirTest:
       let raw =
@@ -106,6 +112,7 @@ proc createUrlSkipPatterns*(raw: string, skipDirTest = false): PkgUrl =
       raise newException(ValueError, "Invalid name or URL: " & raw)
   elif raw.startsWith("git@"): # special case git@server.com
     var u = parseUri("ssh://" & raw.replace(":", "/"))
+    cleanupUrl(u)
     result = PkgUrl(qualifiedName: extractProjectName(u), u: u, hasShortName: false)
   else:
     var u = parseUri(raw)
@@ -116,12 +123,8 @@ proc createUrlSkipPatterns*(raw: string, skipDirTest = false): PkgUrl =
       u = parseUri("file://" & (workspace().string / (u.hostname & u.path)).absolutePath)
       hasShortName = true
 
+    cleanupUrl(u)
     result = PkgUrl(qualifiedName: extractProjectName(u), u: u, hasShortName: hasShortName)
-
-  if result.url.path.endsWith(".git") and (result.url.scheme in ["http", "https"] or result.url.hostname in ["github.com", "gitlab.com", "bitbucket.org"]):
-    result.u.path.removeSuffix(".git")
-
-  result.u.path = result.url.path.strip(leading=false, trailing=true, {'/'})
 
   debug result, "created url raw:", repr(raw), "url:", repr(result)
 
