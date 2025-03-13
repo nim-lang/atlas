@@ -55,15 +55,7 @@ proc lookup*(nc: NimbleContext, name: string): PkgUrl =
   elif lname in nc.nameToUrl:
     result = nc.nameToUrl[lname]
 
-# proc lookup*(nc: NimbleContext, url: Uri): string =
-#   if url in nc.urlToNames:
-#     result = nc.urlToNames[url]
-
-# proc lookup*(nc: NimbleContext, url: PkgUrl): string =
-#   if url.url in nc.urlToNames:
-#     result = nc.urlToNames[url.url]
-
-proc putImpl*(nc: var NimbleContext, name: string, url: PkgUrl, isFromPath = false) =
+proc putImpl(nc: var NimbleContext, name: string, url: PkgUrl, isFromPath = false) =
   let name = unicode.toLower(name)
   if name in nc.nameToUrl:
     discard
