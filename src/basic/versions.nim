@@ -356,7 +356,6 @@ const
   MinCommitLen = len("#baca3")
 
 proc extractSpecificCommit*(pattern: VersionInterval): CommitHash =
-  echo "extractSpecificCommit", " pattern: ", $pattern, " isInterval: ", $pattern.isInterval, " a.r: ", $pattern.a.r, " a.v: ", $pattern.a.v, " a.v.isSpecial: ", $pattern.a.v.isSpecial
   if not pattern.isInterval and pattern.a.r == verEq and pattern.a.v.isSpecial: # and pattern.a.v.string.len >= MinCommitLen:
     result = initCommitHash(pattern.a.v.string.substr(1), FromNimbleFile)
   else:

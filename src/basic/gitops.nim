@@ -204,6 +204,8 @@ proc expandSpecial*(path: Path, vtag: VersionTag): VersionTag =
     let vtags = parseTaggedVersions(cc, requireVersions = false)
     if vtags.len() == 1:
       result.c = vtags[0].c
+      if vtag.version.string.substr(1) in result.c.h: # expand short commit hash to full hash
+        result.v = Version("#" & $(result.c))
   info path, "expandSpecial: ", $vtag, "result:", $result
 
 proc listFiles*(path: Path): seq[string] =

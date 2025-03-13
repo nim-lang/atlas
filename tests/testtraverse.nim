@@ -64,7 +64,7 @@ template testRequirements(sp: Package,
 
 suite "test expand with git tags":
   setup:
-    # setAtlasVerbosity(Info)
+    setAtlasVerbosity(Error)
     context().nameOverrides = Patterns()
     context().urlOverrides = Patterns()
     context().proxy = parseUri "http://localhost:4242"
@@ -290,9 +290,9 @@ suite "test expand with git tags":
       doAssert sp.len() == 5
       let sp0: Package = sp[0] # proj ws_testtraversal
       let sp1: Package = sp[1] # proj A
+      let sp1Commit = projAnimbles[1].c
 
-      check false
-
+      check sp1.releases[VersionTag(v: Version"#7ca5581cd", c: )].version == Version"#7ca5581cd"
       echo "explicit versions: "
       for pkgUrl, commits in nc.explicitVersions.pairs:
         echo "\tversions: ", pkgUrl, " commits: ", commits.toSeq().mapIt($it).join("; ")
@@ -441,7 +441,7 @@ suite "test expand with no git tags":
 suite "test expand with no git tags and nimble commits max":
 
   setup:
-    setAtlasVerbosity(Warning)
+    setAtlasVerbosity(Error)
     context().nameOverrides = Patterns()
     context().urlOverrides = Patterns()
     context().proxy = parseUri "http://localhost:4242"
