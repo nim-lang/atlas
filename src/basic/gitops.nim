@@ -214,7 +214,7 @@ proc listFiles*(path: Path): seq[string] =
     result = @[]
 
 proc showFile*(path: Path, commit: CommitHash, file: string): string =
-  let (outp, status) = exec(GitShowFiles, path, [commit.h, file])
+  let (outp, status) = exec(GitShowFiles, path, [commit.h & ":" & $file])
   if status == RES_OK:
     result = outp
   else:

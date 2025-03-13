@@ -64,7 +64,7 @@ template testRequirements(sp: Package,
 
 suite "test expand with git tags":
   setup:
-    setAtlasVerbosity(Info)
+    # setAtlasVerbosity(Info)
     context().nameOverrides = Patterns()
     context().urlOverrides = Patterns()
     context().proxy = parseUri "http://localhost:4242"
