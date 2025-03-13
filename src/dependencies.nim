@@ -65,7 +65,7 @@ proc processNimbleRelease(
     result = NimbleRelease(status: HasBrokenRelease, err: "no commit")
     return
   else:
-    nimbleFiles = nc.cacheNimbleFilesFromGit(pkg, release.commit)
+    nimbleFiles = cacheNimbleFilesFromGit(pkg, release.commit)
 
     # warn pkg.url.projectName, "processRelease unable to checkout commit ", $release, "at:", $pkg.ondisk
     # result = NimbleRelease(status: HasBrokenRelease, err: "error checking out release")

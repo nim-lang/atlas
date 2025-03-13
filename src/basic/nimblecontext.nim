@@ -34,14 +34,19 @@ proc cacheNimbleFilesFromGit*(pkg: Package, commit: CommitHash): seq[Path] =
   var nimbleFiles: seq[Path]
   for file in files:
     if file.endsWith(".nimble"):
+      warn pkg.url.projectName, "cacheNimbleFilesFromGit found files:", $file
       if file == pkg.url.projectName & ".nimble":
-        return @[Path(file)]
+        nimbleFiles = @[Path(file)]
+        break
       nimbleFiles.add Path(file)
+
+  createDir(cachesDirectory())
   for nimbleFile in nimbleFiles:
     let cachePath = cachesDirectory() / Path(pkg.url.projectName & "-" & commit.h & "-" & $nimbleFile.splitPath().tail)
     if not fileExists(cachePath):
       let contents = showFile(pkg.ondisk, commit, $nimbleFile)
       writeFile($cachePath, contents)
+      warn pkg.url.projectName, "cacheNimbleFilesFromGit cached files:", $cachePath, "contents:", contents[0..min(10, contents.len())]
     result.add cachePath
 
 proc lookup*(nc: NimbleContext, name: string): PkgUrl =
