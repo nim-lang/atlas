@@ -6,7 +6,7 @@ type
     packageToDependency*: Table[PkgUrl, Package]
     packageExtras*: Table[string, PkgUrl]
     nameToUrl: Table[string, PkgUrl]
-    urlToNames: Table[Uri, string]
+    # urlToNames: Table[Uri, string]
 
     explicitVersions*: Table[PkgUrl, HashSet[VersionTag]]
     nameOverrides*: Patterns
@@ -55,13 +55,13 @@ proc lookup*(nc: NimbleContext, name: string): PkgUrl =
   elif lname in nc.nameToUrl:
     result = nc.nameToUrl[lname]
 
-proc lookup*(nc: NimbleContext, url: Uri): string =
-  if url in nc.urlToNames:
-    result = nc.urlToNames[url]
+# proc lookup*(nc: NimbleContext, url: Uri): string =
+#   if url in nc.urlToNames:
+#     result = nc.urlToNames[url]
 
-proc lookup*(nc: NimbleContext, url: PkgUrl): string =
-  if url.url in nc.urlToNames:
-    result = nc.urlToNames[url.url]
+# proc lookup*(nc: NimbleContext, url: PkgUrl): string =
+#   if url.url in nc.urlToNames:
+#     result = nc.urlToNames[url.url]
 
 proc put*(nc: var NimbleContext, name: string, url: PkgUrl, isFromPath = false) =
   let name = unicode.toLower(name)
@@ -149,6 +149,7 @@ proc fillPackageLookupTable(c: var NimbleContext) =
       updatePackages(pkgsDir)
     let packages = getPackageInfos(pkgsDir)
     var aliases: seq[PackageInfo] = @[]
+
     # add all packages to the lookup table
     for pkgInfo in packages:
       if pkgInfo.kind == pkAlias:
@@ -158,7 +159,8 @@ proc fillPackageLookupTable(c: var NimbleContext) =
         pkgUrl.hasShortName = true
         pkgUrl.qualifiedName.name = pkgInfo.name
         c.nameToUrl[unicode.toLower(pkgInfo.name)] = pkgUrl
-        c.urlToNames[pkgUrl.url] = pkgInfo.name
+        # c.urlToNames[pkgUrl.url] = pkgInfo.name
+
     # now we add aliases to the lookup table
     for pkgAlias in aliases:
       # first lookup the alias name
