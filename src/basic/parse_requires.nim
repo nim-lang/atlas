@@ -93,12 +93,10 @@ proc extract(n: PNode; conf: ConfigRef; result: var NimbleFileInfo) =
         handleError(conf, n[1].info, "assignments to 'version' must be string literals")
         result.hasErrors = true
   of nkWhenStmt:
-    echo "Nimble extract: when: "
+    # handles basic when statements for os
     if n[0].kind == nkElifBranch:
       let cond = n[0][0]
       let body = n[0][1]
-      echo "when cond: ", repr cond
-      echo "when body: ", repr body
 
       if cond.kind == nkPrefix: # handle when not defined
         if cond[0].kind == nkIdent and cond[0].ident.s == "not":
