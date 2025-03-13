@@ -292,7 +292,10 @@ suite "test expand with git tags":
       let sp1: Package = sp[1] # proj A
       let sp1Commit = projAnimbles[1].c
 
-      check sp1.releases[VersionTag(v: Version"#7ca5581cd", c: )].version == Version"#7ca5581cd"
+      var err = false
+      let v = parseVersionInterval("#7ca5581cd", 0, err)
+      check not sp1.findRelease(v).isNil
+
       echo "explicit versions: "
       for pkgUrl, commits in nc.explicitVersions.pairs:
         echo "\tversions: ", pkgUrl, " commits: ", commits.toSeq().mapIt($it).join("; ")

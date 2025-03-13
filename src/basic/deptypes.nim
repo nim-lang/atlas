@@ -160,3 +160,9 @@ proc activeNimbleRelease*(pkg: Package): NimbleRelease =
 proc toReporterName*(pkg: Package): string =
   if pkg.isNil: "nil"
   else: pkg.url.fullName()
+
+proc findRelease*(pkg: Package, v: VersionInterval): NimbleRelease =
+  for vtag, release in pkg.versions:
+    if v.matches(release.version):
+      return release
+  result = nil
