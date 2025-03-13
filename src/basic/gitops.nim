@@ -31,6 +31,7 @@ type
     GitCurrentBranch = "git rev-parse --abbrev-ref HEAD"
     GitLsRemote = "git -C $DIR ls-remote --quiet --tags"
     GitShowFiles = "git -C $DIR show"
+    GitListFiles = "git -C $DIR ls-tree --name-only -r"
 
 proc isGitDir*(path: Path): bool =
   let gitPath = path / Path(".git")
@@ -223,7 +224,7 @@ proc showFile*(path: Path, commit: CommitHash, file: string): string =
     result = ""
 
 proc listFiles*(path: Path, commit: CommitHash): seq[string] =
-  let (outp, status) = exec(GitShowFiles, path, ["--name-only", commit.h])
+  let (outp, status) = exec(GitListFiles, path, [commit.h])
   if status == RES_OK:
     result = outp.splitLines().mapIt(it.strip())
   else:
