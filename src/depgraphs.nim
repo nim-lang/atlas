@@ -125,6 +125,9 @@ proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
         # Add implications for each dependency
         # for dep, q in items graph.reqs[ver.req].deps:
         for dep, query in items(rel.requirements):
+          if dep notin graph.pkgs:
+            info pkg.url.projectName, "depdendency requirements not found:", $dep.projectName, "query:", $query
+            continue
           let depNode = graph.pkgs[dep]
 
           var compatibleVersions: seq[VarId] = @[]
