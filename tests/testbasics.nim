@@ -61,6 +61,17 @@ suite "urls and naming":
     check npkg.url.hostname == "github.com"
     check $npkg.url == "https://github.com/zevv/npeg"
 
+  test "npeg url fork":
+    let upkg = nc.createUrl("https://github.com/elcritch/npeg.git")
+    check upkg.url.hostname == "github.com"
+    check $upkg.url == "https://github.com/elcritch/npeg"
+    check $upkg.projectName == "npeg.elcritch.github.com"
+    check upkg.toDirectoryPath() == ws / Path"deps" / Path("npeg.elcritch.github.com")
+    check upkg.toLinkPath() == ws / Path"deps" / Path("npeg.elcritch.github.com.link")
+    let npkg = nc.createUrl("npeg")
+    check npkg.url.hostname == "github.com"
+    check $npkg.url == "https://github.com/zevv/npeg"
+
   test "sync url":
     let upkg = nc.createUrl("https://github.com/planetis-m/sync")
     check upkg.url.hostname == "github.com"
