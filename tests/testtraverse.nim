@@ -296,6 +296,8 @@ suite "test expand with git tags":
       let v = parseVersionInterval("#7ca5581cd", 0, err)
       check not sp1.findRelease(v).isNil
 
+      echo "sp0:reqs: ", sp0.versions.pairs().toSeq()[0][1].requirements.repr
+
       echo "explicit versions: "
       for pkgUrl, commits in nc.explicitVersions.pairs:
         echo "\tversions: ", pkgUrl, " commits: ", commits.toSeq().mapIt($it).join("; ")

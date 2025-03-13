@@ -1,4 +1,4 @@
-import std/[unittest, os, algorithm, strutils, importutils]
+import std/[unittest, os, algorithm, strutils, importutils, terminal]
 import basic/[context, pkgurls, deptypes, nimblecontext, compiledpatterns, osutils, versions]
 
 when false:
@@ -16,6 +16,7 @@ suite "urls and naming":
   setup:
     nc = createUnfilledNimbleContext()
     # setAtlasVerbosity(Trace)
+    setAtlasErrorsColor(fgMagenta)
     ws = absolutePath(workspace())
     nc.put("npeg", toPkgUriRaw(parseUri "https://github.com/zevv/npeg"))
     nc.put("sync", toPkgUriRaw(parseUri "https://github.com/planetis-m/sync"))
@@ -444,6 +445,26 @@ suite "version interval matches":
     let regularInterval = p">= 1.0.0"
     let noCommit = extractSpecificCommit(regularInterval)
     check noCommit.h == ""
+
+  test "version matching with full commit to short":
+    var err = false
+    # this is what nimbleparser does
+    let v1 = parseVersionInterval("proj_a#abcdef123456", 6, err)
+    checkpoint "v1: " & v1.repr
+    check not v1.matches(v"#abcdef")
+
+    let v2 = parseVersionInterval("proj_a#some-branch", 6, err)
+    checkpoint "v2: " & v2.repr
+    check v2.matches(v"#some-branch")
+
+    let v3 = parseVersionInterval("proj_a#aac5ff8533150478a85", 6, err)
+    checkpoint "v3: " & v3.repr
+    check not v3.matches(v"#aac5ff8533150478a85ae6e34e9093997b3a8f76")
+
+    let v4 = parseVersionInterval("proj_b#aac5ff8533150478a85ae6e34e9093997b3a8f76", 6, err)
+    checkpoint "v4: " & v4.repr
+    check v4.matches(VersionTag(v: v"#aac5ff8533150478a85ae6e34e9093997b3a8f76", c: initCommitHash("aac5ff8533150478a85ae6e34e9093997b3a8f76", FromNone)))
+
 
 suite "sortVersions":
   
