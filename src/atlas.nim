@@ -436,7 +436,7 @@ proc mainRun(params: seq[string]) =
       quit(1)
 
     workspace() = paths.getCurrentDir() / Path purl.projectName
-    let (status, msg) = gitops.clone(purl.toUri, workspace(), fullClones = true)
+    let (status, msg) = gitops.clone(purl.toUri, workspace())
     if status != Ok:
       error "atlas", "error cloning project:", dir, "message:", msg
       quit(1)
