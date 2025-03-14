@@ -283,7 +283,7 @@ proc expand*(path: Path, nc: var NimbleContext; mode: TraversalMode, onClone: Pa
   
   doAssert path.string != "."
   let url = nc.createUrlFromPath(path)
-  warn url.projectName, "expanding root package at:", $path, "url:", $url
+  notice url.projectName, "expanding root package at:", $path, "url:", $url
   var root = Package(url: url, isRoot: true)
   # nc.loadDependency(pkg)
 
@@ -291,11 +291,11 @@ proc expand*(path: Path, nc: var NimbleContext; mode: TraversalMode, onClone: Pa
   result = DepGraph(root: root)
   nc.packageToDependency[root.url] = root
 
+  info "atlas:expand", "Expanding packages for:", $root.projectName
   var processing = true
   while processing:
     processing = false
     let pkgUrls = nc.packageToDependency.keys().toSeq()
-    info "atlas:expand", "Expanding packages for:", $root.projectName
     for pkgUrl in pkgUrls:
       var pkg = nc.packageToDependency[pkgUrl]
       case pkg.state:
@@ -322,3 +322,5 @@ proc expand*(path: Path, nc: var NimbleContext; mode: TraversalMode, onClone: Pa
     var pkg = nc.packageToDependency[pkgUrl]
     if pkg.state == Processed:
       nc.traverseDependency(pkg, ExplicitVersions, versions.toSeq())
+
+  info "atlas:expand", "Finished expanding packages for:", $root.projectName

@@ -116,7 +116,7 @@ when not compiles(len(Path("test"))):
     x.string.len()
 
 proc toReporterName(s: string): string = s
-proc toReporterName(p: Path): string = $p.splitFile().name
+proc toReporterName(p: Path): string = $p.splitPath().tail
 
 proc message*[T](k: MsgKind; p: T, args: varargs[string]) =
   mixin toReporterName

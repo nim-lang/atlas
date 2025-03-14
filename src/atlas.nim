@@ -200,7 +200,7 @@ proc autoWorkspace(currentDir: Path): bool =
       break
     cwd = cwd.parentDir()
   workspace() = cwd
-  info "atlas:workspace", "Detected workspace directory:", $workspace()
+  notice "atlas:workspace", "Detected workspace directory:", $workspace()
 
   if workspace().len() > 0:
     result = workspace().dirExists()
