@@ -111,8 +111,8 @@ proc addRelease(
   elif release.version.string == "":
     warn pkg.url.projectName, "nimble file missing version information:", $pkgver.vtag
     release.version = vtag.version
-  elif vtag.v != release.version:
-    warn pkg.url.projectName, "version mismatch between:", $vtag.v, "nimble version:", $release.version
+  elif vtag.v != release.version and not pkg.isRoot:
+    info pkg.url.projectName, "version mismatch between:", $vtag.v, "nimble version:", $release.version
   
   versions.add((pkgver, release))
   result = pkgver

@@ -14,6 +14,7 @@ type
     Ignore = ""
     Error =   "[Error]  "
     Warning = "[Warn]   ",
+    Notice =  "[Notice] ",
     Info =    "[Info]   ",
     Debug =   "[Debug]  "
     Trace =   "[Trace]  "
@@ -27,7 +28,7 @@ type
     errors*: int
     messages: seq[(MsgKind, string, seq[string])] # delayed output
 
-var atlasReporter* = Reporter(verbosity: Info)
+var atlasReporter* = Reporter(verbosity: Notice)
 
 proc setAtlasVerbosity*(verbosity: MsgKind) =
   atlasReporter.verbosity = verbosity
@@ -67,6 +68,7 @@ proc writeMessage(c: var Reporter; k: MsgKind; p: string, args: seq[string]) =
       of Trace: (fgWhite, styleDim)
       of Debug: (fgBlue, styleBright)
       of Info: (fgGreen, styleBright)
+      of Notice: (fgMagenta, styleBright)
       of Warning: (fgYellow, styleBright)
       of Error: (c.errorsColor, styleBright)
     
@@ -127,6 +129,10 @@ proc warn*[T](p: T, args: varargs[string]) =
 proc error*[T](p: T, args: varargs[string]) =
   mixin toReporterName
   message(atlasReporter, Error, toReporterName(p), @args)
+
+proc notice*[T](p: T, args: varargs[string]) =
+  mixin toReporterName
+  message(atlasReporter, Notice, toReporterName(p), @args)
 
 proc info*[T](p: T, args: varargs[string]) =
   mixin toReporterName

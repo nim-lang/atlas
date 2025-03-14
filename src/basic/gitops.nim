@@ -70,9 +70,9 @@ proc exec*(gitCmd: Command;
   else:
     result = ("Not a git repo", ResultCode(1))
   if result[1] != RES_OK:
-    message errorReportLevel, "gitops", "Git command failed:", "`$1`" % [$gitCmd], "with code:", $int(result[1])
-    let lvl = if errorReportLevel == Error: Error else: Trace
-    message lvl, "gitops", "Running Git command:", "`$1 $2`" % [cmd, join(args, " ")]
+    # message errorReportLevel, "gitops", "Git command failed:", "`$1`" % [$gitCmd], "with code:", $int(result[1])
+    # let lvl = if errorReportLevel == Error: Error else: Trace
+    message errorReportLevel, "gitops", "Running Git command:", "`$1 $2`" % [cmd, join(args, " ")]
 
 proc checkGitDiffStatus*(path: Path): string =
   let (outp, status) = exec(GitDiff, path, [])
@@ -126,7 +126,6 @@ proc clone*(url: Uri, dest: Path; retries = 5; fullClones=false): (CloneStatus, 
   for i in 1..retries:
     os.sleep(Pauses[min(i, Pauses.len()-1)])
     let (outp, status) = exec(GitClone, dest, [extraArgs, $url, $dest], Warning)
-    echo "CLONETEST: ", outp, " status: ", status
     if status == RES_OK:
       return (Ok, "")
     elif "not found" in outp or "Not a git repo" in outp:

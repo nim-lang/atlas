@@ -112,12 +112,12 @@ proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
 
           if not hasCompatible:
             allDepsCompatible = false
-            warn pkg, "no versions matched requirements for the dependency:", $dep.projectName
+            warn pkg.url.projectName, "no versions matched requirements for the dependency:", $dep.projectName
             break
 
         # If any dependency can't be satisfied, make this version unsatisfiable
         if not allDepsCompatible:
-          warn pkg.url.projectName, "all requirements needed for this Nimble release:", $ver, "were not able to be satisfied", $rel.requirements.mapIt(it[0].projectName & " " & $it[1]).join("; ")
+          warn pkg.url.projectName, "all requirements needed for nimble release:", $ver, "were not able to be satisfied:", $rel.requirements.mapIt(it[0].projectName & " " & $it[1]).join("; ")
           b.addNegated(ver.vid)
           continue
 
@@ -187,7 +187,7 @@ proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
             inc elementCount
             var matchCount = 0
             var availVers = availVer.versions.keys().toSeq()
-            info pkg.url.projectName, "version keys:", $dep.projectName, "availVers:", $availVers
+            notice pkg.url.projectName, "version keys:", $dep.projectName, "availVers:", $availVers
             if not commit.isEmpty():
               info pkg.url.projectName, "adding requirements selections by specific commit:", $dep.projectName, "commit:", $commit
               # Match by specific commit if specified
@@ -229,13 +229,13 @@ proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
       for pkg in mvalues(graph.pkgs):
         for ver, rel in validVersions(pkg):
           if rel.requirements.len > 0:
-            info pkg.url.projectName, "adding package requirements restraint:", $ver, "vid: ", $ver.vid.int, "rel:", $rel.rid.int
+            debug pkg.url.projectName, "adding package requirements restraint:", $ver, "vid: ", $ver.vid.int, "rel:", $rel.rid.int
             b.openOpr(OrForm)
             b.addNegated ver.vid
             b.add rel.rid
             b.closeOpr() # OrForm
           else:
-            info pkg.url.projectName, "not adding pacakge requirements restraint:", $ver
+            debug pkg.url.projectName, "not adding pacakge requirements restraint:", $ver
 
   result.formula = toForm(b)
 
@@ -297,7 +297,7 @@ proc solve*(graph: var DepGraph; form: Form) =
         debug pkg.url.projectName, "package satisfiable"
 
     if ListVersions in context().flags:
-      warn "Resolved", "selected:"
+      notice "atlas:resolved", "selected:"
       var selections: seq[(string, string)]
       for pkg in values(graph.pkgs):
         if not pkg.isRoot:
@@ -334,8 +334,8 @@ proc solve*(graph: var DepGraph; form: Form) =
       for (pkg, str) in selections:
         longestPkgName = max(longestPkgName, pkg.len)
       for (pkg, str) in selections:
-        warn "Resolved", str
-      warn "Resolved", "end of selection"
+        notice "atlas:resolved", str
+      notice "atlas:resolved", "end of selection"
   else:
     var notFoundCount = 0
     for pkg in values(graph.pkgs):

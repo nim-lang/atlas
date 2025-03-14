@@ -274,13 +274,13 @@ proc newProject(projectName: string) =
       error name, "Failed writing to file '$#': $#" % [fname, e.msg]
       quit(1)
 
-proc parseAtlasOptions(action: var string, args: var seq[string]) =
+proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[string]) =
   var autoinit = false
   var explicitProjectOverride = false
   var explicitDepsDirOverride = false
   if existsEnv("NO_COLOR") or not isatty(stdout) or (getEnv("TERM") == "dumb"):
     setAtlasNoColors(true)
-  for kind, key, val in getopt():
+  for kind, key, val in getopt(params):
     case kind
     of cmdArgument:
       if action.len == 0:
@@ -370,7 +370,7 @@ proc parseAtlasOptions(action: var string, args: var seq[string]) =
   if action != "tag":
     createDir(context().depsDir)
 
-proc mainRun() =
+proc mainRun(params: seq[string]) =
   var action = ""
   var args: seq[string] = @[]
   template singleArg() =
@@ -395,7 +395,7 @@ proc mainRun() =
     for x in walkPattern("*.nimble"):
       return Path x
 
-  parseAtlasOptions(action, args)
+  parseAtlasOptions(params, action, args)
 
   if action notin ["init", "tag"]:
     doAssert workspace().string != "" and workspace().dirExists()
@@ -508,7 +508,7 @@ proc mainRun() =
 proc main =
   setContext AtlasContext()
   try:
-    mainRun()
+    mainRun(commandLineParams())
   finally:
     atlasWritePendingMessages()
   if atlasErrors() > 0 and not context().ignoreErrors:
