@@ -101,11 +101,11 @@ proc atlasWritePendingMessages*() =
 proc doInfoNow*(c: var Reporter; p: string, args: seq[string]) =
   writeMessage c, Info, p, @args
 
-proc doFatal*(c: var Reporter, msg: string, prefix = "fatal", code = 1) =
+proc doFatal*(c: var Reporter, msg: string, prefix = "fatal", code: int) =
   when defined(debug):
     writeStackTrace()
   writeMessage(c, Error, prefix, @[msg])
-  quit 1
+  quit code
 
 when not compiles($(Path("test"))):
   template `$`*(x: Path): string =
