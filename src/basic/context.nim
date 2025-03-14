@@ -40,6 +40,7 @@ type
     GlobalWorkspace
     FullClones
     IgnoreUrls
+    IgnoreErrors
 
   AtlasContext* = object
     workspace*: Path = Path"."

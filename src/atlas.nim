@@ -95,10 +95,10 @@ Options:
   --help                show this help
 """
 
-proc writeHelp() =
+proc writeHelp(code = 2) =
   stdout.write(Usage)
   stdout.flushFile()
-  quit(0)
+  quit(code)
 
 proc writeVersion() =
   stdout.write("version: " & AtlasVersion & "\n")
@@ -289,7 +289,7 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
         args.add key
     of cmdLongOption, cmdShortOption:
       case normalize(key)
-      of "help", "h": writeHelp()
+      of "help", "h": writeHelp(0)
       of "version", "v": writeVersion()
       of "keepcommits": context().flags.incl KeepCommits
       of "workspace":
@@ -311,7 +311,7 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
       of "cfghere": context().flags.incl CfgHere
       of "full": context().flags.incl FullClones
       of "autoinit": autoinit = true
-      of "ignoreerrors": context().ignoreErrors = true
+      of "ignoreerrors": context().flags.incl IgnoreErrors
       of "showgraph": context().flags.incl ShowGraph
       of "ignoreurls": context().flags.incl IgnoreUrls
       of "keepworkspace": context().flags.incl KeepWorkspace
@@ -517,7 +517,7 @@ proc main =
     mainRun(commandLineParams())
   finally:
     atlasWritePendingMessages()
-  if atlasErrors() > 0 and not context().ignoreErrors:
+  if atlasErrors() > 0 and IgnoreErrors notin context().flags:
     quit 1
 
 when isMainModule:
