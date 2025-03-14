@@ -48,7 +48,7 @@ suite "graph solve":
       withDir "tests/ws_semver_unit":
         removeDir("deps")
         workspace() = paths.getCurrentDir()
-        context().flags = {UsesOverrides, KeepWorkspace, ListVersions, FullClones}
+        context().flags = {KeepWorkspace, ListVersions, FullClones}
         context().defaultAlgo = SemVer
 
         var nc = createNimbleContext()
@@ -111,7 +111,7 @@ suite "graph solve":
       withDir "tests/ws_semver_unit":
         removeDir("deps")
         workspace() = paths.getCurrentDir()
-        context().flags = {UsesOverrides, KeepWorkspace, ListVersions, FullClones}
+        context().flags = {KeepWorkspace, ListVersions, FullClones}
         context().defaultAlgo = SemVer
         discard context().nameOverrides.addPattern("proj$+", "https://example.com/buildGraph/proj$#")
 
@@ -182,7 +182,7 @@ suite "test expand with no git tags":
       withDir "tests/ws_semver_unit":
         removeDir("deps")
         workspace() = paths.getCurrentDir()
-        context().flags = {UsesOverrides, KeepWorkspace, ListVersions, FullClones}
+        context().flags = {KeepWorkspace, ListVersions, FullClones}
         context().defaultAlgo = SemVer
 
         var nc = createNimbleContext()
@@ -242,7 +242,7 @@ suite "test expand with no git tags":
       withDir "tests/ws_testtraverse_explicit":
         removeDir("deps")
         workspace() = paths.getCurrentDir()
-        context().flags = {UsesOverrides, KeepWorkspace, ListVersions, FullClones}
+        context().flags = {KeepWorkspace, ListVersions, FullClones}
         context().defaultAlgo = SemVer
 
         var nc = createNimbleContext()
