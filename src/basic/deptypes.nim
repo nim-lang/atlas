@@ -71,7 +71,7 @@ proc sortVersionsAsc*(a, b: (PackageVersion, NimbleRelease)): int =
   sortVersionsAsc(a[0].vtag, b[0].vtag)
 
 proc `$`*(d: Package): string =
-  d.url.fullName()
+  d.url.projectName()
 
 proc projectName*(d: Package): string =
   d.url.projectName()

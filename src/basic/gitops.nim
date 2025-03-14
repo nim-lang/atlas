@@ -199,16 +199,23 @@ proc expandSpecial*(path: Path, vtag: VersionTag, errorReportLevel: MsgKind = Wa
 
   let (cc, status) = exec(GitRevParse, path, [vtag.version.string.substr(1)], errorReportLevel)
 
-  result = VersionTag(v: vtag.version, c: initCommitHash("", FromHead))
-  if status == RES_OK:
+  template processSpecial(cc: string) =
     let vtags = parseTaggedVersions(cc, requireVersions = false)
     if vtags.len() == 1:
       result.c = vtags[0].c
       if vtag.version.string.substr(1) in result.c.h: # expand short commit hash to full hash
         result.v = Version("#" & $(result.c))
-    info path, "expandSpecial: ", $vtag, "result:", $result
+    info path, "expandSpecial: ", $vtag, "result:", repr result
+
+  result = VersionTag(v: vtag.version, c: initCommitHash("", FromHead))
+  if status == RES_OK:
+    processSpecial(cc)
   else:
-    message(errorReportLevel, path, "could not expand special version:", $vtag)
+    let (cc, status) = exec(GitRevParse, path, ["origin/" & vtag.version.string.substr(1)], errorReportLevel)
+    if status == RES_OK:
+      processSpecial(cc)
+    else:
+      message(errorReportLevel, path, "could not expand special version:", $vtag)
 
 proc listFiles*(path: Path): seq[string] =
   let (outp, status) = exec(GitLsFiles, path, [])

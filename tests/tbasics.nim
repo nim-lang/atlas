@@ -504,6 +504,12 @@ suite "version interval matches":
     checkpoint "v4: " & v4.repr
     check v4.matches(VersionTag(v: v"#aac5ff8533150478a85ae6e34e9093997b3a8f76", c: initCommitHash("aac5ff8533150478a85ae6e34e9093997b3a8f76", FromNone)))
 
+    let v5 = parseVersionInterval("proj_b#some_branch", 6, err)
+    checkpoint "v5: " & v5.repr
+    let v5tgt = VersionTag(v: v"#some_branch", c: initCommitHash("aac5ff8533150478a85ae6e34e9093997b3a8f76", FromNone))
+    echo "v5:isinterval: ", v5.isInterval
+    check v5.matches(v5tgt)
+
 
 suite "sortVersions":
   

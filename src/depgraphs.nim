@@ -106,8 +106,10 @@ proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
 
           var hasCompatible = false
           for depVer, relVer in depNode.validVersions():
+            trace pkg.url.projectName, "checking dependnecy version:", $depVer, "query:", $query, "matches:", $query.matches(depVer)
             if query.matches(depVer):
               hasCompatible = true
+              trace pkg.url.projectName, "version matched requirements for the dependency version:", $depVer
               break
 
           if not hasCompatible:
