@@ -11,33 +11,6 @@
 import std / [strutils, os, streams, json, tables, jsonutils]
 import basic/[versions, context, reporters, compiledpatterns, parse_requires]
 
-# proc parseOverridesFile(filename: Path) =
-#   const Separator = " -> "
-#   let path = workspace() / filename
-#   var f: File
-#   if open(f, $path):
-#     info "overrides", "loading file: " & $path
-#     context().flags.incl UsesOverrides
-#     try:
-#       var lineCount = 1
-#       for line in lines($path):
-#         let splitPos = line.find(Separator)
-#         if splitPos >= 0 and line[0] != '#':
-#           let key = line.substr(0, splitPos-1)
-#           let val = line.substr(splitPos+len(Separator))
-#           if key.len == 0 or val.len == 0:
-#             error path, "key/value must not be empty"
-#           let err = context().overrides.addPattern(key, val)
-#           if err.len > 0:
-#             error path, "(" & $lineCount & "): " & err
-#         else:
-#           discard "ignore the line"
-#         inc lineCount
-#     finally:
-#       close f
-#   else:
-#     error path, "cannot open: " & $path
-
 proc readPluginsDir(dir: Path) =
   for k, f in walkDir($(workspace() / dir)):
     if k == pcFile and f.endsWith(".nims"):

@@ -296,7 +296,7 @@ proc solve*(graph: var DepGraph; form: Form) =
         pkg.activeVersion = mapInfo.version
         debug pkg.url.projectName, "package satisfiable"
 
-    if ListVersions in context().flags:
+    if ListVersions in context().flags and ListVersionsOff notin context().flags:
       var inactives: seq[string]
       for pkg in values(graph.pkgs):
         if not pkg.isRoot and not pkg.active:

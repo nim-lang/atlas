@@ -20,7 +20,7 @@ proc eqIdent(a, b: string): bool {.inline.} =
 
 proc handleError(cfg: ConfigRef, li: TLineInfo, mk: TMsgKind, msg: string) =
   {.cast(gcsafe).}:
-    warn("nimbleparser", "error parsing \"$1\" at $2" % [msg, cfg.toFileLineCol(li), repr mk])
+    info("nimbleparser", "error parsing \"$1\" at $2" % [msg, cfg.toFileLineCol(li), repr mk])
 
 proc handleError(cfg: ConfigRef, mk: TMsgKind, li: TLineInfo, msg: string) =
   handleError(cfg, li, warnUser, msg)

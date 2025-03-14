@@ -318,7 +318,13 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
       of "keep": context().flags.incl Keep
       of "autoenv": context().flags.incl AutoEnv
       of "noexec": context().flags.incl NoExec
-      of "list": context().flags.incl ListVersions
+      of "list":
+        if val.normalize in ["on", ""]:
+          context().flags.incl ListVersions
+        elif val.normalize == "off":
+          context().flags.incl ListVersionsOff
+        else:
+          writeHelp()
       of "global", "g": context().flags.incl GlobalWorkspace
       of "colors":
         case val.normalize

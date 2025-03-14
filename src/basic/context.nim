@@ -30,13 +30,13 @@ type
   Flag* = enum
     KeepCommits
     CfgHere
-    UsesOverrides
     Keep
     KeepWorkspace
     ShowGraph
     AutoEnv
     NoExec
     ListVersions
+    ListVersionsOff
     GlobalWorkspace
     FullClones
     IgnoreUrls
@@ -44,7 +44,7 @@ type
   AtlasContext* = object
     workspace*: Path = Path"."
     depsDir*: Path = Path"deps"
-    flags*: set[Flag]
+    flags*: set[Flag] = {ListVersions}
     dumpGraphs*: bool = true # TODO: debugging, plumb cli option later
     dumpFormular*: bool = false
     nameOverrides*: Patterns
