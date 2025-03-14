@@ -297,13 +297,10 @@ proc replay*(lockFile: Path) =
         continue
     
     let url = $getRemoteUrl(dir)
-    if url.withoutSuffix(".git") != url:
-      if IgnoreUrls in context().flags:
-        warn v.dir, "remote URL differs from expected: got: " &
-          url & " but expected: " & v.url
-      else:
-        error v.dir, "remote URL has been compromised: got: " &
-          url & " but wanted: " & v.url
+    if $url.createUrlSkipPatterns() != url:
+      let lvl = if IgnoreGitRemoteUrls in context().flags: Info else: Error
+      message lvl, v.dir, "remote URL differs from expected: got: " &
+                  url & " but expected: " & v.url
     
     let commit = v.commit.initCommitHash(FromLockfile)
     if not checkoutGitCommitFull(dir, commit, FullClones in context().flags):

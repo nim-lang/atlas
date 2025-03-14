@@ -39,7 +39,7 @@ type
     ListVersionsOff
     GlobalWorkspace
     FullClones
-    IgnoreUrls
+    IgnoreGitRemoteUrls
     IgnoreErrors
 
   AtlasContext* = object
