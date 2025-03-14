@@ -71,14 +71,14 @@ proc nimbleExec*(cmd: string; args: openArray[string]) =
     cmdLine.add quoteShell(args[i])
   discard os.execShellCmd(cmdLine)
 
-template withDir*(dir: string; body: untyped) =
-  let oldDir = ospaths2.getCurrentDir()
-  debug dir, "Current directory is now: " & dir
+template withDir*(dir: Path; body: untyped) =
+  let oldDir = paths.getCurrentDir()
+  trace dir, "Current directory is now: " & $dir
   try:
-    setCurrentDir(dir)
+    setCurrentDir($dir)
     body
   finally:
-    setCurrentDir(oldDir)
+    setCurrentDir($oldDir)
 
 template withDir*(dir: Path; body: untyped) =
   let oldDir = paths.getCurrentDir()
@@ -88,12 +88,12 @@ template withDir*(dir: Path; body: untyped) =
   finally:
     setCurrentDir($oldDir)
 
-template tryWithDir*(dir: string; body: untyped) =
-  let oldDir = ospaths2.getCurrentDir()
+template tryWithDir*(dir: Path; body: untyped) =
+  let oldDir = paths.getCurrentDir()
   try:
-    if dirExists(dir):
-      setCurrentDir(dir)
-      debug dir, "Current directory is now: " & dir
+    if dirExists($dir):
+      setCurrentDir($dir)
+      trace dir, "Current directory is now: " & $dir
       body
   finally:
-    setCurrentDir(oldDir)
+    setCurrentDir($oldDir)

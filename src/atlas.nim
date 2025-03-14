@@ -220,7 +220,7 @@ proc listOutdated(dir: Path) =
   var updateable = 0
   for k, f in walkDir(dir, relative=true):
     if k in {pcDir, pcLinkToDir} and isGitDir(dir / f):
-      withDir $(dir / f):
+      withDir dir / f:
         if gitops.isOutdated(dir / f):
           inc updateable
 
@@ -266,14 +266,14 @@ proc newProject(projectName: string) =
     error name, "Failed to create directory '$#': $#" % [name, e.msg]
     quit(1)
   info name, "created project dir"
-  withDir(name):
-    let fname = name.replace('-', '_') & ".nim"
-    try:
-      # A header doc comment with the project's name
-      fname.writeFile("## $#\n" % name)
-    except IOError as e:
-      error name, "Failed writing to file '$#': $#" % [fname, e.msg]
-      quit(1)
+
+  let fname = name / name.replace('-', '_') & ".nim"
+  try:
+    # A header doc comment with the project's name
+    fname.writeFile("## $#\n" % name)
+  except IOError as e:
+    error name, "Failed writing to file '$#': $#" % [fname, e.msg]
+    quit(1)
 
 proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[string]) =
   var autoinit = false

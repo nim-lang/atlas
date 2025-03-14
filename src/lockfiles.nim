@@ -133,7 +133,7 @@ proc pinGraph*(g: DepGraph; lockFile: Path; exportNimble = false) =
 
   for w in toposorted(g):
     let dir = w.ondisk
-    tryWithDir $dir:
+    tryWithDir dir:
       if not exportNimble:
         # generate atlas native lockfile entries
         genLockEntry lf, w
@@ -236,7 +236,7 @@ proc listChanged*(lockFile: Path) =
     if not dirExists(dir):
       warn dir, "repo missing!"
       continue
-    withDir $dir:
+    withDir dir:
       let url = $getRemoteUrl(dir)
       if v.url != url:
         warn v.dir, "remote URL has been changed;" &

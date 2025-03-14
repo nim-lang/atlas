@@ -389,7 +389,7 @@ proc runBuildSteps*(graph: DepGraph) =
   for pkg in revPkgs:
     if pkg.active:
       doAssert pkg != nil
-      tryWithDir $pkg.ondisk:
+      tryWithDir pkg.ondisk:
         # check for install hooks
         if not pkg.activeNimbleRelease.isNil and
             pkg.activeNimbleRelease.hasInstallHooks:
