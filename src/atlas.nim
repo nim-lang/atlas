@@ -310,7 +310,8 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
         else:
           writeHelp()
       of "cfghere": context().flags.incl CfgHere
-      of "full": context().flags.incl FullClones
+      of "shallow": context().flags.incl ShallowClones
+      of "full": context().flags.excl ShallowClones
       of "autoinit": autoinit = true
       of "ignoreerrors": context().flags.incl IgnoreErrors
       of "showgraph": context().flags.incl ShowGraph

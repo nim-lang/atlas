@@ -101,7 +101,7 @@ proc maybeUrlProxy*(url: Uri): Uri =
     result.path = result.path.strip(leading=false, trailing=true, {'/'})
 
 
-proc clone*(url: Uri, dest: Path; retries = 5; fullClones=false): (CloneStatus, string) =
+proc clone*(url: Uri, dest: Path; retries = 5): (CloneStatus, string) =
   ## clone git repo.
   ##
   ## note clones don't use `--recursive` but rely in the `checkoutCommit`
@@ -111,7 +111,7 @@ proc clone*(url: Uri, dest: Path; retries = 5; fullClones=false): (CloneStatus, 
   # retry multiple times to avoid annoying github timeouts:
   let extraArgs =
     if $context().proxy != "" and context().dumbProxy: ""
-    elif not fullClones: "--depth=1"
+    elif ShallowClones in context().flags: "--depth=1"
     else: ""
 
   var url = maybeUrlProxy(url)
@@ -260,16 +260,16 @@ proc checkoutGitCommit*(path: Path, commit: CommitHash, errorReportLevel: MsgKin
     trace path, "updated package to ", $commit
     result = true
 
-proc checkoutGitCommitFull*(path: Path; commit: CommitHash, fullClones: bool;
+proc checkoutGitCommitFull*(path: Path; commit: CommitHash,
                             errorReportLevel: MsgKind = Warning): bool =
   var smExtraArgs: seq[string] = @[]
   result = true
-  if not fullClones and commit.isFull():
+  if ShallowClones in context().flags and commit.isFull():
     smExtraArgs.add "--depth=1"
 
     let extraArgs =
       if context().dumbProxy: ""
-      elif not fullClones: "--update-shallow"
+      elif ShallowClones notin context().flags: "--update-shallow"
       else: ""
     let (_, status) = exec(GitFetch, path, [extraArgs, "--tags", "origin", commit.h], errorReportLevel)
     if status != RES_OK:

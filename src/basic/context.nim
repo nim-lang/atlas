@@ -38,7 +38,7 @@ type
     ListVersions
     ListVersionsOff
     GlobalWorkspace
-    FullClones
+    ShallowClones
     IgnoreGitRemoteUrls
     IgnoreErrors
 

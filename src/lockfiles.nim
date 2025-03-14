@@ -303,7 +303,7 @@ proc replay*(lockFile: Path) =
                   url & " but expected: " & v.url
     
     let commit = v.commit.initCommitHash(FromLockfile)
-    if not checkoutGitCommitFull(dir, commit, FullClones in context().flags):
+    if not checkoutGitCommitFull(dir, commit):
       error v.dir, "unable to convert to full clone:", $v.commit, "at:", $dir
 
     if genCfg:
