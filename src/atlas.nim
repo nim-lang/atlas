@@ -406,6 +406,9 @@ proc mainRun(params: seq[string]) =
   if action notin ["init", "tag"]:
     doAssert workspace().string != "" and workspace().dirExists()
 
+  if action in ["install", "update", "use"]:
+    context().flags.incl ListVersions
+
   case action
   of "":
     fatal "No action."

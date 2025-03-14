@@ -45,7 +45,7 @@ type
   AtlasContext* = object
     workspace*: Path = Path"."
     depsDir*: Path = Path"deps"
-    flags*: set[Flag] = {ListVersions}
+    flags*: set[Flag]
     dumpGraphs*: bool = true # TODO: debugging, plumb cli option later
     dumpFormular*: bool = false
     nameOverrides*: Patterns
