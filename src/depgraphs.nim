@@ -98,9 +98,10 @@ proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
         # First check if all dependencies can be satisfied
         for dep, query in items(rel.requirements):
           if dep notin graph.pkgs:
-            info pkg.url.projectName, "checking dependency; not found:", $dep.projectName, "query:", $query
+            info pkg.url.projectName, "checking dependency for ", $ver, "not found:", $dep.projectName, "query:", $query
+            allDepsCompatible = false
             continue
-          info pkg.url.projectName, "checking dependency:", $dep.projectName, "query:", $query
+          info pkg.url.projectName, "checking dependency for ", $ver, ":", $dep.projectName, "query:", $query
           let depNode = graph.pkgs[dep]
 
           var hasCompatible = false
