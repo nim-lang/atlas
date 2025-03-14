@@ -125,7 +125,7 @@ suite "graph solve":
 
         doAssert sp.len() == 5
 
-        echo "\tgraph:\n", graph.toJson(ToJsonOptions(enumMode: joptEnumString))
+        checkpoint "\tgraph:\n" & $graph.toJson(ToJsonOptions(enumMode: joptEnumString))
 
         let form = graph.toFormular(SemVer)
         context().dumpGraphs = true
@@ -195,7 +195,7 @@ suite "test expand with no git tags":
 
         var graph = dir.expand(nc, AllReleases, onClone=DoClone)
 
-        echo "\tgraph:\n", graph.toJson(ToJsonOptions(enumMode: joptEnumString))
+        checkpoint "\tgraph:\n" & $graph.toJson(ToJsonOptions(enumMode: joptEnumString))
 
         let form = graph.toFormular(SemVer)
         context().dumpGraphs = true
@@ -238,7 +238,7 @@ suite "test expand with no git tags":
 
 
   test "expand using buildGraphNoGitTags with explicit versions":
-      setAtlasVerbosity(Trace)
+      # setAtlasVerbosity(Trace)
       withDir "tests/ws_testtraverse_explicit":
         removeDir("deps")
         workspace() = paths.getCurrentDir()
@@ -255,7 +255,7 @@ suite "test expand with no git tags":
 
         var graph = dir.expand(nc, AllReleases, onClone=DoClone)
 
-        echo "\tgraph:\n", graph.toJson(ToJsonOptions(enumMode: joptEnumString))
+        checkpoint "\tgraph:\n" & $graph.toJson(ToJsonOptions(enumMode: joptEnumString))
 
         echo "explicit versions: "
         for pkgUrl, commits in nc.explicitVersions.pairs:
