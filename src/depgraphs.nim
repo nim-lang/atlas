@@ -139,6 +139,7 @@ proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
             if query.matches(depVer):
               compatibleVersions.add(depVer.vid)
 
+          # trace pkg.url.projectName, "adding implication for ", $ver, "compatible versions: ", $compatibleVersions
           # Add implication: if this version is selected, one of its compatible deps must be selected
           withOpenBr(b, OrForm):
             b.addNegated(ver.vid)  # not A
@@ -153,16 +154,6 @@ proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
         if not moduleNames.hasKey(pkg.projectName):
           moduleNames[pkg.url.shortName()] = initHashSet[Package]()
         moduleNames[pkg.url.shortName()].incl(pkg)
-      
-      for name, pkgs in moduleNames.pairs():
-        if pkgs.len > 1:
-          warn workspace(), "multiple packages with the same module name: ", name, "pkgs: ", $pkgs
-          withOpenBr(b, ZeroOrOneOfForm):
-            # we need to make sure that only one version from any of these packages is selected
-            for pkg in pkgs:
-              for ver, rel in pkg.validVersions():
-                debug workspace(), "adding package version: ", $ver, "for module: ", name
-                b.add(ver.vid)
 
     when false:
       # Note this original ran, but seems to have problems now with minver...
