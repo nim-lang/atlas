@@ -297,6 +297,13 @@ proc solve*(graph: var DepGraph; form: Form) =
         debug pkg.url.projectName, "package satisfiable"
 
     if ListVersions in context().flags:
+      var inactives: seq[string]
+      for pkg in values(graph.pkgs):
+        if not pkg.isRoot and not pkg.active:
+          inactives.add pkg.url.projectName
+      if inactives.len > 0:
+        notice "atlas:resolved", "inactive packages:", inactives.join(", ")
+
       notice "atlas:resolved", "selected:"
       var selections: seq[(string, string)]
       for pkg in values(graph.pkgs):
