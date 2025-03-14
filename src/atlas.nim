@@ -175,6 +175,7 @@ proc updateDir(dir, filter: string) =
 proc detectWorkspace(customWorkspace = Path ""): bool =
   ## find workspace by checking `currentDir` and its parents.
   if customWorkspace.string.len() > 0:
+    warn "atlas", "using custom workspace:", $customWorkspace
     workspace() = customWorkspace
   elif GlobalWorkspace in context().flags:
     workspace() = Path(getHomeDir() / ".atlas")
@@ -183,13 +184,13 @@ proc detectWorkspace(customWorkspace = Path ""): bool =
     var cwd = paths.getCurrentDir().absolutePath
 
     while cwd.string.len() > 0:
-      if cwd.isWorkspace():
+      if cwd.getWorkspaceConfig().fileExists():
         break
       cwd = cwd.parentDir()
     workspace() = cwd
   
   if workspace().len() > 0:
-    result = workspace().fileExists
+    result = getWorkspaceConfig().fileExists()
     if result:
       workspace() = workspace().absolutePath
 
@@ -354,16 +355,12 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
       else: writeHelp()
     of cmdEnd: assert false, "cannot happen"
 
-  if workspace().string notin ["", ".", ".."]:
-    if not dirExists(workspace()):
-      fatal "atlas:workspace", "Workspace directory '" & $workspace() & "' not found."
+  if detectWorkspace():
     info "atlas:workspace", "Using workspace directory:", $workspace()
     readConfig()
   elif action notin ["init", "tag"]:
-    if detectWorkspace():
-      readConfig()
-      info workspace().absolutePath, "is the current workspace"
-    elif autoinit:
+    info "atlas:workspace", "Using workspace directory:", $workspace()
+    if autoinit:
       if autoWorkspace(paths.getCurrentDir()):
         createWorkspace()
       else:
