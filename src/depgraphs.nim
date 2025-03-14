@@ -292,7 +292,7 @@ proc solve*(graph: var DepGraph; form: Form) =
 
   var solution = createSolution(maxVar)
 
-  if context().dumpFormular:
+  if DumpFormular in context().flags:
     debugFormular graph, form, solution
 
   if satisfiable(form.formula, solution):

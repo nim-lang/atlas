@@ -41,13 +41,13 @@ type
     ShallowClones
     IgnoreGitRemoteUrls
     IgnoreErrors
+    DumpFormular
 
   AtlasContext* = object
     workspace*: Path = Path"."
     depsDir*: Path = Path"deps"
     flags*: set[Flag]
     dumpGraphs*: bool = true # TODO: debugging, plumb cli option later
-    dumpFormular*: bool = false
     nameOverrides*: Patterns
     urlOverrides*: Patterns
     defaultAlgo*: ResolutionAlgorithm = SemVer
