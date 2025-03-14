@@ -102,7 +102,7 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
     else:
       let lname = unicode.toLower(name)
       if lname notin nc.notFoundNames:
-        error "atlas:nimblecontext", "name not found in nameToUrl: " & $name, "lname:", $lname
+        warn "atlas:nimblecontext", "name not found in packages database:", $name
         nc.notFoundNames.incl lname
       # error "atlas:createUrl", "name is not in nameToUrl:", $name, "result:", repr(result)
       # error "atlas:createUrl", "nameToUrl:", $nc.nameToUrl.keys().toSeq().join(", ")

@@ -72,7 +72,7 @@ proc exec*(gitCmd: Command;
   if result[1] != RES_OK:
     # message errorReportLevel, "gitops", "Git command failed:", "`$1`" % [$gitCmd], "with code:", $int(result[1])
     # let lvl = if errorReportLevel == Error: Error else: Trace
-    message errorReportLevel, "gitops", "Running Git command:", "`$1 $2`" % [cmd, join(args, " ")]
+    message errorReportLevel, "gitops", "Running Git failed:", $(int(result[1])), "command:", "`$1 $2`" % [cmd, join(args, " ")]
 
 proc checkGitDiffStatus*(path: Path): string =
   let (outp, status) = exec(GitDiff, path, [])
@@ -193,11 +193,11 @@ proc shortToCommit*(path: Path, short: CommitHash): CommitHash =
     if vtags.len() == 1:
       result = vtags[0].c
 
-proc expandSpecial*(path: Path, vtag: VersionTag): VersionTag =
+proc expandSpecial*(path: Path, vtag: VersionTag, errorReportLevel: MsgKind = Warning): VersionTag =
   if vtag.version.isHead():
-    return gitFindOriginTip(path)
+    return gitFindOriginTip(path, errorReportLevel)
 
-  let (cc, status) = exec(GitRevParse, path, [vtag.version.string.substr(1)])
+  let (cc, status) = exec(GitRevParse, path, [vtag.version.string.substr(1)], errorReportLevel)
 
   result = VersionTag(v: vtag.version, c: initCommitHash("", FromHead))
   if status == RES_OK:
@@ -206,7 +206,9 @@ proc expandSpecial*(path: Path, vtag: VersionTag): VersionTag =
       result.c = vtags[0].c
       if vtag.version.string.substr(1) in result.c.h: # expand short commit hash to full hash
         result.v = Version("#" & $(result.c))
-  info path, "expandSpecial: ", $vtag, "result:", $result
+    info path, "expandSpecial: ", $vtag, "result:", $result
+  else:
+    message(errorReportLevel, path, "could not expand special version:", $vtag)
 
 proc listFiles*(path: Path): seq[string] =
   let (outp, status) = exec(GitLsFiles, path, [])
