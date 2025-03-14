@@ -4,7 +4,11 @@ task build, "Build local atlas":
   exec "nim c -d:debug -o:bin/atlas src/atlas.nim"
 
 task unitTests, "Runs unit tests":
-  exec "nim c -d:debug -r tests/unittests.nim"
+  exec "nim c -d:debug -r tests/tbasics.nim"
+  exec "nim c -d:debug -r tests/tgitops.nim"
+  exec "nim c -d:debug -r tests/tnimbleparser.nim"
+  exec "nim c -d:debug -r tests/testtraverse.nim"
+  exec "nim c -d:debug -r tests/tsemverUnit.nim"
 
 task tester, "Runs integration tests":
   exec "nim c -d:debug -r tests/tester.nim"

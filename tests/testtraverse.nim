@@ -105,7 +105,7 @@ suite "test expand with git tags":
       # setAtlasVerbosity(Trace)
       withDir "tests/ws_testtraverse":
         removeDir("deps")
-        context().flags = {UsesOverrides, KeepWorkspace, ListVersions, FullClones}
+        context().flags = {KeepWorkspace, ListVersions, FullClones}
         context().defaultAlgo = SemVer
         # discard context().overrides.addPattern("$+", "file://./buildGraph/$#")
         workspace() = paths.getCurrentDir()
@@ -163,7 +163,7 @@ suite "test expand with git tags":
       withDir "tests/ws_testtraverse":
         removeDir("deps")
         workspace() = paths.getCurrentDir()
-        context().flags = {UsesOverrides, KeepWorkspace, ListVersions, FullClones}
+        context().flags = {KeepWorkspace, ListVersions, FullClones}
         context().defaultAlgo = SemVer
         discard context().nameOverrides.addPattern("$+", "file://./buildGraph/$#")
 
@@ -226,7 +226,7 @@ suite "test expand with git tags":
         # setAtlasVerbosity(Trace)
         removeDir("deps")
         workspace() = paths.getCurrentDir()
-        context().flags = {UsesOverrides, KeepWorkspace, ListVersions, FullClones}
+        context().flags = {KeepWorkspace, ListVersions, FullClones}
         context().defaultAlgo = SemVer
         context().depsDir = Path "deps_http"
         context().nameOverrides = Patterns()
@@ -270,7 +270,7 @@ suite "test expand with git tags":
     withDir "tests//ws_testtraverse_explicit":
       removeDir("deps")
       workspace() = paths.getCurrentDir()
-      context().flags = {UsesOverrides, KeepWorkspace, ListVersions, FullClones}
+      context().flags = {KeepWorkspace, ListVersions, FullClones}
       context().defaultAlgo = SemVer
 
       let deps = setupGraph()
@@ -358,7 +358,7 @@ suite "test expand with no git tags":
       withDir "tests/ws_testtraverse":
         removeDir("deps")
         workspace() = paths.getCurrentDir()
-        context().flags = {UsesOverrides, KeepWorkspace, ListVersions, FullClones}
+        context().flags = {KeepWorkspace, ListVersions, FullClones}
         context().defaultAlgo = SemVer
         discard context().nameOverrides.addPattern("$+", "file://./buildGraphNoGitTags/$#")
 
@@ -398,7 +398,7 @@ suite "test expand with no git tags":
       withDir "tests/ws_testtraverse":
         removeDir("deps")
         workspace() = paths.getCurrentDir()
-        context().flags = {UsesOverrides, KeepWorkspace, ListVersions, FullClones}
+        context().flags = {KeepWorkspace, ListVersions, FullClones}
         context().defaultAlgo = SemVer
 
         var nc = createNimbleContext()
@@ -498,7 +498,7 @@ suite "test expand with no git tags and nimble commits max":
         removeDir("deps")
         context().nimbleCommitsMax = true
         workspace() = paths.getCurrentDir()
-        context().flags = {UsesOverrides, KeepWorkspace, ListVersions, FullClones}
+        context().flags = {KeepWorkspace, ListVersions, FullClones}
         context().defaultAlgo = SemVer
 
         var nc = createNimbleContext()
