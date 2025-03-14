@@ -300,15 +300,15 @@ proc solve*(graph: var DepGraph; form: Form) =
         pkg.activeVersion = mapInfo.version
         debug pkg.url.projectName, "package satisfiable"
 
-    var moduleNameDupes: Table[string, HashSet[Package]]
+    var moduleNames: Table[string, HashSet[Package]]
     for pkg in values(graph.pkgs):
       if pkg.active:
-        if not moduleNameDupes.hasKey(pkg.projectName):
-          moduleNameDupes[pkg.projectName] = initHashSet[Package]()
-        moduleNameDupes[pkg.projectName].incl(pkg)
-    moduleNameDupes = moduleNameDupes.pairs().toSeq().filterIt(it[1].len > 1).toTable()
+        if not moduleNames.hasKey(pkg.projectName):
+          moduleNames[pkg.url.shortName()] = initHashSet[Package]()
+        moduleNames[pkg.url.shortName()].incl(pkg)
+    moduleNames = moduleNames.pairs().toSeq().filterIt(it[1].len > 1).toTable()
 
-    info "atlas:resolved", "module name dupes:", $moduleNameDupes
+    info "atlas:resolved", "module names:", $moduleNames
 
     if ListVersions in context().flags and ListVersionsOff notin context().flags:
       var inactives: seq[string]
