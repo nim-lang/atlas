@@ -389,19 +389,21 @@ proc runBuildSteps*(graph: DepGraph) =
   for pkg in revPkgs:
     if pkg.active:
       doAssert pkg != nil
-      tryWithDir pkg.ondisk:
+      block:
         # check for install hooks
         if not pkg.activeNimbleRelease.isNil and
             pkg.activeNimbleRelease.hasInstallHooks:
-          let nimbleFiles = findNimbleFile(pkg)
-          if nimbleFiles.len() == 1:
-            info pkg.url.projectName, "Running installHook"
-            runNimScriptInstallHook nimbleFiles[0], pkg.projectName
+          tryWithDir pkg.ondisk:
+            let nimbleFiles = findNimbleFile(pkg)
+            if nimbleFiles.len() == 1:
+              info pkg.url.projectName, "Running installHook"
+              runNimScriptInstallHook nimbleFiles[0], pkg.projectName
         # check for nim script bs
         for pattern in mitems context().plugins.builderPatterns:
-          let bFile = pattern[0] % pkg.projectName
+          let bFile = pkg.ondisk / Path(pattern[0] % pkg.projectName)
           if fileExists(bFile):
-            runNimScriptBuilder pattern, pkg.projectName
+            tryWithDir pkg.ondisk:
+              runNimScriptBuilder pattern, pkg.projectName
 
 proc activateGraph*(graph: DepGraph): seq[CfgPath] =
   for pkg in allActiveNodes(graph):
@@ -418,5 +420,5 @@ proc activateGraph*(graph: DepGraph): seq[CfgPath] =
 
   for pkg in allActiveNodes(graph):
     if pkg.isRoot: continue
-    debug pkg.url.projectName, "adding CfgPath:", $(toDestDir(graph, pkg) / getCfgPath(graph, pkg).Path)
+    debug pkg.url.projectName, "adding CfgPath:", $relativePath(toDestDir(graph, pkg) / getCfgPath(graph, pkg).Path, workspace())
     result.add CfgPath(toDestDir(graph, pkg) / getCfgPath(graph, pkg).Path)
