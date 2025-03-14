@@ -91,7 +91,6 @@ proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
     # This simpler deps loop was copied from Nimble after it was first ported from Atlas :)
     # It appears to acheive the same results, but it's a lot simpler
     var anyReleaseSatisfied = false
-    var moduleNames: Table[string, HashSet[Package]]
     for pkg in graph.pkgs.mvalues():
       for ver, rel in validVersions(pkg):
         var allDepsCompatible = true
@@ -150,10 +149,6 @@ proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
       if not anyReleaseSatisfied:
         error pkg.url.projectName, "no versions satisfied for this package:", $pkg.url
         # break
-      else:
-        if not moduleNames.hasKey(pkg.projectName):
-          moduleNames[pkg.url.shortName()] = initHashSet[Package]()
-        moduleNames[pkg.url.shortName()].incl(pkg)
 
     when false:
       # Note this original ran, but seems to have problems now with minver...
@@ -288,6 +283,7 @@ proc solve*(graph: var DepGraph; form: Form) =
 
   if satisfiable(form.formula, solution):
     graph.root.active = true
+
     for varIdx in 0 ..< maxVar:
       let vid = VarId varIdx
       if vid in form.mapping:
@@ -303,6 +299,16 @@ proc solve*(graph: var DepGraph; form: Form) =
         assert not mapInfo.release.isNil, "too bad: " & $pkg.url
         pkg.activeVersion = mapInfo.version
         debug pkg.url.projectName, "package satisfiable"
+
+    var moduleNameDupes: Table[string, HashSet[Package]]
+    for pkg in values(graph.pkgs):
+      if pkg.active:
+        if not moduleNameDupes.hasKey(pkg.projectName):
+          moduleNameDupes[pkg.projectName] = initHashSet[Package]()
+        moduleNameDupes[pkg.projectName].incl(pkg)
+    moduleNameDupes = moduleNameDupes.pairs().toSeq().filterIt(it[1].len > 1).toTable()
+
+    info "atlas:resolved", "module name dupes:", $moduleNameDupes
 
     if ListVersions in context().flags and ListVersionsOff notin context().flags:
       var inactives: seq[string]
@@ -420,5 +426,5 @@ proc activateGraph*(graph: DepGraph): seq[CfgPath] =
 
   for pkg in allActiveNodes(graph):
     if pkg.isRoot: continue
-    debug pkg.url.projectName, "adding CfgPath:", $relativePath(toDestDir(graph, pkg) / getCfgPath(graph, pkg).Path, workspace())
+    trace pkg.url.projectName, "adding CfgPath:", $relativePath(toDestDir(graph, pkg) / getCfgPath(graph, pkg).Path, workspace())
     result.add CfgPath(toDestDir(graph, pkg) / getCfgPath(graph, pkg).Path)
