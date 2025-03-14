@@ -359,7 +359,9 @@ proc solve*(graph: var DepGraph; form: Form) =
     moduleNames = moduleNames.pairs().toSeq().filterIt(it[1].len > 1).toTable()
     for name, pkgs in moduleNames:
       error "atlas:resolved", "duplicate module name:", name, "with pkgs:", pkgs.mapIt(it.url.projectName).join(", ")
-      notice "atlas:resolved", "to resolve add an override to the current workspace to select either: ", pkgs.mapIt($it.url).join(", ")
+      notice "atlas:resolved", "please add an entry to `nameOverrides` to the current workspace config to select one of: "
+      for pkg in pkgs:
+        notice "...", "   \"$1\": \"$2\", " % [$pkg.url.shortName(), $pkg.url]
     
     if moduleNames.len > 0:
       fatal "Invalid solution requiring duplicate module names found: " & moduleNames.keys().toSeq().join(", ")
