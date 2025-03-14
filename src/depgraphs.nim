@@ -352,11 +352,9 @@ proc solve*(graph: var DepGraph; form: Form) =
     var moduleNames: Table[string, HashSet[Package]]
     for pkg in values(graph.pkgs):
       if pkg.active:
-        if not moduleNames.hasKey(pkg.projectName):
-          moduleNames[pkg.url.shortName()] = initHashSet[Package]()
-        moduleNames[pkg.url.shortName()].incl(pkg)
-        
+        moduleNames.mgetOrPut(pkg.url.shortName()).incl(pkg)
     moduleNames = moduleNames.pairs().toSeq().filterIt(it[1].len > 1).toTable()
+
     for name, pkgs in moduleNames:
       error "atlas:resolved", "duplicate module name:", name, "with pkgs:", pkgs.mapIt(it.url.projectName).join(", ")
       notice "atlas:resolved", "please add an entry to `nameOverrides` to the current workspace config to select one of: "
