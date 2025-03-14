@@ -53,6 +53,30 @@ suite "urls and naming":
     check upkg.toDirectoryPath() == ws / Path"deps" / Path("balls.disruptek.github.com")
     check upkg.toLinkPath() == ws / Path"deps" / Path("balls.disruptek.github.com.link")
 
+  test "git url with colon":
+    let upkg = nc.createUrl("git://github.com:disruptek/cutelog")
+    check upkg.url.hostname == "github.com"
+    check $upkg.url == "ssh://github.com/disruptek/cutelog"
+    check $upkg.projectName == "cutelog.disruptek.github.com"
+    check upkg.toDirectoryPath() == ws / Path"deps" / Path("cutelog.disruptek.github.com")
+    check upkg.toLinkPath() == ws / Path"deps" / Path("cutelog.disruptek.github.com.link")
+
+  test "git url with colon and port":
+    let upkg = nc.createUrl("git://github.com:1234/disruptek/cutelog")
+    check upkg.url.hostname == "github.com"
+    check $upkg.url == "ssh://github.com:1234/disruptek/cutelog"
+    check $upkg.projectName == "cutelog.disruptek.github.com"
+    check upkg.toDirectoryPath() == ws / Path"deps" / Path("cutelog.disruptek.github.com")
+    check upkg.toLinkPath() == ws / Path"deps" / Path("cutelog.disruptek.github.com.link")
+
+  test "git url no colon":
+    let upkg = nc.createUrl("git://github.com/disruptek/cutelog")
+    check upkg.url.hostname == "github.com"
+    check $upkg.url == "ssh://github.com/disruptek/cutelog"
+    check $upkg.projectName == "cutelog.disruptek.github.com"
+    check upkg.toDirectoryPath() == ws / Path"deps" / Path("cutelog.disruptek.github.com")
+    check upkg.toLinkPath() == ws / Path"deps" / Path("cutelog.disruptek.github.com.link")
+
   test "npeg url":
     # setAtlasVerbosity(Trace)
     let upkg = nc.createUrl("https://github.com/zevv/npeg.git")

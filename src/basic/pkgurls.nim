@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [hashes, uri, os, strutils, os, json]
+import std / [hashes, uri, os, strutils, os, sequtils, json]
 import compiledpatterns, gitops, reporters, context
 
 export uri
@@ -117,6 +117,14 @@ proc createUrlSkipPatterns*(raw: string, skipDirTest = false): PkgUrl =
   else:
     var u = parseUri(raw)
     var hasShortName = false
+
+    if u.scheme == "git":
+      if u.port.anyIt(not it.isDigit()):
+        u.path = "/" & u.port & u.path
+        u.port = ""
+
+      u.scheme = "ssh"
+      echo "git scheme: url: ", raw, "u: ", repr(u)
 
     if u.scheme == "file" and u.hostname != "":
       # TODO: handle windows paths

@@ -63,7 +63,11 @@ proc putImpl(nc: var NimbleContext, name: string, url: PkgUrl, isFromPath = fals
     nc.packageExtras[name] = url
     result = true
   else:
-    if nc.packageExtras[name] != url:
+    let existingUrl = nc.packageExtras[name]
+    if existingUrl != url:
+      # if existingUrl.scheme != url.scheme: # TODO check host and
+      #   discard
+
       # TODO: need to handle this better, the user needs to choose which url to use
       #       if the solver can't resolve the conflict
       error "atlas:nimblecontext", "name already exists in packageExtras:", $name, "isFromPath:", $isFromPath, "with different url:", $nc.packageExtras[name], "and url:", $url

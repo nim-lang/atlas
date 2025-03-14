@@ -1,25 +1,71 @@
 {
-  "items": {},
+  "items": {
+    "ws_integration": {
+      "dir": "$workspace/ws_integration",
+      "url": "atlas://workspace/ws_integration.nimble",
+      "commit": "-",
+      "version": ""
+    },
+    "nitter.zedeus.github.com": {
+      "dir": "$workspace/nitter.zedeus.github.com",
+      "url": "https://github.com/zedeus/nitter",
+      "commit": "cea5cc0523171bc3eb0967ae83ddbb92f74da94b",
+      "version": ""
+    },
+    "norm": {
+      "dir": "$workspace/norm",
+      "url": "https://github.com/moigagoo/norm",
+      "commit": "a8155118b863f5acaa883c1ec07addf7a11aa8ae",
+      "version": ""
+    },
+    "regex": {
+      "dir": "$workspace/regex",
+      "url": "https://github.com/nitely/nim-regex",
+      "commit": "4593305ed1e49731fc75af1dc572dd2559aad19c",
+      "version": ""
+    },
+    "nimquery": {
+      "dir": "$workspace/nimquery",
+      "url": "https://github.com/GULPF/nimquery",
+      "commit": "4ed0ce9e8e1e6e7d0ea2bfdbd15cd4008063ee21",
+      "version": ""
+    },
+    "nimcrypto": {
+      "dir": "$workspace/nimcrypto",
+      "url": "https://github.com/cheatfate/nimcrypto",
+      "commit": "dc07e3058c6904eef965394493b6ea99aa2adefc",
+      "version": ""
+    },
+    "jester": {
+      "dir": "$workspace/jester",
+      "url": "https://github.com/dom96/jester",
+      "commit": "2d2b38546e78038982028dd8b082453bdf46bdae",
+      "version": ""
+    },
+    "lowdb": {
+      "dir": "$workspace/lowdb",
+      "url": "https://github.com/PhilippMDoerner/lowdb",
+      "commit": "937ebb84bf08d24b97b2a9b8c86c37cd39fab520",
+      "version": ""
+    },
+    "unicodedb": {
+      "dir": "$workspace/unicodedb",
+      "url": "https://github.com/nitely/nim-unicodedb",
+      "commit": "66f2458710dc641dd4640368f9483c8a0ec70561",
+      "version": ""
+    }
+  },
   "nimcfg": [
     "############# begin Atlas config section ##########",
     "--noNimblePath",
-    "--path:\"nitter/src\"",
-    "--path:\"jester\"",
-    "--path:\"karax\"",
-    "--path:\"sass/src\"",
-    "--path:\"nimcrypto\"",
-    "--path:\"nim-markdown/src\"",
-    "--path:\"packedjson\"",
-    "--path:\"supersnappy/src\"",
-    "--path:\"redpool/src\"",
-    "--path:\"redis/src\"",
-    "--path:\"zippy/src\"",
-    "--path:\"flatty/src\"",
-    "--path:\"jsony/src\"",
-    "--path:\"oauth/src\"",
-    "--path:\"ws/src\"",
-    "--path:\"dotenv.nim/src\"",
-    "--path:\"sha1\"",
+    "--path:\"deps/nitter.zedeus.github.com/src\"",
+    "--path:\"deps/norm/src\"",
+    "--path:\"deps/regex/src\"",
+    "--path:\"deps/nimquery\"",
+    "--path:\"deps/nimcrypto\"",
+    "--path:\"deps/jester\"",
+    "--path:\"deps/lowdb/src\"",
+    "--path:\"deps/unicodedb/src\"",
     "############# end Atlas config section   ##########",
     ""
   ],
@@ -29,7 +75,7 @@
   },
   "hostOS": "macosx",
   "hostCPU": "arm64",
-  "nimVersion": "2.0.14 bf4de6a394e040d9810cba8c69fb2829ff04dcc6",
+  "nimVersion": "2.2.2",
   "gccVersion": "",
   "clangVersion": ""
 }
