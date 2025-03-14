@@ -273,7 +273,7 @@ proc solve*(graph: var DepGraph; form: Form) =
     pkg.active = false
 
   let maxVar = form.idgen
-  if context().dumpGraphs:
+  if DumpGraphs in context().flags:
     dumpJson(graph, "graph-solve-input.json")
 
   var solution = createSolution(maxVar)
@@ -299,15 +299,6 @@ proc solve*(graph: var DepGraph; form: Form) =
         assert not mapInfo.release.isNil, "too bad: " & $pkg.url
         pkg.activeVersion = mapInfo.version
         debug pkg.url.projectName, "package satisfiable"
-
-    var moduleNames: Table[string, HashSet[Package]]
-    for pkg in values(graph.pkgs):
-      if pkg.active:
-        if not moduleNames.hasKey(pkg.projectName):
-          moduleNames[pkg.url.shortName()] = initHashSet[Package]()
-        moduleNames[pkg.url.shortName()].incl(pkg)
-    moduleNames = moduleNames.pairs().toSeq().filterIt(it[1].len > 1).toTable()
-    warn "atlas:resolved", "duplicate module names:", $moduleNames
 
     if ListVersions in context().flags and ListVersionsOff notin context().flags:
       var inactives: seq[string]
@@ -356,6 +347,23 @@ proc solve*(graph: var DepGraph; form: Form) =
       for (pkg, str) in selections:
         notice "atlas:resolved", str
       notice "atlas:resolved", "end of selection"
+
+    # Check for duplicate module names
+    var moduleNames: Table[string, HashSet[Package]]
+    for pkg in values(graph.pkgs):
+      if pkg.active:
+        if not moduleNames.hasKey(pkg.projectName):
+          moduleNames[pkg.url.shortName()] = initHashSet[Package]()
+        moduleNames[pkg.url.shortName()].incl(pkg)
+        
+    moduleNames = moduleNames.pairs().toSeq().filterIt(it[1].len > 1).toTable()
+    for name, pkgs in moduleNames:
+      error "atlas:resolved", "duplicate module name:", name, "with pkgs:", pkgs.mapIt(it.url.projectName).join(", ")
+      notice "atlas:resolved", "to resolve add an override to the current workspace to select either: ", pkgs.mapIt($it.url).join(", ")
+    
+    if moduleNames.len > 0:
+      fatal "Invalid solution requiring duplicate module names found: " & moduleNames.keys().toSeq().join(", ")
+
   else:
     var notFoundCount = 0
     for pkg in values(graph.pkgs):
@@ -373,7 +381,7 @@ proc solve*(graph: var DepGraph; form: Form) =
         for (ver, rel) in validVersions(pkg):
           if solution.isTrue(ver.vid):
             error pkg.url.projectName, string(ver.version()) & " required"
-  if context().dumpGraphs:
+  if DumpGraphs in context().flags:
     dumpJson(graph, "graph-solved.json")
 
 proc loadWorkspace*(path: Path, nc: var NimbleContext, mode: TraversalMode, onClone: PackageAction): DepGraph =

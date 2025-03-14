@@ -92,7 +92,7 @@ proc maybeUrlProxy*(url: Uri): Uri =
     result.anchor = url.anchor
 
   if url.scheme == "git":
-    if context().forceGitToHttps:
+    if ForceGitToHttps in context().flags:
       result.scheme = "https"
     else:
       result.scheme = ""
@@ -110,7 +110,7 @@ proc clone*(url: Uri, dest: Path; retries = 5): (CloneStatus, string) =
 
   # retry multiple times to avoid annoying github timeouts:
   let extraArgs =
-    if $context().proxy != "" and context().dumbProxy: ""
+    if $context().proxy != "" and DumbProxy in context().flags: ""
     elif ShallowClones in context().flags: "--depth=1"
     else: ""
 
@@ -275,7 +275,7 @@ proc checkoutGitCommitFull*(path: Path; commit: CommitHash,
     smExtraArgs.add "--depth=1"
 
     let extraArgs =
-      if context().dumbProxy: ""
+      if DumbProxy in context().flags: ""
       elif ShallowClones notin context().flags: "--update-shallow"
       else: ""
     let (_, status) = exec(GitFetch, path, [extraArgs, "--tags", "origin", commit.h], errorReportLevel)
@@ -379,7 +379,7 @@ proc isOutdated*(path: Path): bool =
 
   # TODO: does --update-shallow fetch tags on a shallow repo?
   let extraArgs =
-    if context().dumbProxy: ""
+    if DumbProxy in context().flags: ""
     else: "--update-shallow"
   let (outp, status) = exec(GitFetch, path, [extraArgs, "--tags"])
 

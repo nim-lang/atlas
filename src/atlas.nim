@@ -337,7 +337,7 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
       of "proxy":
         context().proxy = val.parseUri()
       of "dumbproxy":
-        context().dumbProxy = true
+        context().flags.incl DumbProxy
       of "resolver":
         case val.normalize
         of "minver": context().defaultAlgo = MinVer

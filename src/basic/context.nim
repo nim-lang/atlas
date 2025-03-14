@@ -42,12 +42,14 @@ type
     IgnoreGitRemoteUrls
     IgnoreErrors
     DumpFormular
+    DumpGraphs
+    DumbProxy
+    ForceGitToHttps
 
   AtlasContext* = object
     workspace*: Path = Path"."
     depsDir*: Path = Path"deps"
     flags*: set[Flag]
-    dumpGraphs*: bool = true # TODO: debugging, plumb cli option later
     nameOverrides*: Patterns
     urlOverrides*: Patterns
     defaultAlgo*: ResolutionAlgorithm = SemVer
@@ -55,9 +57,6 @@ type
     overridesFile*: Path
     pluginsFile*: Path
     proxy*: Uri
-    ignoreErrors*: bool = false
-    dumbProxy*: bool = false
-    forceGitToHttps*: bool = false
     includeTagsAndNimbleCommits*: bool = false # include nimble commits and tags in the solver
     nimbleCommitsMax*: bool = false # takes the newest commit for each version
 
