@@ -397,15 +397,18 @@ proc runBuildSteps*(graph: DepGraph) =
 
 proc activateGraph*(graph: DepGraph): seq[CfgPath] =
   for pkg in allActiveNodes(graph):
+    if pkg.isRoot: continue
     if not pkg.activeVersion.commit().isEmpty():
       if pkg.ondisk.string.len == 0:
         error pkg.url.projectName, "Missing ondisk location for:", $(pkg.url)
       else:
+        info pkg.url.projectName, "checkout git commit:", $pkg.activeVersion.commit(), "at:", $pkg.ondisk.relativePath(workspace())
         let res = checkoutGitCommit(pkg.ondisk, pkg.activeVersion.commit())
 
   if NoExec notin context().flags:
     runBuildSteps(graph)
 
   for pkg in allActiveNodes(graph):
+    if pkg.isRoot: continue
     debug pkg.url.projectName, "adding CfgPath:", $(toDestDir(graph, pkg) / getCfgPath(graph, pkg).Path)
     result.add CfgPath(toDestDir(graph, pkg) / getCfgPath(graph, pkg).Path)
