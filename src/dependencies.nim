@@ -228,7 +228,7 @@ proc traverseDependency*(
   var uniqueReleases: Table[NimbleRelease, NimbleRelease]
   for (ver, rel) in versions:
     if rel notin uniqueReleases:
-      trace pkg.url.projectName, "found unique release requirements at:", $ver.vtag
+      # trace pkg.url.projectName, "found unique release requirements at:", $ver.vtag
       uniqueReleases[rel] = rel
     else:
       trace pkg.url.projectName, "found duplicate release requirements at:", $ver.vtag
@@ -295,7 +295,7 @@ proc expand*(path: Path, nc: var NimbleContext; mode: TraversalMode, onClone: Pa
   while processing:
     processing = false
     let pkgUrls = nc.packageToDependency.keys().toSeq()
-    info "Expand", "Expanding packages for:", $root.projectName
+    info "atlas:expand", "Expanding packages for:", $root.projectName
     for pkgUrl in pkgUrls:
       var pkg = nc.packageToDependency[pkgUrl]
       case pkg.state:

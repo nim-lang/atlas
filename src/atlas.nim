@@ -41,15 +41,10 @@ Usage:
   atlas [options] [command] [arguments]
 Command:
   init                  initializes the current directory as a workspace
-    --deps=DIR          use DIR as the directory for dependencies
-                        (default: store directly in the workspace)
-
   use <url|pkgname>     clone a package and all of its dependencies and make
                         it importable for the current project
-  clone <url|pkgname>   clone a package and all of its dependencies
   update <url|pkgname>  update a package and all of its dependencies
-  install <proj.nimble> use the .nimble file to setup the project's dependencies
-  new <project>         init a new project directory
+  install               use the nimble file to setup the project's dependencies
   search <keyA> [keyB ...]
                         search for package that contains the given keywords
   extract <file.nimble> extract the requirements and custom commands from
