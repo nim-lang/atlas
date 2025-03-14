@@ -38,7 +38,7 @@ suite "graph solve":
     context().nameOverrides = Patterns()
     context().urlOverrides = Patterns()
     context().proxy = parseUri "http://localhost:4242"
-    context().dumbProxy = true
+    context().flags.incl DumbProxy
     context().depsDir = Path "deps"
     setAtlasErrorsColor(fgMagenta)
 
@@ -48,7 +48,7 @@ suite "graph solve":
       withDir "tests/ws_semver_unit":
         removeDir("deps")
         workspace() = paths.getCurrentDir()
-        context().flags = {KeepWorkspace, ListVersions, FullClones}
+        context().flags = {KeepWorkspace, ListVersions}
         context().defaultAlgo = SemVer
 
         var nc = createNimbleContext()
@@ -67,7 +67,7 @@ suite "graph solve":
         echo "\tgraph:\n", graph.toJson(ToJsonOptions(enumMode: joptEnumString))
 
         let form = graph.toFormular(SemVer)
-        context().dumpGraphs = true
+        context().flags.incl DumpGraphs
         var sol: Solution
         solve(graph, form)
 
@@ -84,7 +84,7 @@ suite "graph solve":
         check $graph.pkgs[nc.createUrl("proj_d")].activeVersion == "1.0.0@0dec9c97"
 
         let formMinVer = graph.toFormular(MinVer)
-        context().dumpGraphs = true
+        context().flags.incl DumpGraphs
         var solMinVer: Solution
         solve(graph, formMinVer)
 
@@ -111,7 +111,7 @@ suite "graph solve":
       withDir "tests/ws_semver_unit":
         removeDir("deps")
         workspace() = paths.getCurrentDir()
-        context().flags = {KeepWorkspace, ListVersions, FullClones}
+        context().flags = {KeepWorkspace, ListVersions}
         context().defaultAlgo = SemVer
         discard context().nameOverrides.addPattern("proj$+", "https://example.com/buildGraph/proj$#")
 
@@ -128,7 +128,7 @@ suite "graph solve":
         checkpoint "\tgraph:\n" & $graph.toJson(ToJsonOptions(enumMode: joptEnumString))
 
         let form = graph.toFormular(SemVer)
-        context().dumpGraphs = true
+        context().flags.incl DumpGraphs
         var sol: Solution
         solve(graph, form)
 
@@ -145,7 +145,7 @@ suite "graph solve":
         check $graph.pkgs[nc.createUrl("proj_d")].activeVersion == "1.0.0@0dec9c97"
 
         let formMinVer = graph.toFormular(MinVer)
-        context().dumpGraphs = true
+        context().flags.incl DumpGraphs
         var solMinVer: Solution
         solve(graph, formMinVer)
 
@@ -173,7 +173,7 @@ suite "test expand with no git tags":
     context().nameOverrides = Patterns()
     context().urlOverrides = Patterns()
     context().proxy = parseUri "http://localhost:4242"
-    context().dumbProxy = true
+    context().flags.incl DumbProxy
     context().depsDir = Path "deps"
     setAtlasErrorsColor(fgMagenta)
 
@@ -182,7 +182,7 @@ suite "test expand with no git tags":
       withDir "tests/ws_semver_unit":
         removeDir("deps")
         workspace() = paths.getCurrentDir()
-        context().flags = {KeepWorkspace, ListVersions, FullClones}
+        context().flags = {KeepWorkspace, ListVersions}
         context().defaultAlgo = SemVer
 
         var nc = createNimbleContext()
@@ -198,7 +198,7 @@ suite "test expand with no git tags":
         checkpoint "\tgraph:\n" & $graph.toJson(ToJsonOptions(enumMode: joptEnumString))
 
         let form = graph.toFormular(SemVer)
-        context().dumpGraphs = true
+        context().flags.incl DumpGraphs
         var sol: Solution
         solve(graph, form)
 
@@ -215,7 +215,7 @@ suite "test expand with no git tags":
         check $graph.pkgs[nc.createUrl("proj_d")].activeVersion.version == "1.0.0"
 
         let formMinVer = graph.toFormular(MinVer)
-        context().dumpGraphs = true
+        context().flags.incl DumpGraphs
         var solMinVer: Solution
         solve(graph, formMinVer)
 
@@ -242,7 +242,7 @@ suite "test expand with no git tags":
       withDir "tests/ws_testtraverse_explicit":
         removeDir("deps")
         workspace() = paths.getCurrentDir()
-        context().flags = {KeepWorkspace, ListVersions, FullClones}
+        context().flags = {KeepWorkspace, ListVersions}
         context().defaultAlgo = SemVer
 
         var nc = createNimbleContext()
@@ -262,7 +262,7 @@ suite "test expand with no git tags":
           echo "\tversions: ", pkgUrl, " commits: ", commits.toSeq().mapIt($it).join("; ")
 
         let form = graph.toFormular(SemVer)
-        context().dumpGraphs = true
+        context().flags.incl DumpGraphs
         var sol: Solution
         solve(graph, form)
 
