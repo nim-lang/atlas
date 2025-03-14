@@ -63,15 +63,18 @@ proc putImpl(nc: var NimbleContext, name: string, url: PkgUrl, isFromPath = fals
     nc.packageExtras[name] = url
     result = true
   else:
-    let existingUrl = nc.packageExtras[name]
+    let existingPkg = nc.packageExtras[name]
+    let existingUrl = existingPkg.url
+    let url = url.url
     if existingUrl != url:
-      # if existingUrl.scheme != url.scheme: # TODO check host and
-      #   discard
-
-      # TODO: need to handle this better, the user needs to choose which url to use
-      #       if the solver can't resolve the conflict
-      error "atlas:nimblecontext", "name already exists in packageExtras:", $name, "isFromPath:", $isFromPath, "with different url:", $nc.packageExtras[name], "and url:", $url
-      result = false
+      if existingUrl.scheme != url.scheme and existingUrl.port == url.port and
+          existingUrl.path == url.path and existingUrl.hostname == url.hostname:
+        info "atlas:nimblecontext", "different url schemes for the same package:", $name, "existing:", $existingUrl, "new:", $url
+      else:
+        # TODO: need to handle this better, the user needs to choose which url to use
+        #       if the solver can't resolve the conflict
+        error "atlas:nimblecontext", "name already exists in packageExtras:", $name, "isFromPath:", $isFromPath, "with different url:", $nc.packageExtras[name], "and url:", $url
+        result = false
 
 proc put*(nc: var NimbleContext, name: string, url: PkgUrl): bool {.discardable.} =
   nc.putImpl(name, url, false)
