@@ -338,6 +338,10 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
         context().proxy = val.parseUri()
       of "dumbproxy":
         context().flags.incl DumbProxy
+      of "dumpgraphs":
+        context().flags.incl DumpGraphs
+      of "forcegittophps":
+        context().flags.incl ForceGitToHttps
       of "resolver":
         case val.normalize
         of "minver": context().defaultAlgo = MinVer
