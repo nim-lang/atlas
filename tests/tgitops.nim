@@ -14,7 +14,7 @@ suite "Git Operations Tests":
     # Create a fresh test directory
     removeDir(testDir)
     createDir(testDir)
-    c = AtlasContext(dumbProxy: false)
+    c = AtlasContext(flags: {DumbProxy})
     reporter = Reporter()
     
   teardown:
@@ -39,7 +39,7 @@ suite "Git Operations Tests":
 
   test "Git command execution":
     # Initialize test repo
-    withDir $testDir:
+    withDir testDir:
       discard execCmd("git init")
       check(isGitDir(Path "."))
       
@@ -49,7 +49,7 @@ suite "Git Operations Tests":
       check(diffOutput.len == 0)
 
   test "Version to commit resolution":
-    withDir $testDir:
+    withDir testDir:
       discard execCmd("git init")
       # Create and tag a test commit
       writeFile("test.txt", "test content")
@@ -63,7 +63,7 @@ suite "Git Operations Tests":
 
   test "Git clone functionality":
     let testUrl = parseUri "http://localhost:4242/buildGraph/proj_a.git"
-    let res = clone(testUrl, testDir, fullClones=true)
+    let res = clone(testUrl, testDir)
     # Note: This will fail if gitHttpServer isn't running
     check(res[0] == Ok)  # Expected to fail since URL is fake
 
@@ -96,7 +96,7 @@ suite "Git Operations Tests":
     check(not sameVersionAs("v10.0.0", "1.0.0"))
 
   test "incrementLastTag behavior":
-    withDir $testDir:
+    withDir testDir:
       discard execCmd("git init")
       # Create initial commit and tag
       writeFile("test.txt", "initial content")
@@ -112,7 +112,7 @@ suite "Git Operations Tests":
       check(incrementLastTag(Path ".", 2) == "v1.0.1")
 
   test "incrementLastTag behavior no tags":
-    withDir $testDir:
+    withDir testDir:
       # Test with no tags
       discard execCmd("git init ")
       writeFile("test.txt", "initial content")
@@ -121,7 +121,7 @@ suite "Git Operations Tests":
       check(incrementLastTag(Path ".", 0) == "v0.0.1")
 
   test "isOutdated detection":
-    withDir $testDir:
+    withDir testDir:
       discard execCmd("git init")
       # Create initial commit and tag
       writeFile("test.txt", "initial content")
@@ -141,7 +141,7 @@ suite "Git Operations Tests":
       check(not outdated)  # Expected to be false in test environment
 
   test "getRemoteUrl functionality":
-    withDir $testDir:
+    withDir testDir:
       discard execCmd("git init")
       let testUrl = "https://github.com/test/repo.git"
       discard execCmd("git remote add origin " & testUrl)
@@ -155,7 +155,7 @@ suite "Git Operations Tests":
       # check(dirUrl == testUrl)
 
   test "checkGitDiffStatus behavior":
-    withDir $testDir:
+    withDir testDir:
       discard execCmd("git init")
       
       # Test clean state
@@ -176,7 +176,7 @@ suite "Git Operations Tests":
       check(committedStatus == "")
 
   test "gitDescribeRefTag functionality":
-    withDir $testDir:
+    withDir testDir:
       discard execCmd("git init")
       
       # Create and tag a commit
@@ -199,7 +199,7 @@ suite "Git Operations Tests":
       check(untaggedDescription.startsWith("v1.0.0-1-"))
 
   test "collectTaggedVersions functionality":
-    withDir $testDir:
+    withDir testDir:
       discard execCmd("git init")
      
       # Create initial commit and tag
