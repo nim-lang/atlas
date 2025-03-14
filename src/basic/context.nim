@@ -70,6 +70,9 @@ proc context*(): var AtlasContext =
 proc workspace*(): var Path =
   atlasContext.workspace
 
+proc depsDir*(): Path =
+  result = atlasContext.workspace / atlasContext.depsDir
+
 proc getWorkspaceConfig*(workspace = workspace()): Path =
   ## prefer workspace atlas.config if found
   ## otherwise default to one in deps/

@@ -200,11 +200,13 @@ proc autoWorkspace(currentDir: Path): bool =
       break
     cwd = cwd.parentDir()
   workspace() = cwd
+  info "atlas:workspace", "Detected workspace directory:", $workspace()
 
   if workspace().len() > 0:
-    result = workspace().fileExists
+    result = workspace().dirExists()
 
 proc createWorkspace() =
+  createDir(depsDir())
   if not fileExists(getWorkspaceConfig()):
     writeDefaultConfigFile()
     info workspace(), "created atlas.workspace"
@@ -296,8 +298,8 @@ proc parseAtlasOptions(action: var string, args: var seq[string]) =
           createWorkspace()
         elif val.len > 0:
           workspace() = Path val
-          createDir(val)
-          createWorkspace()
+          # createDir(val)
+          # createWorkspace()
         else:
           writeHelp()
       of "deps":
@@ -346,9 +348,10 @@ proc parseAtlasOptions(action: var string, args: var seq[string]) =
       else: writeHelp()
     of cmdEnd: assert false, "cannot happen"
 
-  if workspace().len > 0:
+  if workspace().string notin ["", ".", ".."]:
     if not dirExists(workspace()):
-      fatal "Workspace directory '" & $workspace() & "' not found."
+      fatal "atlas:workspace", "Workspace directory '" & $workspace() & "' not found."
+    info "atlas:workspace", "Using workspace directory:", $workspace()
     readConfig()
   elif action notin ["init", "tag"]:
     if detectWorkspace():

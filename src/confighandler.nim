@@ -67,7 +67,7 @@ proc readConfig*() =
   let configFile = getWorkspaceConfig()
   var f = newFileStream($configFile, fmRead)
   if f == nil:
-    warn configFile, "could not read workspace config:", $configFile
+    warn "atlas:config", "could not read workspace config:", $configFile
     return
 
   let j = parseJson(f, $configFile)
