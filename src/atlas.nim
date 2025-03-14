@@ -313,7 +313,7 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
       of "autoinit": autoinit = true
       of "ignoreerrors": context().flags.incl IgnoreErrors
       of "showgraph": context().flags.incl ShowGraph
-      of "ignoreurls": context().flags.incl IgnoreUrls
+      of "ignoreurls": context().flags.incl IgnoreGitRemoteUrls
       of "keepworkspace": context().flags.incl KeepWorkspace
       of "keep": context().flags.incl Keep
       of "autoenv": context().flags.incl AutoEnv

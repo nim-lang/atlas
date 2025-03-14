@@ -169,7 +169,7 @@ proc traverseDependency*(
     for version in explicitVersions:
       info pkg.url.projectName, "check explicit version:", repr version
       if version.commit.isEmpty():
-        error pkg.url.projectName, "explicit version has empty commit:", $version
+        warn pkg.url.projectName, "explicit version has empty commit:", $version
       elif not uniqueCommits.containsOrIncl(version.commit):
         info pkg.url.projectName, "add explicit version:", $version
         discard versions.addRelease(nc, pkg, version)
