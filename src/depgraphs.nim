@@ -307,7 +307,7 @@ proc solve*(graph: var DepGraph; form: Form) =
           moduleNames[pkg.url.shortName()] = initHashSet[Package]()
         moduleNames[pkg.url.shortName()].incl(pkg)
     moduleNames = moduleNames.pairs().toSeq().filterIt(it[1].len > 1).toTable()
-    info "atlas:resolved", "duplicate module names:", $moduleNames
+    warn "atlas:resolved", "duplicate module names:", $moduleNames
 
     if ListVersions in context().flags and ListVersionsOff notin context().flags:
       var inactives: seq[string]
