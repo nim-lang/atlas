@@ -52,7 +52,7 @@ type
     flags*: set[Flag]
     nameOverrides*: Patterns
     urlOverrides*: Patterns
-    pkgOverrides*: Table[string, PkgUrl]
+    pkgOverrides*: Table[string, Uri]
     defaultAlgo*: ResolutionAlgorithm = SemVer
     plugins*: PluginInfo
     overridesFile*: Path

@@ -300,6 +300,35 @@ proc solve*(graph: var DepGraph; form: Form) =
         pkg.activeVersion = mapInfo.version
         debug pkg.url.projectName, "package satisfiable"
 
+    # Check for duplicate module names
+    var moduleNames: Table[string, HashSet[Package]]
+    for pkg in values(graph.pkgs):
+      if pkg.active:
+        moduleNames.mgetOrPut(pkg.url.shortName()).incl(pkg)
+    moduleNames = moduleNames.pairs().toSeq().filterIt(it[1].len > 1).toTable()
+
+    var unhandledDuplicates: seq[string]
+    for name, dupePkgs in moduleNames:
+      if not context().pkgOverrides.hasKey(name):
+        error "atlas:resolved", "duplicate module name:", name, "with pkgs:", dupePkgs.mapIt(it.url.projectName).join(", ")
+        notice "atlas:resolved", "please add an entry to `pkgOverrides` to the current workspace config to select one of: "
+        for pkg in dupePkgs:
+          notice "...", "   \"$1\": \"$2\", " % [$pkg.url.shortName(), $pkg.url]
+      
+        if moduleNames.len > 1:
+          unhandledDuplicates.add name
+          error "Invalid solution requiring duplicate module names found: " & moduleNames.keys().toSeq().join(", ")
+      else:
+        let pkgUrl = context().pkgOverrides[name].toPkgUriRaw()
+        notice "atlas:resolved", "overriding package:", name, "with:", $pkgUrl
+        for pkg in dupePkgs:
+          if pkg.url != pkgUrl:
+            notice "atlas:resolved", "deactivating duplicate package:", pkg.url.projectName
+            pkg.active = false
+    
+    if unhandledDuplicates.len > 0:
+      fatal "unhandled duplicate module names found: " & unhandledDuplicates.join(", ")
+
     if ListVersions in context().flags and ListVersionsOff notin context().flags:
       var inactives: seq[string]
       for pkg in values(graph.pkgs):
@@ -347,22 +376,6 @@ proc solve*(graph: var DepGraph; form: Form) =
       for (pkg, str) in selections:
         notice "atlas:resolved", str
       notice "atlas:resolved", "end of selection"
-
-    # Check for duplicate module names
-    var moduleNames: Table[string, HashSet[Package]]
-    for pkg in values(graph.pkgs):
-      if pkg.active:
-        moduleNames.mgetOrPut(pkg.url.shortName()).incl(pkg)
-    moduleNames = moduleNames.pairs().toSeq().filterIt(it[1].len > 1).toTable()
-
-    for name, pkgs in moduleNames:
-      error "atlas:resolved", "duplicate module name:", name, "with pkgs:", pkgs.mapIt(it.url.projectName).join(", ")
-      notice "atlas:resolved", "please add an entry to `nameOverrides` to the current workspace config to select one of: "
-      for pkg in pkgs:
-        notice "...", "   \"$1\": \"$2\", " % [$pkg.url.shortName(), $pkg.url]
-    
-    if moduleNames.len > 0:
-      fatal "Invalid solution requiring duplicate module names found: " & moduleNames.keys().toSeq().join(", ")
 
   else:
     var notFoundCount = 0

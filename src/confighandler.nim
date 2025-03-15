@@ -8,7 +8,7 @@
 
 ## Configuration handling.
 
-import std / [strutils, os, streams, json, tables, jsonutils]
+import std / [strutils, os, streams, json, tables, jsonutils, uri, sequtils]
 import basic/[versions, context, reporters, compiledpatterns, parse_requires]
 
 proc readPluginsDir(dir: Path) =
@@ -63,6 +63,9 @@ proc readConfig*() =
       if err.len > 0:
         error configFile, "invalid URL override pattern: " & err
 
+    # Handle package overrides
+    for key, val in m.pkgOverrides:
+      context().pkgOverrides[key] = parseUri(val)
     if m.resolver.len > 0:
       try:
         context().defaultAlgo = parseEnum[ResolutionAlgorithm](m.resolver)
@@ -79,7 +82,7 @@ proc writeConfig*(graph: JsonNode) =
     deps: $context().depsDir,
     nameOverrides: context().nameOverrides.toTable(),
     urlOverrides: context().urlOverrides.toTable(),
-    pkgOverrides: context().pkgOverrides.toTable(),
+    pkgOverrides: context().pkgOverrides.pairs().toSeq().mapIt((it[0], $it[1])).toTable(),
     plugins: $context().pluginsFile,
     resolver: $context().defaultAlgo,
     graph: graph
