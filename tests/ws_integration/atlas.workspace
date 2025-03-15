@@ -1,6 +1,8 @@
 {
   "deps": "",
-  "overrides": "",
+  "pkgOverrides": {
+    "asynctools": "https://github.com/timotheecour/asynctools",
+  },
   "plugins": "",
   "resolver": "MaxVer",
   "graph": null
