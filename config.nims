@@ -36,12 +36,21 @@ task buildRelease, "Build release":
     else:
       exec "nim c -d:release -o:./atlas src/atlas.nim"
 
+task cleanTests, "Clean tests":
+  echo "Stashing any changes to tests"
+  exec "git stash -- tests"
+  echo "Removing tests"
+  rmDir("tests")
+  echo "Checking out tests for a clean slate"
+  exec "git checkout -- tests"
+
 task testReposSetup, "Setup atlas-tests from a cached zip":
   let version = "0.1.4"
   let repo = "https://github.com/nim-lang/atlas-tests/"
   let file = "atlas-tests.zip"
   let url = fmt"{repo}/releases/download/v{version}/{file}"
   if not dirExists("atlas-tests"):
+    cleanTestsTask()
     echo "Downloading Test Repos zip"
     exec(fmt"curl -L -o {file} {url}")
     echo "Unzipping Test Repos"
