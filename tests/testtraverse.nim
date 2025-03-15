@@ -247,6 +247,11 @@ suite "test expand with git tags":
       context().flags = {KeepWorkspace, ListVersions}
       context().defaultAlgo = SemVer
 
+      let projAexplicit = projAnimbles[2]
+      echo "projAnimbles: ", projAnimbles
+      echo "projAexplicit: ", projAexplicit
+      writeFile("ws_testtraverse_explicit.nimble", "requires \"proj_a#$1\"\n" % [$projAexplicit.commit.short()])
+
       let deps = setupGraph()
       var nc = createNimbleContext()
       nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a"))

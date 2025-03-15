@@ -133,7 +133,7 @@ template expectedVersionWithNoGitTagsMaxVer*() =
 
     let projAnimbles {.inject.} = dedent"""
     2a630f98c20f54b828f95e824e2a1b2da50fe687 1.1.0
-    26f1c9e97a4d3606b2ac4fec147a664f88cfecc9 1.0.0
+    62fca4fd4062087d937146fd5d8f9ab7e1e5c22b 1.0.0
     """.parseTaggedVersions(false)
     let projAtags {.inject.} = projAnimbles.filterIt(it.v.string != "")
 
@@ -145,7 +145,7 @@ template expectedVersionWithNoGitTagsMaxVer*() =
 
     let projCnimbles {.inject.} = dedent"""
     d2056e869dfcea4ed6a5fbf905e6e1922f0637c3 1.2.0
-    62fca4fd4062087d937146fd5d8f9ab7e1e5c22b 1.0.0
+    07d8c752b1810542f6e72a12eb2d26b81ee09041 1.0.0
     """.parseTaggedVersions(false)
     let projCtags {.inject.} = projCnimbles.filterIt(it.v.string != "")
 
