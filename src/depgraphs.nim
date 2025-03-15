@@ -325,6 +325,8 @@ proc solve*(graph: var DepGraph; form: Form) =
           if pkg.url != pkgUrl:
             notice "atlas:resolved", "deactivating duplicate package:", pkg.url.projectName
             pkg.active = false
+          else:
+            notice "atlas:resolved", "activating duplicate package:", pkg.url.projectName
     
     if unhandledDuplicates.len > 0:
       fatal "unhandled duplicate module names found: " & unhandledDuplicates.join(", ")
@@ -339,7 +341,7 @@ proc solve*(graph: var DepGraph; form: Form) =
 
       notice "atlas:resolved", "selected:"
       var selections: seq[(string, string)]
-      for pkg in values(graph.pkgs):
+      for pkg in allActiveNodes(graph):
         if not pkg.isRoot:
           var versions = pkg.versions.pairs().toSeq()
           versions.sort(sortVersionsAsc)
@@ -406,13 +408,7 @@ proc loadWorkspace*(path: Path, nc: var NimbleContext, mode: TraversalMode, onCl
 proc runBuildSteps*(graph: DepGraph) =
   ## execute build steps for the dependency graph
   ##
-  ## `countdown` suffices to give us some kind of topological sort:
-  ##
-  var revPkgs = graph.pkgs.values().toSeq()
-  revPkgs.reverse()
-
-  # for i in countdown(graph.pkgs.len-1, 0):
-  for pkg in revPkgs:
+  for pkg in toposorted(graph):
     if pkg.active:
       doAssert pkg != nil
       block:
