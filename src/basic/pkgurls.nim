@@ -75,12 +75,11 @@ proc toOriginalPath*(pkgUrl: PkgUrl): Path =
   else:
     raise newException(ValueError, "Invalid file path: " & $pkgUrl.url)
 
-proc toDirectoryPath*(pkgUrl: PkgUrl, ): Path =
+proc toDirectoryPath*(pkgUrl: PkgUrl): Path =
   if pkgUrl.url.scheme == "atlas":
     result = workspace()
   elif pkgUrl.url.scheme == "file":
-    # result = workspace() / Path(pkgUrl.url.path)
-    result = workspace() / context().depsDir / Path(pkgUrl.projectName())
+    result = workspace() / Path(pkgUrl.url.path)
   else:
     result = workspace() / context().depsDir / Path(pkgUrl.projectName())
   result = result.absolutePath
@@ -107,6 +106,10 @@ proc createUrlSkipPatterns*(raw: string, skipDirTest = false): PkgUrl =
           getRemoteUrl(Path(raw))
         else:
           ("file://" & raw)
+      when defined(windows):
+        if raw.startsWith("file://"):
+          raw.replace(":\\", "/")
+          raw.replace(DirSep, AltSep)
       let u = parseUri(raw)
       result = PkgUrl(qualifiedName: extractProjectName(u), u: u, hasShortName: true)
     else:
