@@ -250,6 +250,12 @@ suite "test expand with no git tags":
 
         expectedVersionWithGitTags()
 
+        let projAexplicit = projAnimbles[2]
+        echo "projAnimbles: ", projAnimbles
+        echo "projAexplicit: ", projAexplicit
+
+        writeFile("ws_testtraverse_explicit.nimble", "requires \"proj_a#$1\"\n" % [$projAexplicit.commit.short()])
+
         var nc = createNimbleContext()
         nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a"))
         nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b"))
