@@ -107,10 +107,10 @@ proc createUrlSkipPatterns*(raw: string, skipDirTest = false): PkgUrl =
         if isGitDir(raw):
           getRemoteUrl(Path(raw))
         else:
-          ("file://" & raw)
-      when defined(windows):
-        if raw.startsWith("file://"):
-          raw = raw.replace(AltSep, DirSep) # make it all windows style
+          when defined(windows):
+            ("file://" & raw).replace(AltSep, DirSep)
+          else:
+            ("file://" & raw)
       let u = parseUri(raw)
       result = PkgUrl(qualifiedName: extractProjectName(u), u: u, hasShortName: true)
     else:
@@ -135,7 +135,7 @@ proc createUrlSkipPatterns*(raw: string, skipDirTest = false): PkgUrl =
       # fix absolute paths
       var url = "file://" & ((workspace().string / (u.hostname & u.path)).absolutePath)
       when defined(windows):
-        url = url.replace(AltSep, DirSep)
+        url = url.replace(AltSep, DirSep).replace(":\\\\", ":/")
       u = parseUri(url)
       hasShortName = true
 
