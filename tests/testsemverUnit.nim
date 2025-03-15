@@ -51,7 +51,6 @@ suite "graph solve":
         context().defaultAlgo = SemVer
 
         expectedVersionWithGitTags()
-w
         var nc = createNimbleContext()
         nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a", true))
         nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b", true))
@@ -65,7 +64,7 @@ w
 
         var graph = dir.expand(nc, AllReleases, onClone=DoClone)
 
-        echo "\tgraph:\n", graph.toJson(ToJsonOptions(enumMode: joptEnumString))
+        checkpoint "\tgraph:\n" & $graph.toJson(ToJsonOptions(enumMode: joptEnumString))
 
         let form = graph.toFormular(SemVer)
         context().flags.incl DumpGraphs
@@ -79,10 +78,10 @@ w
         check graph.pkgs[nc.createUrl("proj_d")].active
 
         check $graph.root.activeVersion == "#head@-"
-        check $graph.pkgs[nc.createUrl("proj_a")].activeVersion == "1.1.0@fb3804df^"
-        check $graph.pkgs[nc.createUrl("proj_b")].activeVersion == "1.1.0@ee875bae^"
-        check $graph.pkgs[nc.createUrl("proj_c")].activeVersion == "1.2.0@9331e14f^"
-        check $graph.pkgs[nc.createUrl("proj_d")].activeVersion == "1.0.0@0dec9c97"
+        check $graph.pkgs[nc.createUrl("proj_a")].activeVersion == $findCommit("proj_a", "1.1.0")
+        check $graph.pkgs[nc.createUrl("proj_b")].activeVersion == $findCommit("proj_b", "1.1.0")
+        check $graph.pkgs[nc.createUrl("proj_c")].activeVersion == $findCommit("proj_c", "1.2.0")
+        check $graph.pkgs[nc.createUrl("proj_d")].activeVersion == $findCommit("proj_d", "1.0.0")
 
         let formMinVer = graph.toFormular(MinVer)
         context().flags.incl DumpGraphs
@@ -90,10 +89,10 @@ w
         solve(graph, formMinVer)
 
         check $graph.root.activeVersion == "#head@-"
-        check $graph.pkgs[nc.createUrl("proj_a")].activeVersion == "1.0.0@e479b438"
-        check $graph.pkgs[nc.createUrl("proj_b")].activeVersion == "1.0.0@af427510"
-        check $graph.pkgs[nc.createUrl("proj_c")].activeVersion == "1.2.0@9331e14f^"
-        check $graph.pkgs[nc.createUrl("proj_d")].activeVersion == "1.0.0@0dec9c97"
+        check $graph.pkgs[nc.createUrl("proj_a")].activeVersion == $findCommit("proj_a", "1.0.0")
+        check $graph.pkgs[nc.createUrl("proj_b")].activeVersion == $findCommit("proj_b", "1.0.0")
+        check $graph.pkgs[nc.createUrl("proj_c")].activeVersion == $findCommit("proj_c", "1.2.0")
+        check $graph.pkgs[nc.createUrl("proj_d")].activeVersion == $findCommit("proj_d", "1.0.0")
 
         check graph.validateDependencyGraph()
         let topo = graph.toposorted()
@@ -140,10 +139,10 @@ w
         check graph.pkgs[nc.createUrl("proj_d")].active
 
         check $graph.root.activeVersion == "#head@-"
-        check $graph.pkgs[nc.createUrl("proj_a")].activeVersion == "1.1.0@fb3804df^"
-        check $graph.pkgs[nc.createUrl("proj_b")].activeVersion == "1.1.0@ee875bae^"
-        check $graph.pkgs[nc.createUrl("proj_c")].activeVersion == "1.2.0@9331e14f^"
-        check $graph.pkgs[nc.createUrl("proj_d")].activeVersion == "1.0.0@0dec9c97"
+        check $graph.pkgs[nc.createUrl("proj_a")].activeVersion == $findCommit("proj_a", "1.1.0")
+        check $graph.pkgs[nc.createUrl("proj_b")].activeVersion == $findCommit("proj_b", "1.1.0")
+        check $graph.pkgs[nc.createUrl("proj_c")].activeVersion == $findCommit("proj_c", "1.2.0")
+        check $graph.pkgs[nc.createUrl("proj_d")].activeVersion == $findCommit("proj_d", "1.0.0")
 
         let formMinVer = graph.toFormular(MinVer)
         context().flags.incl DumpGraphs
@@ -152,10 +151,10 @@ w
 
 
         check $graph.root.activeVersion == "#head@-"
-        check $graph.pkgs[nc.createUrl("proj_a")].activeVersion == "1.0.0@e479b438"
-        check $graph.pkgs[nc.createUrl("proj_b")].activeVersion == "1.0.0@af427510"
-        check $graph.pkgs[nc.createUrl("proj_c")].activeVersion == "1.2.0@9331e14f^"
-        check $graph.pkgs[nc.createUrl("proj_d")].activeVersion == "1.0.0@0dec9c97"
+        check $graph.pkgs[nc.createUrl("proj_a")].activeVersion == $findCommit("proj_a", "1.0.0")
+        check $graph.pkgs[nc.createUrl("proj_b")].activeVersion == $findCommit("proj_b", "1.0.0")
+        check $graph.pkgs[nc.createUrl("proj_c")].activeVersion == $findCommit("proj_c", "1.2.0")
+        check $graph.pkgs[nc.createUrl("proj_d")].activeVersion == $findCommit("proj_d", "1.0.0")
 
         check graph.validateDependencyGraph()
         let topo = graph.toposorted()
