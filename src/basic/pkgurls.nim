@@ -110,7 +110,7 @@ proc createUrlSkipPatterns*(raw: string, skipDirTest = false): PkgUrl =
           ("file://" & raw)
       when defined(windows):
         if raw.startsWith("file://"):
-          raw.replace(AltSep, DirSep) # make it all windows style
+          raw = raw.replace(AltSep, DirSep) # make it all windows style
       let u = parseUri(raw)
       result = PkgUrl(qualifiedName: extractProjectName(u), u: u, hasShortName: true)
     else:
