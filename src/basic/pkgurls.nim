@@ -103,7 +103,7 @@ proc createUrlSkipPatterns*(raw: string, skipDirTest = false): PkgUrl =
 
   if not raw.isUrl():
     if dirExists(raw) or skipDirTest:
-      let raw =
+      var raw =
         if isGitDir(raw):
           getRemoteUrl(Path(raw))
         else:
