@@ -8,8 +8,7 @@ import dependencies
 import depgraphs
 import testerutils
 
-if not dirExists("tests/ws_testtraverse/buildGraph"):
-  ensureGitHttpServer()
+ensureGitHttpServer()
 
 proc setupGraph*(): seq[string] =
   let projs = @["proj_a", "proj_b", "proj_c", "proj_d"]

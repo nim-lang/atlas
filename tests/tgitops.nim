@@ -3,6 +3,9 @@ import std/[os, files, dirs, paths, osproc, strutils, uri]
 import basic/[reporters, osutils, versions, context]
 
 import basic/gitops
+import testerutils
+
+ensureGitHttpServer()
 
 suite "Git Operations Tests":
   var 

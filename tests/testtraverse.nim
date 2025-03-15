@@ -7,8 +7,8 @@ import basic/[deptypes, nimblecontext]
 import dependencies, depgraphs
 import testerutils
 
-if not dirExists("tests/ws_testtraverse/buildGraph"):
-  ensureGitHttpServer()
+# if not dirExists("tests/ws_testtraverse/buildGraph"):
+ensureGitHttpServer()
 
 # proc createGraph*(s: PkgUrl): DepGraph =
 #   result = DepGraph(nodes: @[], reqs: defaultReqs())

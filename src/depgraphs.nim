@@ -267,6 +267,86 @@ proc toPretty*(v: uint64): string =
   elif v == IsInvalid: "!"
   else: ""
 
+proc checkDuplicateModules(graph: var DepGraph) =
+  # Check for duplicate module names
+  var moduleNames: Table[string, HashSet[Package]]
+  for pkg in values(graph.pkgs):
+    if pkg.active:
+      moduleNames.mgetOrPut(pkg.url.shortName()).incl(pkg)
+  moduleNames = moduleNames.pairs().toSeq().filterIt(it[1].len > 1).toTable()
+
+  var unhandledDuplicates: seq[string]
+  for name, dupePkgs in moduleNames:
+    if not context().pkgOverrides.hasKey(name):
+      error "atlas:resolved", "duplicate module name:", name, "with pkgs:", dupePkgs.mapIt(it.url.projectName).join(", ")
+      notice "atlas:resolved", "please add an entry to `pkgOverrides` to the current workspace config to select one of: "
+      for pkg in dupePkgs:
+        notice "...", "   \"$1\": \"$2\", " % [$pkg.url.shortName(), $pkg.url]
+    
+      if moduleNames.len > 1:
+        unhandledDuplicates.add name
+        error "Invalid solution requiring duplicate module names found: " & moduleNames.keys().toSeq().join(", ")
+    else:
+      let pkgUrl = context().pkgOverrides[name].toPkgUriRaw()
+      notice "atlas:resolved", "overriding package:", name, "with:", $pkgUrl
+      for pkg in dupePkgs:
+        if pkg.url != pkgUrl:
+          notice "atlas:resolved", "deactivating duplicate package:", pkg.url.projectName
+          pkg.active = false
+        else:
+          notice "atlas:resolved", "activating duplicate package:", pkg.url.projectName
+  
+  if unhandledDuplicates.len > 0:
+    fatal "unhandled duplicate module names found: " & unhandledDuplicates.join(", ")
+
+proc printVersionSelections(graph: DepGraph, solution: Solution, form: Form) =
+  var inactives: seq[string]
+  for pkg in values(graph.pkgs):
+    if not pkg.isRoot and not pkg.active:
+      inactives.add pkg.url.projectName
+  if inactives.len > 0:
+    notice "atlas:resolved", "inactive packages:", inactives.join(", ")
+
+  notice "atlas:resolved", "selected:"
+  var selections: seq[(string, string)]
+  for pkg in allActiveNodes(graph):
+    if not pkg.isRoot:
+      var versions = pkg.versions.pairs().toSeq()
+      versions.sort(sortVersionsAsc)
+      var selectedIdx = -1
+      for idx, (ver, rel) in versions:
+        if ver.vid in form.mapping:
+          if solution.isTrue(ver.vid):
+            selectedIdx = idx
+            break
+      if selectedIdx == -1:
+        continue
+
+      let startIdx = max(0, selectedIdx - 1)
+      let endIdx = min(versions.len - 1, selectedIdx + 1)
+      var idxs = (startIdx .. endIdx).toSeq() 
+      idxs.addUnique(0)
+      idxs.addUnique(versions.len - 1)
+
+      for idx in idxs:
+        if idx < 0 or idx >= versions.len: continue
+        let (ver, rel) = versions[idx]
+        if ver.vid in form.mapping:
+          let item = form.mapping[ver.vid]
+          doAssert pkg.url == item.pkg.url
+          if solution.isTrue(ver.vid):
+            selections.add((item.pkg.url.projectName, "[x] " & toString item))
+          else:
+            selections.add((item.pkg.url.projectName, "[ ] " & toString item))
+        else:
+          selections.add((pkg.url.projectName, "[!] " & "(" & $rel.status & "; pkg: " & pkg.url.projectName & ", " & $ver & ")"))
+  var longestPkgName = 0
+  for (pkg, str) in selections:
+    longestPkgName = max(longestPkgName, pkg.len)
+  for (pkg, str) in selections:
+    notice "atlas:resolved", str
+  notice "atlas:resolved", "end of selection"
+
 proc solve*(graph: var DepGraph; form: Form) =
   for pkg in graph.pkgs.mvalues():
     pkg.activeVersion = nil
@@ -300,84 +380,10 @@ proc solve*(graph: var DepGraph; form: Form) =
         pkg.activeVersion = mapInfo.version
         debug pkg.url.projectName, "package satisfiable"
 
-    # Check for duplicate module names
-    var moduleNames: Table[string, HashSet[Package]]
-    for pkg in values(graph.pkgs):
-      if pkg.active:
-        moduleNames.mgetOrPut(pkg.url.shortName()).incl(pkg)
-    moduleNames = moduleNames.pairs().toSeq().filterIt(it[1].len > 1).toTable()
-
-    var unhandledDuplicates: seq[string]
-    for name, dupePkgs in moduleNames:
-      if not context().pkgOverrides.hasKey(name):
-        error "atlas:resolved", "duplicate module name:", name, "with pkgs:", dupePkgs.mapIt(it.url.projectName).join(", ")
-        notice "atlas:resolved", "please add an entry to `pkgOverrides` to the current workspace config to select one of: "
-        for pkg in dupePkgs:
-          notice "...", "   \"$1\": \"$2\", " % [$pkg.url.shortName(), $pkg.url]
-      
-        if moduleNames.len > 1:
-          unhandledDuplicates.add name
-          error "Invalid solution requiring duplicate module names found: " & moduleNames.keys().toSeq().join(", ")
-      else:
-        let pkgUrl = context().pkgOverrides[name].toPkgUriRaw()
-        notice "atlas:resolved", "overriding package:", name, "with:", $pkgUrl
-        for pkg in dupePkgs:
-          if pkg.url != pkgUrl:
-            notice "atlas:resolved", "deactivating duplicate package:", pkg.url.projectName
-            pkg.active = false
-          else:
-            notice "atlas:resolved", "activating duplicate package:", pkg.url.projectName
-    
-    if unhandledDuplicates.len > 0:
-      fatal "unhandled duplicate module names found: " & unhandledDuplicates.join(", ")
+    checkDuplicateModules(graph)
 
     if ListVersions in context().flags and ListVersionsOff notin context().flags:
-      var inactives: seq[string]
-      for pkg in values(graph.pkgs):
-        if not pkg.isRoot and not pkg.active:
-          inactives.add pkg.url.projectName
-      if inactives.len > 0:
-        notice "atlas:resolved", "inactive packages:", inactives.join(", ")
-
-      notice "atlas:resolved", "selected:"
-      var selections: seq[(string, string)]
-      for pkg in allActiveNodes(graph):
-        if not pkg.isRoot:
-          var versions = pkg.versions.pairs().toSeq()
-          versions.sort(sortVersionsAsc)
-          var selectedIdx = -1
-          for idx, (ver, rel) in versions:
-            if ver.vid in form.mapping:
-              if solution.isTrue(ver.vid):
-                selectedIdx = idx
-                break
-          if selectedIdx == -1:
-            continue
-
-          let startIdx = max(0, selectedIdx - 1)
-          let endIdx = min(versions.len - 1, selectedIdx + 1)
-          var idxs = (startIdx .. endIdx).toSeq() 
-          idxs.addUnique(0)
-          idxs.addUnique(versions.len - 1)
-
-          for idx in idxs:
-            if idx < 0 or idx >= versions.len: continue
-            let (ver, rel) = versions[idx]
-            if ver.vid in form.mapping:
-              let item = form.mapping[ver.vid]
-              doAssert pkg.url == item.pkg.url
-              if solution.isTrue(ver.vid):
-                selections.add((item.pkg.url.projectName, "[x] " & toString item))
-              else:
-                selections.add((item.pkg.url.projectName, "[ ] " & toString item))
-            else:
-              selections.add((pkg.url.projectName, "[!] " & "(" & $rel.status & "; pkg: " & pkg.url.projectName & ", " & $ver & ")"))
-      var longestPkgName = 0
-      for (pkg, str) in selections:
-        longestPkgName = max(longestPkgName, pkg.len)
-      for (pkg, str) in selections:
-        notice "atlas:resolved", str
-      notice "atlas:resolved", "end of selection"
+      printVersionSelections(graph, solution, form)
 
   else:
     var notFoundCount = 0
