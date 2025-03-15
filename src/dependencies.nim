@@ -300,7 +300,7 @@ proc expand*(path: Path, nc: var NimbleContext; mode: TraversalMode, onClone: Pa
       var pkg = nc.packageToDependency[pkgUrl]
       case pkg.state:
       of NotInitialized:
-        notice pkg.projectName, "Initializing package at:", pkg.ondisk.relativeToWorkspace()
+        notice pkg.projectName, "Initializing package"
         nc.loadDependency(pkg, onClone)
         trace pkg.projectName, "expanded pkg:", pkg.repr
         processing = true
