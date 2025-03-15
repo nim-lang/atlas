@@ -61,29 +61,32 @@ template expectedVersionWithGitTags*() =
     # These will change if atlas-tests is regnerated!
     # To update run and use commits not adding a proj_x.nim file
     #    curl http://localhost:4242/buildGraph/ws_generated-logs.txt
+
+    # note: the middle commit is where nimble file comment is changed but the version is the same
     let projAnimbles {.inject.} = dedent"""
-    1aeb8db7c1955af43d458ccbbf65358b0a1a4fab 1.1.0
-    e4c0ff66740bf604fc050b783c4ee61af05be36b
-    43cdb67b93331a45dd82628c4cc7f3876dc2af91 1.0.0
+    b62ef0ae3e5d888e28f432d87645ee945ced6f19 1.1.0
+    7f5302d5ea45c5c040d2939ef59449e801d59054
+    58ea44fb5cf98b7d333fd482dbccea9dd82050ff 1.0.0
     """.parseTaggedVersions(false)
     let projAtags {.inject.} = projAnimbles.filterIt(it.v.string != "")
 
+    # note: the middle commit is where nimble file comment is changed but the version is the same
     let projBnimbles {.inject.} = dedent"""
-    ecb875d651b205412c880bf6eadbdd9f2a8fc6a3 1.1.0
-    185ab2a8ecfca2944e51b38ea66339181e676072
-    c0c5fe710e7c274642f8e95a9d7c155ede95d57e 1.0.0
+    423774bee431e28321989eb50a9ca70650986088 1.1.0
+    fa97674802701849b4ec488aeb20019b5e843510
+    1f2221a7186c65d588e4cdf46dba7bb46a1c90a5 1.0.0
     """.parseTaggedVersions(false)
     let projBtags {.inject.} = projBnimbles.filterIt(it.v.string != "")
 
     let projCnimbles {.inject.} = dedent"""
-    41135038965b204de40ac7b90ef1fcae2acdbf08 1.2.0
-    76b20c1e28280f35c9a0122776d0d8b2b7c53d46
+    7538587e7e6d7c50f6533d0d226d5ae73b91d045 1.2.0
+    8ba310d7c4931fc2b8ffba8d2e4c52fd0646ad73
     """.parseTaggedVersions(false)
     let projCtags {.inject.} = projCnimbles.filterIt(it.v.string != "")
 
     let projDnimbles {.inject.} = dedent"""
-    a376d2152e86998cfb450e354e83697ccc9fc91f 2.0.0
-    7c64075acb954fffd2318cee66113ac2ddad39cf 1.0.0
+    db336b9131bde8adf4b58513b9589e89b6590893 2.0.0
+    1dcdfddd2aa193804286681f6ebd09e8b8b398fc 1.0.0
     """.parseTaggedVersions(false)
     let projDtags {.inject.} = projDnimbles.filterIt(it.v.string != "")
 
@@ -91,29 +94,32 @@ template expectedVersionWithNoGitTags*() =
     # These will change if atlas-tests is regnerated!
     # To update run and use commits not adding a proj_x.nim file
     #    curl http://localhost:4242/buildGraphNoGitTags/ws_generated-logs.txt
+
+    # note: the middle commit is where nimble file comment is changed but the version is the same
     let projAnimbles {.inject.} = dedent"""
-    2a475375e473d9dc3163da8c8e67b21da27bcfbe 1.1.0
-    af49e004c3de040598c3c174f73cc168255d9272
-    26b7db63c1432791812d32dd7b748e90c9bf1b5c 1.0.0
+    2a630f98c20f54b828f95e824e2a1b2da50fe687 1.1.0
+    62fca4fd4062087d937146fd5d8f9ab7e1e5c22b
+    4d2bb051f45a3a4612f9b461401982f48e6637d7 1.0.0
     """.parseTaggedVersions(false)
     let projAtags {.inject.} = projAnimbles.filterIt(it.v.string != "")
 
+    # note: the middle commit is where nimble file comment is changed but the version is the same
     let projBnimbles {.inject.} = dedent"""
-    ef7bcc3ec9c5921506390795642281aa69bc0267 1.1.0
-    fc92c20321d2c645821601bd0a97169cb8d8f3d4
-    4839843c715b1cb48e4a8d8b1ff1a3f2253f63e2 1.0.0
+    05b2f46caf8ae7322c855a482ad297c399b5d185 1.1.0
+    4cee9aed9623f4142a7b15bb96a1d582c8b87250
+    60c3613e16d54f170e991eed3f5b23dbf1c03cf4 1.0.0
     """.parseTaggedVersions(false)
     let projBtags {.inject.} = projBnimbles.filterIt(it.v.string != "")
 
     let projCnimbles {.inject.} = dedent"""
-    d4722de3342de848cf80afad309b0e1bc918a020 1.2.0
-    cfb20bf3770d4f527010637856f8d0f7b62f6f98 1.0.0
+    d2056e869dfcea4ed6a5fbf905e6e1922f0637c3 1.2.0
+    07d8c752b1810542f6e72a12eb2d26b81ee09041 1.0.0
     """.parseTaggedVersions(false)
     let projCtags {.inject.} = projCnimbles.filterIt(it.v.string != "")
 
     let projDnimbles {.inject.} = dedent"""
-    cd972f754f7ed0cbc89038375157cfc69e8504dd 2.0.0
-    cf22977a771494b0a6923142121121ed451c9bca 1.0.0
+    e60f0846cc949055dc5ed4b1e65ff8bd61d17fc3 2.0.0
+    4ec5f558465498358096dbc6d7dd3bbedf1ef2bc 1.0.0
     """.parseTaggedVersions(false)
     let projDtags {.inject.} = projDnimbles.filterIt(it.v.string != "")
 
@@ -121,28 +127,31 @@ template expectedVersionWithNoGitTagsMaxVer*() =
     # These will change if atlas-tests is regnerated!
     # To update run and use commits not adding a proj_x.nim file
     #    curl http://localhost:4242/buildGraphNoGitTags/ws_generated-logs.txt
-    # this variant uses the last commit where a given nimble version was found
+
+    # note: this variant uses the last commit where a given nimble version was found
+    #       when the nimble file was changed, the version was the same
+
     let projAnimbles {.inject.} = dedent"""
-    2a475375e473d9dc3163da8c8e67b21da27bcfbe 1.1.0
-    af49e004c3de040598c3c174f73cc168255d9272 1.0.0
+    2a630f98c20f54b828f95e824e2a1b2da50fe687 1.1.0
+    26f1c9e97a4d3606b2ac4fec147a664f88cfecc9 1.0.0
     """.parseTaggedVersions(false)
     let projAtags {.inject.} = projAnimbles.filterIt(it.v.string != "")
 
     let projBnimbles {.inject.} = dedent"""
-    ef7bcc3ec9c5921506390795642281aa69bc0267 1.1.0
-    fc92c20321d2c645821601bd0a97169cb8d8f3d4 1.0.0
+    05b2f46caf8ae7322c855a482ad297c399b5d185 1.1.0
+    4cee9aed9623f4142a7b15bb96a1d582c8b87250 1.0.0
     """.parseTaggedVersions(false)
     let projBtags {.inject.} = projBnimbles.filterIt(it.v.string != "")
 
     let projCnimbles {.inject.} = dedent"""
-    d4722de3342de848cf80afad309b0e1bc918a020 1.2.0
-    cfb20bf3770d4f527010637856f8d0f7b62f6f98 1.0.0
+    d2056e869dfcea4ed6a5fbf905e6e1922f0637c3 1.2.0
+    62fca4fd4062087d937146fd5d8f9ab7e1e5c22b 1.0.0
     """.parseTaggedVersions(false)
     let projCtags {.inject.} = projCnimbles.filterIt(it.v.string != "")
 
     let projDnimbles {.inject.} = dedent"""
-    cd972f754f7ed0cbc89038375157cfc69e8504dd 2.0.0
-    cf22977a771494b0a6923142121121ed451c9bca 1.0.0
+    e60f0846cc949055dc5ed4b1e65ff8bd61d17fc3 2.0.0
+    4ec5f558465498358096dbc6d7dd3bbedf1ef2bc 1.0.0
     """.parseTaggedVersions(false)
     let projDtags {.inject.} = projDnimbles.filterIt(it.v.string != "")
 
