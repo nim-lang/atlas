@@ -75,6 +75,35 @@ template expectedVersionWithNoGitTags*() =
     """.parseTaggedVersions(false)
     let projDtags {.inject.} = projDnimbles.filterIt(it.v.string != "")
 
+template expectedVersionWithNoGitTagsMaxVer*() =
+    # These will change if atlas-tests is regnerated!
+    # To update run and use commits not adding a proj_x.nim file
+    #    curl http://localhost:4242/buildGraphNoGitTags/ws_generated-logs.txt
+    # this variant uses the last commit where a given nimble version was found
+    let projAnimbles {.inject.} = dedent"""
+    2a475375e473d9dc3163da8c8e67b21da27bcfbe 1.1.0
+    af49e004c3de040598c3c174f73cc168255d9272 1.0.0
+    """.parseTaggedVersions(false)
+    let projAtags {.inject.} = projAnimbles.filterIt(it.v.string != "")
+
+    let projBnimbles {.inject.} = dedent"""
+    ef7bcc3ec9c5921506390795642281aa69bc0267 1.1.0
+    fc92c20321d2c645821601bd0a97169cb8d8f3d4 1.0.0
+    """.parseTaggedVersions(false)
+    let projBtags {.inject.} = projBnimbles.filterIt(it.v.string != "")
+
+    let projCnimbles {.inject.} = dedent"""
+    d4722de3342de848cf80afad309b0e1bc918a020 1.2.0
+    cfb20bf3770d4f527010637856f8d0f7b62f6f98 1.0.0
+    """.parseTaggedVersions(false)
+    let projCtags {.inject.} = projCnimbles.filterIt(it.v.string != "")
+
+    let projDnimbles {.inject.} = dedent"""
+    cd972f754f7ed0cbc89038375157cfc69e8504dd 2.0.0
+    cf22977a771494b0a6923142121121ed451c9bca 1.0.0
+    """.parseTaggedVersions(false)
+    let projDtags {.inject.} = projDnimbles.filterIt(it.v.string != "")
+
 
 proc setupGraph*(): seq[string] =
   let projs = @["proj_a", "proj_b", "proj_c", "proj_d"]
@@ -470,7 +499,7 @@ suite "test expand with no git tags and nimble commits max":
     context().depsDir = Path "deps"
     setAtlasErrorsColor(fgMagenta)
 
-    expectedVersionWithNoGitTags()
+    expectedVersionWithNoGitTagsMaxVer()
 
   test "expand no git tags and nimble commits max":
       # setAtlasVerbosity(Trace)
