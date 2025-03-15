@@ -1,4 +1,6 @@
 import std/[strformat, strutils]
+--path:"$nim"
+--path:"../sat/src/"
 
 task build, "Build local atlas":
   exec "nim c -d:debug -o:bin/atlas src/atlas.nim"
@@ -69,5 +71,10 @@ task test, "Runs all tests":
   unitTestsTask() # tester runs both
   testerTask()
 
---path:"$nim"
---path:"../sat/src/"
+task docs, "build Atlas's docs":
+  exec "nim rst2html --putenv:atlasversion=$1 doc/atlas.md" % version
+
+# begin Nimble config (version 2)
+when withDir(thisDir(), system.fileExists("nimble.paths")):
+  include "nimble.paths"
+# end Nimble config

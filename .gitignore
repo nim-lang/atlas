@@ -24,3 +24,5 @@ atlas-tests/
 atlas
 deps.png
 nim.cfg
+nimble.develop
+nimble.paths
