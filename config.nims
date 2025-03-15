@@ -37,7 +37,7 @@ task buildRelease, "Build release":
       exec "nim c -d:release -o:./atlas src/atlas.nim"
 
 task testReposSetup, "Setup atlas-tests from a cached zip":
-  let version = "0.1.3"
+  let version = "0.1.4"
   let repo = "https://github.com/nim-lang/atlas-tests/"
   let file = "atlas-tests.zip"
   let url = fmt"{repo}/releases/download/v{version}/{file}"
