@@ -45,7 +45,7 @@ task cleanTests, "Clean tests":
   exec "git checkout -- tests"
 
 task testReposSetup, "Setup atlas-tests from a cached zip":
-  let version = "0.1.4"
+  let version = "0.1.5"
   let repo = "https://github.com/nim-lang/atlas-tests/"
   let file = "atlas-tests.zip"
   let url = fmt"{repo}/releases/download/v{version}/{file}"
