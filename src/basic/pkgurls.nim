@@ -135,7 +135,7 @@ proc createUrlSkipPatterns*(raw: string, skipDirTest = false): PkgUrl =
       # fix absolute paths
       var url = "file://" & ((workspace().string / (u.hostname & u.path)).absolutePath)
       when defined(windows):
-        url = url.replace(AltSep, DirSep).replace(":\\\\", ":/")
+        url = url.replace(AltSep, DirSep).replace(":\\\\", "://")
       u = parseUri(url)
       hasShortName = true
 
