@@ -362,10 +362,10 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
     of cmdEnd: assert false, "cannot happen"
 
   if detectWorkspace():
-    info "atlas:workspace", "Using workspace directory:", $workspace()
+    notice "atlas:workspace", "Using workspace directory:", $workspace()
     readConfig()
   elif action notin ["init", "tag"]:
-    info "atlas:workspace", "Using workspace directory:", $workspace()
+    notice "atlas:workspace", "Using workspace directory:", $workspace()
     if autoinit:
       if autoWorkspace(paths.getCurrentDir()):
         createWorkspace()

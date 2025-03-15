@@ -74,6 +74,9 @@ proc workspace*(): var Path =
 proc depsDir*(): Path =
   result = atlasContext.workspace / atlasContext.depsDir
 
+proc relativeToWorkspace*(path: Path): string =
+  result = "$workspace/" & $path.relativePath(workspace())
+
 proc getWorkspaceConfig*(workspace = workspace()): Path =
   ## prefer workspace atlas.config if found
   ## otherwise default to one in deps/

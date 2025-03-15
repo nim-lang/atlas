@@ -300,12 +300,12 @@ proc expand*(path: Path, nc: var NimbleContext; mode: TraversalMode, onClone: Pa
       var pkg = nc.packageToDependency[pkgUrl]
       case pkg.state:
       of NotInitialized:
-        notice pkg.projectName, "Initializing package at:", $pkg.ondisk.relativePath(workspace())
+        notice pkg.projectName, "Initializing package at:", pkg.ondisk.relativeToWorkspace()
         nc.loadDependency(pkg, onClone)
         trace pkg.projectName, "expanded pkg:", pkg.repr
         processing = true
       of Found:
-        notice pkg.projectName, "Processing package at:", $pkg.ondisk.relativePath(workspace())
+        notice pkg.projectName, "Processing package at:", pkg.ondisk.relativeToWorkspace()
         # processing = true
         let mode = if pkg.isRoot: CurrentCommit else: mode
         nc.traverseDependency(pkg, mode, @[])

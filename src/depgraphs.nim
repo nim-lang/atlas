@@ -434,7 +434,7 @@ proc activateGraph*(graph: DepGraph): seq[CfgPath] =
       if pkg.ondisk.string.len == 0:
         error pkg.url.projectName, "Missing ondisk location for:", $(pkg.url)
       else:
-        info pkg.url.projectName, "checkout git commit:", $pkg.activeVersion.commit(), "at:", $pkg.ondisk.relativePath(workspace())
+        info pkg.url.projectName, "checkout git commit:", $pkg.activeVersion.commit(), "at:", pkg.ondisk.relativeToWorkspace()
         let res = checkoutGitCommit(pkg.ondisk, pkg.activeVersion.commit())
 
   if NoExec notin context().flags:
@@ -442,5 +442,5 @@ proc activateGraph*(graph: DepGraph): seq[CfgPath] =
 
   for pkg in allActiveNodes(graph):
     if pkg.isRoot: continue
-    trace pkg.url.projectName, "adding CfgPath:", $relativePath(toDestDir(graph, pkg) / getCfgPath(graph, pkg).Path, workspace())
+    trace pkg.url.projectName, "adding CfgPath:", $relativeToWorkspace(toDestDir(graph, pkg) / getCfgPath(graph, pkg).Path)
     result.add CfgPath(toDestDir(graph, pkg) / getCfgPath(graph, pkg).Path)
