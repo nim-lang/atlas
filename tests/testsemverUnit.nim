@@ -115,6 +115,7 @@ suite "graph solve":
         context().defaultAlgo = SemVer
         discard context().nameOverrides.addPattern("proj$+", "https://example.com/buildGraph/proj$#")
 
+        expectedVersionWithGitTags()
         var nc = createNimbleContext()
 
         let dir = paths.getCurrentDir().absolutePath
@@ -185,6 +186,8 @@ suite "test expand with no git tags":
         context().flags = {KeepWorkspace, ListVersions}
         context().defaultAlgo = SemVer
 
+        expectedVersionWithNoGitTags()
+
         var nc = createNimbleContext()
         nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraphNoGitTags/proj_a", true))
         nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraphNoGitTags/proj_b", true))
@@ -244,6 +247,8 @@ suite "test expand with no git tags":
         workspace() = paths.getCurrentDir()
         context().flags = {KeepWorkspace, ListVersions}
         context().defaultAlgo = SemVer
+
+        expectedVersionWithGitTags()
 
         var nc = createNimbleContext()
         nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a"))
