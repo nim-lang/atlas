@@ -120,7 +120,7 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
         nc.notFoundNames.incl lname
       # error "atlas:createUrl", "name is not in nameToUrl:", $name, "result:", repr(result)
       # error "atlas:createUrl", "nameToUrl:", $nc.nameToUrl.keys().toSeq().join(", ")
-      raise newException(ValueError, "project name not found in packages database: " & $lname)
+      raise newException(ValueError, "project name not found in packages database: " & $lname & " original: " & $nameOrig)
   
   let officialPkg = nc.lookup(result.shortName())
   if not officialPkg.isEmpty() and officialPkg.url == result.url:
