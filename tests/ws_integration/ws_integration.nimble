@@ -1,2 +1,2 @@
-requires "https://github.com/zedeus/nitter#cea5cc0523171bc3eb0967ae83ddbb92f74da94b"
+requires "https://github.com/zedeus/nitter#92cd6abcf6d9935bc0d7f013acbfbfd8ddd896ba"
 
