@@ -79,7 +79,9 @@ proc toDirectoryPath*(pkgUrl: PkgUrl): Path =
   if pkgUrl.url.scheme == "atlas":
     result = workspace()
   elif pkgUrl.url.scheme == "file":
-    result = workspace() / Path(pkgUrl.url.path)
+    # file:// urls are used for local source paths, not dependencies paths
+    # result = Path(pkgUrl.url.path)
+    result = workspace() / context().depsDir / Path(pkgUrl.projectName())
   else:
     result = workspace() / context().depsDir / Path(pkgUrl.projectName())
   result = result.absolutePath
@@ -131,9 +133,15 @@ proc createUrlSkipPatterns*(raw: string, skipDirTest = false): PkgUrl =
       echo "git scheme: url: ", raw, "u: ", repr(u)
 
     if u.scheme == "file" and u.hostname != "":
-      # TODO: handle windows paths
-      u = parseUri("file://" & (workspace().string / (u.hostname & u.path)).absolutePath)
+      # fix absolute paths
+      var url = "file://" & ((workspace().string / (u.hostname & u.path)).absolutePath)
+      when defined(windows):
+        url.replace(DirSep, AltSep)
+      u = parseUri(url)
       hasShortName = true
+
+    if u.scheme == "file":
+      warn "atlas:createUrlSkipPatterns: url: ", $u
 
     cleanupUrl(u)
     result = PkgUrl(qualifiedName: extractProjectName(u), u: u, hasShortName: hasShortName)
