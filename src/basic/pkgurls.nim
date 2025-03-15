@@ -57,7 +57,7 @@ proc toReporterName(u: PkgUrl): string = u.projectName()
 proc extractProjectName*(url: Uri): tuple[name: string, user: string, host: string] =
   var u = url
   var (p, n, e) = u.path.splitFile()
-  p.removePrefix(DirSep)
+  p.removePrefix(DirSep).removePrefix(AltSep)
   if u.scheme in ["http", "https"] and e == GitSuffix:
     e = ""
 
