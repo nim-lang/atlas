@@ -132,22 +132,18 @@ suite "urls and naming":
       discard nc.createUrl("atlas")
 
   test "proj_a file url":
-    let pth = "file://" & "." & DirSep & "buildGraph" & DirSep & "proj_a"
-    echo "PATH: ", pth
-    let upkg = nc.createUrl(pth)
+    let upkg = nc.createUrl("file://./buildGraph/proj_a")
     check upkg.url.hostname == ""
-    check $upkg.url == ("file://" & "$1" / "buildGraph" / "proj_a") % [ospaths2.getCurrentDir()]
+    check $upkg.url == "file://$1/buildGraph/proj_a" % [ospaths2.getCurrentDir()]
     check $upkg.projectName == "proj_a"
     check upkg.toDirectoryPath() == ws / Path"deps" / Path("proj_a")
     check upkg.toLinkPath() == ws / Path"deps" / Path("proj_a.link")
 
   test "proj_b file url absolute path":
     # setAtlasVerbosity(Trace)
-    let pth = ("file://" & "$1" / "buildGraph" / "proj_b")
-    echo "PATH: ", pth
-    let upkg = nc.createUrl(pth % [ospaths2.getCurrentDir()])
+    let upkg = nc.createUrl("file://$1/buildGraph/proj_b" % [ospaths2.getCurrentDir()])
     check upkg.url.hostname == ""
-    check $upkg.url == pth % [ospaths2.getCurrentDir()]
+    check $upkg.url == "file://$1/buildGraph/proj_b" % [ospaths2.getCurrentDir()]
     check $upkg.projectName == "proj_b"
     check upkg.toDirectoryPath() == ws / Path"deps" / Path("proj_b")
     check upkg.toLinkPath() == ws / Path"deps" / Path("proj_b.link")
