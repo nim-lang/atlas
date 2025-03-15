@@ -50,6 +50,8 @@ suite "graph solve":
         context().flags = {KeepWorkspace, ListVersions}
         context().defaultAlgo = SemVer
 
+        expectedVersionWithGitTags()
+w
         var nc = createNimbleContext()
         nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a", true))
         nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b", true))
