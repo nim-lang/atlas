@@ -21,6 +21,7 @@ type
     deps: string
     nameOverrides: Table[string, string]
     urlOverrides: Table[string, string]
+    pkgOverrides: Table[string, string]
     plugins: string
     resolver: string
     graph: JsonNode
@@ -30,6 +31,7 @@ proc writeDefaultConfigFile*() =
     deps: $context().depsDir,
     nameOverrides: initTable[string, string](),
     urlOverrides: initTable[string, string](),
+    pkgOverrides: initTable[string, string](),
     resolver: $SemVer,
     graph: newJNull()
   )
@@ -77,6 +79,7 @@ proc writeConfig*(graph: JsonNode) =
     deps: $context().depsDir,
     nameOverrides: context().nameOverrides.toTable(),
     urlOverrides: context().urlOverrides.toTable(),
+    pkgOverrides: context().pkgOverrides.toTable(),
     plugins: $context().pluginsFile,
     resolver: $context().defaultAlgo,
     graph: graph

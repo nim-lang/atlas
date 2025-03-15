@@ -96,11 +96,18 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
   else:
     name = substitute(nc.nameOverrides, nameOrig, didReplace)
   
-  # trace "atlas:createUrl", "name:", name, "orig:", nameOrig, "isUrl:", $name.isUrl()
+  trace "atlas:createUrl", "name:", name, "orig:", nameOrig, "isUrl:", $name.isUrl()
   
   if name.isUrl():
-    # trace "atlas:createUrl", "name is url:", name
     result = createUrlSkipPatterns(name)
+    # info "atlas:createUrl", "name is url:", name, "shortName:", $result.shortName()
+
+    # TODO: not 100% sure this is needed, but it makes the behavior more consistent
+    var didReplace = false
+    name = substitute(nc.nameOverrides, result.shortName(), didReplace)
+    if didReplace:
+      result = createUrlSkipPatterns(name)
+      # error "atlas:createUrl", "name overrides found for url:", $nameOrig, "result:", $result
   else:
     let lname = nc.lookup(name)
     if not lname.isEmpty():
@@ -119,6 +126,7 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
   if not officialPkg.isEmpty() and officialPkg.url == result.url:
     result.hasShortName = true
 
+  # info "atlas:createUrl", "created url with name:", name, "orig:", nameOrig, "projectName:", $result.projectName, "hasShortName:", $result.hasShortName, "url:", $result.url
   if not result.isEmpty():
     if nc.put(result.projectName, result):
       trace "atlas:createUrl", "created url with name:", name, "orig:", nameOrig, "projectName:", $result.projectName, "hasShortName:", $result.hasShortName, "url:", $result.url

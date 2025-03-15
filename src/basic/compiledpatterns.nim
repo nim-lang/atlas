@@ -221,7 +221,9 @@ proc addPattern*(p: var Patterns; inputPattern, outputPattern: string): string =
       result = ""
 
 proc substitute*(p: Patterns; input: string; didReplace: var bool): string =
-  result = p.t.getOrDefault(input)
+  if input in p.t:
+    didReplace = true
+    result = p.t[input]
   if result.len == 0:
     for i in 0..<p.s.len:
       let m = p.s[i][0].matches(p.strings, input)
