@@ -4,6 +4,8 @@ import std / [strutils, os, osproc, sequtils, strformat, unittest]
 import basic/context
 import testerutils
 
+ensureGitHttpServer()
+
 if execShellCmd("nim c -o:$# -d:release src/atlas.nim" % [atlasExe]) != 0:
   quit("FAILURE: compilation of atlas failed")
 

@@ -123,7 +123,7 @@
     "asynctools": {
       "dir": "$workspace/asynctools",
       "url": "https://github.com/cheatfate/asynctools",
-      "commit": "0e6bdc3ed5bae8c7cc9e03cfbf66b7c882a908a7",
+      "commit": "a1a17d06713727d97810cad291e29dd7c672738f",
       "version": ""
     }
   },
