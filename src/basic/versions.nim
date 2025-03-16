@@ -314,9 +314,7 @@ proc parseTaggedVersions*(outp: string, requireVersions = true): seq[VersionTag]
       while i < line.len and line[i] notin Digits: inc i
       let v = parseVersion(line, i)
       let c = initCommitHash(line.substr(0, commitEnd-1), FromGitTag)
-      if c.isEmpty():
-        continue
-      if v != Version("") or not requireVersions:
+      if not c.isEmpty() and (v != Version("") or not requireVersions):
         result.add VersionTag(c: c, v: v)
   result.sort proc (a, b: VersionTag): int =
     (if a.v < b.v: 1
