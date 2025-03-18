@@ -216,8 +216,13 @@ proc listOutdated() =
 
   var updateable = 0
   for pkg in allNodes(graph):
+    if pkg.isRoot:
+      continue
     if gitops.isOutdated(pkg.ondisk):
+      warn pkg.url.projectName, "is outdated"
       inc updateable
+    else:
+      notice pkg.url.projectName, "is up to date"
 
   if updateable == 0:
     info workspace(), "all packages are up to date"

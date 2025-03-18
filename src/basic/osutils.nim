@@ -60,7 +60,8 @@ proc silentExec*(cmd: string; args: openArray[string]): (string, ResultCode) =
   var cmdLine = cmd
   for i in 0..<args.len:
     cmdLine.add ' '
-    cmdLine.add quoteShell(args[i])
+    if args[i].len > 0:
+      cmdLine.add quoteShell(args[i])
   let (res, code) = osproc.execCmdEx(cmdLine)
   result = (res, ResultCode(code))
 
