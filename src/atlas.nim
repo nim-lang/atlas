@@ -151,8 +151,7 @@ proc installDependencies(nc: var NimbleContext; nimbleFile: Path) =
   if dir == Path "":
     dir = Path(".").absolutePath
   info pkgname, "installing dependencies"
-  trace pkgname, "using nimble file at " & $nimbleFile
-  let graph = dir.loadWorkspace(nc, AllReleases, onClone=DoClone)
+  let graph = dir.loadWorkspace(nc, AllReleases, onClone=DoClone, doSolve=true)
   let paths = graph.activateGraph()
   let cfgPath = CfgPath workspace()
   patchNimCfg(paths, cfgPath)
@@ -211,13 +210,15 @@ proc createWorkspace() =
     createDir absoluteDepsDir(workspace(), context().depsDir)
 
 proc listOutdated() =
-  # TODO: convert to use loadWorkspace
-  let dir = workspace() / context().depsDir
+  let dir = workspace()
+  var nc = createNimbleContext()
+  let graph = dir.loadWorkspace(nc, CurrentCommit, onClone=DoNothing, doSolve=false)
+  # let paths = graph.activateGraph()
+
   var updateable = 0
-  for k, f in walkDir(dir, relative=true):
-    if k in {pcDir, pcLinkToDir} and isGitDir(dir / f):
-      if gitops.isOutdated(dir / f):
-        inc updateable
+  for pkg in allNodes(graph):
+    if gitops.isOutdated(pkg.ondisk):
+      inc updateable
 
   if updateable == 0:
     info workspace(), "all packages are up to date"

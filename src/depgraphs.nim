@@ -405,11 +405,12 @@ proc solve*(graph: var DepGraph; form: Form) =
   if DumpGraphs in context().flags:
     dumpJson(graph, "graph-solved.json")
 
-proc loadWorkspace*(path: Path, nc: var NimbleContext, mode: TraversalMode, onClone: PackageAction): DepGraph =
+proc loadWorkspace*(path: Path, nc: var NimbleContext, mode: TraversalMode, onClone: PackageAction, doSolve: bool): DepGraph =
   result = path.expand(nc, mode, onClone)
 
-  let form = result.toFormular(context().defaultAlgo)
-  solve(result, form)
+  if doSolve:
+    let form = result.toFormular(context().defaultAlgo)
+    solve(result, form)
 
 proc runBuildSteps*(graph: DepGraph) =
   ## execute build steps for the dependency graph
