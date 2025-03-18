@@ -51,7 +51,7 @@ type
   AtlasContext* = object
     workspace*: Path = Path"."
     depsDir*: Path = Path"deps"
-    flags*: set[Flag] = {KeepWorkspace}
+    flags*: set[Flag] = {}
     nameOverrides*: Patterns
     urlOverrides*: Patterns
     pkgOverrides*: Table[string, Uri]
