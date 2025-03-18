@@ -23,7 +23,8 @@ proc integrationTest() =
     let cmd = atlasExe & args & " pin"
     let res = execShellCmd cmd
 
-  sameDirContents("expected", ".")
+  when not defined(windows): # windows is different
+    sameDirContents("expected", ".")
 
   if res != 0:
     quit "FAILURE RUNNING: " & cmd

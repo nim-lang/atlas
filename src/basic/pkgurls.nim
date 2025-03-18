@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [hashes, uri, os, strutils, os, sequtils, json]
+import std / [hashes, uri, os, strutils, os, sequtils, pegs, json]
 import compiledpatterns, gitops, reporters, context
 
 export uri
@@ -69,9 +69,13 @@ proc extractProjectName*(url: Uri): tuple[name: string, user: string, host: stri
   else:
     result = (n & e, p, u.hostname)
 
-proc toOriginalPath*(pkgUrl: PkgUrl): Path =
+proc toOriginalPath*(pkgUrl: PkgUrl, isWindowsTest: bool = false): Path =
   if pkgUrl.url.scheme == "file":
     result = Path(pkgUrl.url.hostname & pkgUrl.url.path)
+    if defined(windows) or isWindowsTest:
+      var p = result.string.replace('/', '\\')
+      p.removePrefix('\\')
+      result = p.Path
   else:
     raise newException(ValueError, "Invalid file path: " & $pkgUrl.url)
 
@@ -79,7 +83,7 @@ proc toDirectoryPath*(pkgUrl: PkgUrl): Path =
   if pkgUrl.url.scheme == "atlas":
     result = workspace()
   elif pkgUrl.url.scheme == "file":
-    # file:// urls are used for local source paths, not dependencies paths
+    # file:// urls are used for local source paths, not dependency paths
     # result = Path(pkgUrl.url.path)
     result = workspace() / context().depsDir / Path(pkgUrl.projectName())
   else:
@@ -94,7 +98,32 @@ proc toLinkPath*(pkgUrl: PkgUrl): Path =
   else:
     Path(pkgUrl.toDirectoryPath().string & ".link")
 
-proc createUrlSkipPatterns*(raw: string, skipDirTest = false): PkgUrl =
+proc isWindowsAbsoluteFile*(raw: string): bool =
+  raw.match(peg"^ {'file://'?} {[A-Z] ':' ['/'\\]} .*")
+
+proc toWindowsFileUrl*(raw: string): string =
+  let rawPath = raw.replace('\\', '/')
+  if rawPath.isWindowsAbsoluteFile():
+    result = rawPath.replace("file://", "file:///")
+  else:
+    result = rawPath
+
+proc fixFileRelativeUrl*(u: Uri, isWindowsTest: bool = false): Uri =
+  if isWindowsTest or defined(windows) and u.scheme == "file" and u.hostname.len() > 0:
+    result = parseUri(toWindowsFileUrl($u))
+  else:
+    result = u
+
+  if result.scheme == "file" and result.hostname.len() > 0:
+    # fix relative paths
+    var url = (workspace().string / (result.hostname & result.path)).absolutePath
+    # url = absolutePath(url)
+    url = "file://" & url
+    if isWindowsTest or defined(windows):
+      url = toWindowsFileUrl(url)
+    result = parseUri(url)
+
+proc createUrlSkipPatterns*(raw: string, skipDirTest = false, forceWindows: bool = false): PkgUrl =
   template cleanupUrl(u: Uri) =
     if u.path.endsWith(".git") and (u.scheme in ["http", "https"] or u.hostname in ["github.com", "gitlab.com", "bitbucket.org"]):
       u.path.removeSuffix(".git")
@@ -103,14 +132,16 @@ proc createUrlSkipPatterns*(raw: string, skipDirTest = false): PkgUrl =
 
   if not raw.isUrl():
     if dirExists(raw) or skipDirTest:
-      var raw =
-        if isGitDir(raw):
-          getRemoteUrl(Path(raw))
+      var raw: string = raw
+      if isGitDir(raw):
+        raw = getRemoteUrl(Path(raw))
+      else:
+        if not forceWindows:
+          raw = raw.absolutePath()
+        if forceWindows or defined(windows) or defined(atlasUnitTests):
+          raw = toWindowsFileUrl("file:///" & raw)
         else:
-          when defined(windows):
-            ("file://" & raw).replace(AltSep, DirSep)
-          else:
-            ("file://" & raw)
+          raw = "file://" & raw
       let u = parseUri(raw)
       result = PkgUrl(qualifiedName: extractProjectName(u), u: u, hasShortName: true)
     else:
@@ -129,18 +160,11 @@ proc createUrlSkipPatterns*(raw: string, skipDirTest = false): PkgUrl =
         u.port = ""
 
       u.scheme = "ssh"
-      echo "git scheme: url: ", raw, "u: ", repr(u)
-
-    if u.scheme == "file" and u.hostname != "":
-      # fix absolute paths
-      var url = "file://" & ((workspace().string / (u.hostname & u.path)).absolutePath)
-      when defined(windows):
-        url = url.replace(AltSep, DirSep).replace(":\\\\", "://")
-      u = parseUri(url)
-      hasShortName = true
 
     if u.scheme == "file":
-      warn "atlas:createUrlSkipPatterns", "url: ", $u
+      # fix missing absolute paths
+      u = fixFileRelativeUrl(u)
+      hasShortName = true
 
     cleanupUrl(u)
     result = PkgUrl(qualifiedName: extractProjectName(u), u: u, hasShortName: hasShortName)

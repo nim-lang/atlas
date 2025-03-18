@@ -161,15 +161,15 @@ suite "test expand with git tags":
         let sp4: Package = sp[4] # proj D
 
         check $sp0.url == "atlas://workspace/ws_testtraverse.nimble"
-        check $sp1.url == "file://$1/buildGraph/proj_a" % [$dir]  
-        check $sp2.url == "file://$1/buildGraph/proj_b" % [$dir]
-        check $sp3.url == "file://$1/buildGraph/proj_c" % [$dir]
-        check $sp4.url == "file://$1/buildGraph/proj_d" % [$dir]
+        check $sp1.url == toWindowsFileUrl("file://$1/buildGraph/proj_a" % [$dir])  
+        check $sp2.url == toWindowsFileUrl("file://$1/buildGraph/proj_b" % [$dir])
+        check $sp3.url == toWindowsFileUrl("file://$1/buildGraph/proj_c" % [$dir])
+        check $sp4.url == toWindowsFileUrl("file://$1/buildGraph/proj_d" % [$dir])
 
         let vt = toVersionTag
 
         testRequirements(sp0, @[vt"#head@-"], [
-          ("file://$1/buildGraph/proj_a" % [$dir], "*"),
+          (toWindowsFileUrl("file://$1/buildGraph/proj_a" % [$dir]), "*"),
         ])
 
 
@@ -177,21 +177,21 @@ suite "test expand with git tags":
         # check sp1.releases[projAtags[1]] == sp1.releases[projAtags[2]]
         # check cast[pointer](sp1.releases[projAtags[1]]) == cast[pointer](sp1.releases[projAtags[2]])
         testRequirements(sp1, projAtags, [
-          ("file://$1/buildGraph/proj_b" % [$dir], ">= 1.1.0"),
-          ("file://$1/buildGraph/proj_b" % [$dir], ">= 1.0.0"),
+          (toWindowsFileUrl("file://$1/buildGraph/proj_b" % [$dir]), ">= 1.1.0"),
+          (toWindowsFileUrl("file://$1/buildGraph/proj_b" % [$dir]), ">= 1.0.0"),
         ])
 
         testRequirements(sp2, projBtags, [
-          ("file://$1/buildGraph/proj_c" % [$dir], ">= 1.1.0"),
-          ("file://$1/buildGraph/proj_c" % [$dir], ">= 1.0.0"),
+          (toWindowsFileUrl("file://$1/buildGraph/proj_c" % [$dir]), ">= 1.1.0"),
+          (toWindowsFileUrl("file://$1/buildGraph/proj_c" % [$dir]), ">= 1.0.0"),
         ])
 
         testRequirements(sp3, projCtags, [
-          ("file://$1/buildGraph/proj_d" % [$dir], ">= 1.0.0"),
+          (toWindowsFileUrl("file://$1/buildGraph/proj_d" % [$dir]), ">= 1.0.0"),
         ])
 
         testRequirements(sp4, projDtags, [
-          ("file://$1/buildGraph/does_not_exist" % [$dir], ">= 1.2.0"),
+          (toWindowsFileUrl("file://$1/buildGraph/does_not_exist" % [$dir]), ">= 1.2.0"),
           ("", ""),
         ], true)
 
@@ -372,35 +372,35 @@ suite "test expand with no git tags":
         let sp4: Package = sp[4] # proj D
 
         check $sp[0].url == "atlas://workspace/ws_testtraverse.nimble"
-        check $sp[1].url == "file://$1/buildGraphNoGitTags/proj_a" % [$dir]
-        check $sp[2].url == "file://$1/buildGraphNoGitTags/proj_b" % [$dir]
-        check $sp[3].url == "file://$1/buildGraphNoGitTags/proj_c" % [$dir]
-        check $sp[4].url == "file://$1/buildGraphNoGitTags/proj_d" % [$dir]
+        check $sp[1].url == toWindowsFileUrl("file://$1/buildGraphNoGitTags/proj_a" % [$dir])
+        check $sp[2].url == toWindowsFileUrl("file://$1/buildGraphNoGitTags/proj_b" % [$dir])
+        check $sp[3].url == toWindowsFileUrl("file://$1/buildGraphNoGitTags/proj_c" % [$dir])
+        check $sp[4].url == toWindowsFileUrl("file://$1/buildGraphNoGitTags/proj_d" % [$dir])
 
         let vt = toVersionTag
         proc stripcommits(tags: seq[VersionTag]): seq[VersionTag] = tags.mapIt(VersionTag(v: Version"", c: it.c))
 
         testRequirements(sp0, @[vt"#head@-"], [
-          ("file://$1/buildGraphNoGitTags/proj_a" % [$dir], "*"),
+          (toWindowsFileUrl("file://$1/buildGraphNoGitTags/proj_a" % [$dir]), "*"),
         ])
 
         testRequirements(sp1, projAtags, [
-          ("file://$1/buildGraphNoGitTags/proj_b" % [$dir], ">= 1.1.0"),
-          ("file://$1/buildGraphNoGitTags/proj_b" % [$dir], ">= 1.0.0"),
+          (toWindowsFileUrl("file://$1/buildGraphNoGitTags/proj_b" % [$dir]), ">= 1.1.0"),
+          (toWindowsFileUrl("file://$1/buildGraphNoGitTags/proj_b" % [$dir]), ">= 1.0.0"),
         ])
 
         testRequirements(sp2, projBtags, [
-          ("file://$1/buildGraphNoGitTags/proj_c" % [$dir], ">= 1.1.0"),
-          ("file://$1/buildGraphNoGitTags/proj_c" % [$dir], ">= 1.0.0"),
+          (toWindowsFileUrl("file://$1/buildGraphNoGitTags/proj_c" % [$dir]), ">= 1.1.0"),
+          (toWindowsFileUrl("file://$1/buildGraphNoGitTags/proj_c" % [$dir]), ">= 1.0.0"),
         ])
 
         testRequirements(sp3, projCtags, [
-          ("file://$1/buildGraphNoGitTags/proj_d" % [$dir], ">= 1.0.0"),
-          ("file://$1/buildGraphNoGitTags/proj_d" % [$dir], ">= 1.2.0"),
+          (toWindowsFileUrl("file://$1/buildGraphNoGitTags/proj_d" % [$dir]), ">= 1.0.0"),
+          (toWindowsFileUrl("file://$1/buildGraphNoGitTags/proj_d" % [$dir]), ">= 1.2.0"),
         ])
 
         testRequirements(sp4, projDtags, [
-          ("file://$1/buildGraphNoGitTags/does_not_exist" % [$dir], ">= 1.2.0"),
+          (toWindowsFileUrl("file://$1/buildGraphNoGitTags/does_not_exist" % [$dir]), ">= 1.2.0"),
           ("", ""),
         ], true)
 
@@ -446,35 +446,35 @@ suite "test expand with no git tags and nimble commits max":
         let sp4: Package = sp[4] # proj D
 
         check $sp[0].url == "atlas://workspace/ws_testtraverse.nimble"
-        check $sp[1].url == "file://$1/buildGraphNoGitTags/proj_a" % [$dir]
-        check $sp[2].url == "file://$1/buildGraphNoGitTags/proj_b" % [$dir]
-        check $sp[3].url == "file://$1/buildGraphNoGitTags/proj_c" % [$dir]
-        check $sp[4].url == "file://$1/buildGraphNoGitTags/proj_d" % [$dir]
+        check $sp[1].url == toWindowsFileUrl("file://$1/buildGraphNoGitTags/proj_a" % [$dir])
+        check $sp[2].url == toWindowsFileUrl("file://$1/buildGraphNoGitTags/proj_b" % [$dir])
+        check $sp[3].url == toWindowsFileUrl("file://$1/buildGraphNoGitTags/proj_c" % [$dir])
+        check $sp[4].url == toWindowsFileUrl("file://$1/buildGraphNoGitTags/proj_d" % [$dir])
 
         let vt = toVersionTag
         proc stripcommits(tags: seq[VersionTag]): seq[VersionTag] = tags.mapIt(VersionTag(v: Version"", c: it.c))
 
         testRequirements(sp0, @[vt"#head@-"], [
-          ("file://$1/buildGraphNoGitTags/proj_a" % [$dir], "*"),
+          (toWindowsFileUrl("file://$1/buildGraphNoGitTags/proj_a" % [$dir]), "*"),
         ])
 
         testRequirements(sp1, projAtags, [
-          ("file://$1/buildGraphNoGitTags/proj_b" % [$dir], ">= 1.1.0"),
-          ("file://$1/buildGraphNoGitTags/proj_b" % [$dir], ">= 1.0.0"),
+          (toWindowsFileUrl("file://$1/buildGraphNoGitTags/proj_b" % [$dir]), ">= 1.1.0"),
+          (toWindowsFileUrl("file://$1/buildGraphNoGitTags/proj_b" % [$dir]), ">= 1.0.0"),
         ])
 
         testRequirements(sp2, projBtags, [
-          ("file://$1/buildGraphNoGitTags/proj_c" % [$dir], ">= 1.1.0"),
-          ("file://$1/buildGraphNoGitTags/proj_c" % [$dir], ">= 1.0.0"),
+          (toWindowsFileUrl("file://$1/buildGraphNoGitTags/proj_c" % [$dir]), ">= 1.1.0"),
+          (toWindowsFileUrl("file://$1/buildGraphNoGitTags/proj_c" % [$dir]), ">= 1.0.0"),
         ])
 
         testRequirements(sp3, projCtags, [
-          ("file://$1/buildGraphNoGitTags/proj_d" % [$dir], ">= 1.0.0"),
-          ("file://$1/buildGraphNoGitTags/proj_d" % [$dir], ">= 1.2.0"),
+          (toWindowsFileUrl("file://$1/buildGraphNoGitTags/proj_d" % [$dir]), ">= 1.0.0"),
+          (toWindowsFileUrl("file://$1/buildGraphNoGitTags/proj_d" % [$dir]), ">= 1.2.0"),
         ])
 
         testRequirements(sp4, projDtags, [
-          ("file://$1/buildGraphNoGitTags/does_not_exist" % [$dir], ">= 1.2.0"),
+          (toWindowsFileUrl("file://$1/buildGraphNoGitTags/does_not_exist" % [$dir]), ">= 1.2.0"),
           ("", ""),
         ], true)
 

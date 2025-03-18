@@ -112,7 +112,7 @@ proc addRelease(
     warn pkg.url.projectName, "nimble file missing version information:", $pkgver.vtag
     release.version = vtag.version
   elif vtag.v != release.version and not pkg.isRoot:
-    info pkg.url.projectName, "version mismatch between:", $vtag.v, "nimble version:", $release.version
+    info pkg.url.projectName, "version mismatch between version tag:", $vtag.v, "and nimble version:", $release.version
   
   versions.add((pkgver, release))
   result = pkgver
@@ -150,7 +150,7 @@ proc traverseDependency*(
     discard versions.addRelease(nc, pkg, vtag)
 
   of ExplicitVersions:
-    info pkg.url.projectName, "traverseDependency nimble explicit versions:", $explicitVersions
+    debug pkg.url.projectName, "traversing dependency found explicit versions:", $explicitVersions
     # for ver, rel in pkg.versions:
     #   versions.add((ver, rel))
 
@@ -164,14 +164,14 @@ proc traverseDependency*(
     for version in mitems(explicitVersions):
       let vtag = gitops.expandSpecial(pkg.ondisk, version)
       version = vtag
-      info pkg.url.projectName, "explicit version:", $version, "vtag:", repr vtag
+      debug pkg.url.projectName, "explicit version:", $version, "vtag:", repr vtag
 
     for version in explicitVersions:
-      info pkg.url.projectName, "check explicit version:", repr version
+      debug pkg.url.projectName, "check explicit version:", repr version
       if version.commit.isEmpty():
         warn pkg.url.projectName, "explicit version has empty commit:", $version
       elif not uniqueCommits.containsOrIncl(version.commit):
-        info pkg.url.projectName, "add explicit version:", $version
+        debug pkg.url.projectName, "add explicit version:", $version
         discard versions.addRelease(nc, pkg, version)
 
   of AllReleases:
@@ -300,12 +300,12 @@ proc expand*(path: Path, nc: var NimbleContext; mode: TraversalMode, onClone: Pa
       var pkg = nc.packageToDependency[pkgUrl]
       case pkg.state:
       of NotInitialized:
-        notice pkg.projectName, "Initializing package:", $pkg.url
+        info pkg.projectName, "Initializing package:", $pkg.url
         nc.loadDependency(pkg, onClone)
         trace pkg.projectName, "expanded pkg:", pkg.repr
         processing = true
       of Found:
-        notice pkg.projectName, "Processing package at:", pkg.ondisk.relativeToWorkspace()
+        info pkg.projectName, "Processing package at:", pkg.ondisk.relativeToWorkspace()
         # processing = true
         let mode = if pkg.isRoot: CurrentCommit else: mode
         nc.traverseDependency(pkg, mode, @[])
