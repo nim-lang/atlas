@@ -421,9 +421,8 @@ suite "test expand with no git tags and nimble commits max":
       # setAtlasVerbosity(Trace)
       withDir "tests/ws_testtraverse":
         removeDir("deps")
-        context().nimbleCommitsMax = true
         workspace() = paths.getCurrentDir()
-        context().flags = {KeepWorkspace, ListVersions}
+        context().flags = {NimbleCommitsMax, KeepWorkspace, ListVersions}
         context().defaultAlgo = SemVer
 
         var nc = createNimbleContext()
