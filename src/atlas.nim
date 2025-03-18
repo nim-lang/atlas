@@ -491,11 +491,8 @@ proc mainRun(params: seq[string]) =
 
   of "pin":
     optSingleArg($LockFileName)
-    if workspace() == workspace() or workspace() == context().depsDir:
-      pinWorkspace Path(args[0])
-    else:
-      let exportNimble = Path(args[0]) == NimbleLockFileName
-      pinProject Path(args[0]), exportNimble
+    let exportNimble = Path(args[0]) == NimbleLockFileName
+    pinProject Path(args[0]), exportNimble
   of "rep", "replay", "reproduce":
     optSingleArg($LockFileName)
     replay(Path(args[0]))

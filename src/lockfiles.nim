@@ -147,17 +147,10 @@ proc pinGraph*(graph: DepGraph; lockFile: Path; exportNimble = false) =
   else:
     write nlf, $lockFile
 
-proc pinWorkspace*(lockFile: Path) =
-  let workspace = workspace()
-  info "pin", "pinning workspace: " & $workspace
-  var nc = createNimbleContext()
-  let graph = workspace.expand(nc, CurrentCommit, onClone=DoNothing) 
-  pinGraph graph, lockFile
-
 proc pinProject*(lockFile: Path, exportNimble = false) =
   ## Pin project using deps starting from the current project directory.
   ##
-  info "pin", "pinning project"
+  notice "atlas:pin", "Pinning workspace:", $lockFile
   let workspace = workspace()
 
   var nc = createNimbleContext()
