@@ -51,7 +51,7 @@ type
   AtlasContext* = object
     workspace*: Path = Path"."
     depsDir*: Path = Path"deps"
-    flags*: set[Flag]
+    flags*: set[Flag] = {KeepWorkspace}
     nameOverrides*: Patterns
     urlOverrides*: Patterns
     pkgOverrides*: Table[string, Uri]
@@ -61,7 +61,7 @@ type
     pluginsFile*: Path
     proxy*: Uri
 
-var atlasContext = AtlasContext(flags: {KeepWorkspace})
+var atlasContext = AtlasContext()
 
 proc setContext*(ctx: AtlasContext) =
   atlasContext = ctx
