@@ -1,127 +1,121 @@
 {
   "items": {
-    "ws_integration": {
-      "dir": "$workspace/ws_integration",
-      "url": "atlas://workspace/ws_integration.nimble",
-      "commit": "-",
-      "version": ""
-    },
     "nitter.zedeus.github.com": {
-      "dir": "$workspace/nitter.zedeus.github.com",
+      "dir": "$deps/nitter.zedeus.github.com",
       "url": "https://github.com/zedeus/nitter",
       "commit": "92cd6abcf6d9935bc0d7f013acbfbfd8ddd896ba",
       "version": ""
     },
     "supersnappy": {
-      "dir": "$workspace/supersnappy",
+      "dir": "$deps/supersnappy",
       "url": "https://github.com/guzba/supersnappy",
       "commit": "6c94198ea0e6835dcf11e3a207542cbb6bfb1cd9",
       "version": ""
     },
     "packedjson": {
-      "dir": "$workspace/packedjson",
+      "dir": "$deps/packedjson",
       "url": "https://github.com/Araq/packedjson",
       "commit": "9e6fbb63cb9e0ab8ff570c04bec28cc713ca1f7c",
       "version": ""
     },
     "redpool": {
-      "dir": "$workspace/redpool",
+      "dir": "$deps/redpool",
       "url": "https://github.com/zedeus/redpool",
       "commit": "8b7c1db069797300425037c98b825c5d3316f752",
       "version": ""
     },
     "karax": {
-      "dir": "$workspace/karax",
+      "dir": "$deps/karax",
       "url": "https://github.com/karaxnim/karax",
       "commit": "5cf360c1fd85af8a4cb71a39f626648cfa5695a3",
       "version": ""
     },
     "markdown": {
-      "dir": "$workspace/markdown",
+      "dir": "$deps/markdown",
       "url": "https://github.com/soasme/nim-markdown",
       "commit": "158efe32b1436a9b4d7ef37f1a4733ee4252c7f4",
       "version": ""
     },
     "jsony": {
-      "dir": "$workspace/jsony",
+      "dir": "$deps/jsony",
       "url": "https://github.com/treeform/jsony",
       "commit": "1de1f0815e4ed6bfc36be4c96a59041e4620ebe2",
       "version": ""
     },
     "oauth": {
-      "dir": "$workspace/oauth",
+      "dir": "$deps/oauth",
       "url": "https://github.com/CORDEA/oauth",
       "commit": "b8c163b0d9cfad6d29ce8c1fb394e5f47182ee1c",
       "version": ""
     },
     "nimcrypto": {
-      "dir": "$workspace/nimcrypto",
+      "dir": "$deps/nimcrypto",
       "url": "https://github.com/cheatfate/nimcrypto",
       "commit": "a079df92424968d46a6ac258299ce9380aa153f2",
       "version": ""
     },
     "redis.zedeus.github.com": {
-      "dir": "$workspace/redis.zedeus.github.com",
+      "dir": "$deps/redis.zedeus.github.com",
       "url": "https://github.com/zedeus/redis",
       "commit": "d0a0e6fb3010015f0cc483ca2e540ace02446570",
       "version": ""
     },
     "jester": {
-      "dir": "$workspace/jester",
+      "dir": "$deps/jester",
       "url": "https://github.com/dom96/jester",
       "commit": "baca3fe328b2020b3fda3038eb626a440a7d265c",
       "version": ""
     },
     "zippy": {
-      "dir": "$workspace/zippy",
+      "dir": "$deps/zippy",
       "url": "https://github.com/guzba/zippy",
       "commit": "ca5989a1ba8bdba897d7906dfd6ccda2580d9a5a",
       "version": ""
     },
     "flatty": {
-      "dir": "$workspace/flatty",
+      "dir": "$deps/flatty",
       "url": "https://github.com/treeform/flatty",
       "commit": "e66808508b3e5a05c53039226b467404febeb7f0",
       "version": ""
     },
     "sass": {
-      "dir": "$workspace/sass",
+      "dir": "$deps/sass",
       "url": "https://github.com/dom96/sass",
       "commit": "7dfdd03ccfe3384c995ea70d6d727bfe886fdd4e",
       "version": ""
     },
     "ws": {
-      "dir": "$workspace/ws",
+      "dir": "$deps/ws",
       "url": "https://github.com/treeform/ws",
       "commit": "9536bf99ddf5948db221ccb7bb3663aa238a8e21",
       "version": ""
     },
     "asynctools.timotheecour.github.com": {
-      "dir": "$workspace/asynctools.timotheecour.github.com",
+      "dir": "$deps/asynctools.timotheecour.github.com",
       "url": "https://github.com/timotheecour/asynctools",
       "commit": "a314fb8d18a08954fc7ea43e40673acb348ce7cc",
       "version": ""
     },
     "sha1": {
-      "dir": "$workspace/sha1",
+      "dir": "$deps/sha1",
       "url": "https://github.com/onionhammer/sha1",
       "commit": "92ccc5800bb0ac4865b275a2ce3c1544e98b48bc",
       "version": ""
     },
     "dotenv": {
-      "dir": "$workspace/dotenv",
+      "dir": "$deps/dotenv",
       "url": "https://github.com/euantorano/dotenv.nim",
       "commit": "a3c6726147276ea1447dee292fd27bb036242b78",
       "version": ""
     },
     "httpbeast": {
-      "dir": "$workspace/httpbeast",
+      "dir": "$deps/httpbeast",
       "url": "https://github.com/dom96/httpbeast",
       "commit": "75008aaba497479df4023d52880086deae6385e3",
       "version": ""
     },
     "asynctools": {
-      "dir": "$workspace/asynctools",
+      "dir": "$deps/asynctools",
       "url": "https://github.com/cheatfate/asynctools",
       "commit": "a1a17d06713727d97810cad291e29dd7c672738f",
       "version": ""

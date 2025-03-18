@@ -291,11 +291,29 @@ proc expand*(path: Path, nc: var NimbleContext; mode: TraversalMode, onClone: Pa
   result = DepGraph(root: root)
   nc.packageToDependency[root.url] = root
 
-  info "atlas:expand", "Expanding packages for:", $root.projectName
+  notice "atlas:expand", "Expanding packages for:", $root.projectName
+
   var processing = true
   while processing:
     processing = false
     let pkgUrls = nc.packageToDependency.keys().toSeq()
+
+    var initializingPkgs: seq[string]
+    var processingPkgs: seq[string]
+    for pkgUrl in pkgUrls:
+      var pkg = nc.packageToDependency[pkgUrl]
+      case pkg.state:
+      of NotInitialized:
+        initializingPkgs.add pkg.projectName
+      of Found:
+        processingPkgs.add pkg.projectName
+      else:
+        discard
+    if initializingPkgs.len() > 0:
+      notice root.projectName, "Initializing packages:", initializingPkgs.join(", ")
+    if processingPkgs.len() > 0:
+      notice root.projectName, "Processing packages:", processingPkgs.join(", ")
+
     for pkgUrl in pkgUrls:
       var pkg = nc.packageToDependency[pkgUrl]
       case pkg.state:

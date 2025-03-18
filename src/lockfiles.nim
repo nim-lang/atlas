@@ -19,7 +19,7 @@ const
 
 proc prefixedPath*(path: Path): Path =
   let parts = splitPath($path)
-  if path.isRelativeTo(context().depsDir):
+  if path.isRelativeTo(workspace() / context().depsDir):
     return Path("$deps" / parts.tail)
   elif path.isRelativeTo(workspace()):
     return Path("$workspace" / parts.tail)
@@ -44,21 +44,6 @@ proc genLockEntry(lf: var LockFile; w: Package) =
     commit: $currentGitCommit(w.ondisk),
     version: ""
   )
-
-when false:
-  proc genLockEntriesForDir(lf: var LockFile; dir: string) =
-    for k, f in walkDir(dir):
-      if k == pcDir and dirExists(f / ".git"):
-        if f.absolutePath == context().depsDir / "packages":
-          # skipping this gives us the locking behavior for a project
-          # TODO: is this what we want?
-          # we could just create a fake Package item here
-          continue
-        withDir f:
-          let path = "file://" & f
-          debug "genLockEntries", "using pkg: " & path
-          let pkg = resolvePackage(path)
-          genLockEntry(lf, pkg)
 
 proc newLockFile(): LockFile =
   result = LockFile(items: initOrderedTable[string, LockFileEntry](),
@@ -88,8 +73,7 @@ proc newNimbleLockFile(): NimbleLockFile =
 proc write(lock: NimbleLockFile; lockFilePath: string) =
   writeFile lockFilePath, pretty(toJson(lock))
 
-proc genLockEntry(
-                  lf: var NimbleLockFile;
+proc genLockEntry(lf: var NimbleLockFile;
                   w: Package,
                   cfg: CfgPath,
                   deps: HashSet[string]) =
@@ -117,7 +101,7 @@ proc genLockEntry(
 const
   NimCfg = Path "nim.cfg"
 
-proc pinGraph*(g: DepGraph; lockFile: Path; exportNimble = false) =
+proc pinGraph*(graph: DepGraph; lockFile: Path; exportNimble = false) =
   info "pin", "pinning project"
   var lf = newLockFile()
   let workspace = workspace()
@@ -131,20 +115,22 @@ proc pinGraph*(g: DepGraph; lockFile: Path; exportNimble = false) =
   var nc = createNimbleContext()
   var graph = workspace.expand(nc, CurrentCommit, onClone=DoNothing)
 
-  for w in toposorted(g):
-    let dir = w.ondisk
-    tryWithDir dir:
-      if not exportNimble:
-        # generate atlas native lockfile entries
-        genLockEntry lf, w
-      else:
-        # handle exports for Nimble; these require looking up a bit more info
-        for nx in directDependencies(g, w):
-          nimbleDeps.mgetOrPut(w.url.projectName,
+  for pkg in toposorted(graph):
+    if pkg.isRoot:
+      continue
+
+    let dir = pkg.ondisk
+    if not exportNimble:
+      # generate atlas native lockfile entries
+      genLockEntry lf, pkg
+    else:
+      # handle exports for Nimble; these require looking up a bit more info
+      for nx in directDependencies(graph, pkg):
+        nimbleDeps.mgetOrPut(pkg.url.projectName,
                               initHashSet[string]()).incl(nx.url.projectName)
-        trace w.url.projectName, "exporting nimble " & $w.url.url
-        let deps = nimbleDeps.getOrDefault(w.url.projectName)
-        genLockEntry nlf, w, getCfgPath(g, w), deps
+      debug pkg.url.projectName, "exporting nimble " & $pkg.url.url
+      let deps = nimbleDeps.getOrDefault(pkg.url.projectName)
+      genLockEntry nlf, pkg, getCfgPath(graph, pkg), deps
 
   let nimcfgPath = workspace / NimCfg
   if fileExists(nimcfgPath):

@@ -6,5 +6,6 @@
     "asynctools": "https://github.com/timotheecour/asynctools"
   },
   "plugins": "",
-  "resolver": "MaxVer"
+  "resolver": "MaxVer",
+  "graph": null
 }
