@@ -64,7 +64,6 @@ proc exec*(gitCmd: Command;
            errorReportLevel: MsgKind = Error,
            ): (string, ResultCode) =
   let cmd = $gitCmd % ["DIR", $path]
-  #if execDir.len == 0: $cmd else: $(cmd) % [execDir]
   if isGitDir(path):
     result = silentExec(cmd, args)
   else:
