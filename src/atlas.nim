@@ -68,7 +68,6 @@ Command:
 
 Options:
   --keepCommits         do not perform any `git checkouts`
-  --full                perform full checkouts rather than the default shallow
   --cfgHere             also create/maintain a nim.cfg in the current
                         working directory
   --workspace=DIR       use DIR as workspace
