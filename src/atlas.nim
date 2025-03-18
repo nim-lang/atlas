@@ -213,7 +213,6 @@ proc listOutdated() =
   let dir = workspace()
   var nc = createNimbleContext()
   let graph = dir.loadWorkspace(nc, CurrentCommit, onClone=DoNothing, doSolve=false)
-  # let paths = graph.activateGraph()
 
   var updateable = 0
   for pkg in allNodes(graph):

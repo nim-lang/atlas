@@ -70,8 +70,6 @@ proc exec*(gitCmd: Command;
   else:
     result = ("Not a git repo", ResultCode(1))
   if result[1] != RES_OK:
-    # message errorReportLevel, "gitops", "Git command failed:", "`$1`" % [$gitCmd], "with code:", $int(result[1])
-    # let lvl = if errorReportLevel == Error: Error else: Trace
     message errorReportLevel, "gitops", "Running Git failed:", $(int(result[1])), "command:", "`$1 $2`" % [cmd, join(args, " ")]
 
 proc checkGitDiffStatus*(path: Path): string =
