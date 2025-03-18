@@ -390,10 +390,6 @@ proc mainRun(params: seq[string]) =
     if workspace() == workspace() or workspace() == context().depsDir:
       fatal action & " command must be executed in a project, not in the workspace"
 
-  proc findCurrentNimble(): Path =
-    for x in walkPattern("*.nimble"):
-      return Path x
-
   parseAtlasOptions(params, action, args)
 
   if action notin ["init", "tag"]:
