@@ -137,7 +137,7 @@ proc generateDepGraph(g: DepGraph) =
 
 proc afterGraphActions(g: DepGraph) =
   if atlasErrors() == 0 and KeepWorkspace notin context().flags:
-    writeConfig toJson(g)
+    writeConfig(g)
 
   if ShowGraph in context().flags:
     generateDepGraph g

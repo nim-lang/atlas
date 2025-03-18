@@ -9,7 +9,7 @@
 ## Configuration handling.
 
 import std / [strutils, os, streams, json, tables, jsonutils, uri, sequtils]
-import basic/[versions, context, reporters, compiledpatterns, parse_requires]
+import basic/[versions, context, reporters, compiledpatterns, parse_requires, deptypes]
 
 proc readPluginsDir(dir: Path) =
   for k, f in walkDir($(workspace() / dir)):
@@ -77,7 +77,9 @@ proc readConfig*() =
   finally:
     close f
 
-proc writeConfig*(graph: JsonNode) =
+proc writeConfig*(graph: DepGraph) =
+  # TODO: serialize graph in a smarter way
+
   let config = JsonConfig(
     deps: $context().depsDir,
     nameOverrides: context().nameOverrides.toTable(),
@@ -85,7 +87,7 @@ proc writeConfig*(graph: JsonNode) =
     pkgOverrides: context().pkgOverrides.pairs().toSeq().mapIt((it[0], $it[1])).toTable(),
     plugins: $context().pluginsFile,
     resolver: $context().defaultAlgo,
-    graph: graph
+    graph: nil,
   )
   let configFile = getWorkspaceConfig()
   writeFile($configFile, pretty %*config)
