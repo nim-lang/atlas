@@ -42,7 +42,7 @@ proc genLockEntry(lf: var LockFile; w: Package) =
     dir: prefixedPath(w.ondisk),
     url: $w.url.url,
     commit: $currentGitCommit(w.ondisk),
-    version: ""
+    version: if w.activeVersion.isNil: "" else: $w.activeVersion.vtag.v
   )
 
 proc newLockFile(): LockFile =
