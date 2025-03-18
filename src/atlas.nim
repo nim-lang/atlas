@@ -40,11 +40,11 @@ const
 Usage:
   atlas [options] [command] [arguments]
 Command:
-  init                  initializes the current directory as a workspace
-  use <url|pkgname>     clone a package and all of its dependencies and make
-                        it importable for the current project
-  update <url|pkgname>  update a package and all of its dependencies
+  init                  initializes the current project as an Atlas project
+  use <url|pkgname>     add package and its dependencies to the project
+                        and patch the project's Nimble file
   install               use the nimble file to setup the project's dependencies
+  update <url|pkgname>  update a package and all of its dependencies
   search <keyA> [keyB ...]
                         search for package that contains the given keywords
   extract <file.nimble> extract the requirements and custom commands from
