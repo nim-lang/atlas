@@ -30,12 +30,12 @@ proc fromPrefixedPath*(path: Path): Path =
   var path = path
   if path.string.startsWith("$deps"):
     path.string.removePrefix("$deps")
-    return context().depsDir / path
+    return context().workspace / context().depsDir / path
   elif path.string.startsWith("$workspace"):
-    path.string.removePrefix("$workspace")
-    return workspace() / path
+    path.string.removePrefix("$workspace") # default to deps dir now
+    return context().workspace / context().depsDir / path
   else:
-    return context().depsDir / path
+    return path
 
 proc genLockEntry(lf: var LockFile; w: Package) =
   lf.items[w.url.projectName] = LockFileEntry(
@@ -212,6 +212,7 @@ proc listChanged*(lockFile: Path) =
   # update the the dependencies
   for _, v in pairs(lf.items):
     let dir = base / v.dir
+    notice "atlas:pin", "Checking repo:", $dir
     if not dirExists(dir):
       warn dir, "repo missing!"
       continue
@@ -267,8 +268,8 @@ proc replay*(lockFile: Path) =
   # update the the dependencies
   var paths: seq[CfgPath] = @[]
   for _, v in pairs(lf.items):
-    trace "replay", "replaying: " & v.repr
     let dir = fromPrefixedPath(v.dir)
+    notice "atlas:replay", "Setting up repo:", $dir.relativePath(workspace()), "to commit:", $v.commit
     if not dirExists(dir):
       let (status, err) = gitops.clone(nc.createUrl(v.url).toUri, dir)
       if status != Ok:
