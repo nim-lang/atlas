@@ -211,8 +211,7 @@ proc listChanged*(lockFile: Path) =
 
   # update the the dependencies
   for _, v in pairs(lf.items):
-    let dir = base / v.dir
-    notice "atlas:pin", "Checking repo:", $dir
+    let dir = fromPrefixedPath(v.dir)
     if not dirExists(dir):
       warn dir, "repo missing!"
       continue
@@ -228,6 +227,8 @@ proc listChanged*(lockFile: Path) =
         warn dir, "commit differs;" &
                      " found: " & $commit &
                      " lockfile has: " & v.commit
+      else:
+        notice "atlas:pin", "Repo:", $dir.relativePath(workspace()), "is up to date at:", commit.short()
 
   if lf.hostOS == system.hostOS and lf.hostCPU == system.hostCPU:
     compareVersion "nim", lf.nimVersion, detectNimVersion()
