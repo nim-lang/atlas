@@ -180,7 +180,7 @@ proc traverseDependency*(
       var nimbleVersions: HashSet[Version]
       var nimbleCommits = nc.collectNimbleVersions(pkg)
 
-      trace pkg.url.projectName, "traverseDependency nimble explicit versions:", $explicitVersions
+      debug pkg.url.projectName, "nimble explicit versions:", $explicitVersions
       for version in explicitVersions:
         if version.version == Version"" and
             not version.commit.isEmpty() and
@@ -191,7 +191,7 @@ proc traverseDependency*(
 
       ## Note: always prefer tagged versions
       let tags = collectTaggedVersions(pkg.ondisk)
-      trace pkg.url.projectName, "traverseDependency nimble tags:", $tags
+      debug pkg.url.projectName, "nimble tags:", $tags
       for tag in tags:
         if not uniqueCommits.containsOrIncl(tag.c):
           discard versions.addRelease(nc, pkg, tag)
@@ -204,7 +204,7 @@ proc traverseDependency*(
           # reverse the order so the newest commit is preferred for new versions
           nimbleCommits.reverse()
 
-        trace pkg.url.projectName, "traverseDependency nimble commits:", $nimbleCommits
+        debug pkg.url.projectName, "nimble commits:", $nimbleCommits
         for tag in nimbleCommits:
           if not uniqueCommits.containsOrIncl(tag.c):
             # trace pkg.url.projectName, "traverseDependency adding nimble commit:", $tag
@@ -217,7 +217,7 @@ proc traverseDependency*(
 
       if versions.len() == 0:
         let vtag = VersionTag(v: Version"#head", c: initCommitHash(currentCommit, FromHead))
-        trace pkg.url.projectName, "traverseDependency no versions found, using default #head", "at", $pkg.ondisk
+        debug pkg.url.projectName, "traverseDependency no versions found, using default #head", "at", $pkg.ondisk
         discard versions.addRelease(nc, pkg, vtag)
 
     finally:
