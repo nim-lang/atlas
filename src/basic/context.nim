@@ -45,6 +45,8 @@ type
     DumpGraphs
     DumbProxy
     ForceGitToHttps
+    IncludeTagsAndNimbleCommits # include nimble commits and tags in the solver
+    NimbleCommitsMax # takes the newest commit for each version
 
   AtlasContext* = object
     workspace*: Path = Path"."
@@ -58,10 +60,8 @@ type
     overridesFile*: Path
     pluginsFile*: Path
     proxy*: Uri
-    includeTagsAndNimbleCommits*: bool = false # include nimble commits and tags in the solver
-    nimbleCommitsMax*: bool = false # takes the newest commit for each version
 
-var atlasContext = AtlasContext()
+var atlasContext = AtlasContext(flags: {KeepWorkspace})
 
 proc setContext*(ctx: AtlasContext) =
   atlasContext = ctx

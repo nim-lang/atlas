@@ -197,10 +197,10 @@ proc traverseDependency*(
           discard versions.addRelease(nc, pkg, tag)
           assert tag.commit.orig == FromGitTag, "maybe this needs to be overriden like before: " & $tag.commit.orig
 
-      if tags.len() == 0 or context().includeTagsAndNimbleCommits:
+      if tags.len() == 0 or IncludeTagsAndNimbleCommits in context().flags:
         ## Note: skip nimble commit versions unless explicitly enabled
         ## package maintainers may delete a tag to skip a versions, which we'd override here
-        if context().nimbleCommitsMax:
+        if NimbleCommitsMax in context().flags:
           # reverse the order so the newest commit is preferred for new versions
           nimbleCommits.reverse()
 

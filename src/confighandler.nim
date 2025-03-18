@@ -87,7 +87,7 @@ proc writeConfig*(graph: DepGraph) =
     pkgOverrides: context().pkgOverrides.pairs().toSeq().mapIt((it[0], $it[1])).toTable(),
     plugins: $context().pluginsFile,
     resolver: $context().defaultAlgo,
-    graph: nil,
+    graph: newJNull(),
   )
   let configFile = getWorkspaceConfig()
   writeFile($configFile, pretty %*config)
