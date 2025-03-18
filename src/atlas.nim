@@ -49,11 +49,7 @@ Command:
                         search for package that contains the given keywords
   extract <file.nimble> extract the requirements and custom commands from
                         the given Nimble file
-  updateProjects [filter]
-                        update every project that has a remote
-                        URL that matches `filter` if a filter is given
-  updateDeps [filter]
-                        update every dependency that has a remote
+  updateDeps [filter]   update every dependency that has a remote
                         URL that matches `filter` if a filter is given
   tag [major|minor|patch]
                         add and push a new tag, input must be one of:
