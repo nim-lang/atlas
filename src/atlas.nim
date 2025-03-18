@@ -76,7 +76,6 @@ Options:
   --cfgHere             also create/maintain a nim.cfg in the current
                         working directory
   --workspace=DIR       use DIR as workspace
-  --project=DIR         use DIR as the current project
   --noexec              do not perform any action that may run arbitrary code
   --autoenv             detect the minimal Nim $version and setup a
                         corresponding Nim virtual environment
@@ -216,21 +215,17 @@ proc createWorkspace() =
       info context().depsDir, "creating deps directory"
     createDir absoluteDepsDir(workspace(), context().depsDir)
 
-proc listOutdated(dir: Path) =
+proc listOutdated() =
+  # TODO: convert to use loadWorkspace
+  let dir = workspace() / context().depsDir
   var updateable = 0
   for k, f in walkDir(dir, relative=true):
     if k in {pcDir, pcLinkToDir} and isGitDir(dir / f):
-      withDir dir / f:
-        if gitops.isOutdated(dir / f):
-          inc updateable
+      if gitops.isOutdated(dir / f):
+        inc updateable
 
   if updateable == 0:
     info workspace(), "all packages are up to date"
-
-proc listOutdated() =
-  if context().depsDir.string.len > 0 and context().depsDir != workspace():
-    listOutdated context().depsDir
-  listOutdated workspace()
 
 proc newProject(projectName: string) =
   ## Tries to create a new project directory in the current dir
