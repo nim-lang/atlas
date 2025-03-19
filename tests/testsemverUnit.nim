@@ -46,7 +46,7 @@ suite "graph solve":
       # setAtlasVerbosity(Info)
       withDir "tests/ws_semver_unit":
         removeDir("deps")
-        workspace() = paths.getCurrentDir()
+        workspace(paths.getCurrentDir())
         context().flags = {KeepWorkspace, ListVersions}
         context().defaultAlgo = SemVer
 
@@ -110,7 +110,7 @@ suite "graph solve":
       # setAtlasVerbosity(Trace)
       withDir "tests/ws_semver_unit":
         removeDir("deps")
-        workspace() = paths.getCurrentDir()
+        workspace(paths.getCurrentDir())
         context().flags = {KeepWorkspace, ListVersions}
         context().defaultAlgo = SemVer
         discard context().nameOverrides.addPattern("proj$+", "https://example.com/buildGraph/proj$#")
@@ -182,7 +182,7 @@ suite "test expand with no git tags":
       # setAtlasVerbosity(Info)
       withDir "tests/ws_semver_unit":
         removeDir("deps")
-        workspace() = paths.getCurrentDir()
+        workspace(paths.getCurrentDir())
         context().flags = {KeepWorkspace, ListVersions}
         context().defaultAlgo = SemVer
 
@@ -244,7 +244,7 @@ suite "test expand with no git tags":
       # setAtlasVerbosity(Trace)
       withDir "tests/ws_testtraverse_explicit":
         removeDir("deps")
-        workspace() = paths.getCurrentDir()
+        workspace(paths.getCurrentDir())
         context().flags = {KeepWorkspace, ListVersions}
         context().defaultAlgo = SemVer
 

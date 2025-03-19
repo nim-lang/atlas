@@ -85,9 +85,9 @@ proc toDirectoryPath*(pkgUrl: PkgUrl): Path =
   elif pkgUrl.url.scheme == "file":
     # file:// urls are used for local source paths, not dependency paths
     # result = Path(pkgUrl.url.path)
-    result = workspace() / context().depsDir / Path(pkgUrl.projectName())
+    result = depsDir() / Path(pkgUrl.projectName())
   else:
-    result = workspace() / context().depsDir / Path(pkgUrl.projectName())
+    result = depsDir() / Path(pkgUrl.projectName())
   result = result.absolutePath
   trace pkgUrl, "found directory path:", $result
   doAssert result.len() > 0

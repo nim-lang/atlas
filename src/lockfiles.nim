@@ -19,7 +19,7 @@ const
 
 proc prefixedPath*(path: Path): Path =
   let parts = splitPath($path)
-  if path.isRelativeTo(workspace() / context().depsDir):
+  if path.isRelativeTo(depsDir()):
     return Path("$deps" / parts.tail)
   elif path.isRelativeTo(workspace()):
     return Path("$workspace" / parts.tail)
