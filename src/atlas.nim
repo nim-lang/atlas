@@ -476,6 +476,32 @@ proc mainRun(params: seq[string]) =
     else:
       error args[0], "cannot find .nimble file"
 
+  of "link":
+    singleArg()
+
+    var nimbleFiles = findNimbleFile(workspace())
+    var nc = createNimbleContext()
+
+    if nimbleFiles.len() == 0:
+      let nimbleFile = workspace() / Path(splitPath($paths.getCurrentDir()).tail & ".nimble")
+      debug "atlas:link", "using nimble file:", $nimbleFile
+      writeFile($nimbleFile, "")
+      nimbleFiles.add(nimbleFile)
+    elif nimbleFiles.len() > 1:
+      error "atlas:link", "Ambiguous Nimble files found: " & $nimbleFiles
+
+    info "atlas:link", "modifying nimble file to use package:", args[0], "at:", $nimbleFiles[0]
+    patchNimbleFile(nc, nimbleFiles[0], args[0])
+
+    if atlasErrors() > 0:
+      discard "don't continue for 'cannot resolve'"
+    elif nimbleFiles.len() == 1:
+      installDependencies(nc, nimbleFiles[0].Path)
+    elif nimbleFiles.len() > 1:
+      error args[0], "ambiguous .nimble file"
+    else:
+      error args[0], "cannot find .nimble file"
+
   of "pin":
     optSingleArg($LockFileName)
     let exportNimble = Path(args[0]) == NimbleLockFileName
