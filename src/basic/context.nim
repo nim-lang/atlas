@@ -74,10 +74,10 @@ proc workspace*(): Path =
 proc workspace*(ws: Path) =
   atlasContext.workspace = ws
 
-proc depsDir*(): Path =
+proc depsDir*(relative = false): Path =
   if atlasContext.depsDir == Path"":
     result = Path""
-  elif atlasContext.depsDir.isAbsolute:
+  elif relative or atlasContext.depsDir.isAbsolute:
     result = atlasContext.depsDir
   else:
     result = atlasContext.workspace / atlasContext.depsDir
@@ -91,7 +91,7 @@ proc getWorkspaceConfig*(workspace = workspace()): Path =
   ## the deps path will be the default for auto-created ones
   result = workspace / AtlasWorkspaceFile
   if fileExists(result): return
-  result = workspace / context().depsDir / AtlasWorkspaceFile
+  result = depsDir() / AtlasWorkspaceFile
 
 proc isWorkspace*(dir: Path): bool =
   fileExists(getWorkspaceConfig(dir))

@@ -111,7 +111,7 @@ proc getPackageInfos*(pkgsDir = packagesDirectory()): seq[PackageInfo] =
           result.add(pkg)
 
 proc updatePackages*(pkgsDir = packagesDirectory()) =
-  let pkgsDir = context().depsDir / DefaultPackagesSubDir
+  let pkgsDir = depsDir() / DefaultPackagesSubDir
   if dirExists(pkgsDir):
     gitPull(pkgsDir)
   else:

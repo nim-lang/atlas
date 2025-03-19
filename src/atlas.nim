@@ -204,10 +204,10 @@ proc createWorkspace() =
   if not fileExists(getWorkspaceConfig()):
     writeDefaultConfigFile()
     info workspace(), "created atlas.workspace"
-  if workspace() != context().depsDir and context().depsDir != Path "":
-    if not dirExists(absoluteDepsDir(workspace(), context().depsDir)):
-      info context().depsDir, "creating deps directory"
-    createDir absoluteDepsDir(workspace(), context().depsDir)
+  if depsDir() != Path "":
+    if not dirExists(absoluteDepsDir(workspace(), depsDir())):
+      info depsDir(), "creating deps directory"
+    createDir absoluteDepsDir(workspace(), depsDir())
 
 proc listOutdated() =
   let dir = workspace()
@@ -372,7 +372,7 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
   if not explicitDepsDirOverride and action notin ["init", "tag"] and context().depsDir.len == 0:
     context().depsDir = Path "deps"
   if action != "tag":
-    createDir(context().depsDir)
+    createDir(depsDir())
 
 proc mainRun(params: seq[string]) =
   var action = ""

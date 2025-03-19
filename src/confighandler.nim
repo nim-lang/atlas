@@ -28,7 +28,7 @@ type
 
 proc writeDefaultConfigFile*() =
   let config = JsonConfig(
-    deps: $context().depsDir,
+    deps: $depsDir(relative=true),
     nameOverrides: initTable[string, string](),
     urlOverrides: initTable[string, string](),
     pkgOverrides: initTable[string, string](),
@@ -81,7 +81,7 @@ proc writeConfig*(graph: DepGraph) =
   # TODO: serialize graph in a smarter way
 
   let config = JsonConfig(
-    deps: $context().depsDir,
+    deps: $depsDir(relative=true),
     nameOverrides: context().nameOverrides.toTable(),
     urlOverrides: context().urlOverrides.toTable(),
     pkgOverrides: context().pkgOverrides.pairs().toSeq().mapIt((it[0], $it[1])).toTable(),

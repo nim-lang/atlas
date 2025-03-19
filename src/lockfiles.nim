@@ -184,7 +184,7 @@ proc convertNimbleLock*(nimble: Path): LockFile =
       let pkgurl = info["url"].getStr
       info name, " imported "
       let u = nc.createUrl(pkgurl)
-      let dir = context().depsDir / u.projectName.Path 
+      let dir = depsDir(relative=true) / u.projectName.Path 
       result.items[name] = LockFileEntry(
         dir: dir.relativePath(workspace()),
         url: pkgurl,
