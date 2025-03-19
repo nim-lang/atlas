@@ -30,10 +30,10 @@ proc fromPrefixedPath*(path: Path): Path =
   var path = path
   if path.string.startsWith("$deps"):
     path.string.removePrefix("$deps")
-    return context().workspace / context().depsDir / path
+    return depsDir() / path
   elif path.string.startsWith("$workspace"):
     path.string.removePrefix("$workspace") # default to deps dir now
-    return context().workspace / context().depsDir / path
+    return depsDir() / path
   else:
     return path
 
