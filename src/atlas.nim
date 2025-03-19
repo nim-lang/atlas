@@ -169,9 +169,9 @@ proc detectWorkspace(customWorkspace = Path ""): bool =
   ## find workspace by checking `currentDir` and its parents.
   if customWorkspace.string.len() > 0:
     warn "atlas", "using custom workspace:", $customWorkspace
-    workspace() = customWorkspace
+    workspace(customWorkspace)
   elif GlobalWorkspace in context().flags:
-    workspace() = Path(getHomeDir() / ".atlas")
+    workspace(Path(getHomeDir() / ".atlas"))
     warn "atlas", "using global workspace:", $workspace()
   else:
     var cwd = paths.getCurrentDir().absolutePath
@@ -180,12 +180,12 @@ proc detectWorkspace(customWorkspace = Path ""): bool =
       if cwd.getWorkspaceConfig().fileExists():
         break
       cwd = cwd.parentDir()
-    workspace() = cwd
+    workspace(cwd)
   
   if workspace().len() > 0:
     result = getWorkspaceConfig().fileExists()
     if result:
-      workspace() = workspace().absolutePath
+      workspace(workspace().absolutePath)
 
 proc autoWorkspace(currentDir: Path): bool =
   var cwd = currentDir
@@ -193,7 +193,7 @@ proc autoWorkspace(currentDir: Path): bool =
     if dirExists(cwd / Path ".git"):
       break
     cwd = cwd.parentDir()
-  workspace() = cwd
+  workspace(cwd)
   notice "atlas:workspace", "Detected workspace directory:", $workspace()
 
   if workspace().len() > 0:
@@ -290,10 +290,10 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
       of "keepcommits": context().flags.incl KeepCommits
       of "workspace":
         if val == ".":
-          workspace() = paths.getCurrentDir()
+          workspace(paths.getCurrentDir())
           createWorkspace()
         elif val.len > 0:
-          workspace() = Path val
+          workspace(Path val)
           # createDir(val)
           # createWorkspace()
         else:
@@ -391,10 +391,6 @@ proc mainRun(params: seq[string]) =
     if args.len != 0:
       fatal action & " command takes no arguments"
 
-  template projectCmd() =
-    if workspace() == workspace() or workspace() == context().depsDir:
-      fatal action & " command must be executed in a project, not in the workspace"
-
   parseAtlasOptions(params, action, args)
 
   if action notin ["init", "tag"]:
@@ -408,10 +404,10 @@ proc mainRun(params: seq[string]) =
     fatal "No action."
   of "init":
     if GlobalWorkspace in context().flags:
-      workspace() = Path(getHomeDir() / ".atlas")
+      workspace(Path(getHomeDir() / ".atlas"))
       createDir(workspace())
     else:
-      workspace() = paths.getCurrentDir()
+      workspace(paths.getCurrentDir())
     createWorkspace()
   of "update":
     discard # TODO: what to do here?
@@ -431,7 +427,7 @@ proc mainRun(params: seq[string]) =
       error "atlas", "'" & dir & "' is not a vaild project name!"
       quit(1)
 
-    workspace() = paths.getCurrentDir() / Path purl.projectName
+    workspace(paths.getCurrentDir() / Path purl.projectName)
     let (status, msg) = gitops.clone(purl.toUri, workspace())
     if status != Ok:
       error "atlas", "error cloning project:", dir, "message:", msg

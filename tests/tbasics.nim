@@ -152,8 +152,8 @@ suite "urls and naming":
     check ua.path == "/D:/a/atlas/atlas/buildGraph/proj_a"
 
   test "proj_a windows path url with createUrlSkipPatterns":
-    workspace() = Path("D:\\a\\atlas\\atlas")
-    defer: workspace() = ws
+    workspace(Path("D:\\a\\atlas\\atlas"))
+    defer: workspace(ws)
 
     let upkg = createUrlSkipPatterns("D:\\a\\atlas\\atlas\\buildGraph\\proj_a", true, forceWindows = true)
     echo "upkg: ", $upkg

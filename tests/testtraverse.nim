@@ -82,7 +82,7 @@ suite "test expand with git tags":
         context().flags = {KeepWorkspace, ListVersions}
         context().defaultAlgo = SemVer
         # discard context().overrides.addPattern("$+", "file://./buildGraph/$#")
-        workspace() = paths.getCurrentDir()
+        workspace(paths.getCurrentDir())
 
         let dir = paths.getCurrentDir()
         # writeFile("ws_testtraverse.nimble", "requires \"proj_a\"\n")
@@ -136,7 +136,7 @@ suite "test expand with git tags":
       #setAtlasVerbosity(Trace)
       withDir "tests/ws_testtraverse":
         removeDir("deps")
-        workspace() = paths.getCurrentDir()
+        workspace(paths.getCurrentDir())
         context().flags = {KeepWorkspace, ListVersions}
         context().defaultAlgo = SemVer
         discard context().nameOverrides.addPattern("$+", "file://./buildGraph/$#")
@@ -199,7 +199,7 @@ suite "test expand with git tags":
       withDir "tests/ws_testtraverse":
         # setAtlasVerbosity(Trace)
         removeDir("deps")
-        workspace() = paths.getCurrentDir()
+        workspace(paths.getCurrentDir())
         context().flags = {KeepWorkspace, ListVersions}
         context().defaultAlgo = SemVer
         context().depsDir = Path "deps_http"
@@ -243,7 +243,7 @@ suite "test expand with git tags":
     # setAtlasVerbosity(Trace)
     withDir "tests//ws_testtraverse_explicit":
       removeDir("deps")
-      workspace() = paths.getCurrentDir()
+      workspace(paths.getCurrentDir())
       context().flags = {KeepWorkspace, ListVersions}
       context().defaultAlgo = SemVer
 
@@ -309,7 +309,7 @@ suite "test expand with no git tags":
       # setAtlasVerbosity(Trace)
       withDir "tests/ws_testtraverse":
         removeDir("deps")
-        workspace() = paths.getCurrentDir()
+        workspace(paths.getCurrentDir())
         context().flags = {KeepWorkspace, ListVersions}
         context().defaultAlgo = SemVer
         discard context().nameOverrides.addPattern("$+", "file://./buildGraphNoGitTags/$#")
@@ -349,7 +349,7 @@ suite "test expand with no git tags":
       # setAtlasVerbosity(Trace)
       withDir "tests/ws_testtraverse":
         removeDir("deps")
-        workspace() = paths.getCurrentDir()
+        workspace(paths.getCurrentDir())
         context().flags = {KeepWorkspace, ListVersions}
         context().defaultAlgo = SemVer
 
@@ -421,7 +421,7 @@ suite "test expand with no git tags and nimble commits max":
       # setAtlasVerbosity(Trace)
       withDir "tests/ws_testtraverse":
         removeDir("deps")
-        workspace() = paths.getCurrentDir()
+        workspace(paths.getCurrentDir())
         context().flags = {NimbleCommitsMax, KeepWorkspace, ListVersions}
         context().defaultAlgo = SemVer
 

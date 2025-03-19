@@ -68,8 +68,11 @@ proc setContext*(ctx: AtlasContext) =
 proc context*(): var AtlasContext =
   atlasContext
 
-proc workspace*(): var Path =
+proc workspace*(): Path =
   atlasContext.workspace
+
+proc workspace*(ws: Path) =
+  atlasContext.workspace = ws
 
 proc depsDir*(): Path =
   result = atlasContext.workspace / atlasContext.depsDir
