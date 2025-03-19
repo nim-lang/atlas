@@ -24,7 +24,7 @@ proc findNimbleFile*(dir: Path, projectName: string): seq[Path] =
   if result.len() == 0:
     for file in walkFiles($dir / "*.nimble"):
       result.add Path(file)
-  trace dir, "finding nimble file searching by name:", projectName, "found:", result.join(", ")
+  debug dir, "finding nimble file searching by name:", projectName, "found:", result.join(", ")
 
 proc findNimbleFile*(info: Package): seq[Path] =
   doAssert(info.ondisk.string != "", "Package ondisk must be set before findNimbleFile can be called! Package: " & $(info))
