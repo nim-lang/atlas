@@ -75,7 +75,12 @@ proc workspace*(ws: Path) =
   atlasContext.workspace = ws
 
 proc depsDir*(): Path =
-  result = atlasContext.workspace / atlasContext.depsDir
+  if atlasContext.depsDir == Path"":
+    result = Path""
+  elif atlasContext.depsDir.isAbsolute:
+    result = atlasContext.depsDir
+  else:
+    result = atlasContext.workspace / atlasContext.depsDir
 
 proc relativeToWorkspace*(path: Path): string =
   result = "$workspace/" & $path.relativePath(workspace())
