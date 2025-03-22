@@ -50,7 +50,7 @@ proc parseNimbleFile*(nc: var NimbleContext;
         result.status = HasBrokenNimbleFile
         result.err.addError $nimbleFile, "invalid 'requires' syntax in nimble file: " & r
     else:
-      if cmpIgnoreCase(name, "nim") == 0:
+      if cmpIgnoreCase(name, "nim") == 0 or cmpIgnoreCase($url, "https://github.com/nim-lang/nim") == 0:
         let v = extractGeQuery(query)
         if v != Version"":
           result.nimVersion = v
