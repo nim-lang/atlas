@@ -207,10 +207,8 @@ proc linkPackage(linkDir, linkedNimble: Path) =
   writeConfig()
   info "atlas:link", "current project dir:", $project()
 
-  echo "\n\n============== Linking project\n\n"
   # Load linked project's config to get its deps dir
   info "atlas:link", "linked project dir:", $linkDir
-  # var lnc = createNimbleContext()
   let lgraph = loadDepGraph(nc, linkedNimble)
 
   # Create links for all nimble files and links in the linked project
@@ -224,10 +222,6 @@ proc linkPackage(linkDir, linkedNimble: Path) =
     let nimble = nimbleFiles[0]
     createNimbleLink(pkg.url, nimble, CfgPath(srcDir))
 
-  let url = nc.createUrl("ws_link_semver")
-  error "NimbleContext:ws_link_semver: ", $url, "projectName:", url.projectName, " repr: ", repr(url)
-
-  echo "\n\n============== Installing dependencies\n\n"
   installDependencies(nc, nimbleFile)
 
 

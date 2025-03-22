@@ -66,7 +66,7 @@ suite "test link integration":
         var graph = dir.loadWorkspace(nc, AllReleases, onClone=DoClone, doSolve=true)
         writeDepGraph(graph)
 
-        echo "\tgraph:\n" & $graph.toJson(ToJsonOptions(enumMode: joptEnumString))
+        checkpoint "\tgraph:\n" & $graph.toJson(ToJsonOptions(enumMode: joptEnumString))
 
         let form = graph.toFormular(SemVer)
         context().flags.incl DumpGraphs
@@ -95,7 +95,7 @@ suite "test link integration":
         # check graph.toJson(ToJsonOptions(enumMode: joptEnumString)) == graph2.toJson(ToJsonOptions(enumMode: joptEnumString))
 
   test "expand using http urls with link files":
-      setAtlasVerbosity(Trace)
+      setAtlasVerbosity(Warning)
       withDir "tests/ws_link_integration":
         removeDir("deps")
         project(paths.getCurrentDir())
@@ -125,7 +125,7 @@ suite "test link integration":
         var nc = createNimbleContext()
         var graph = dir.loadWorkspace(nc, AllReleases, onClone=DoClone, doSolve=true)
 
-        echo "\tgraph:\n" & $graph.toJson(ToJsonOptions(enumMode: joptEnumString))
+        checkpoint "\tgraph:\n" & $graph.toJson(ToJsonOptions(enumMode: joptEnumString))
 
         let config = readConfigFile(getProjectConfig())
         echo "config: ", $config
@@ -138,11 +138,11 @@ suite "test link integration":
         # var sol: Solution
         # solve(graph, form)
 
-        # check graph.root.active
-        # check graph.pkgs[nc.createUrl("proj_a")].active
-        # check graph.pkgs[nc.createUrl("proj_b")].active
-        # check graph.pkgs[nc.createUrl("proj_c")].active
-        # check graph.pkgs[nc.createUrl("proj_d")].active
+        check graph.root.active
+        check graph.pkgs[nc.createUrl("proj_a")].active
+        check graph.pkgs[nc.createUrl("proj_b")].active
+        check graph.pkgs[nc.createUrl("proj_c")].active
+        check graph.pkgs[nc.createUrl("proj_d")].active
 
         # check $graph.root.activeVersion == "#head@-"
         # check $graph.pkgs[nc.createUrl("proj_a")].activeVersion == $findCommit("proj_a", "1.1.0")
