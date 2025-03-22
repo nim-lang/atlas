@@ -32,6 +32,17 @@ proc findNimbleFile*(info: Package): seq[Path] =
   result = findNimbleFile(info.ondisk, info.projectName() & ".nimble")
 
 proc cacheNimbleFilesFromGit*(pkg: Package, commit: CommitHash): seq[Path] =
+  # First check if we already have cached nimble files for this commit
+  for file in walkFiles($nimbleCachesDirectory() / (commit.h & "-*.nimble")):
+    let path = Path(file)
+    let nimbleFile = path.splitPath().tail
+    if nimbleFile == Path(commit.h & "-" & pkg.url.projectName & ".nimble"):
+      return @[path]
+    result.add path
+  
+  if result.len > 0:
+    return result
+
   let files = listFiles(pkg.ondisk, commit)
   var nimbleFiles: seq[Path]
   for file in files:
