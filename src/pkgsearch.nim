@@ -9,8 +9,6 @@
 import std / [json, os, sets, strutils, httpclient, uri]
 import basic/[context, reporters, packageinfos]
 
-const DefaultPackagesSubDir* = "packages"
-
 type PkgCandidates* = array[3, seq[PackageInfo]]
 
 proc determineCandidates*(pkgList: seq[PackageInfo];

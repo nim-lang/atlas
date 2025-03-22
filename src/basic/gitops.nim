@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std/[os, files, dirs, paths, osproc, sequtils, strutils, uri, algorithm]
+import std/[os, files, dirs, paths, osproc, sequtils, strutils, uri]
 import reporters, osutils, versions, context
 
 type
@@ -417,7 +417,7 @@ proc updateDir*(path: Path, filter: string) =
     if diff.len > 0:
       warn($path, "has uncommitted changes; skipped")
     else:
-      let (branch, status) = exec(GitCurrentBranch, path, [])
+      let (branch, _) = exec(GitCurrentBranch, path, [])
       if branch.strip.len > 0:
         let (output, exitCode) = osproc.execCmdEx("git pull origin " & branch.strip)
         if exitCode != 0:

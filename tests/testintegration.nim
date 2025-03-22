@@ -13,7 +13,7 @@ proc integrationTest() =
   # Test installation of some "important_packages" which we are sure
   # won't disappear in the near or far future. Turns out `nitter` has
   # quite some dependencies so it suffices:
-  let args = " --proxy=http://localhost:4242/ --dumbproxy --full --verbosity:info --keepWorkspace "
+  let args = " --proxy=http://localhost:4242/ --dumbproxy --dumpgraphs --full --verbosity:info --keepWorkspace "
 
   let cmd = atlasExe & args & " install"
   echo "Running: ", cmd

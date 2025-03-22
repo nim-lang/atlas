@@ -1,7 +1,7 @@
-import std/[unicode, paths, sha1, tables, json, jsonutils, hashes]
-import sattypes, pkgurls, versions, context, compiledpatterns
+import std/[paths, tables, json, jsonutils, hashes]
+import sattypes, pkgurls, versions, context
 
-export sha1, tables
+export tables
 
 type
 
@@ -23,8 +23,10 @@ type
     ondisk*: Path
     nimbleFile*: Path
     active*: bool
+    isAtlasProject*: bool # true if the package is an atlas project
     isRoot*: bool
     errors*: seq[string]
+    originHead*: CommitHash
 
   NimbleRelease* = ref object
     version*: Version
@@ -41,8 +43,14 @@ type
     vid*: VarId = NoVar
 
   DepGraph* = object
+    mode*: TraversalMode
     root*: Package
     pkgs*: OrderedTable[PkgUrl, Package]
+
+  TraversalMode* = enum
+    AllReleases,
+    ExplicitVersions,
+    CurrentCommit
 
 const
   EmptyReqs* = 0
@@ -75,26 +83,6 @@ proc `$`*(d: Package): string =
 
 proc projectName*(d: Package): string =
   d.url.projectName()
-
-proc toJsonHook*(v: (PkgUrl, VersionInterval), opt: ToJsonOptions): JsonNode =
-  result = newJObject()
-  result["url"] = toJsonHook(v[0])
-  result["version"] = toJsonHook(v[1])
-
-proc toJsonHook*(r: NimbleRelease, opt: ToJsonOptions = ToJsonOptions()): JsonNode =
-  if r == nil:
-    return newJNull()
-  result = newJObject()
-  result["requirements"] = toJson(r.requirements, opt)
-  if r.hasInstallHooks:
-    result["hasInstallHooks"] = toJson(r.hasInstallHooks, opt)
-  if r.srcDir != Path "":
-    result["srcDir"] = toJson(r.srcDir, opt)
-  # if r.version != Version"":
-  result["version"] = toJson(r.version, opt)
-  # if r.vid != NoVar:
-  #   result["varId"] = toJson(r.vid, opt)
-  result["status"] = toJson(r.status, opt)
 
 proc hash*(r: Package): Hash =
   ## use pkg name and url for identification and lookups
@@ -130,25 +118,6 @@ proc hash*(r: PackageVersion): Hash =
   result = hash(r.vtag)
 proc `==`*(a, b: PackageVersion): bool =
   result = a.vtag == b.vtag
-
-proc toJsonHook*(t: Table[VersionTag, NimbleRelease], opt: ToJsonOptions): JsonNode =
-  result = newJObject()
-  for k, v in t:
-    result[repr(k)] = toJson(v, opt)
-
-proc toJsonHook*(t: OrderedTable[PackageVersion, NimbleRelease], opt: ToJsonOptions): JsonNode =
-  result = newJArray()
-  for k, v in t:
-    var tpl = newJArray()
-    tpl.add toJson(k, opt)
-    tpl.add toJson(v, opt)
-    result.add tpl
-    # result[repr(k.vtag)] = toJson(v, opt)
-
-proc toJsonHook*(t: OrderedTable[PkgUrl, Package], opt: ToJsonOptions): JsonNode =
-  result = newJObject()
-  for k, v in t:
-    result[$(k)] = toJson(v, opt)
 
 proc activeNimbleRelease*(pkg: Package): NimbleRelease =
   if pkg.activeVersion.isNil:

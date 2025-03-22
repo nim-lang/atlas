@@ -6,21 +6,10 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [os, strutils, uri, tables, sequtils, unicode, sequtils, sets, json, hashes, algorithm, paths, files, dirs]
-import basic/[context, deptypes, versions, osutils, nimbleparser, packageinfos, reporters, gitops, parse_requires, pkgurls, compiledpatterns, sattypes, nimblecontext]
+import std / [os, strutils, uri, tables, sequtils, sets, hashes, algorithm, paths, dirs]
+import basic/[context, deptypes, versions, osutils, nimbleparser, reporters, gitops, pkgurls, nimblecontext, deptypesjson]
 
-export deptypes, versions
-
-type
-  TraversalMode* = enum
-    AllReleases,
-    ExplicitVersions,
-    CurrentCommit
-
-when defined(nimAtlasBootstrap):
-  import ../dist/sat/src/sat/satvars
-else:
-  import sat/satvars
+export deptypes, versions, deptypesjson
 
 proc collectNimbleVersions*(nc: NimbleContext; pkg: Package): seq[VersionTag] =
   let nimbleFiles = findNimbleFile(pkg)
@@ -70,7 +59,6 @@ proc processNimbleRelease(
     # warn pkg.url.projectName, "processRelease unable to checkout commit ", $release, "at:", $pkg.ondisk
     # result = NimbleRelease(status: HasBrokenRelease, err: "error checking out release")
 
-  var badNimbleFile = false
   if nimbleFiles.len() == 0:
     info "processRelease", "skipping release: missing nimble file:", $release
     result = NimbleRelease(status: HasUnknownNimbleFile, err: "missing nimble file")
@@ -128,6 +116,8 @@ proc traverseDependency*(
   var versions: seq[(PackageVersion, NimbleRelease)]
 
   let currentCommit = currentGitCommit(pkg.ondisk, Warning)
+  pkg.originHead = gitops.gitFindOriginTip(pkg.ondisk, Warning).commit()
+
   if mode == CurrentCommit and currentCommit.isEmpty():
     # let vtag = VersionTag(v: Version"#head", c: initCommitHash("", FromHead))
     # versions.add((vtag, NimbleRelease(version: vtag.version, status: Normal)))
@@ -252,9 +242,11 @@ proc loadDependency*(
 ) = 
   doAssert pkg.ondisk.string == ""
   pkg.ondisk = pkg.url.toDirectoryPath()
+  pkg.isAtlasProject = pkg.url.isAtlasProject()
   let todo = if dirExists(pkg.ondisk): DoNothing else: DoClone
 
-  debug pkg.url.projectName, "loading dependency todo:", $todo, "dest:", $pkg.ondisk
+  debug pkg.url.projectName, "loading dependency isLinked:", $pkg.isAtlasProject
+  debug pkg.url.projectName, "loading dependency todo:", $todo, "ondisk:", $pkg.ondisk
   case todo
   of DoClone:
     if onClone == DoNothing:
@@ -278,17 +270,16 @@ proc loadDependency*(
       pkg.state = Error
       pkg.errors.add "ondisk location missing"
 
-proc expand*(path: Path, nc: var NimbleContext; mode: TraversalMode, onClone: PackageAction): DepGraph =
+proc expandGraph*(path: Path, nc: var NimbleContext; mode: TraversalMode, onClone: PackageAction, isLinkPath = false): DepGraph =
   ## Expand the graph by adding all dependencies.
   
   doAssert path.string != "."
-  let url = nc.createUrlFromPath(path)
+  let url = nc.createUrlFromPath(path, isLinkPath)
   notice url.projectName, "expanding root package at:", $path, "url:", $url
   var root = Package(url: url, isRoot: true)
   # nc.loadDependency(pkg)
 
-  var processed = initHashSet[PkgUrl]()
-  result = DepGraph(root: root)
+  result = DepGraph(root: root, mode: mode)
   nc.packageToDependency[root.url] = root
 
   notice "atlas:expand", "Expanding packages for:", $root.projectName
@@ -298,6 +289,7 @@ proc expand*(path: Path, nc: var NimbleContext; mode: TraversalMode, onClone: Pa
     processing = false
     let pkgUrls = nc.packageToDependency.keys().toSeq()
 
+    # just for more concise logging
     var initializingPkgs: seq[string]
     var processingPkgs: seq[string]
     for pkgUrl in pkgUrls:
@@ -314,6 +306,7 @@ proc expand*(path: Path, nc: var NimbleContext; mode: TraversalMode, onClone: Pa
     if processingPkgs.len() > 0:
       notice root.projectName, "Processing packages:", processingPkgs.join(", ")
 
+    # process packages
     for pkgUrl in pkgUrls:
       var pkg = nc.packageToDependency[pkgUrl]
       case pkg.state:
@@ -325,11 +318,9 @@ proc expand*(path: Path, nc: var NimbleContext; mode: TraversalMode, onClone: Pa
       of Found:
         info pkg.projectName, "Processing package at:", pkg.ondisk.relativeToWorkspace()
         # processing = true
-        let mode = if pkg.isRoot: CurrentCommit else: mode
+        let mode = if pkg.isRoot or pkg.isAtlasProject: CurrentCommit else: mode
         nc.traverseDependency(pkg, mode, @[])
         trace pkg.projectName, "processed pkg:", $pkg
-        # for vtag, reqs in pkg.versions:
-        #   trace pkg.projectName, "pkg version:", $vtag, "reqs:", $(toJsonHook(reqs))
         processing = true
         result.pkgs[pkgUrl] = pkg
       else:
@@ -342,3 +333,9 @@ proc expand*(path: Path, nc: var NimbleContext; mode: TraversalMode, onClone: Pa
       nc.traverseDependency(pkg, ExplicitVersions, versions.toSeq())
 
   info "atlas:expand", "Finished expanding packages for:", $root.projectName
+
+proc findProjects*(path: Path): seq[Path] =
+  result = @[]
+  for k, f in walkDir(path):
+    if k == pcDir and dirExists(f / Path".git"):
+      result.add(f)

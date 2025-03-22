@@ -1,4 +1,4 @@
-import std/[paths, tables, files, os, uri, sequtils, dirs, sets, strutils, unicode]
+import std/[paths, tables, files, os, uri, dirs, sets, strutils, unicode]
 import context, packageinfos, reporters, pkgurls, gitops, compiledpatterns, deptypes, versions
 
 type
@@ -6,21 +6,22 @@ type
     packageToDependency*: Table[PkgUrl, Package]
     packageExtras*: Table[string, PkgUrl]
     nameToUrl: Table[string, PkgUrl]
-    # urlToNames: Table[Uri, string]
-
     explicitVersions*: Table[PkgUrl, HashSet[VersionTag]]
     nameOverrides*: Patterns
     urlOverrides*: Patterns
     hasPackageList*: bool
     notFoundNames: HashSet[string]
 
-proc findNimbleFile*(nimbleFile: Path): seq[Path] =
-  if fileExists(nimbleFile):
-    result.add nimbleFile
+proc findNimbleFile*(dir: Path, projectName: string = ""): seq[Path] =
+  if dir.splitFile().ext == "nimble":
+    let nimbleFile = dir
+    if fileExists(nimbleFile):
+      return @[nimbleFile]
+  else:
+    let nimbleFile = dir / Path(projectName & ".nimble")
+    if fileExists(nimbleFile):
+      return @[nimbleFile]
 
-proc findNimbleFile*(dir: Path, projectName: string): seq[Path] =
-  var nimbleFile = dir / Path(projectName & ".nimble")
-  result = findNimbleFile(nimbleFile)
   if result.len() == 0:
     for file in walkFiles($dir / "*.nimble"):
       result.add Path(file)
@@ -40,9 +41,9 @@ proc cacheNimbleFilesFromGit*(pkg: Package, commit: CommitHash): seq[Path] =
         break
       nimbleFiles.add Path(file)
 
-  createDir(cachesDirectory())
+  createDir(nimbleCachesDirectory())
   for nimbleFile in nimbleFiles:
-    let cachePath = cachesDirectory() / Path(commit.h & "-" & $nimbleFile.splitPath().tail)
+    let cachePath = nimbleCachesDirectory() / Path(commit.h & "-" & $nimbleFile.splitPath().tail)
     if not fileExists(cachePath):
       let contents = showFile(pkg.ondisk, commit, $nimbleFile)
       writeFile($cachePath, contents)
@@ -71,9 +72,9 @@ proc putImpl(nc: var NimbleContext, name: string, url: PkgUrl, isFromPath = fals
           existingUrl.path == url.path and existingUrl.hostname == url.hostname:
         info "atlas:nimblecontext", "different url schemes for the same package:", $name, "existing:", $existingUrl, "new:", $url
       else:
-        # TODO: need to handle this better, the user needs to choose which url to use
-        #       if the solver can't resolve the conflict
-        error "atlas:nimblecontext", "name already exists in packageExtras:", $name, "isFromPath:", $isFromPath, "with different url:", $nc.packageExtras[name], "and url:", $url
+        # this is handled in the solver which checks for conflicts
+        # but users should be aware that this is happening as they can override stuff
+        warn "atlas:nimblecontext", "name already exists in packageExtras:", $name, "isFromPath:", $isFromPath, "with different url:", $nc.packageExtras[name], "and url:", $url
         result = false
 
 proc put*(nc: var NimbleContext, name: string, url: PkgUrl): bool {.discardable.} =
@@ -84,8 +85,7 @@ proc putFromPath*(nc: var NimbleContext, name: string, url: PkgUrl): bool =
 
 proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
   ## primary point to createUrl's from a name or argument
-  ## TODO: add unit tests!
-  doAssert not nameOrig.isAbsolute(), "createUrl does not support absolute paths: " & $nameOrig
+  doAssert not nameOrig.isAbsolute(), "createUrl does not support relative paths: " & $nameOrig
 
   var didReplace = false
   var name = nameOrig
@@ -121,26 +121,36 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
 
   if not result.isEmpty():
     if nc.put(result.projectName, result):
-      debug "atlas:createUrl", "created url with name:", name, "orig:", nameOrig, "projectName:", $result.projectName, "hasShortName:", $result.hasShortName, "url:", $result.url
+      debug "atlas:createUrl", "created url with name:", name, "orig:",
+            nameOrig, "projectName:", $result.projectName,
+            "hasShortName:", $result.hasShortName, "url:", $result.url
 
-
-proc createUrlFromPath*(nc: var NimbleContext, orig: Path): PkgUrl =
+proc createUrlFromPath*(nc: var NimbleContext, orig: Path, isLinkPath = false): PkgUrl =
   let absPath = absolutePath(orig)
-  # Check if this is an Atlas workspace or if it's the current workspace
-  if isWorkspace(absPath) or absPath == absolutePath(workspace()):
-    # Find nimble files in the workspace directory
-    let nimbleFiles = findNimbleFile(absPath, "")
-    if nimbleFiles.len > 0:
-      # Use the first nimble file found as the workspace identifier
-      let url = parseUri("atlas://workspace/" & $nimbleFiles[0].splitPath().tail)
+  # Check if this is an Atlas project or if it's the current project
+  let prefix = if isLinkPath: "link://" else: "atlas://"
+  if isProject(absPath) or absPath == absolutePath(project()):
+    if isLinkPath:
+      let url = parseUri(prefix & $absPath)
       result = toPkgUriRaw(url)
     else:
-      # Fallback to directory name if no nimble file found
-      let url = parseUri("atlas://workspace/" & $orig.splitPath().tail)
-      result = toPkgUriRaw(url)
+      # Find nimble files in the project directory
+      let nimbleFiles = findNimbleFile(absPath, "")
+      if nimbleFiles.len > 0:
+        # Use the first nimble file found as the project identifier
+        trace "atlas:nimblecontext", "createUrlFromPath: found nimble file: ", $nimbleFiles[0]
+        let url = parseUri(prefix & $nimbleFiles[0])
+        result = toPkgUriRaw(url)
+      else:
+        # Fallback to directory name if no nimble file found
+        let nimble = $(absPath.splitPath().tail) & ".nimble"
+        trace "atlas:nimblecontext", "createUrlFromPath: no nimble file found, trying directory name: ", $nimble
+        let url = parseUri(prefix & $absPath / nimble)
+        result = toPkgUriRaw(url)
   else:
-    let fileUrl = "file://" & $absPath
-    result = createUrlSkipPatterns(fileUrl)
+    error "atlas:nimblecontext", "createUrlFromPath: not a project: " & $absPath
+    # let fileUrl = "file://" & $absPath
+    # result = createUrlSkipPatterns(fileUrl)
   if not result.isEmpty():
     discard nc.putFromPath(result.projectName, result)
 

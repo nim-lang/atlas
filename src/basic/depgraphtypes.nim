@@ -1,7 +1,6 @@
+import std / [paths, tables, streams, json, jsonutils]
 
-import std / [sets, paths, files, dirs, tables, os, strutils, streams, json, jsonutils, algorithm]
-
-import sattypes, context, deptypes, gitops, reporters, nimbleparser, pkgurls, versions
+import sattypes, context, deptypes, reporters, nimblecontext, pkgurls, versions
 
 
 type 
@@ -54,7 +53,6 @@ proc toposorted*(graph: DepGraph): seq[Package] =
 proc validateDependencyGraph*(graph: DepGraph): bool =
   ## Checks if the dependency graph is valid (no cycles)
   var visited = initTable[PkgUrl, VisitState]()
-  var valid = true
   
   # Initialize all packages as not visited
   for url, pkg in graph.pkgs:
@@ -89,16 +87,6 @@ proc validateDependencyGraph*(graph: DepGraph): bool =
   
   return true
 
-proc toJsonHook*(vid: VarId): JsonNode = toJson($(int(vid)))
-proc toJsonHook*(p: Path): JsonNode = toJson($(p))
-
-proc dumpJson*(d: DepGraph, filename: string, full = true, pretty = true) =
-  let jn = toJson(d, ToJsonOptions(enumMode: joptEnumString))
-  if pretty:
-    writeFile(filename, pretty(jn))
-  else:
-    writeFile(filename, $(jn))
-
 proc toDestDir*(g: DepGraph; d: Package): Path =
   result = d.ondisk
 
@@ -121,21 +109,3 @@ proc bestNimVersion*(g: DepGraph): Version =
     if pkg.active and pkg.activeNimbleRelease().nimVersion != Version"":
       let v = pkg.activeNimbleRelease().nimVersion
       if v > result: result = v
-
-proc createGraphFromWorkspace*(): DepGraph =
-  # TODO: fixme?
-  result = DepGraph()
-  let configFile = getWorkspaceConfig()
-  var f = newFileStream($configFile, fmRead)
-  if f == nil:
-    error configFile, "could not open workspace config:", $configFile
-    return
-  try:
-    let j = parseJson(f, $configFile)
-    # let g = j["graph"]
-    # result.nodes = jsonTo(g["nodes"], typeof(result.nodes))
-    # result.reqs = jsonTo(g["reqs"], typeof(result.reqs))
-    # for i, n in mpairs(result.nodes):
-    #   result.packageToDependency[n.dep.url] = i
-  except:
-    warn configFile, "couldn't load graph from: " & $configFile

@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std/[os, strutils, dirs, files]
+import std/[os, strutils, files]
 import context, osutils, parse_requires, reporters
 
 export parse_requires
@@ -35,10 +35,10 @@ proc patchNimCfg*(deps: seq[CfgPath]; cfgPath: CfgPath) =
   let cfg = Path(cfgPath.string / "nim.cfg")
   assert cfgPath.string.len > 0
   if cfgPath.string.len > 0 and not dirExists(cfgPath.string):
-    error($workspace(), "could not write the nim.cfg")
+    error($project(), "could not write the nim.cfg")
   elif not fileExists(cfg):
     writeFile($cfg, cfgContent)
-    info(workspace(), "created: " & $cfg.readableFile(workspace()))
+    info(project(), "created: " & $cfg.readableFile(project()))
   else:
     let content = readFile($cfg)
     let start = content.find(configPatternBegin)
@@ -53,4 +53,4 @@ proc patchNimCfg*(deps: seq[CfgPath]; cfgPath: CfgPath) =
       # do not touch the file if nothing changed
       # (preserves the file date information):
       writeFile($cfg, cfgContent)
-      info(workspace(), "updated: " & $cfg.readableFile(workspace()))
+      info(project(), "updated: " & $cfg.readableFile(project()))

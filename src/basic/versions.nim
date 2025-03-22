@@ -440,13 +440,10 @@ proc `$`*(i: VersionInterval): string =
     of verSpecial:
       result = $i.a.v
 
-proc toJsonHook*(v: VersionInterval): JsonNode = toJson($(v))
-proc toJsonHook*(v: Version): JsonNode = toJson($v)
-proc toJsonHook*(v: VersionTag): JsonNode = toJson(repr(v))
-
 proc toVersion*(str: string): Version =
   if str == "~": result = Version("")
   else: result = parseVersion(str, 0)
+
 
 proc toCommitHash*(str: string, origin = FromNone): CommitHash =
   if str == "-": result = initCommitHash("", origin)

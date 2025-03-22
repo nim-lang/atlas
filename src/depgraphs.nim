@@ -1,11 +1,9 @@
-import std / [sets, tables, sequtils, paths, dirs, files, tables, os, strutils, streams, json, jsonutils, algorithm]
+import std / [sets, tables, sequtils, paths, files, os, strutils, json, jsonutils, algorithm]
 
-import basic/[deptypes, versions, depgraphtypes, osutils, context, gitops, reporters, nimblecontext, pkgurls, versions]
+import basic/[deptypes, versions, depgraphtypes, osutils, context, gitops, reporters, nimblecontext, pkgurls, deptypesjson]
 import dependencies, runners 
 
-import std/[json, jsonutils]
-
-export depgraphtypes
+export depgraphtypes, deptypesjson
 
 when defined(nimAtlasBootstrap):
   import ../dist/sat/src/sat/[sat, satvars]
@@ -279,7 +277,7 @@ proc checkDuplicateModules(graph: var DepGraph) =
   for name, dupePkgs in moduleNames:
     if not context().pkgOverrides.hasKey(name):
       error "atlas:resolved", "duplicate module name:", name, "with pkgs:", dupePkgs.mapIt(it.url.projectName).join(", ")
-      notice "atlas:resolved", "please add an entry to `pkgOverrides` to the current workspace config to select one of: "
+      notice "atlas:resolved", "please add an entry to `pkgOverrides` to the current project config to select one of: "
       for pkg in dupePkgs:
         notice "...", "   \"$1\": \"$2\", " % [$pkg.url.shortName(), $pkg.url]
     
@@ -373,7 +371,6 @@ proc solve*(graph: var DepGraph; form: Form) =
       if solution.isTrue(VarId(varIdx)) and form.mapping.hasKey(VarId varIdx):
         let mapInfo = form.mapping[VarId varIdx]
         let pkg = mapInfo.pkg
-        let ver = mapInfo.version
         pkg.active = true
         assert not pkg.isNil, "too bad: " & $pkg.url
         assert not mapInfo.release.isNil, "too bad: " & $pkg.url
@@ -389,11 +386,11 @@ proc solve*(graph: var DepGraph; form: Form) =
     var notFoundCount = 0
     for pkg in values(graph.pkgs):
       if pkg.isRoot and pkg.state != Processed:
-        error workspace(), "invalid find package: " & pkg.url.projectName & " in state: " & $pkg.state & " error: " & $pkg.errors
+        error project(), "invalid find package: " & pkg.url.projectName & " in state: " & $pkg.state & " error: " & $pkg.errors
         inc notFoundCount
     if notFoundCount > 0:
       return
-    error workspace(), "version conflict; for more information use --showGraph"
+    error project(), "version conflict; for more information use --showGraph"
     for pkg in mvalues(graph.pkgs):
       var usedVersionCount = 0
       for (ver, rel) in validVersions(pkg):
@@ -403,14 +400,16 @@ proc solve*(graph: var DepGraph; form: Form) =
           if solution.isTrue(ver.vid):
             error pkg.url.projectName, string(ver.version()) & " required"
   if DumpGraphs in context().flags:
+    info "atlas:graph", "dumping graph after solving"
     dumpJson(graph, "graph-solved.json")
 
 proc loadWorkspace*(path: Path, nc: var NimbleContext, mode: TraversalMode, onClone: PackageAction, doSolve: bool): DepGraph =
-  result = path.expand(nc, mode, onClone)
+  result = path.expandGraph(nc, mode, onClone)
 
   if doSolve:
     let form = result.toFormular(context().defaultAlgo)
     solve(result, form)
+
 
 proc runBuildSteps*(graph: DepGraph) =
   ## execute build steps for the dependency graph
@@ -442,7 +441,7 @@ proc activateGraph*(graph: DepGraph): seq[CfgPath] =
         error pkg.url.projectName, "Missing ondisk location for:", $(pkg.url)
       else:
         info pkg.url.projectName, "checkout git commit:", $pkg.activeVersion.commit(), "at:", pkg.ondisk.relativeToWorkspace()
-        let res = checkoutGitCommit(pkg.ondisk, pkg.activeVersion.commit())
+        discard checkoutGitCommit(pkg.ondisk, pkg.activeVersion.commit())
 
   if NoExec notin context().flags:
     runBuildSteps(graph)

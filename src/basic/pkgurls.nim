@@ -6,8 +6,8 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [hashes, uri, os, strutils, os, sequtils, pegs, json]
-import compiledpatterns, gitops, reporters, context
+import std / [hashes, uri, os, strutils, files, dirs, sequtils, pegs, json, jsonutils]
+import gitops, reporters, context
 
 export uri
 
@@ -48,7 +48,6 @@ proc requiresName*(u: PkgUrl): string =
 proc toUri*(u: PkgUrl): Uri = result = u.u
 proc url*(p: PkgUrl): Uri = p.u
 proc `$`*(u: PkgUrl): string = $u.u
-proc toJsonHook*(v: PkgUrl): JsonNode = %($(v))
 proc hash*(a: PkgUrl): Hash {.inline.} = hash(a.u)
 proc `==`*(a, b: PkgUrl): bool {.inline.} = a.u == b.u
 
@@ -66,11 +65,13 @@ proc extractProjectName*(url: Uri): tuple[name: string, user: string, host: stri
     result = (n, "", "")
   elif u.scheme == "file":
     result = (n & e, "", "")
+  elif u.scheme == "link":
+    result = (n, "", "")
   else:
     result = (n & e, p, u.hostname)
 
 proc toOriginalPath*(pkgUrl: PkgUrl, isWindowsTest: bool = false): Path =
-  if pkgUrl.url.scheme == "file":
+  if pkgUrl.url.scheme in ["file", "link", "atlas"]:
     result = Path(pkgUrl.url.hostname & pkgUrl.url.path)
     if defined(windows) or isWindowsTest:
       var p = result.string.replace('/', '\\')
@@ -79,46 +80,93 @@ proc toOriginalPath*(pkgUrl: PkgUrl, isWindowsTest: bool = false): Path =
   else:
     raise newException(ValueError, "Invalid file path: " & $pkgUrl.url)
 
-proc toDirectoryPath*(pkgUrl: PkgUrl): Path =
+proc linkPath*(path: Path): Path =
+  result = Path(path.string & ".nimble-link")
+
+proc toDirectoryPath(pkgUrl: PkgUrl, isLinkFile: bool): Path =
+  trace pkgUrl, "directory path from:", $pkgUrl.url
+
   if pkgUrl.url.scheme == "atlas":
-    result = workspace()
+    result = project()
+  elif pkgUrl.url.scheme == "link":
+    result = pkgUrl.toOriginalPath().parentDir()
   elif pkgUrl.url.scheme == "file":
     # file:// urls are used for local source paths, not dependency paths
-    # result = Path(pkgUrl.url.path)
     result = depsDir() / Path(pkgUrl.projectName())
   else:
     result = depsDir() / Path(pkgUrl.projectName())
+  
+  if not isLinkFile and not dirExists(result) and fileExists(result.linkPath()):
+    # prefer the directory path if it exists (?)
+    let linkPath = result.linkPath()
+    let link = readFile($linkPath)
+    let lines = link.split("\n")
+    if lines.len != 2:
+      warn pkgUrl.projectName(), "invalid link file:", $linkPath
+    else:
+      let nimble = Path(lines[0])
+      result = nimble.splitFile().dir
+      if not result.isAbsolute():
+        result = linkPath.parentDir() / result
+      debug pkgUrl.projectName(), "link file to:", $result
+
   result = result.absolutePath
   trace pkgUrl, "found directory path:", $result
   doAssert result.len() > 0
 
+proc toDirectoryPath*(pkgUrl: PkgUrl): Path =
+  toDirectoryPath(pkgUrl, false)
+
 proc toLinkPath*(pkgUrl: PkgUrl): Path =
   if pkgUrl.url.scheme == "atlas":
-    Path""
+    result = Path("")
+  elif pkgUrl.url.scheme == "link":
+    result = depsDir() / Path(pkgUrl.projectName() & ".nimble-link")
   else:
-    Path(pkgUrl.toDirectoryPath().string & ".link")
+    result = Path(toDirectoryPath(pkgUrl, true).string & ".nimble-link")
+
+proc isLinkPath*(pkgUrl: PkgUrl): bool =
+  result = fileExists(toLinkPath(pkgUrl))
+
+proc isAtlasProject*(pkgUrl: PkgUrl): bool =
+  result = pkgUrl.url.scheme == "link"
+
+proc createNimbleLink*(pkgUrl: PkgUrl, nimblePath: Path, cfgPath: CfgPath) =
+  let nimbleLink = toLinkPath(pkgUrl)
+  trace "nimble:link", "creating link at:", $nimbleLink, "from:", $nimblePath
+  if nimbleLink.fileExists():
+    return
+
+  let nimblePath = nimblePath.absolutePath()
+  let cfgPath = cfgPath.Path.absolutePath()
+
+  writeFile($nimbleLink, "$1\n$2" % [$nimblePath, $cfgPath])
 
 proc isWindowsAbsoluteFile*(raw: string): bool =
-  raw.match(peg"^ {'file://'?} {[A-Z] ':' ['/'\\]} .*")
+  raw.match(peg"^ {'file://'?} {[A-Z] ':' ['/'\\]} .*") or
+  raw.match(peg"^ {'link://'?} {[A-Z] ':' ['/'\\]} .*") or
+  raw.match(peg"^ {'atlas://'?} {[A-Z] ':' ['/'\\]} .*")
 
 proc toWindowsFileUrl*(raw: string): string =
   let rawPath = raw.replace('\\', '/')
   if rawPath.isWindowsAbsoluteFile():
-    result = rawPath.replace("file://", "file:///")
+    result = rawPath
+    result = result.replace("file://", "file:///")
+    result = result.replace("link://", "link:///")
+    result = result.replace("atlas://", "atlas:///")
   else:
     result = rawPath
 
 proc fixFileRelativeUrl*(u: Uri, isWindowsTest: bool = false): Uri =
-  if isWindowsTest or defined(windows) and u.scheme == "file" and u.hostname.len() > 0:
+  if isWindowsTest or defined(windows) and u.scheme in ["file", "link", "atlas"] and u.hostname.len() > 0:
     result = parseUri(toWindowsFileUrl($u))
   else:
     result = u
 
-  if result.scheme == "file" and result.hostname.len() > 0:
+  if result.scheme in ["file", "link", "atlas"] and result.hostname.len() > 0:
     # fix relative paths
-    var url = (workspace().string / (result.hostname & result.path)).absolutePath
-    # url = absolutePath(url)
-    url = "file://" & url
+    var url = (project().string / (result.hostname & result.path)).absolutePath
+    url = result.scheme & "://" & url
     if isWindowsTest or defined(windows):
       url = toWindowsFileUrl(url)
     result = parseUri(url)
@@ -161,22 +209,15 @@ proc createUrlSkipPatterns*(raw: string, skipDirTest = false, forceWindows: bool
 
       u.scheme = "ssh"
 
-    if u.scheme == "file":
+    if u.scheme in ["file", "link", "atlas"]:
       # fix missing absolute paths
-      u = fixFileRelativeUrl(u)
+      u = fixFileRelativeUrl(u, isWindowsTest = forceWindows)
       hasShortName = true
 
     cleanupUrl(u)
     result = PkgUrl(qualifiedName: extractProjectName(u), u: u, hasShortName: hasShortName)
-
   # trace result, "created url raw:", repr(raw), "url:", repr(result)
 
 proc toPkgUriRaw*(u: Uri, hasShortName: bool = false): PkgUrl =
   result = createUrlSkipPatterns($u, true)
   result.hasShortName = hasShortName
-
-# proc dir*(s: PkgUrl): string =
-#   if isFileProtocol(s):
-#     result = substr(s.u, len("file://"))
-#   else:
-#     result = s.projectName

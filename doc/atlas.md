@@ -1,6 +1,6 @@
 # Atlas Package Cloner
 
-Atlas is a simple package cloner tool. It manages an isolated workspace that
+Atlas is a simple package cloner tool. It manages an isolated project that
 contains projects and dependencies.
 
 Atlas is compatible with Nimble in the sense that it supports the Nimble
@@ -17,17 +17,17 @@ Atlas uses three concepts:
 
 ### Workspaces
 
-Every workspace is isolated, nothing is shared between workspaces.
-A workspace is a directory that has a file `atlas.workspace` inside it. Use `atlas init`
-to create a workspace out of the current working directory.
+Every project is isolated, nothing is shared between workspaces.
+A project is a directory that has a file `atlas.config` inside it. Use `atlas init`
+to create a project out of the current working directory.
 
-Projects plus their dependencies are stored in a workspace:
+Projects plus their dependencies are stored in a project:
 
 ```
-  $workspace / main project
-  $workspace / other project
-  $workspace / _deps / dependency A
-  $workspace / _deps / dependency B
+  $project / main project
+  $project / other project
+  $project / _deps / dependency A
+  $project / _deps / dependency B
 ```
 
 The deps directory can be set via `--deps:DIR` during `atlas init`.
@@ -35,12 +35,12 @@ The deps directory can be set via `--deps:DIR` during `atlas init`.
 
 ### Projects
 
-A workspace contains one or multiple "projects". These projects can use each other and it
+A project contains one or multiple "projects". These projects can use each other and it
 is easy to develop multiple projects at the same time.
 
 ### Dependencies
 
-Inside a workspace there can be a `_deps` directory where your dependencies are kept. It is
+Inside a project there can be a `_deps` directory where your dependencies are kept. It is
 easy to move a dependency one level up and out the `_deps` directory, turning it into a project.
 Likewise, you can move a project to the `_deps` directory, turning it into a dependency.
 
@@ -107,7 +107,7 @@ For example:
 
 ### Clone/Update <url>/<package name>
 
-Clones a URL and all of its dependencies (recursively) into the workspace.
+Clones a URL and all of its dependencies (recursively) into the project.
 Creates or patches a `nim.cfg` file with the required `--path` entries.
 
 **Note**: Due to the used algorithms an `update` is the same as a `clone`.
@@ -129,7 +129,7 @@ Use the .nimble file to setup the project's dependencies.
 
 ### UpdateProjects / updateDeps [filter]
 
-Update every project / dependency in the workspace that has a remote URL that
+Update every project / dependency in the project that has a remote URL that
 matches `filter` if a filter is given. The project / dependency is only updated
 if there are no uncommitted changes.
 
@@ -144,13 +144,18 @@ You can override how Atlas resolves a package name or a URL. The overrides use
 a simple pattern matching language and are flexible enough to integrate private
 gitlab repositories.
 
-To setup an override file, edit the `$workspace/atlas.workspace` file to contain
-a line like `overrides="urls.rules"`. Then create a file `urls.rules` that can
-contain lines like:
-
 ```
-customProject -> https://gitlab.company.com/customProject
-https://github.com/araq/ormin -> https://github.com/useMyForkInstead/ormin
+{
+  "resolver": "SemVer",
+  "nameOverrides": {
+    "customProject": "https://gitlab.company.com/customProject"
+  },
+  "urlOverrides": {
+    "https://github.com/araq/ormin": "https://github.com/useMyForkInstead/ormin"
+  },
+  "plugins": "",
+}
+
 ```
 
 The `$` has a special meaning in a pattern:
@@ -167,7 +172,7 @@ The `$` has a special meaning in a pattern:
 For example, here is how to override any github link:
 
 ```
-https://github.com/$+ -> https://utopia.forall/$#
+"https://github.com/$+": "https://utopia.forall/$#"
 ```
 
 You can use `$1` or `$#` to refer to captures.
@@ -176,7 +181,7 @@ You can use `$1` or `$#` to refer to captures.
 ## Virtual Nim environments
 
 Atlas supports setting up a virtual Nim environment via the `env` command. You can
-even install multiple different Nim versions into the same workspace.
+even install multiple different Nim versions into the same project.
 
 For example:
 
@@ -191,7 +196,7 @@ When completed, run `source nim-1.6.12/activate.sh` on UNIX and `nim-1.6.12/acti
 ## Dependency resolution
 
 To change the used dependency resolution mechanism, edit the `resolver` value of
-your `atlas.workspace` file. The possible values are:
+your `atlas.config` file. The possible values are:
 
 ### MaxVer
 
@@ -239,9 +244,9 @@ third party dependencies ("libc" etc.) and the version of your operating system.
 
 ### pin [atlas.lock]
 
-`atlas pin` can be run either in the workspace or in a specific project. It "pins" the used
+`atlas pin` can be run either in the project or in a specific project. It "pins" the used
 repositories to their current commit hashes.
-If run in the workspace the entire workspace is "pinned" in the `atlas.lock` file.
+If run in the project the entire project is "pinned" in the `atlas.lock` file.
 If run in a project the project's dependencies but not the project itself is "pinned" in the
 lock file.
 
@@ -261,8 +266,8 @@ easy to integrate foreign projects as dependencies into your project.
 This is accomplished by Atlas plugins. A plugin is a NimScript snippet that can call into
 external tools via `exec`.
 
-To enable plugins, add the line `plugins="_plugins"` to your `atlas.workspace` file. Then create
-a directory `_plugins` in your workspace. Every `*.nims` file inside the plugins directory is
+To enable plugins, add the line `plugins="_plugins"` to your `atlas.config` file. Then create
+a directory `_plugins` in your project. Every `*.nims` file inside the plugins directory is
 integrated into Atlas.
 
 

@@ -1,7 +1,7 @@
 ## Utility API for Nim package managers.
 ## (c) 2021 Andreas Rumpf
 
-import std / [tables, strutils, paths]
+import std / [strutils, paths]
 
 import compiler / [ast, idents, msgs, syntaxes, options, pathutils, lineinfos]
 import reporters

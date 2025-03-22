@@ -16,7 +16,11 @@ const
   TestsDir* = "atlas/tests"
 
 const
-  AtlasWorkspaceFile = Path "atlas.workspace"
+  AtlasProjectConfig = Path"atlas.config"
+  DefaultPackagesSubDir* = Path"_packages"
+  DefaultCachesSubDir* = Path"_caches"
+  DefaultNimbleCachesSubDir* = Path"_nimbles"
+
 
 type
   CfgPath* = distinct string # put into a config `--path:"../x"`
@@ -49,7 +53,7 @@ type
     NimbleCommitsMax # takes the newest commit for each version
 
   AtlasContext* = object
-    workspace*: Path = Path"."
+    projectDir*: Path = Path"."
     depsDir*: Path = Path"deps"
     flags*: set[Flag] = {}
     nameOverrides*: Patterns
@@ -68,11 +72,11 @@ proc setContext*(ctx: AtlasContext) =
 proc context*(): var AtlasContext =
   atlasContext
 
-proc workspace*(): Path =
-  atlasContext.workspace
+proc project*(): Path =
+  atlasContext.projectDir
 
-proc workspace*(ws: Path) =
-  atlasContext.workspace = ws
+proc project*(ws: Path) =
+  atlasContext.projectDir = ws
 
 proc depsDir*(relative = false): Path =
   if atlasContext.depsDir == Path"":
@@ -80,30 +84,42 @@ proc depsDir*(relative = false): Path =
   elif relative or atlasContext.depsDir.isAbsolute:
     result = atlasContext.depsDir
   else:
-    result = atlasContext.workspace / atlasContext.depsDir
+    result = atlasContext.projectDir / atlasContext.depsDir
+
+proc packagesDirectory*(): Path =
+  depsDir() / DefaultPackagesSubDir
+
+proc cachesDirectory*(): Path =
+  depsDir() / DefaultCachesSubDir
+
+proc nimbleCachesDirectory*(): Path =
+  depsDir() / DefaultNimbleCachesSubDir
+
+proc depGraphCacheFile*(ctx: AtlasContext): Path =
+  ctx.projectDir / ctx.depsDir / Path"atlas.cache.json"
 
 proc relativeToWorkspace*(path: Path): string =
-  result = "$workspace/" & $path.relativePath(workspace())
+  result = "$project/" & $path.relativePath(project())
 
-proc getWorkspaceConfig*(workspace = workspace()): Path =
-  ## prefer workspace atlas.config if found
+proc getProjectConfig*(dir = project()): Path =
+  ## prefer project atlas.config if found
   ## otherwise default to one in deps/
   ## the deps path will be the default for auto-created ones
-  result = workspace / AtlasWorkspaceFile
+  result = dir / AtlasProjectConfig
   if fileExists(result): return
-  result = depsDir() / AtlasWorkspaceFile
+  result = depsDir() / AtlasProjectConfig
 
-proc isWorkspace*(dir: Path): bool =
-  fileExists(getWorkspaceConfig(dir))
+proc isProject*(dir: Path): bool =
+  fileExists(getProjectConfig(dir))
 
 proc `==`*(a, b: CfgPath): bool {.borrow.}
 
 proc displayName(c: AtlasContext; p: string): string =
-  if p == c.workspace.string:
+  if p == c.projectDir.string:
     p.absolutePath
   elif $c.depsDir != "" and p.isRelativeTo($c.depsDir):
     p.relativePath($c.depsDir)
-  elif p.isRelativeTo($c.workspace):
-    p.relativePath($c.workspace)
+  elif p.isRelativeTo($c.projectDir):
+    p.relativePath($c.projectDir)
   else:
     p

@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [json, os, sets, strutils, paths, files, dirs, httpclient, uri, json, jsonutils]
+import std / [json, os, sets, strutils, paths, dirs, httpclient, uri]
 import context, reporters, gitops
 
 const
@@ -40,16 +40,6 @@ type
       version*: string
       dvcsTag*: string
       web*: string # Info url for humans.
-
-const
-  DefaultPackagesSubDir* = Path"packages"
-  DefaultCachesSubDir* = Path"_caches"
-
-proc packagesDirectory*(): Path =
-  depsDir() / DefaultPackagesSubDir
-
-proc cachesDirectory*(): Path =
-  depsDir() / DefaultCachesSubDir
 
 proc optionalField(obj: JsonNode, name: string, default = ""): string =
   if hasKey(obj, name) and obj[name].kind == JString:

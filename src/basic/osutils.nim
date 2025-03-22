@@ -47,13 +47,13 @@ proc readableFile*(s: Path, path: Path): Path =
     s
 
 
-proc absoluteDepsDir*(workspace, value: Path): Path =
+proc absoluteDepsDir*(project, value: Path): Path =
   if value == Path ".":
-    result = workspace
+    result = project
   elif isAbsolute(value):
     result = value
   else:
-    result = workspace / value
+    result = project / value
 
 
 proc silentExec*(cmd: string; args: openArray[string]): (string, ResultCode) =
@@ -75,14 +75,6 @@ proc nimbleExec*(cmd: string; args: openArray[string]) =
 template withDir*(dir: Path; body: untyped) =
   let oldDir = paths.getCurrentDir()
   trace dir, "Current directory is now: " & $dir
-  try:
-    setCurrentDir($dir)
-    body
-  finally:
-    setCurrentDir($oldDir)
-
-template withDir*(dir: Path; body: untyped) =
-  let oldDir = paths.getCurrentDir()
   try:
     setCurrentDir($dir)
     body

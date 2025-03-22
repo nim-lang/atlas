@@ -6,15 +6,13 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [os, sha1, uri, paths, strutils, tables, unicode, hashes, json, jsonutils]
-import sattypes, deptypes, nimblecontext, versions, context, reporters, gitops, parse_requires, pkgurls, compiledpatterns
+import std / [os, uri, paths, strutils, json]
+import deptypes, nimblecontext, versions, context, reporters, parse_requires, pkgurls
 
 proc addError*(err: var string; nimbleFile: string; msg: string) =
   if err.len > 0: err.add "\n"
   else: err.add "in file: " & nimbleFile & "\n"
   err.add msg
-
-proc isUrl(s: string): bool {.inline.} = s.len > 5 and s.contains "://"
 
 proc parseNimbleFile*(nc: var NimbleContext;
                       nimbleFile: Path): NimbleRelease =
@@ -59,7 +57,6 @@ proc parseNimbleFile*(nc: var NimbleContext;
       else:
         result.requirements.add (url, query)
 
-
 proc genRequiresLine(u: string): string =
   result = "requires \"$1\"\n" % u.escape("", "")
 
@@ -67,11 +64,13 @@ proc patchNimbleFile*(nc: var NimbleContext;
                       nimbleFile: Path, name: string) =
   var url = nc.createUrl(name)  # This will handle both name and URL overrides internally
   
-  debug nimbleFile, "patching nimble file to use package:", name, "url:", $url
+  debug nimbleFile, "patching nimble file:", $nimbleFile, "to use package:", name, "url:", $url
 
   if url.isEmpty:
     error name, "cannot resolve package name: " & name
     return
+
+  doAssert nimbleFile.string.fileExists()
 
   let release = parseNimbleFile(nc, nimbleFile)
   # see if we have this requirement already listed. If so, do nothing:

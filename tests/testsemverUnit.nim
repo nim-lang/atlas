@@ -46,7 +46,7 @@ suite "graph solve":
       # setAtlasVerbosity(Info)
       withDir "tests/ws_semver_unit":
         removeDir("deps")
-        workspace(paths.getCurrentDir())
+        project(paths.getCurrentDir())
         context().flags = {KeepWorkspace, ListVersions}
         context().defaultAlgo = SemVer
 
@@ -62,7 +62,7 @@ suite "graph solve":
 
         let dir = paths.getCurrentDir().absolutePath
 
-        var graph = dir.expand(nc, AllReleases, onClone=DoClone)
+        var graph = dir.expandGraph(nc, AllReleases, onClone=DoClone)
 
         checkpoint "\tgraph:\n" & $graph.toJson(ToJsonOptions(enumMode: joptEnumString))
 
@@ -110,7 +110,7 @@ suite "graph solve":
       # setAtlasVerbosity(Trace)
       withDir "tests/ws_semver_unit":
         removeDir("deps")
-        workspace(paths.getCurrentDir())
+        project(paths.getCurrentDir())
         context().flags = {KeepWorkspace, ListVersions}
         context().defaultAlgo = SemVer
         discard context().nameOverrides.addPattern("proj$+", "https://example.com/buildGraph/proj$#")
@@ -120,7 +120,7 @@ suite "graph solve":
 
         let dir = paths.getCurrentDir().absolutePath
 
-        var graph = dir.expand(nc, AllReleases, onClone=DoClone)
+        var graph = dir.expandGraph(nc, AllReleases, onClone=DoClone)
 
         let sp = graph.pkgs.values().toSeq()
 
@@ -182,7 +182,7 @@ suite "test expand with no git tags":
       # setAtlasVerbosity(Info)
       withDir "tests/ws_semver_unit":
         removeDir("deps")
-        workspace(paths.getCurrentDir())
+        project(paths.getCurrentDir())
         context().flags = {KeepWorkspace, ListVersions}
         context().defaultAlgo = SemVer
 
@@ -196,7 +196,7 @@ suite "test expand with no git tags":
 
         let dir = paths.getCurrentDir().absolutePath
 
-        var graph = dir.expand(nc, AllReleases, onClone=DoClone)
+        var graph = dir.expandGraph(nc, AllReleases, onClone=DoClone)
 
         checkpoint "\tgraph:\n" & $graph.toJson(ToJsonOptions(enumMode: joptEnumString))
 
@@ -244,7 +244,7 @@ suite "test expand with no git tags":
       # setAtlasVerbosity(Trace)
       withDir "tests/ws_testtraverse_explicit":
         removeDir("deps")
-        workspace(paths.getCurrentDir())
+        project(paths.getCurrentDir())
         context().flags = {KeepWorkspace, ListVersions}
         context().defaultAlgo = SemVer
 
@@ -264,7 +264,7 @@ suite "test expand with no git tags":
 
         let dir = paths.getCurrentDir().absolutePath
 
-        var graph = dir.expand(nc, AllReleases, onClone=DoClone)
+        var graph = dir.expandGraph(nc, AllReleases, onClone=DoClone)
 
         checkpoint "\tgraph:\n" & $graph.toJson(ToJsonOptions(enumMode: joptEnumString))
 

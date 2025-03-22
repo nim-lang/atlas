@@ -9,8 +9,8 @@
 ## Lockfile implementation.
 
 import std / [sequtils, paths, dirs, files, strutils, tables, sets, os, json, jsonutils]
-import basic/[lockfiletypes, context, osutils, gitops, nimblechecksums, compilerversions,
-  configutils, depgraphtypes, reporters, nimbleparser, pkgurls, nimblecontext]
+import basic/[lockfiletypes, context, pkgurls, osutils, gitops, nimblechecksums, compilerversions,
+  configutils, depgraphtypes, reporters, nimblecontext]
 import depgraphs, dependencies
 
 const
@@ -21,8 +21,8 @@ proc prefixedPath*(path: Path): Path =
   let parts = splitPath($path)
   if path.isRelativeTo(depsDir()):
     return Path("$deps" / parts.tail)
-  elif path.isRelativeTo(workspace()):
-    return Path("$workspace" / parts.tail)
+  elif path.isRelativeTo(project()):
+    return Path("$project" / parts.tail)
   else:
     return Path($path)
 
@@ -31,14 +31,14 @@ proc fromPrefixedPath*(path: Path): Path =
   if path.string.startsWith("$deps"):
     path.string.removePrefix("$deps")
     return depsDir() / path
-  elif path.string.startsWith("$workspace"):
-    path.string.removePrefix("$workspace") # default to deps dir now
+  elif path.string.startsWith("$project"):
+    path.string.removePrefix("$project") # default to deps dir now
     return depsDir() / path
   else:
     return path
 
 proc genLockEntry(lf: var LockFile; w: Package) =
-  lf.items[w.url.projectName] = LockFileEntry(
+  lf.items[w.url.projectName()] = LockFileEntry(
     dir: prefixedPath(w.ondisk),
     url: $w.url.url,
     commit: $currentGitCommit(w.ondisk),
@@ -104,16 +104,16 @@ const
 proc pinGraph*(graph: DepGraph; lockFile: Path; exportNimble = false) =
   info "pin", "pinning project"
   var lf = newLockFile()
-  let workspace = workspace()
+  let project = project()
 
   # only used for exporting nimble locks
   var nlf = newNimbleLockFile()
   var nimbleDeps = newTable[string, HashSet[string]]()
 
-  info workspace, "pinning lockfile: " & $lockFile
+  info project, "pinning lockfile: " & $lockFile
 
   var nc = createNimbleContext()
-  var graph = workspace.expand(nc, CurrentCommit, onClone=DoNothing)
+  var graph = project.expandGraph(nc, CurrentCommit, onClone=DoNothing)
 
   for pkg in toposorted(graph):
     if pkg.isRoot:
@@ -132,14 +132,14 @@ proc pinGraph*(graph: DepGraph; lockFile: Path; exportNimble = false) =
       let deps = nimbleDeps.getOrDefault(pkg.url.projectName)
       genLockEntry nlf, pkg, getCfgPath(graph, pkg), deps
 
-  let nimcfgPath = workspace / NimCfg
+  let nimcfgPath = project / NimCfg
   if fileExists(nimcfgPath):
     lf.nimcfg = readFile($nimcfgPath).splitLines()
 
-  let nimblePaths = findNimbleFile(workspace)
+  let nimblePaths = findNimbleFile(project)
   if nimblePaths.len() == 1 and nimblePaths[0].string.len > 0 and nimblePaths[0].fileExists():
     lf.nimbleFile = LockedNimbleFile(
-      filename: nimblePaths[0].relativePath(workspace),
+      filename: nimblePaths[0].relativePath(project),
       content: readFile($nimblePaths[0]).splitLines())
 
   if not exportNimble:
@@ -150,11 +150,11 @@ proc pinGraph*(graph: DepGraph; lockFile: Path; exportNimble = false) =
 proc pinProject*(lockFile: Path, exportNimble = false) =
   ## Pin project using deps starting from the current project directory.
   ##
-  notice "atlas:pin", "Pinning workspace:", $lockFile
-  let workspace = workspace()
+  notice "atlas:pin", "Pinning project:", $lockFile
+  let project = project()
 
   var nc = createNimbleContext()
-  let graph = workspace.expand(nc, CurrentCommit, onClone=DoNothing) 
+  let graph = project.expandGraph(nc, CurrentCommit, onClone=DoNothing) 
   pinGraph graph, lockFile
 
 proc compareVersion(key, wanted, got: string) =
@@ -186,7 +186,7 @@ proc convertNimbleLock*(nimble: Path): LockFile =
       let u = nc.createUrl(pkgurl)
       let dir = depsDir(relative=true) / u.projectName.Path 
       result.items[name] = LockFileEntry(
-        dir: dir.relativePath(workspace()),
+        dir: dir.relativePath(project()),
         url: pkgurl,
         commit: info["vcsRevision"].getStr
       )
@@ -228,17 +228,12 @@ proc listChanged*(lockFile: Path) =
                      " found: " & $commit &
                      " lockfile has: " & v.commit
       else:
-        notice "atlas:pin", "Repo:", $dir.relativePath(workspace()), "is up to date at:", commit.short()
+        notice "atlas:pin", "Repo:", $dir.relativePath(project()), "is up to date at:", commit.short()
 
   if lf.hostOS == system.hostOS and lf.hostCPU == system.hostCPU:
     compareVersion "nim", lf.nimVersion, detectNimVersion()
     compareVersion "gcc", lf.gccVersion, detectGccVersion()
     compareVersion "clang", lf.clangVersion, detectClangVersion()
-
-proc withoutSuffix(s, suffix: string): string =
-  result = s
-  if result.endsWith(suffix):
-    result.setLen result.len - suffix.len
 
 proc replay*(lockFile: Path) =
   ## replays the given lockfile by cloning and updating all the deps
@@ -246,7 +241,7 @@ proc replay*(lockFile: Path) =
   ## this also includes updating the nim.cfg and nimble file as well
   ## if they're included in the lockfile
   ##
-  let workspace = workspace()
+  let project = project()
   let lf = if lockFile == NimbleLockFileName:
               convertNimbleLock(lockFile)
            else:
@@ -257,20 +252,20 @@ proc replay*(lockFile: Path) =
 
   # update the nim.cfg file
   if lf.nimcfg.len > 0:
-    writeFile($(workspace / NimCfg), lf.nimcfg.join("\n"))
+    writeFile($(project / NimCfg), lf.nimcfg.join("\n"))
   else:
     genCfg = true
 
   # update the nimble file
   if lf.nimbleFile.filename.string.len > 0:
-    writeFile($(workspace / lf.nimbleFile.filename),
+    writeFile($(project / lf.nimbleFile.filename),
               lf.nimbleFile.content.join("\n"))
 
   # update the the dependencies
   var paths: seq[CfgPath] = @[]
   for _, v in pairs(lf.items):
     let dir = fromPrefixedPath(v.dir)
-    notice "atlas:replay", "Setting up repo:", $dir.relativePath(workspace()), "to commit:", $v.commit
+    notice "atlas:replay", "Setting up repo:", $dir.relativePath(project()), "to commit:", $v.commit
     if not dirExists(dir):
       let (status, err) = gitops.clone(nc.createUrl(v.url).toUri, dir)
       if status != Ok:
@@ -291,9 +286,9 @@ proc replay*(lockFile: Path) =
       paths.add findCfgDir(dir)
 
   if genCfg:
-    # this allows us to re-create a nim.cfg that uses the paths from the users workspace
+    # this allows us to re-create a nim.cfg that uses the paths from the users project
     # without needing to do a `installDependencies` or `traverseLoop`
-    let cfgPath = CfgPath(workspace)
+    let cfgPath = CfgPath(project)
     patchNimCfg(paths, cfgPath)
 
   if lf.hostOS == system.hostOS and lf.hostCPU == system.hostCPU:

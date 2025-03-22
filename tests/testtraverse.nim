@@ -82,7 +82,7 @@ suite "test expand with git tags":
         context().flags = {KeepWorkspace, ListVersions}
         context().defaultAlgo = SemVer
         # discard context().overrides.addPattern("$+", "file://./buildGraph/$#")
-        workspace(paths.getCurrentDir())
+        project(paths.getCurrentDir())
 
         let dir = paths.getCurrentDir()
         # writeFile("ws_testtraverse.nimble", "requires \"proj_a\"\n")
@@ -98,7 +98,7 @@ suite "test expand with git tags":
         let url = nc.createUrlFromPath(dir)
         echo "URL: ", url
 
-        check url.toDirectoryPath() == Path(workspace())
+        check url.toDirectoryPath() == Path(project())
 
         var dep0 = Package(url: url, isRoot: true)
         var dep1 = Package(url: nc.createUrl("proj_a"))
@@ -113,15 +113,15 @@ suite "test expand with git tags":
         nc.loadDependency(dep4)
 
         check dep0.state == Found
-        check dep0.ondisk == Path(workspace())
+        check dep0.ondisk == Path(project())
         check dep1.state == Found
-        check dep1.ondisk == Path(workspace().string / "deps" / "proj_a")
+        check dep1.ondisk == Path(project().string / "deps" / "proj_a")
         check dep2.state == Found
-        check dep2.ondisk == Path(workspace().string / "deps" / "proj_b")
+        check dep2.ondisk == Path(project().string / "deps" / "proj_b")
         check dep3.state == Found
-        check dep3.ondisk == Path(workspace().string / "deps" / "proj_c")
+        check dep3.ondisk == Path(project().string / "deps" / "proj_c")
         check dep4.state == Found
-        check dep4.ondisk == Path(workspace().string / "deps" / "proj_d")
+        check dep4.ondisk == Path(project().string / "deps" / "proj_d")
 
         check collectNimbleVersions(nc, dep0) == newSeq[VersionTag]()
         proc tolist(tags: seq[VersionTag]): seq[string] = tags.mapIt($VersionTag(v: Version"", c: it.c)).sorted()
@@ -136,7 +136,7 @@ suite "test expand with git tags":
       #setAtlasVerbosity(Trace)
       withDir "tests/ws_testtraverse":
         removeDir("deps")
-        workspace(paths.getCurrentDir())
+        project(paths.getCurrentDir())
         context().flags = {KeepWorkspace, ListVersions}
         context().defaultAlgo = SemVer
         discard context().nameOverrides.addPattern("$+", "file://./buildGraph/$#")
@@ -146,7 +146,7 @@ suite "test expand with git tags":
         let deps = setupGraph()
         let dir = paths.getCurrentDir().absolutePath
 
-        let graph = dir.expand(nc, AllReleases, onClone=DoClone)
+        let graph = dir.expandGraph(nc, AllReleases, onClone=DoClone)
 
         checkpoint "\tgraph:\n" & $graph.toJson(ToJsonOptions(enumMode: joptEnumString))
         let sp = graph.pkgs.values().toSeq()
@@ -160,7 +160,8 @@ suite "test expand with git tags":
         let sp3: Package = sp[3] # proj C
         let sp4: Package = sp[4] # proj D
 
-        check $sp0.url == "atlas://workspace/ws_testtraverse.nimble"
+        check $sp0.url.url.scheme == "atlas" and endsWith($sp0.url, "ws_testtraverse.nimble")
+
         check $sp1.url == toWindowsFileUrl("file://$1/buildGraph/proj_a" % [$dir])  
         check $sp2.url == toWindowsFileUrl("file://$1/buildGraph/proj_b" % [$dir])
         check $sp3.url == toWindowsFileUrl("file://$1/buildGraph/proj_c" % [$dir])
@@ -199,14 +200,12 @@ suite "test expand with git tags":
       withDir "tests/ws_testtraverse":
         # setAtlasVerbosity(Trace)
         removeDir("deps")
-        workspace(paths.getCurrentDir())
+        project(paths.getCurrentDir())
         context().flags = {KeepWorkspace, ListVersions}
         context().defaultAlgo = SemVer
         context().depsDir = Path "deps_http"
         context().nameOverrides = Patterns()
 
-        # discard context().overrides.addPattern("does_not_exist", "file://./buildGraph/does_not_exist")
-        # discard context().overrides.addPattern("$+", "http://localhost:4242/buildGraph/$#")
         var nc = createNimbleContext()
         nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a"))
         nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b"))
@@ -221,14 +220,15 @@ suite "test expand with git tags":
         # let deps = setupGraph()
         let dir = paths.getCurrentDir().absolutePath
 
-        let graph = dir.expand(nc, AllReleases, onClone=DoClone)
+        let graph = dir.expandGraph(nc, AllReleases, onClone=DoClone)
 
         checkpoint "\tgraph:\n" & $graph.toJson(ToJsonOptions(enumMode: joptEnumString))
         let sp = graph.pkgs.values().toSeq()
         let vt = toVersionTag
 
         check sp.len() == 5
-        check $sp[0].url == "atlas://workspace/ws_testtraverse.nimble"
+        check $sp[0].url.url.scheme == "atlas" and endsWith($sp[0].url, "ws_testtraverse.nimble")
+
         check $sp[1].url == "https://example.com/buildGraph/proj_a"
         check $sp[2].url == "https://example.com/buildGraph/proj_b"
         check $sp[3].url == "https://example.com/buildGraph/proj_c"
@@ -243,7 +243,7 @@ suite "test expand with git tags":
     # setAtlasVerbosity(Trace)
     withDir "tests//ws_testtraverse_explicit":
       removeDir("deps")
-      workspace(paths.getCurrentDir())
+      project(paths.getCurrentDir())
       context().flags = {KeepWorkspace, ListVersions}
       context().defaultAlgo = SemVer
 
@@ -261,7 +261,7 @@ suite "test expand with git tags":
 
       # TODO: add a specific version to the requirements for a to include non-tagged 7ca5581cd
       # TODO: then check that the expanded graph has the correct version
-      let graph = workspace().expand(nc, AllReleases, onClone=DoClone)
+      let graph = project().expandGraph(nc, AllReleases, onClone=DoClone)
 
       checkpoint "\tgraph:\n" & $graph.toJson(ToJsonOptions(enumMode: joptEnumString))
 
@@ -290,6 +290,98 @@ suite "test expand with git tags":
       for pkgUrl, commits in nc.explicitVersions.pairs:
         echo "\tversions: ", pkgUrl, " commits: ", commits.toSeq().mapIt($it).join("; ")
 
+  test "expand from link file":
+      withDir "tests/ws_testtraverse":
+        setAtlasVerbosity(Error)
+        removeDir("deps")
+        let deps = setupGraph()
+
+        var nc = createNimbleContext()
+        nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a"))
+        nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b"))
+        nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c"))
+        nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d"))
+        # nc.nameToUrl["does_not_exist"] = toPkgUri(parseUri "https://example.com/buildGraph/does_not_exist")
+
+        let pkgA = nc.createUrl("proj_a")
+
+        check $pkgA == "https://example.com/buildGraph/proj_a"
+
+        # let deps = setupGraph()
+        let dir = paths.getCurrentDir().absolutePath
+
+        let graph = dir.expandGraph(nc, AllReleases, onClone=DoClone)
+
+      withDir "tests/ws_testtraverselinked":
+        setAtlasVerbosity(Warning)
+        removeDir("deps")
+        project(paths.getCurrentDir())
+        context().flags = {KeepWorkspace, ListVersions}
+        context().defaultAlgo = SemVer
+        context().depsDir = Path "deps"
+        context().nameOverrides = Patterns()
+
+        let ws_testtraverse = Path(".." / "ws_testtraverse").absolutePath()
+        let deps = Path(".." / "ws_testtraverse" / "deps").absolutePath()
+        let proj_a = Path(".." / "ws_testtraverse" / "deps" / "proj_a").absolutePath()
+        let proj_b = Path(".." / "ws_testtraverse" / "deps" / "proj_b").absolutePath()
+        let proj_c = Path(".." / "ws_testtraverse" / "deps" / "proj_c").absolutePath()
+        let proj_d = Path(".." / "ws_testtraverse" / "deps" / "proj_d").absolutePath()
+
+        discard context().nameOverrides.addPattern("ws_testtraverse", toWindowsFileUrl("link://" & $(ws_testtraverse / Path("ws_testtraverse.nimble"))))
+
+        var nc = createNimbleContext()
+        nc.put("ws_testtraverse", toPkgUriRaw(parseUri "https://example.com/buildGraph/ws_testtraverse"))
+        nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a"))
+        nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b"))
+        nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c"))
+        nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d"))
+
+        createNimbleLink(nc.createUrl("ws_testtraverse"), ws_testtraverse / Path("ws_testtraverse.nimble"), ws_testtraverse.CfgPath)
+        createNimbleLink(nc.createUrl("proj_a"), proj_a / Path("proj_a.nimble"), proj_a.CfgPath)
+        createNimbleLink(nc.createUrl("proj_b"), proj_b / Path("proj_b.nimble"), proj_b.CfgPath)
+        createNimbleLink(nc.createUrl("proj_c"), proj_c / Path("proj_c.nimble"), proj_c.CfgPath)
+        createNimbleLink(nc.createUrl("proj_d"), proj_d / Path("proj_d.nimble"), proj_d.CfgPath)
+
+        check nc.createUrl("proj_a").toDirectoryPath() == proj_a
+        check nc.createUrl("proj_b").toDirectoryPath() == proj_b
+        check nc.createUrl("proj_c").toDirectoryPath() == proj_c
+        check nc.createUrl("proj_d").toDirectoryPath() == proj_d
+
+        let pkgA = nc.createUrl("proj_a")
+
+        check $pkgA == "https://example.com/buildGraph/proj_a"
+
+        let dir = paths.getCurrentDir().absolutePath
+
+        let graph = dir.expandGraph(nc, AllReleases, onClone=DoClone)
+
+        checkpoint "\tgraph:\n" & $graph.toJson(ToJsonOptions(enumMode: joptEnumString))
+        let sp = graph.pkgs.values().toSeq()
+        let vt = toVersionTag
+
+        check sp.len() == 6
+        check $sp[0].url.url.scheme == "atlas" and endsWith($sp[0].url, "ws_testtraverselinked.nimble")
+
+        check $sp[1].url == toWindowsFileUrl("link://" & $(ws_testtraverse / Path("ws_testtraverse.nimble")))
+        check $sp[2].url == "https://example.com/buildGraph/proj_a"
+        check $sp[3].url == "https://example.com/buildGraph/proj_b"
+        check $sp[4].url == "https://example.com/buildGraph/proj_c"
+        check $sp[5].url == "https://example.com/buildGraph/proj_d"
+
+        let sp0: Package = sp[0] # proj ws_testtraversallinked
+        testRequirements(sp0, @[vt"#head@-"], [
+          (toWindowsFileUrl("link://" & $(ws_testtraverse / Path"ws_testtraverse.nimble")), "*"),
+        ])
+
+        let sp2: Package = sp[2] # proj A
+        check sp2.url.projectName() == "proj_a"
+
+        echo "sp2: ", sp2
+        testRequirements(sp2, projAtags, [
+          ("https://example.com/buildGraph/proj_b", ">= 1.1.0"),
+          ("https://example.com/buildGraph/proj_b", ">= 1.0.0"),
+        ])
       
 
 suite "test expand with no git tags":
@@ -309,7 +401,7 @@ suite "test expand with no git tags":
       # setAtlasVerbosity(Trace)
       withDir "tests/ws_testtraverse":
         removeDir("deps")
-        workspace(paths.getCurrentDir())
+        project(paths.getCurrentDir())
         context().flags = {KeepWorkspace, ListVersions}
         context().defaultAlgo = SemVer
         discard context().nameOverrides.addPattern("$+", "file://./buildGraphNoGitTags/$#")
@@ -319,7 +411,7 @@ suite "test expand with no git tags":
         let deps = setupGraphNoGitTags()
         var nc = createNimbleContext()
         # var graph = DepGraph(nodes: @[], reqs: defaultReqs())
-        let url = nc.createUrlFromPath(workspace())
+        let url = nc.createUrlFromPath(project())
 
         echo "URL: ", url
         var dep0 = Package(url: url, isRoot: true)
@@ -349,7 +441,7 @@ suite "test expand with no git tags":
       # setAtlasVerbosity(Trace)
       withDir "tests/ws_testtraverse":
         removeDir("deps")
-        workspace(paths.getCurrentDir())
+        project(paths.getCurrentDir())
         context().flags = {KeepWorkspace, ListVersions}
         context().defaultAlgo = SemVer
 
@@ -359,7 +451,7 @@ suite "test expand with no git tags":
         let deps = setupGraphNoGitTags()
         let dir = paths.getCurrentDir().absolutePath
 
-        let graph = dir.expand(nc, AllReleases, onClone=DoClone)
+        let graph = dir.expandGraph(nc, AllReleases, onClone=DoClone)
 
         checkpoint "\tgraph:\n" & $graph.toJson(ToJsonOptions(enumMode: joptEnumString))
         let sp = graph.pkgs.values().toSeq()
@@ -371,7 +463,8 @@ suite "test expand with no git tags":
         let sp3: Package = sp[3] # proj C
         let sp4: Package = sp[4] # proj D
 
-        check $sp[0].url == "atlas://workspace/ws_testtraverse.nimble"
+        check $sp[0].url.url.scheme == "atlas" and endsWith($sp[0].url, "ws_testtraverse.nimble")
+
         check $sp[1].url == toWindowsFileUrl("file://$1/buildGraphNoGitTags/proj_a" % [$dir])
         check $sp[2].url == toWindowsFileUrl("file://$1/buildGraphNoGitTags/proj_b" % [$dir])
         check $sp[3].url == toWindowsFileUrl("file://$1/buildGraphNoGitTags/proj_c" % [$dir])
@@ -421,7 +514,7 @@ suite "test expand with no git tags and nimble commits max":
       # setAtlasVerbosity(Trace)
       withDir "tests/ws_testtraverse":
         removeDir("deps")
-        workspace(paths.getCurrentDir())
+        project(paths.getCurrentDir())
         context().flags = {NimbleCommitsMax, KeepWorkspace, ListVersions}
         context().defaultAlgo = SemVer
 
@@ -431,7 +524,7 @@ suite "test expand with no git tags and nimble commits max":
         let deps = setupGraphNoGitTags()
         let dir = paths.getCurrentDir().absolutePath
 
-        let graph = dir.expand(nc, AllReleases, onClone=DoClone)
+        let graph = dir.expandGraph(nc, AllReleases, onClone=DoClone)
 
         checkpoint "\tgraph:\n" & $graph.toJson(ToJsonOptions(enumMode: joptEnumString))
         let sp = graph.pkgs.values().toSeq()
@@ -444,7 +537,8 @@ suite "test expand with no git tags and nimble commits max":
         let sp3: Package = sp[3] # proj C
         let sp4: Package = sp[4] # proj D
 
-        check $sp[0].url == "atlas://workspace/ws_testtraverse.nimble"
+        check $sp[0].url.url.scheme == "atlas" and endsWith($sp[0].url, "ws_testtraverse.nimble")
+
         check $sp[1].url == toWindowsFileUrl("file://$1/buildGraphNoGitTags/proj_a" % [$dir])
         check $sp[2].url == toWindowsFileUrl("file://$1/buildGraphNoGitTags/proj_b" % [$dir])
         check $sp[3].url == toWindowsFileUrl("file://$1/buildGraphNoGitTags/proj_c" % [$dir])
