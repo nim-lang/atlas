@@ -99,7 +99,7 @@ suite "test link integration":
       withDir "tests/ws_link_integration":
         removeDir("deps")
         project(paths.getCurrentDir())
-        context().flags = {KeepWorkspace, ListVersions}
+        context().flags = {ListVersions}
         context().defaultAlgo = SemVer
 
         createDir("deps")
@@ -121,9 +121,18 @@ suite "test link integration":
         check project() == paths.getCurrentDir()
         atlasRun(@["link", "../ws_link_semver"])
 
-        echo "\n\n============== Expanding graph\n\n"
+  test "expand using link files":
+      setAtlasVerbosity(Warning)
+      withDir "tests/ws_link_integration":
+        project(paths.getCurrentDir())
+        context().flags = {ListVersions}
+        context().defaultAlgo = SemVer
+
+        expectedVersionWithGitTags()
+        readConfig()
+
         var nc = createNimbleContext()
-        var graph = dir.loadWorkspace(nc, AllReleases, onClone=DoClone, doSolve=true)
+        var graph = project().loadWorkspace(nc, AllReleases, onClone=DoClone, doSolve=true)
 
         checkpoint "\tgraph:\n" & $graph.toJson(ToJsonOptions(enumMode: joptEnumString))
 
@@ -144,10 +153,10 @@ suite "test link integration":
         check graph.pkgs[nc.createUrl("proj_c")].active
         check graph.pkgs[nc.createUrl("proj_d")].active
 
-        # check $graph.root.activeVersion == "#head@-"
-        # check $graph.pkgs[nc.createUrl("proj_a")].activeVersion == $findCommit("proj_a", "1.1.0")
-        # check $graph.pkgs[nc.createUrl("proj_b")].activeVersion == $findCommit("proj_b", "1.1.0")
-        # check $graph.pkgs[nc.createUrl("proj_c")].activeVersion == $findCommit("proj_c", "1.2.0")
-        # check $graph.pkgs[nc.createUrl("proj_d")].activeVersion == $findCommit("proj_d", "1.0.0")
+        check $graph.root.activeVersion == "#head@-"
+        check $graph.pkgs[nc.createUrl("proj_a")].activeVersion == $findCommit("proj_a", "1.1.0")
+        check $graph.pkgs[nc.createUrl("proj_b")].activeVersion == $findCommit("proj_b", "1.1.0")
+        check $graph.pkgs[nc.createUrl("proj_c")].activeVersion == $findCommit("proj_c", "1.2.0")
+        check $graph.pkgs[nc.createUrl("proj_d")].activeVersion == $findCommit("proj_d", "1.0.0")
 
 
