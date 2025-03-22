@@ -157,7 +157,7 @@ proc afterGraphActions(g: DepGraph) =
   if atlasErrors() == 0:
     writeConfig()
 
-  writeDepGraph(g, debug = not g.root.active or KeepWorkspace notin context().flags)
+  writeDepGraph(g, debug = not g.root.active or KeepWorkspace in context().flags)
 
   if ShowGraph in context().flags:
     generateDepGraph g
