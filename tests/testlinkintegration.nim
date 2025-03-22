@@ -121,7 +121,7 @@ suite "test link integration":
         check project() == paths.getCurrentDir()
         atlasRun(@["link", "../ws_link_semver"])
 
-  test "expand using link files":
+  test "expand using link files part 2":
       setAtlasVerbosity(Warning)
       withDir "tests/ws_link_integration":
         project(paths.getCurrentDir())
