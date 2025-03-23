@@ -54,7 +54,7 @@ Command:
   tag [major|minor|patch]
                         add and push a new tag, input must be one of:
                         ['major'|'minor'|'patch'] or a SemVer tag like ['1.0.3']
-                        or a letter ['a'..'z']: a.b.context().d.e.f.g
+                        or a letter ['a'..'z']: a.b.c.d.e.f.g
   pin [atlas.lock]      pin the current checkouts and store them in the lock file
   rep [atlas.lock]      replay the state of the projects according to the lock file
   changed <atlack.lock> list any packages that differ from the lock file
