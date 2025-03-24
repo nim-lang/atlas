@@ -83,9 +83,9 @@ Options:
   --list                list all available and installed versions
   --version             show the version
   --ignoreUrls          don't error on mismatching urls
-  --verbosity=normal|trace|debug
-                        set verbosity level to normal, trace, debug
-  --global              use global project in ~/.atlas
+  --verbosity=info|warning|error|trace|debug
+                        set verbosity level to info, warning, error, trace, debug
+                        the default level is warning
   --help                show this help
 """
 
