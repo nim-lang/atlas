@@ -70,19 +70,17 @@ Command:
 
 Options:
   --keepCommits         do not perform any `git checkouts`
-  --cfgHere             also create/maintain a nim.cfg in the current
-                        working directory
   --noexec              do not perform any action that may run arbitrary code
   --autoenv             detect the minimal Nim $version and setup a
                         corresponding Nim virtual environment
   --autoinit            auto initialize an atlas project
-  --colors=on|off       turn on|off colored output
   --resolver=minver|semver|maxver
                         which resolution algorithm to use, default is semver
   --showGraph           show the dependency graph
   --list                list all available and installed versions
   --version             show the version
   --ignoreUrls          don't error on mismatching urls
+  --colors=on|off       turn on|off colored output
   --verbosity=info|warning|error|trace|debug
                         set verbosity level to info, warning, error, trace, debug
                         the default level is warning
