@@ -1,7 +1,6 @@
 # Atlas Package Cloner
 
-Atlas is a simple package cloner tool. It manages an isolated project that
-contains projects and dependencies.
+Atlas is a simple package cloner tool. It manages project dependencies in an isolated `deps/` directory.
 
 Atlas is compatible with Nimble in the sense that it supports the Nimble
 file format.
@@ -9,40 +8,37 @@ file format.
 
 ## Concepts
 
-Atlas uses three concepts:
+Atlas uses two main concepts:
 
-1. Workspaces
-2. Projects
-3. Dependencies
+1. Projects
+2. Dependencies
 
-### Workspaces
+### Projects
 
-Every project is isolated, nothing is shared between workspaces.
 A project is a directory that has a file `atlas.config` inside it. Use `atlas init`
 to create a project out of the current working directory.
 
-Projects plus their dependencies are stored in a project:
+Projects can share dependencies and be developed locally by using the `link` command. This creates `nimble-link` files that allow projects to share their dependencies.
+
+The project structure looks like this:
 
 ```
-  $project / main project
-  $project / other project
-  $project / _deps / dependency A
-  $project / _deps / dependency B
+  $project / main project files
+  $project / project.nimble
+  $project / nim.cfg
+  $project / deps / dependency A
+  $project / deps / dependency B
+  $project / deps / dependency C.nimble-link (for linked projects)
 ```
 
 The deps directory can be set via `--deps:DIR` during `atlas init`.
 
 
-### Projects
-
-A project contains one or multiple "projects". These projects can use each other and it
-is easy to develop multiple projects at the same time.
-
 ### Dependencies
 
-Inside a project there can be a `_deps` directory where your dependencies are kept. It is
-easy to move a dependency one level up and out the `_deps` directory, turning it into a project.
-Likewise, you can move a project to the `_deps` directory, turning it into a dependency.
+Inside a project there is a `deps` directory where your dependencies are kept. It is
+easy to move a dependency one level up and out of the `deps` directory, turning it into a project.
+Likewise, you can move a project to the `deps` directory, turning it into a dependency.
 
 The only distinction between a project and a dependency is its location. For dependency resolution
 a project always has a higher priority than a dependency.
@@ -57,10 +53,12 @@ edit these manually too, Atlas doesn't touch what should be left untouched.
 ## How it works
 
 Atlas uses git commits internally; version requirements are translated
-to git commits via `git show-ref --tags`.
+to git commits via git tags and a fallback of searching Nimble file commits.
 
 Atlas uses URLs internally; Nimble package names are translated to URLs
-via Nimble's  `packages.json` file.
+via Nimble's  `packages.json` file. Atlas uses "shortnames" for known URLs from
+packages. Unofficial URLs, including forks, using a name tripplett of the form
+`projectName.author.host`. For example Atlas would be `atlas.nim-lang.github.com`. Packages can be added using `nameOverrides` in `atlas.config` which adds a new name to URL mapping.
 
 Atlas does not call the Nim compiler for a build, instead it creates/patches
 a `nim.cfg` file for the compiler. For example:
@@ -87,9 +85,8 @@ Atlas supports the following commands:
 ### Use <url> / <package name>
 
 Clone the package behind `url` or `package name` and its dependencies into
-the `_deps` directory and make it available for your current project which
-should be in the current working directory. Atlas will create or patch
-the files `$project.nimble` and `nim.cfg` for you so that you can simply
+the `deps` directory and make it available for your current project.
+Atlas will create or patch the files `$project.nimble` and `nim.cfg` for you so that you can simply
 import the required modules.
 
 For example:
@@ -103,6 +100,19 @@ For example:
   nim c example.nim
 
 ```
+
+
+### Link <path>
+
+Link another project into the current project to share its dependencies. This creates `nimble-link` files that allow the projects to share their dependencies.
+
+For example:
+
+```
+  atlas link ../other-project
+```
+
+This will link the other project and make its dependencies available to your current project.
 
 
 ### Clone/Update <url>/<package name>
@@ -119,7 +129,7 @@ via `packages.json` or via a github search.
 
 ### Search <term term2 term3 ...>
 
-Search the package index `packages.json` for a package that the given terms
+Search the package index `packages.json` for a package that contains the given terms
 in its description (or name or list of tags).
 
 
