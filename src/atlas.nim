@@ -154,6 +154,10 @@ proc generateDepGraph(g: DepGraph) =
     discard execShellCmd("dot -Tpng -odeps.png " & quoteShell($dotFile))
 
 proc afterGraphActions(g: DepGraph) =
+  ## perform any actions after the dependency graph has been generated
+  ##
+  ## this will write the config file, generate the dependency graph, and
+  ## setup the Nim environment if the user has requested it
   if atlasErrors() == 0:
     writeConfig()
 
