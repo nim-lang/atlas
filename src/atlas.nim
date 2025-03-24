@@ -74,6 +74,8 @@ Options:
   --autoinit            auto initialize an atlas project
   --resolver=minver|semver|maxver
                         which resolution algorithm to use, default is semver
+  --proxy=url           use the given proxy URL for all git operations
+  --dumbProxy           use a dumb proxy without smart git protocol
   --showGraph           show the dependency graph
   --list                list all available and installed versions
   --version             show the version
