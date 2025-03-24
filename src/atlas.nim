@@ -59,9 +59,7 @@ Command:
                         or a letter ['a'..'z']: a.b.c.d.e.f.g
   pin [atlas.lock]      pin the current checkouts and store them in the lock file
   rep [atlas.lock]      replay the state of the projects according to the lock file
-  changed <atlack.lock> list any packages that differ from the lock file
-  convert <nimble.lock> [atlas.lock]
-                        convert Nimble lockfile into an Atlas one
+  changed <atlas.lock>  list any packages that differ from the lock file
   outdated              list the packages that are outdated
   build|test|doc|tasks  currently delegates to `nimble build|test|doc`
   task <taskname>       currently delegates to `nimble <taskname>`
@@ -532,13 +530,6 @@ proc atlasRun*(params: seq[string]) =
   of "changed":
     optSingleArg($LockFileName)
     listChanged(Path(args[0]))
-  of "convert":
-    if args.len == 1:
-      convertAndSaveNimbleLock(Path(args[0]), LockFileName)
-    elif args.len == 2:
-      convertAndSaveNimbleLock(Path(args[0]), Path(args[1]))
-    else:
-      fatal "convert command takes one or two arguments"
   of "env":
     singleArg()
     setupNimEnv project(), args[0], Keep in context().flags

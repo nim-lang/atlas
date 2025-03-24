@@ -191,16 +191,8 @@ proc convertNimbleLock*(nimble: Path): LockFile =
         commit: info["vcsRevision"].getStr
       )
 
-proc convertAndSaveNimbleLock*(nimble, lockFile: Path) =
-  ## convert and save a nimble.lock into an Atlas lockfile
-  let lf = convertNimbleLock(nimble)
-  write lf, $lockFile
-
 proc listChanged*(lockFile: Path) =
-  ## replays the given lockfile by cloning and updating all the deps
-  ##
-  ## this also includes updating the nim.cfg and nimble file as well
-  ## if they're included in the lockfile
+  ## list any packages that differ from the lockfile
   ##
   let lf = if lockFile == NimbleLockFileName:
               convertNimbleLock(lockFile)
