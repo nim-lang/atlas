@@ -67,9 +67,11 @@ a `nim.cfg` file for the compiler. For example:
 ```
 ############# begin Atlas config section ##########
 --noNimblePath
---path:"../nimx"
---path:"../sdl2/src"
---path:"../opengl/src"
+--path:"deps/nimx"
+--path:"deps/sdl2/src"
+--path:"deps/opengl/src"
+--path:"../linked-project/src"
+--path:"../linked-project/deps/msgpack4nim/"
 ############# end Atlas config section   ##########
 ```
 
