@@ -271,6 +271,10 @@ proc detectProject(customProject = Path ""): bool =
       project(project().absolutePath)
 
 proc autoProject(currentDir: Path): bool =
+  ## auto detect the project directory
+  ##
+  ## this will walk the current directory and all of its parents to find a
+  ## directory that contains a git repository
   var cwd = currentDir
   while cwd.len > 0:
     if dirExists(cwd / Path ".git"):
