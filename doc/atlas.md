@@ -196,8 +196,10 @@ The `$` has a special meaning in a pattern:
 
 For example, here is how to override any github link:
 
-```
-"https://github.com/$+": "https://utopia.forall/$#"
+```json
+  "urlOverrides": {
+    "https://github.com/$+": "https://utopia.forall/$#"
+  }
 ```
 
 You can use `$1` or `$#` to refer to captures.
