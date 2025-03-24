@@ -149,6 +149,15 @@ if there are no uncommitted changes.
 
 Run `atlas --help` for more features.
 
+## Package Overrides
+
+Sometimes two URLs can conflict for the same dependency shortname. For example, when a project uses a forked dependency with bug fixes. These conflicts need to be manually resolved using `pkgOverrides` in `atlas.config`. The format is package name and the selected URL:
+
+```json
+  "pkgOverrides": {
+    "asynctools": "https://github.com/timotheecour/asynctools"
+  },
+```
 
 ## Overrides
 
@@ -156,7 +165,7 @@ You can override how Atlas resolves a package name or a URL. The overrides use
 a simple pattern matching language and are flexible enough to integrate private
 gitlab repositories.
 
-```
+```json
 {
   "resolver": "SemVer",
   "nameOverrides": {
