@@ -113,8 +113,9 @@ For example:
   atlas link ../other-project
 ```
 
-This will link the other project and make its dependencies available to your current project. The other project
-must be another Atlas project and have a Nimble file.
+This will link the other project and make its dependencies available to your current project. The other project must be another Atlas project and have a Nimble file.
+
+The linked project will be added to this project's Nimble file if it's not already present.
 
 Note, that the other project's `nameOverrides` and `urlOverrides` *aren't* imported. You may need to import the name-overrides to properly use the deps. This is due to the triplet-naming above.
 
