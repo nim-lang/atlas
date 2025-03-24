@@ -23,12 +23,13 @@ Projects can share dependencies and be developed locally by using the `link` com
 The project structure looks like this:
 
 ```
-  $project / main project files
   $project / project.nimble
   $project / nim.cfg
-  $project / deps / dependency A
-  $project / deps / dependency B
-  $project / deps / dependency C.nimble-link (for linked projects)
+  $project / other main project files...
+  $project / deps / atlas.config
+  $project / deps / dependency-A
+  $project / deps / dependency-B
+  $project / deps / dependency-C.nimble-link (for linked projects)
 ```
 
 The deps directory can be set via `--deps:DIR` during `atlas init`.
