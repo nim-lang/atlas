@@ -108,6 +108,10 @@ proc tag(field: Natural) =
     tag(newTag)
 
 proc findProjectNimbleFile(writeNimbleFile: bool = false): Path =
+  ## find the project's nimble file
+  ##
+  ## this will search for the project's nimble file in the project's directory
+  ## and write a new one if it doesn't exist
   var nimbleFiles = findNimbleFile(project(), "")
 
   if nimbleFiles.len() == 0 and writeNimbleFile:
@@ -125,6 +129,10 @@ proc findProjectNimbleFile(writeNimbleFile: bool = false): Path =
     result = nimbleFiles[0]
 
 proc createWorkspace() =
+  ## create the workspace directory and the config file
+  ##
+  ## this will create the workspace directory and the config file if they
+  ## don't exist
   createDir(depsDir())
   if not fileExists(getProjectConfig()):
     writeDefaultConfigFile()
@@ -175,8 +183,10 @@ proc afterGraphActions(g: DepGraph) =
     g.runBuildSteps()
 
 proc installDependencies(nc: var NimbleContext; nimbleFile: Path) =
-  # 1. find .nimble file in CWD
-  # 2. install deps from .nimble
+  ## install the dependencies for the project
+  ##
+  ## this will find the project's nimble file, install the dependencies, and
+  ## patch the Nim configuration file
   var (dir, pkgname, _) = splitFile(nimbleFile.absolutePath)
   if dir == Path "":
     dir = Path(".").absolutePath
@@ -189,6 +199,9 @@ proc installDependencies(nc: var NimbleContext; nimbleFile: Path) =
 
 proc updateDir(dir, filter: string) =
   ## update the package's VCS
+  ##
+  ## this will walk the directory and update the package's VCS if it is a git
+  ## repository
   for kind, file in walkDir(dir):
     debug (project() / Path("updating")), "checking directory: " & $kind & " file: " & file.absolutePath
     if kind == pcDir and isGitDir(file):
