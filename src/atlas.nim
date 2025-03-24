@@ -192,8 +192,12 @@ proc updateDir(dir, filter: string) =
       gitops.updateDir(file.Path, filter)
 
 proc linkPackage(linkDir, linkedNimble: Path) =
+  ## link a project into the current project
+  ##
+  ## this will add the linked project's dependencies to the current project's
+  ## nimble file and create links to the dependent nimble files in the current
+  ## project's deps directory
 
-  echo "LINKING: NAME OVERRIDES: ", $context().nameOverrides
   let linkUri = toPkgUriRaw(parseUri("link://" & $linkedNimble))
   discard context().nameOverrides.addPattern(linkUri.projectName, $linkUri.url)
   info "atlas:link", "link uri:", $linkUri
@@ -213,7 +217,6 @@ proc linkPackage(linkDir, linkedNimble: Path) =
 
   # Create links for all nimble files and links in the linked project
   for pkg in allNodes(lgraph):
-    echo "pkg: ", $pkg.url.projectName, " at: ", $pkg.ondisk
     let srcDir = if pkg.activeNimbleRelease().isNil: Path"" else: pkg.activeNimbleRelease().srcDir
     let nimbleFiles = pkg.ondisk.findNimbleFile()
     if nimbleFiles.len() != 1:
