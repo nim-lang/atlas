@@ -45,7 +45,7 @@ Command:
                         and patch the project's Nimble file
   install               use the nimble file to setup the project's dependencies
   link <path>           link an existing project into the current project
-                        to share it's dependencies
+                        to share its dependencies
   update <url|pkgname>  update a package and all of its dependencies
   search <keyA> [keyB ...]
                         search for package that contains the given keywords
