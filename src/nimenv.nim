@@ -106,7 +106,7 @@ proc setupNimEnv*(nimVersion: string; keepCsources: bool) =
         removeDir $depsDir() / csourcesVersion / "c_code"
       let pathEntry = depsDir() / nimDest / "bin".Path
       when defined(windows):
-        writeFile "activate.bat", BatchFile % $pathEntry.replace('/', '\\')
+        writeFile "activate.bat", BatchFile % replace($pathEntry, '/', '\\')
       else:
         writeFile "activate.sh", ShellFile % $pathEntry
       infoAboutActivation nimDest, nimVersion
