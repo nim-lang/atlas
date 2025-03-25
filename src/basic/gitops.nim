@@ -343,7 +343,6 @@ proc incrementTag*(displayName, lastTag: string; field: Natural): string =
 
 proc incrementLastTag*(path: Path, field: Natural): string =
   let (ltr, status) = exec(GitLastTaggedRef, path, [])
-  echo "incrementLastTag: `$1`" % [ltr]
   if status != RES_OK or ltr == "":
     "v0.0.1" # assuming no tags have been made yet
   else:
@@ -352,8 +351,6 @@ proc incrementLastTag*(path: Path, field: Natural): string =
       lastTag = gitDescribeRefTag(path, lastTaggedRef)
       currentCommit = exec(GitCurrentCommit, path, [])[0].strip()
 
-    echo "lastTaggedRef: ", lastTaggedRef 
-    echo "currentCommit: ", currentCommit 
     if lastTaggedRef == "":
       "v0.0.1" # assuming no tags have been made yet
     elif lastTaggedRef == "" or lastTaggedRef == currentCommit:

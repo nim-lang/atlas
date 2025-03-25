@@ -98,14 +98,30 @@ proc writeVersion() =
   quit(0)
 
 proc tag(tag: string) =
-  gitTag(project(), tag)
-  pushTag(project(), tag)
-
-proc tag(field: Natural) =
-  let oldErrors = atlasErrors()
-  let newTag = incrementLastTag(project(), field)
-  if atlasErrors() == oldErrors:
-    tag(newTag)
+  if tag.len == 1 and tag[0] in {'a'..'z'}:
+    # Handle single letter tags
+    gitTag(project(), tag)
+    pushTag(project(), tag)
+  elif tag in ["major", "minor", "patch"]:
+    # Handle semantic version increments
+    let field = case tag
+      of "major": 0
+      of "minor": 1
+      of "patch": 2
+      else: 0  # Should never happen due to above check
+    
+    let oldErrors = atlasErrors()
+    let newTag = incrementLastTag(project(), field)
+    if atlasErrors() == oldErrors:
+      gitTag(project(), newTag)
+      pushTag(project(), newTag)
+  elif tag.count('.') >= 2:  # Looks like a semver tag
+    # Direct version tag like '1.0.3'
+    gitTag(project(), tag)
+    pushTag(project(), tag)
+  else:
+    error "atlas:tag", "Invalid tag format. Must be one of: ['major'|'minor'|'patch'] or a SemVer tag like ['1.0.3'] or a letter ['a'..'z']"
+    quit(1)
 
 proc findProjectNimbleFile(writeNimbleFile: bool = false): Path =
   ## find the project's nimble file
@@ -479,6 +495,9 @@ proc atlasRun*(params: seq[string]) =
     else:
       project(paths.getCurrentDir())
     createWorkspace()
+  of "tag":
+    singleArg()
+    tag(args[0])
   of "update":
     discard # TODO: what to do here?
     quit 1
@@ -545,6 +564,7 @@ proc atlasRun*(params: seq[string]) =
 
     linkPackage(linkDir, linkedNimbles[0])
 
+  
 
   of "pin":
     optSingleArg($LockFileName)
