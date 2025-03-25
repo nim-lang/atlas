@@ -39,6 +39,7 @@ type
     ShowGraph
     AutoEnv
     NoExec
+    UpdateRepos
     ListVersions
     ListVersionsOff
     GlobalWorkspace

@@ -441,7 +441,7 @@ proc activateGraph*(graph: DepGraph): seq[CfgPath] =
         error pkg.url.projectName, "Missing ondisk location for:", $(pkg.url)
       else:
         info pkg.url.projectName, "checkout git commit:", $pkg.activeVersion.commit(), "at:", pkg.ondisk.relativeToWorkspace()
-        discard checkoutGitCommit(pkg.ondisk, pkg.activeVersion.commit())
+        discard checkoutGitCommitFull(pkg.ondisk, pkg.activeVersion.commit())
 
   if NoExec notin context().flags:
     runBuildSteps(graph)

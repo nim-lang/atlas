@@ -35,8 +35,6 @@ proc copyFromDisk*(pkg: Package, dest: Path): (CloneStatus, string) =
   else:
     error pkg, "copyFromDisk not found:", $source
     result = (NotFound, $dest)
-  #writeFile destDir / ThisVersion, w.commit
-  #echo "WRITTEN ", destDir / ThisVersion
 
 proc processNimbleRelease(
     nc: var NimbleContext;
@@ -266,6 +264,9 @@ proc loadDependency*(
   of DoNothing:
     if pkg.ondisk.dirExists():
       pkg.state = Found
+      if UpdateRepos in context().flags:
+        gitops.updateRepo(pkg.ondisk)
+        
     else:
       pkg.state = Error
       pkg.errors.add "ondisk location missing"

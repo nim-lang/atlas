@@ -365,6 +365,13 @@ proc incrementLastTag*(path: Path, field: Natural): string =
 proc isShortCommitHash*(commit: string): bool {.inline.} =
   commit.len >= 4 and commit.len < 40
 
+proc updateRepo*(path: Path) =
+  let (outp, status) = exec(GitFetch, path, ["--tags"])
+  if status != RES_OK:
+    error(path, "could not update repo: " & outp)
+  else:
+    info(path, "successfully updated repo")
+
 proc isOutdated*(path: Path): bool =
   ## determine if the given git repo `f` is updateable
   ##

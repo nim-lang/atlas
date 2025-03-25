@@ -498,9 +498,6 @@ proc atlasRun*(params: seq[string]) =
   of "tag":
     singleArg()
     tag(args[0])
-  of "update":
-    discard # TODO: what to do here?
-    quit 1
   of "new":
     singleArg()
     var nc = createNimbleContext()
@@ -530,8 +527,11 @@ proc atlasRun*(params: seq[string]) =
     var nc = createNimbleContext()
     installDependencies(nc, nimbleFile)
 
-  of "use":
+  of "use", "update":
     singleArg()
+
+    if action == "update":
+      context().flags.incl UpdateRepos
 
     var nc = createNimbleContext()
     let nimbleFile = findProjectNimbleFile(writeNimbleFile = true)
@@ -543,6 +543,9 @@ proc atlasRun*(params: seq[string]) =
       fatal "cannot continue"
 
     installDependencies(nc, nimbleFile)
+
+  of "updatedeps":
+    updateDir(project(), if args.len == 0: "" else: args[0])
 
   of "link":
     singleArg()
@@ -563,8 +566,6 @@ proc atlasRun*(params: seq[string]) =
       quit(2)
 
     linkPackage(linkDir, linkedNimbles[0])
-
-  
 
   of "pin":
     optSingleArg($LockFileName)
