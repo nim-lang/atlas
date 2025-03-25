@@ -550,7 +550,9 @@ proc atlasRun*(params: seq[string]) =
       notice dep.url.projectName, "Updating repo..."
       gitops.updateRepo(dep.ondisk)
 
-    dumpJson(graph, "graph-update.json")
+    let nimbleFile = findProjectNimbleFile()
+    var ncPost = createNimbleContext()
+    installDependencies(ncPost, nimbleFile)
 
   of "use":
     singleArg()
