@@ -7,8 +7,8 @@
 #
 
 ## Implementation of the "Nim virtual environment" (`atlas env`) feature.
-
-import basic/[context, osutils]
+import std/[files, dirs, strscans, os, strutils]
+import basic/[context, osutils, versions, gitops]
 
 when defined(windows):
   const
@@ -23,6 +23,15 @@ else:
 const
   ActivationFile* = when defined(windows): Path "activate.bat" else: Path "activate.sh"
 
+template withDir*(dir: string; body: untyped) =
+  let old = paths.getCurrentDir()
+  try:
+    setCurrentDir(dir)
+    # echo "WITHDIR: ", dir, " at: ", getCurrentDir()
+    body
+  finally:
+    setCurrentDir(old)
+
 proc infoAboutActivation(nimDest: Path, nimVersion: string) =
   when defined(windows):
     info nimDest, "RUN\nnim-" & nimVersion & "\\activate.bat"
@@ -30,7 +39,6 @@ proc infoAboutActivation(nimDest: Path, nimVersion: string) =
     info nimDest, "RUN\nsource nim-" & nimVersion & "/activate.sh"
 
 proc setupNimEnv*(project: Path, nimVersion: string; keepCsources: bool) =
-  when false:
     template isDevel(nimVersion: string): bool = nimVersion == "devel"
 
     template exec(command: string) =
@@ -40,8 +48,8 @@ proc setupNimEnv*(project: Path, nimVersion: string; keepCsources: bool) =
         return
 
     let nimDest = Path("nim-" & nimVersion)
-    if dirExists($(project / nimDest)):
-      if not fileExists($(project / nimDest / ActivationFile)):
+    if dirExists(project / nimDest):
+      if not fileExists(project / nimDest / ActivationFile):
         info nimDest, "already exists; remove or rename and try again"
       else:
         infoAboutActivation nimDest, nimVersion
@@ -81,7 +89,7 @@ proc setupNimEnv*(project: Path, nimVersion: string; keepCsources: bool) =
       let query = createQueryEq(if nimVersion.isDevel: Version"#head" else: Version(nimVersion))
       if not nimVersion.isDevel:
         let commit = versionToCommit(dir, SemVer, query)
-        if commit.len == 0:
+        if commit.isEmpty():
           error nimDest, "cannot resolve version to a commit"
           return
         discard checkoutGitCommit(dir, commit)
