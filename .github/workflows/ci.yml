@@ -1,8 +1,5 @@
 name: atlas ci
 on:
-  push:
-    branches:
-    - '**'
   pull_request:
 
 jobs:
@@ -135,8 +132,9 @@ jobs:
 
       - name: Install SAT
         run: |
-          cd atlas
-          nimble install -y sat
+          # cd atlas
+          # nimble install -y sat
+          git clone https://github.com/nim-lang/sat.git
 
       - name: Run tests
         run: |

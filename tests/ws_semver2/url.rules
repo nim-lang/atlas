@@ -1,1 +1,1 @@
-$+ -> file://./source/$#
+proj$+ -> http://example.com/buildGraph/proj$#

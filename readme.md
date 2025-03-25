@@ -1,5 +1,5 @@
 # atlas
-The Atlas Package cloner. It manages an isolated workspace that contains projects and dependencies.
+The Atlas Package cloner. It manages an isolated project that contains projects and dependencies.
 
 # Installation
 
@@ -18,16 +18,16 @@ Read the [full documentation](./doc/atlas.md) or go through the following tutori
 
 ## Tutorial
 
-Create a new workspace. A workspace contains everything we need and can safely be deleted after
+Create a new project. A project contains everything we need and can safely be deleted after
 this tutorial:
 
 ```sh
-mkdir workspace
-cd workspace
+mkdir project
+cd project
 atlas init
 ```
 
-Create a new project inside the workspace:
+Create a new project inside the project:
 
 ```sh
 mkdir myproject
@@ -67,10 +67,10 @@ source $WORKSPACE/nim-2.0.0/activate.sh
 
 ## Vendoring with Atlas
 
-Atlas also supports vendoring using an "inverted workspace". The project layout is where the workspace is a top-level subfolder like `vendor/` or `deps/` in your project. Like this:
+Atlas also supports vendoring using an "inverted project". The project layout is where the project is a top-level subfolder like `vendor/` or `deps/` in your project. Like this:
 
 ```
-someProject/vendor/atlas.workspace
+someProject/vendor/atlas.config
 someProject/vendor/dep1/
 ...
 ```

@@ -9,11 +9,11 @@
 ## Simple tool to automate frequent workflows: Can "clone"
 ## a Nimble dependency and its dependencies recursively.
 
-import std / [parseopt, strutils, os, osproc, tables, sets, json, jsonutils, uri]
-import basic / [versions, context, osutils, packageinfos,
-                configutils, nimblechecksums, reporters,
-                nimbleparser, gitops, pkgurls]
-import cloner, depgraphs, nimenv, lockfiles, confighandler, pkgcache, pkgsearch
+import std / [parseopt, files, dirs, strutils, os, osproc, tables, sets, json, uri, paths]
+import basic / [versions, context, osutils, configutils, reporters,
+                nimbleparser, gitops, pkgurls, nimblecontext, compiledpatterns]
+import depgraphs, nimenv, lockfiles, confighandler, dependencies
+
 
 from std/terminal import isatty
 
@@ -33,32 +33,25 @@ const
       ver & " (sha: " & staticExec("git log -n 1 --format=%H") & ")"
 
 const
-  LockFileName = "atlas.lock"
+  LockFileName = Path "atlas.lock"
   Usage = "atlas - Nim Package Cloner Version " & AtlasVersion & """
 
   (c) 2021 Andreas Rumpf
 Usage:
   atlas [options] [command] [arguments]
 Command:
-  init                  initializes the current directory as a workspace
-    --deps=DIR          use DIR as the directory for dependencies
-                        (default: store directly in the workspace)
-
-  use <url|pkgname>     clone a package and all of its dependencies and make
-                        it importable for the current project
-  clone <url|pkgname>   clone a package and all of its dependencies
+  init                  initializes the current project as an Atlas project
+  use <url|pkgname>     add package and its dependencies to the project
+                        and patch the project's Nimble file
+  install               use the nimble file to setup the project's dependencies
+  link <path>           link an existing project into the current project
+                        to share its dependencies
   update <url|pkgname>  update a package and all of its dependencies
-  install <proj.nimble> use the .nimble file to setup the project's dependencies
-  new <project>         init a new project directory
   search <keyA> [keyB ...]
                         search for package that contains the given keywords
   extract <file.nimble> extract the requirements and custom commands from
                         the given Nimble file
-  updateProjects [filter]
-                        update every project that has a remote
-                        URL that matches `filter` if a filter is given
-  updateDeps [filter]
-                        update every dependency that has a remote
+  updateDeps [filter]   update every dependency that has a remote
                         URL that matches `filter` if a filter is given
   tag [major|minor|patch]
                         add and push a new tag, input must be one of:
@@ -66,9 +59,7 @@ Command:
                         or a letter ['a'..'z']: a.b.c.d.e.f.g
   pin [atlas.lock]      pin the current checkouts and store them in the lock file
   rep [atlas.lock]      replay the state of the projects according to the lock file
-  changed <atlack.lock> list any packages that differ from the lock file
-  convert <nimble.lock> [atlas.lock]
-                        convert Nimble lockfile into an Atlas one
+  changed <atlas.lock>  list any packages that differ from the lock file
   outdated              list the packages that are outdated
   build|test|doc|tasks  currently delegates to `nimble build|test|doc`
   task <taskname>       currently delegates to `nimble <taskname>`
@@ -77,210 +68,259 @@ Command:
 
 Options:
   --keepCommits         do not perform any `git checkouts`
-  --full                perform full checkouts rather than the default shallow
-  --cfgHere             also create/maintain a nim.cfg in the current
-                        working directory
-  --workspace=DIR       use DIR as workspace
-  --project=DIR         use DIR as the current project
   --noexec              do not perform any action that may run arbitrary code
   --autoenv             detect the minimal Nim $version and setup a
                         corresponding Nim virtual environment
-  --autoinit            auto initialize a workspace
-  --colors=on|off       turn on|off colored output
+  --autoinit            auto initialize an atlas project
   --resolver=minver|semver|maxver
                         which resolution algorithm to use, default is semver
+  --proxy=url           use the given proxy URL for all git operations
+  --dumbProxy           use a dumb proxy without smart git protocol
   --showGraph           show the dependency graph
-  --keepWorkspace       do not update/overwrite `atlas.workspace`
   --list                list all available and installed versions
   --version             show the version
   --ignoreUrls          don't error on mismatching urls
-  --verbosity=normal|trace|debug
-                        set verbosity level to normal, trace, debug
-  --global              use global workspace in ~/.atlas
+  --colors=on|off       turn on|off colored output
+  --verbosity=info|warning|error|trace|debug
+                        set verbosity level to info, warning, error, trace, debug
+                        the default level is warning
   --help                show this help
 """
 
-proc writeHelp() =
+proc writeHelp(code = 2) =
   stdout.write(Usage)
   stdout.flushFile()
-  quit(0)
+  quit(code)
 
 proc writeVersion() =
   stdout.write("version: " & AtlasVersion & "\n")
   stdout.flushFile()
   quit(0)
 
-proc tag(c: var AtlasContext; tag: string) =
-  gitTag(c, c.projectDir, tag)
-  pushTag(c, c.projectDir, tag)
+proc tag(tag: string) =
+  if tag.len == 1 and tag[0] in {'a'..'z'}:
+    # Handle single letter tags
+    gitTag(project(), tag)
+    pushTag(project(), tag)
+  elif tag in ["major", "minor", "patch"]:
+    # Handle semantic version increments
+    let field = case tag
+      of "major": 0
+      of "minor": 1
+      of "patch": 2
+      else: 0  # Should never happen due to above check
+    
+    let oldErrors = atlasErrors()
+    let newTag = incrementLastTag(project(), field)
+    if atlasErrors() == oldErrors:
+      gitTag(project(), newTag)
+      pushTag(project(), newTag)
+  elif tag.count('.') >= 2:  # Looks like a semver tag
+    # Direct version tag like '1.0.3'
+    gitTag(project(), tag)
+    pushTag(project(), tag)
+  else:
+    error "atlas:tag", "Invalid tag format. Must be one of: ['major'|'minor'|'patch'] or a SemVer tag like ['1.0.3'] or a letter ['a'..'z']"
+    quit(1)
 
-proc tag(c: var AtlasContext; field: Natural) =
-  let oldErrors = c.errors
-  let newTag = incrementLastTag(c, c.projectDir, field)
-  if c.errors == oldErrors:
-    tag(c, newTag)
+proc findProjectNimbleFile(writeNimbleFile: bool = false): Path =
+  ## find the project's nimble file
+  ##
+  ## this will search for the project's nimble file in the project's directory
+  ## and write a new one if it doesn't exist
+  var nimbleFiles = findNimbleFile(project(), "")
 
-proc generateDepGraph(c: var AtlasContext; g: DepGraph) =
-  proc repr(w: Dependency): string =
-    $(w.pkg.url / w.commit)
+  if nimbleFiles.len() == 0 and writeNimbleFile:
+    let nimbleFile = project() / Path(splitPath($paths.getCurrentDir()).tail & ".nimble")
+    debug "atlas:link", "writing nimble file:", $nimbleFile
+    writeFile($nimbleFile, "")
+    result = nimbleFile
+  elif nimbleFiles.len() == 0:
+    fatal "No Nimble file found in project"
+    quit(1)
+  elif nimbleFiles.len() > 1:
+    fatal "Ambiguous Nimble files found: " & $nimbleFiles
+    quit(1)
+  else:
+    result = nimbleFiles[0]
+
+proc createWorkspace() =
+  ## create the workspace directory and the config file
+  ##
+  ## this will create the workspace directory and the config file if they
+  ## don't exist
+  createDir(depsDir())
+  if not fileExists(getProjectConfig()):
+    writeDefaultConfigFile()
+    info project(), "created atlas.config"
+  if depsDir() != Path "":
+    if not dirExists(absoluteDepsDir(project(), depsDir())):
+      info depsDir(), "creating deps directory"
+    createDir absoluteDepsDir(project(), depsDir())
+
+proc generateDepGraph(g: DepGraph) =
+  proc repr(pkg: Package): string =
+    $(pkg.url.url / $pkg.activeVersion.commit)
 
   var dotGraph = ""
   for n in allNodes(g):
     dotGraph.addf("\"$1\" [label=\"$2\"];\n", [n.repr, if n.active: "" else: "unused"])
   for n in allNodes(g):
-    for child in directDependencies(g, c, n):
+    for child in directDependencies(g, n):
       dotGraph.addf("\"$1\" -> \"$2\";\n", [n.repr, child.repr])
-  let dotFile = c.currentDir / "deps.dot"
-  writeFile(dotFile, "digraph deps {\n$1}\n" % dotGraph)
+  let dotFile = paths.getCurrentDir() / "deps.dot".Path
+  writeFile($dotFile, "digraph deps {\n$1}\n" % dotGraph)
   let graphvizDotPath = findExe("dot")
   if graphvizDotPath.len == 0:
-    #echo("gendepend: Graphviz's tool dot is required, " &
-    #  "see https://graphviz.org/download for downloading")
-    discard
+    warn("atlas:showgraph", "Graphviz's tool dot is required, " &
+         "see https://graphviz.org/download for downloading")
   else:
-    discard execShellCmd("dot -Tpng -odeps.png " & quoteShell(dotFile))
+    discard execShellCmd("dot -Tpng -odeps.png " & quoteShell($dotFile))
 
-proc afterGraphActions(c: var AtlasContext; g: DepGraph) =
-  if c.errors == 0 and KeepWorkspace notin c.flags:
-    writeConfig c, toJson(g)
+proc afterGraphActions(g: DepGraph) =
+  ## perform any actions after the dependency graph has been generated
+  ##
+  ## this will write the config file, generate the dependency graph, and
+  ## setup the Nim environment if the user has requested it
+  if atlasErrors() == 0:
+    writeConfig()
 
-  if ShowGraph in c.flags:
-    generateDepGraph c, g
-  if c.errors == 0 and AutoEnv in c.flags:
+  writeDepGraph(g, debug = not g.root.active or KeepWorkspace in context().flags)
+
+  if ShowGraph in context().flags:
+    generateDepGraph g
+
+  if atlasErrors() == 0 and AutoEnv in context().flags:
     let v = g.bestNimVersion
     if v != Version"":
-      setupNimEnv c, c.workspace, v.string, Keep in c.flags
+      setupNimEnv project(), v.string, Keep in context().flags
 
-proc getRequiredCommit*(c: var AtlasContext; w: Dependency): string =
-  if isShortCommitHash(w.commit): shortToCommit(c, w.commit)
-  else: w.commit
+  if NoExec notin context().flags:
+    g.runBuildSteps()
 
-proc checkoutLaterCommit(c: var AtlasContext; g: var DepGraph; w: Dependency) =
-  # Now dead code.
-  withDir c, w.ondisk:
-    if w.commit.len == 0 or cmpIgnoreCase(w.commit, InvalidCommit) == 0:
-      gitPull(c, w.pkg.url)
-    else:
-      let err = checkGitDiffStatus(c)
-      if err.len > 0:
-        warn c, w.pkg.projectName, err
-      else:
-        let requiredCommit = getRequiredCommit(c, w)
-        let (cc, status) = exec(c, GitCurrentCommit, [])
-        let currentCommit = strutils.strip(cc)
-        if requiredCommit == "" or status != 0:
-          if requiredCommit == "" and w.commit == InvalidCommit:
-            warn c, w.pkg.projectName, "package has no tagged releases"
-          else:
-            warn c, w.pkg.projectName, "cannot find specified version/commit " & w.commit
-        else:
-          if currentCommit != requiredCommit:
-            # checkout the later commit:
-            # git merge-base --is-ancestor <commit> <commit>
-            let (cc, status) = exec(c, GitMergeBase, [currentCommit, requiredCommit])
-            let mergeBase = strutils.strip(cc)
-            if status == 0 and (mergeBase == currentCommit or mergeBase == requiredCommit):
-              # conflict resolution: pick the later commit:
-              if mergeBase == currentCommit:
-                checkoutGitCommit(c, w.ondisk, requiredCommit)
-            else:
-              checkoutGitCommit(c, w.ondisk, requiredCommit)
-              when false:
-                warn c, w.pkg.projectName, "do not know which commit is more recent:",
-                  currentCommit, "(current) or", w.commit, " =", requiredCommit, "(required)"
+proc installDependencies(nc: var NimbleContext; nimbleFile: Path) =
+  ## install the dependencies for the project
+  ##
+  ## this will find the project's nimble file, install the dependencies, and
+  ## patch the Nim configuration file
+  var (dir, pkgname, _) = splitFile(nimbleFile.absolutePath)
+  if dir == Path "":
+    dir = Path(".").absolutePath
+  info pkgname, "installing dependencies"
+  let graph = dir.loadWorkspace(nc, AllReleases, onClone=DoClone, doSolve=true)
+  let paths = graph.activateGraph()
+  let cfgPath = CfgPath project()
+  patchNimCfg(paths, cfgPath)
+  afterGraphActions graph
 
-proc traverseLoop(c: var AtlasContext; nc: var NimbleContext; g: var DepGraph): seq[CfgPath] =
-  result = @[]
-  expand c, g, nc, TraversalMode.AllReleases
-  let f = toFormular(c, g, c.defaultAlgo)
-  solve c, g, f
-  for w in allActiveNodes(g):
-    result.add CfgPath(toDestDir(g, w) / getCfgPath(g, w).string)
-
-proc traverse(c: var AtlasContext; nc: var NimbleContext; start: string): seq[CfgPath] =
-  # returns the list of paths for the nim.cfg file.
-  let u = createUrl(start, c.overrides)
-  var g = c.createGraph(u)
-
-  #if $pkg.url == "":
-  #  error c, pkg, "cannot resolve package name"
-  #  return
-  #c.projectDir = c.depsDir / u.projectName
-  for n in allNodes(g):
-    c.projectDir = n.ondisk
-    break
-
-  result = traverseLoop(c, nc, g)
-  afterGraphActions c, g
-
-
-proc installDependencies(c: var AtlasContext; nc: var NimbleContext; nimbleFile: string) =
-  # 1. find .nimble file in CWD
-  # 2. install deps from .nimble
-  var (dir, pkgname, _) = splitFile(nimbleFile)
-  if dir == "":
-    dir = "."
-  info c, pkgname, "installing dependencies for " & pkgname & ".nimble"
-  var g = createGraph(c, createUrlSkipPatterns(dir))
-  let paths = traverseLoop(c, nc, g)
-  let cfgPath = if CfgHere in c.flags: CfgPath c.currentDir else: findCfgDir(c)
-  patchNimCfg(c, paths, cfgPath)
-  afterGraphActions c, g
-
-proc updateDir(c: var AtlasContext; dir, filter: string) =
+proc updateDir(dir, filter: string) =
   ## update the package's VCS
+  ##
+  ## this will walk the directory and update the package's VCS if it is a git
+  ## repository
   for kind, file in walkDir(dir):
-    debug c, (c.workspace / "updating"), "checking directory: " & $kind & " file: " & file.absolutePath
+    debug (project() / Path("updating")), "checking directory: " & $kind & " file: " & file.absolutePath
     if kind == pcDir and isGitDir(file):
-      trace c, file, "updating directory"
-      gitops.updateDir(c, file, filter)
+      trace file, "updating directory"
+      gitops.updateDir(file.Path, filter)
+
+proc linkPackage(linkDir, linkedNimble: Path) =
+  ## link a project into the current project
+  ##
+  ## this will add the linked project's dependencies to the current project's
+  ## nimble file and create links to the dependent nimble files in the current
+  ## project's deps directory
+
+  let linkUri = toPkgUriRaw(parseUri("link://" & $linkedNimble))
+  discard context().nameOverrides.addPattern(linkUri.projectName, $linkUri.url)
+  info "atlas:link", "link uri:", $linkUri
+
+  var nc = createNimbleContext()
+
+  let nimbleFile = findProjectNimbleFile(writeNimbleFile = true)
+  info "atlas:link", "modifying nimble file to use package:", linkUri.projectName, "at:", $nimbleFile
+  patchNimbleFile(nc, nimbleFile, linkUri.projectName)
+
+  writeConfig()
+  info "atlas:link", "current project dir:", $project()
+
+  # Load linked project's config to get its deps dir
+  info "atlas:link", "linked project dir:", $linkDir
+  let lgraph = loadDepGraph(nc, linkedNimble)
+
+  # Create links for all nimble files and links in the linked project
+  for pkg in allNodes(lgraph):
+    let srcDir = if pkg.activeNimbleRelease().isNil: Path"" else: pkg.activeNimbleRelease().srcDir
+    let nimbleFiles = pkg.ondisk.findNimbleFile()
+    if nimbleFiles.len() != 1:
+      error $pkg.url.projectName, "error finding nimble file; got:", $nimbleFiles
+      continue
+    let nimble = nimbleFiles[0]
+    createNimbleLink(pkg.url, nimble, CfgPath(srcDir))
+
+  installDependencies(nc, nimbleFile)
 
 
-proc detectWorkspace(currentDir: string): string =
-  ## find workspace by checking `currentDir` and its parents.
-  result = currentDir
-  while result.len > 0:
-    if fileExists(result / AtlasWorkspace):
-      return result
-    result = result.parentDir()
-  when false:
-    # That is a bad idea and I know no other tool (git etc.) that
-    # does such shenanigans.
-    # alternatively check for "sub-directory" workspace
-    for kind, file in walkDir(currentDir):
-      if kind == pcDir and fileExists(file / AtlasWorkspace):
-        return file
+proc detectProject(customProject = Path ""): bool =
+  ## find project by checking `currentDir` and its parents.
+  if customProject.string.len() > 0:
+    warn "atlas", "using custom project:", $customProject
+    project(customProject)
+  elif GlobalWorkspace in context().flags:
+    project(Path(getHomeDir() / ".atlas"))
+    warn "atlas", "using global project:", $project()
+  else:
+    var cwd = paths.getCurrentDir().absolutePath
+    debug "atlas", "finding project from current dir:", $cwd
 
-proc autoWorkspace(currentDir: string): string =
-  result = currentDir
-  while result.len > 0 and dirExists(result / ".git"):
-    result = result.parentDir()
+    while cwd.string.len() > 0:
+      debug "atlas", "checking project config:", $(cwd.getProjectConfig())
+      if cwd.getProjectConfig().fileExists():
+        break
+      cwd = cwd.parentDir()
+    project(cwd)
+  
+  if project().len() > 0:
+    debug "atlas", "project found:", $project()
+    result = getProjectConfig().fileExists()
+    if result:
+      project(project().absolutePath)
 
-proc createWorkspaceIn(c: var AtlasContext) =
-  if not fileExists(c.workspace / AtlasWorkspace):
-    writeDefaultConfigFile c
-    info c, c.workspace, "created atlas.workspace"
-  if c.workspace != c.depsDir and c.depsDir != "":
-    createDir absoluteDepsDir(c.workspace, c.depsDir)
-    info c, c.depsDir, "created deps dir"
+proc autoProject(currentDir: Path): bool =
+  ## auto detect the project directory
+  ##
+  ## this will walk the current directory and all of its parents to find a
+  ## directory that contains a git repository
+  var cwd = currentDir
+  while cwd.len > 0:
+    if dirExists(cwd / Path ".git"):
+      break
+    cwd = cwd.parentDir()
+  project(cwd)
+  notice "atlas:project", "Detected project directory:", $project()
 
-proc listOutdated(c: var AtlasContext; dir: string) =
+  if project().len() > 0:
+    result = project().dirExists()
+
+proc listOutdated() =
+  let dir = project()
+  var nc = createNimbleContext()
+  let graph = dir.loadWorkspace(nc, CurrentCommit, onClone=DoNothing, doSolve=false)
+
   var updateable = 0
-  for k, f in walkDir(dir, relative=true):
-    if k in {pcDir, pcLinkToDir} and isGitDir(dir / f):
-      withDir c, dir / f:
-        if gitops.isOutdated(c, dir / f):
-          inc updateable
+  for pkg in allNodes(graph):
+    if pkg.isRoot:
+      continue
+    if gitops.isOutdated(pkg.ondisk):
+      warn pkg.url.projectName, "is outdated"
+      inc updateable
+    else:
+      notice pkg.url.projectName, "is up to date"
 
   if updateable == 0:
-    info c, c.workspace, "all packages are up to date"
+    info project(), "all packages are up to date"
 
-proc listOutdated(c: var AtlasContext) =
-  if c.depsDir.len > 0 and c.depsDir != c.workspace:
-    listOutdated c, c.depsDir
-  listOutdated c, c.workspace
-
-proc newProject(c: var AtlasContext; projectName: string) =
+proc newProject(projectName: string) =
   ## Tries to create a new project directory in the current dir
   ## with a single bare `projectname.nim` file inside.
   ## `projectName` is validated.
@@ -303,57 +343,31 @@ proc newProject(c: var AtlasContext; projectName: string) =
 
   let name = projectName.strip()
   if not (isValidFilename(name) and isValidProjectName(name)):
-    error c, name, "'" & name & "' is not a vaild project name!"
+    error name, "'" & name & "' is not a vaild project name!"
     quit(1)
   if dirExists(name):
-    error c, name, "Directory '" & name & "' already exists!"
+    error name, "Directory '" & name & "' already exists!"
     quit(1)
   try:
     createDir(name)
   except OSError as e:
-    error c, name, "Failed to create directory '$#': $#" % [name, e.msg]
+    error name, "Failed to create directory '$#': $#" % [name, e.msg]
     quit(1)
-  info c, name, "created project dir"
-  withDir(c, name):
-    let fname = name.replace('-', '_') & ".nim"
-    try:
-      # A header doc comment with the project's name
-      fname.writeFile("## $#\n" % name)
-    except IOError as e:
-      error c, name, "Failed writing to file '$#': $#" % [fname, e.msg]
-      quit(1)
+  info name, "created project dir"
 
-proc main(c: var AtlasContext) =
-  var action = ""
-  var args: seq[string] = @[]
-  template singleArg() =
-    if args.len != 1:
-      fatal c, action & " command takes a single package name"
+  let fname = name / name.replace('-', '_') & ".nim"
+  try:
+    # A header doc comment with the project's name
+    fname.writeFile("## $#\n" % name)
+  except IOError as e:
+    error name, "Failed writing to file '$#': $#" % [fname, e.msg]
+    quit(1)
 
-  template optSingleArg(default: string) =
-    if args.len == 0:
-      args.add default
-    elif args.len != 1:
-      fatal c, action & " command takes a single package name"
-
-  template noArgs() =
-    if args.len != 0:
-      fatal c, action & " command takes no arguments"
-
-  template projectCmd() =
-    if c.projectDir == c.workspace or c.projectDir == c.depsDir:
-      fatal c, action & " command must be executed in a project, not in the workspace"
-
-  proc findCurrentNimble(): string =
-    for x in walkPattern("*.nimble"):
-      return x
-
+proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[string]) =
   var autoinit = false
-  var explicitProjectOverride = false
-  var explicitDepsDirOverride = false
   if existsEnv("NO_COLOR") or not isatty(stdout) or (getEnv("TERM") == "dumb"):
-    c.noColors = true
-  for kind, key, val in getopt():
+    setAtlasNoColors(true)
+  for kind, key, val in getopt(params):
     case kind
     of cmdArgument:
       if action.len == 0:
@@ -362,222 +376,249 @@ proc main(c: var AtlasContext) =
         args.add key
     of cmdLongOption, cmdShortOption:
       case normalize(key)
-      of "help", "h": writeHelp()
+      of "help", "h": writeHelp(0)
       of "version", "v": writeVersion()
-      of "keepcommits": c.flags.incl KeepCommits
-      of "workspace":
+      of "keepcommits": context().flags.incl KeepCommits
+      of "project":
         if val == ".":
-          c.workspace = getCurrentDir()
-          createWorkspaceIn c
+          project(paths.getCurrentDir())
+          createWorkspace()
         elif val.len > 0:
-          c.workspace = val
-          if not explicitProjectOverride:
-            c.currentDir = val
-          createDir(val)
-          createWorkspaceIn c
+          project(Path val)
+          # createDir(val)
+          # createWorkspace()
         else:
           writeHelp()
-      of "project":
-        explicitProjectOverride = true
-        if isAbsolute(val):
-          c.currentDir = val
-        else:
-          c.currentDir = getCurrentDir() / val
       of "deps":
         if val.len > 0:
-          c.origDepsDir = val
-          explicitDepsDirOverride = true
+          context().depsDir = Path val
         else:
           writeHelp()
-      of "cfghere": c.flags.incl CfgHere
-      of "full": c.flags.incl FullClones
+      of "shallow": context().flags.incl ShallowClones
+      of "full": context().flags.excl ShallowClones
       of "autoinit": autoinit = true
-      of "showgraph": c.flags.incl ShowGraph
-      of "ignoreurls": c.flags.incl IgnoreUrls
-      of "keepworkspace": c.flags.incl KeepWorkspace
-      of "keep": c.flags.incl Keep
-      of "autoenv": c.flags.incl AutoEnv
-      of "noexec": c.flags.incl NoExec
-      of "list": c.flags.incl ListVersions
-      of "global", "g": c.flags.incl GlobalWorkspace
+      of "ignoreerrors": context().flags.incl IgnoreErrors
+      of "dumpformular": context().flags.incl DumpFormular
+      of "showgraph": context().flags.incl ShowGraph
+      of "ignoreurls": context().flags.incl IgnoreGitRemoteUrls
+      of "keepworkspace": context().flags.incl KeepWorkspace
+      of "autoenv": context().flags.incl AutoEnv
+      of "noexec": context().flags.incl NoExec
+      of "list":
+        if val.normalize in ["on", ""]:
+          context().flags.incl ListVersions
+        elif val.normalize == "off":
+          context().flags.incl ListVersionsOff
+        else:
+          writeHelp()
+      of "global", "g": context().flags.incl GlobalWorkspace
       of "colors":
         case val.normalize
-        of "off": c.noColors = true
-        of "on": c.noColors = false
+        of "off": setAtlasNoColors(true)
+        of "on": setAtlasNoColors(false)
         else: writeHelp()
       of "proxy":
-        c.proxy = val.parseUri()
+        context().proxy = val.parseUri()
       of "dumbproxy":
-        c.dumbProxy = true
+        context().flags.incl DumbProxy
+      of "dumpgraphs":
+        context().flags.incl DumpGraphs
+      of "forcegittophps":
+        context().flags.incl ForceGitToHttps
+      of "resolver":
+        case val.normalize
+        of "minver": context().defaultAlgo = MinVer
+        of "maxver": context().defaultAlgo = MaxVer
+        of "semver": context().defaultAlgo = SemVer
+        else: writeHelp()
       of "verbosity":
         case val.normalize
-        of "normal": c.verbosity = 0
-        of "trace": c.verbosity = 1
-        of "debug": c.verbosity = 2
+        of "normal": setAtlasVerbosity(Info)
+        of "info": setAtlasVerbosity(Info)
+        of "error": setAtlasVerbosity(Error)
+        of "warn": setAtlasVerbosity(Warning)
+        of "warning": setAtlasVerbosity(Warning)
+        of "trace": setAtlasVerbosity(Trace)
+        of "debug": setAtlasVerbosity(Debug)
         else: writeHelp()
-      of "assertonerror": c.assertOnError = true
-      of "resolver":
-        try:
-          c.defaultAlgo = parseEnum[ResolutionAlgorithm](val)
-        except ValueError:
-          quit "unknown resolver: " & val
       else: writeHelp()
     of cmdEnd: assert false, "cannot happen"
 
-  if c.workspace.len > 0:
-    if not dirExists(c.workspace): fatal c, "Workspace directory '" & c.workspace & "' not found."
-    readConfig c
+  if detectProject():
+    notice "atlas:project", "Using project directory:", $project()
+    readConfig()
   elif action notin ["init", "tag"]:
-    if GlobalWorkspace in c.flags:
-      c.workspace = detectWorkspace(getHomeDir() / ".atlas")
-      warn c, c.workspace, "using global workspace"
-    else:
-      c.workspace = detectWorkspace(c.currentDir)
-    if c.workspace.len > 0:
-      readConfig c
-      info c, c.workspace.absolutePath, "is the current workspace"
-    elif autoinit:
-      c.workspace = autoWorkspace(c.currentDir)
-      createWorkspaceIn c
+    notice "atlas:project", "Using project directory:", $project()
+    if autoinit:
+      if autoProject(paths.getCurrentDir()):
+        createWorkspace()
+      else:
+        fatal "No project found and unable to auto init project. Run `atlas init` if you want this current directory to be your project."
     elif action notin ["search", "list"]:
-      fatal c, "No workspace found. Run `atlas init` if you want this current directory to be your workspace."
+      fatal "No project found. Run `atlas init` if you want this current directory to be your project."
 
-  if not explicitDepsDirOverride and action notin ["init", "tag"] and c.origDepsDir.len == 0:
-    c.origDepsDir = ""
   if action != "tag":
-    createDir(c.depsDir)
+    createDir(depsDir())
+
+proc atlasRun*(params: seq[string]) =
+  var action = ""
+  var args: seq[string] = @[]
+  template singleArg() =
+    if args.len != 1:
+      fatal action & " command takes a single package name"
+
+  template optSingleArg(default: string) =
+    if args.len == 0:
+      args.add default
+    elif args.len != 1:
+      fatal action & " command takes a single package name"
+
+  template noArgs() =
+    if args.len != 0:
+      fatal action & " command takes no arguments"
+
+  parseAtlasOptions(params, action, args)
+
+  if action notin ["init", "tag"]:
+    doAssert project().string != "" and project().dirExists(), "project was not set"
+
+  if action in ["install", "update", "use"]:
+    context().flags.incl ListVersions
 
   case action
   of "":
-    fatal c, "No action."
+    fatal "No action."
   of "init":
-    if GlobalWorkspace in c.flags:
-      c.workspace = getHomeDir() / ".atlas"
-      createDir(c.workspace)
+    if GlobalWorkspace in context().flags:
+      project(Path(getHomeDir() / ".atlas"))
+      createDir(project())
     else:
-      c.workspace = getCurrentDir()
-    createWorkspaceIn c
-  of "clone", "update":
-    singleArg()
-    var nc = createNimbleContext(c, c.depsDir)
-    let deps = traverse(c, nc, args[0])
-    let cfgPath = if CfgHere in c.flags: CfgPath c.currentDir
-                  else: findCfgDir(c)
-    patchNimCfg c, deps, cfgPath
-  of "use":
-    singleArg()
-    #fillPackageLookupTable(c.nimbleContext, c, )
-    var amb = false
-    var nimbleFile = findNimbleFile(c, c.workspace, amb)
-    var nc = createNimbleContext(c, c.depsDir)
-
-    if nimbleFile.len == 0:
-      nimbleFile = c.workspace / extractProjectName(c.workspace) & ".nimble"
-      writeFile(nimbleFile, "")
-    patchNimbleFile(nc, c, c.overrides, nimbleFile, args[0])
-    if c.errors > 0:
-      discard "don't continue for 'cannot resolve'"
-    elif nimbleFile.len > 0 and not amb:
-      installDependencies(c, nc, nimbleFile)
-    elif amb:
-      error c, args[0], "ambiguous .nimble file"
-    else:
-      error c, args[0], "cannot find .nimble file"
-
-  of "pin":
-    optSingleArg(LockFileName)
-    if c.projectDir == c.workspace or c.projectDir == c.depsDir:
-      pinWorkspace c, args[0]
-    else:
-      let exportNimble = args[0] == NimbleLockFileName
-      pinProject c, args[0], exportNimble
-  of "rep", "replay", "reproduce":
-    optSingleArg(LockFileName)
-    replay(c, args[0])
-  of "changed":
-    optSingleArg(LockFileName)
-    listChanged(c, args[0])
-  of "convert":
-    if args.len < 1:
-      fatal c, "convert command takes a nimble lockfile argument"
-    let lfn = if args.len == 1: LockFileName
-              else: args[1]
-    convertAndSaveNimbleLock c, args[0], lfn
-  of "install", "setup":
-    # projectCmd()
-    if args.len > 1:
-      fatal c, "install command takes a single argument"
-    var nimbleFile = ""
-    if args.len == 1:
-      nimbleFile = args[0]
-    else:
-      nimbleFile = findCurrentNimble()
-    if nimbleFile.len == 0:
-      fatal c, "could not find a .nimble file"
-    else:
-      var nc = createNimbleContext(c, c.depsDir)
-      installDependencies(c, nc, nimbleFile)
-  of "refresh":
-    noArgs()
-    updatePackages(c, c.depsDir)
-  of "search", "list":
-    if c.workspace.len != 0:
-      updatePackages(c, c.depsDir)
-      let pkgInfos = getPackageInfos(c.depsDir)
-      search c, pkgInfos, args
-    else:
-      search c, @[], args
-  of "updateprojects":
-    updateDir(c, c.workspace, if args.len == 0: "" else: args[0])
-  of "updatedeps":
-    updateDir(c, c.depsDir, if args.len == 0: "" else: args[0])
-  of "extract":
-    singleArg()
-    if fileExists(args[0]):
-      echo toJson(extractRequiresInfo(args[0]))
-    else:
-      fatal c, "File does not exist: " & args[0]
+      project(paths.getCurrentDir())
+    createWorkspace()
   of "tag":
-    projectCmd()
-    if args.len == 0:
-      tag(c, ord(patch))
-    elif args[0].len == 1 and args[0][0] in {'a'..'z'}:
-      let field = ord(args[0][0]) - ord('a')
-      tag(c, field)
-    elif args[0].len == 1 and args[0][0] in {'A'..'Z'}:
-      let field = ord(args[0][0]) - ord('A')
-      tag(c, field)
-    elif '.' in args[0]:
-      tag(c, args[0])
-    else:
-      var field: SemVerField
-      try: field = parseEnum[SemVerField](args[0])
-      except: fatal c, "tag command takes one of 'patch' 'minor' 'major', a SemVer tag, or a letter from 'a' to 'z'"
-      tag(c, ord(field))
-  of "build", "test", "doc", "tasks":
-    projectCmd()
-    nimbleExec(action, args)
-  of "task":
-    projectCmd()
-    nimbleExec("", args)
-  of "env":
     singleArg()
-    setupNimEnv c, c.workspace, args[0], Keep in c.flags
-  of "outdated":
-    listOutdated(c)
+    tag(args[0])
   of "new":
     singleArg()
-    newProject(c, args[0])
-  else:
-    fatal c, "Invalid action: " & action
+    var nc = createNimbleContext()
+    let dir = args[0]
+    if dir.dirExists():
+      error "atlas", "'" & dir & "' already exists! Cowardly refusing to overwrite"
+      quit(1)
 
-proc main =
-  var c = AtlasContext(projectDir: getCurrentDir(), currentDir: getCurrentDir(), workspace: "")
+    var purl: PkgUrl
+    try:
+      purl = nc.createUrl(args[0])
+    except CatchableError:
+      error "atlas", "'" & dir & "' is not a vaild project name!"
+      quit(1)
+
+    project(paths.getCurrentDir() / Path purl.projectName)
+    let (status, msg) = gitops.clone(purl.toUri, project())
+    if status != Ok:
+      error "atlas", "error cloning project:", dir, "message:", msg
+      quit(1)
+    
+    newProject(args[0])
+
+  of "install":
+    let nimbleFile = findProjectNimbleFile()
+
+    var nc = createNimbleContext()
+    installDependencies(nc, nimbleFile)
+
+  of "update":
+    singleArg()
+
+    var nc = createNimbleContext()
+    let graph = project().loadWorkspace(nc, CurrentCommit, onClone=DoNothing, doSolve=false)
+
+    let pkgUrl = nc.createUrl(args[0])
+    let pkg = graph.pkgs.getOrDefault(pkgUrl, nil)
+    if pkg.isNil:
+      fatal "package not found: " & args[0]
+      quit(1)
+
+    var deps: HashSet[Package] = initHashSet[Package]()
+    for ver, rel in pkg.versions:
+      info "atlas:update", "package:", $pkgUrl, "version:", $ver
+      for (depUrl, depVer) in rel.requirements:
+        info "atlas:update", "  dep:", $depUrl, "version:", $depVer
+        deps.incl graph.pkgs[depUrl]
+
+    for dep in deps:
+      notice dep.url.projectName, "Updating repo..."
+      gitops.updateRepo(dep.ondisk)
+
+    let nimbleFile = findProjectNimbleFile()
+    var ncPost = createNimbleContext()
+    installDependencies(ncPost, nimbleFile)
+
+  of "use":
+    singleArg()
+
+    if action == "update":
+      context().flags.incl UpdateRepos
+
+    var nc = createNimbleContext()
+    let nimbleFile = findProjectNimbleFile(writeNimbleFile = true)
+
+    info "atlas:use", "modifying nimble file to use package:", args[0], "at:", $nimbleFile
+    patchNimbleFile(nc, nimbleFile, args[0])
+
+    if atlasErrors() > 0:
+      fatal "cannot continue"
+
+    installDependencies(nc, nimbleFile)
+
+  of "updatedeps":
+    updateDir(project(), if args.len == 0: "" else: args[0])
+
+  of "link":
+    singleArg()
+
+    var linkDir = Path(args[0]).absolutePath
+    if linkDir.splitFile().ext == "nimble":
+      linkDir = linkDir.parentDir()
+
+    if not linkDir.dirExists():
+      fatal "cannot link to directory that does not exist: " & $linkDir
+
+    let linkedNimbles = linkDir.findNimbleFile()
+    if linkedNimbles.len() == 0:
+      fatal "cannot link to directory that does not contain a nimble file: " & $linkDir
+      quit(2)
+    elif linkedNimbles.len() > 1:
+      fatal "cannot link to directory that contains multiple nimble files: " & $linkDir
+      quit(2)
+
+    linkPackage(linkDir, linkedNimbles[0])
+
+  of "pin":
+    optSingleArg($LockFileName)
+    let exportNimble = Path(args[0]) == NimbleLockFileName
+    pinProject Path(args[0]), exportNimble
+  of "rep", "replay", "reproduce":
+    optSingleArg($LockFileName)
+    replay(Path(args[0]))
+  of "changed":
+    optSingleArg($LockFileName)
+    listChanged(Path(args[0]))
+  of "env":
+    singleArg()
+    setupNimEnv project(), args[0], Keep in context().flags
+  of "outdated":
+    listOutdated()
+  else:
+    fatal "Invalid action: " & action
+
+proc main() =
+  setContext AtlasContext()
   try:
-    main(c)
+    atlasRun(commandLineParams())
   finally:
-    writePendingMessages(c)
-  if c.errors > 0:
+    atlasWritePendingMessages()
+  if atlasErrors() > 0 and IgnoreErrors notin context().flags:
     quit 1
 
 when isMainModule:

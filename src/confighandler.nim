@@ -8,83 +8,124 @@
 
 ## Configuration handling.
 
-import std / [strutils, os, streams, json]
-import basic/[versions, context, reporters, compiledpatterns, parserequires]
+import std / [strutils, os, streams, json, tables, jsonutils, uri, sequtils]
+import basic/[versions, depgraphtypes, nimblecontext, deptypesjson, context, reporters, compiledpatterns, parse_requires, deptypes]
 
-proc parseOverridesFile(c: var AtlasContext; filename: string) =
-  const Separator = " -> "
-  let path = c.workspace / filename
-  var f: File
-  if open(f, path):
-    info c, "overrides", "loading file: " & path
-    c.flags.incl UsesOverrides
-    try:
-      var lineCount = 1
-      for line in lines(path):
-        let splitPos = line.find(Separator)
-        if splitPos >= 0 and line[0] != '#':
-          let key = line.substr(0, splitPos-1)
-          let val = line.substr(splitPos+len(Separator))
-          if key.len == 0 or val.len == 0:
-            error c, path, "key/value must not be empty"
-          let err = c.overrides.addPattern(key, val)
-          if err.len > 0:
-            error c, path, "(" & $lineCount & "): " & err
-        else:
-          discard "ignore the line"
-        inc lineCount
-    finally:
-      close f
-  else:
-    error c, path, "cannot open: " & path
-
-proc readPluginsDir(c: var AtlasContext; dir: string) =
-  for k, f in walkDir(c.workspace / dir):
+proc readPluginsDir(dir: Path) =
+  for k, f in walkDir($(project() / dir)):
     if k == pcFile and f.endsWith(".nims"):
-      extractPluginInfo f, c.plugins
+      extractPluginInfo f, context().plugins
 
 type
-  JsonConfig = object
-    deps: string
-    overrides: string
-    plugins: string
-    resolver: string
-    graph: JsonNode
+  JsonConfig* = object
+    deps*: string
+    nameOverrides*: Table[string, string]
+    urlOverrides*: Table[string, string]
+    pkgOverrides*: Table[string, string]
+    plugins*: string
+    resolver*: string
+    graph*: JsonNode
 
-proc writeDefaultConfigFile*(c: var AtlasContext) =
-  let config = JsonConfig(deps: c.origDepsDir, resolver: $SemVer, graph: newJNull())
-  let configFile = c.workspace / AtlasWorkspace
-  writeFile(configFile, pretty %*config)
+proc writeDefaultConfigFile*() =
+  let config = JsonConfig(
+    deps: $depsDir(relative=true),
+    nameOverrides: initTable[string, string](),
+    urlOverrides: initTable[string, string](),
+    pkgOverrides: initTable[string, string](),
+    resolver: $SemVer,
+    graph: newJNull()
+  )
+  let configFile = getProjectConfig()
+  writeFile($configFile, pretty %*config)
 
-proc readConfig*(c: var AtlasContext) =
-  let configFile = c.workspace / AtlasWorkspace
-  var f = newFileStream(configFile, fmRead)
+proc readConfigFile*(configFile: Path): JsonConfig =
+  var f = newFileStream($configFile, fmRead)
   if f == nil:
-    error c, configFile, "cannot open: " & configFile
+    warn "atlas:config", "could not read project config:", $configFile
     return
 
-  let j = parseJson(f, configFile)
   try:
-    let m = j.to(JsonConfig)
-    if m.deps.len > 0:
-      c.origDepsDir = m.deps
-    if m.overrides.len > 0:
-      c.overridesFile = m.overrides
-      parseOverridesFile(c, m.overrides)
-    if m.resolver.len > 0:
-      try:
-        c.defaultAlgo = parseEnum[ResolutionAlgorithm](m.resolver)
-      except ValueError:
-        warn c, configFile, "ignored unknown resolver: " & m.resolver
-    if m.plugins.len > 0:
-      c.pluginsFile = m.plugins
-      readPluginsDir(c, m.plugins)
+    let j = parseJson(f, $configFile)
+    result = j.jsonTo(JsonConfig, Joptions(allowExtraKeys: true, allowMissingKeys: true))
+
   finally:
     close f
 
-proc writeConfig*(c: AtlasContext; graph: JsonNode) =
-  let config = JsonConfig(deps: c.origDepsDir, overrides: c.overridesFile,
-    plugins: c.pluginsFile, resolver: $c.defaultAlgo,
-    graph: graph)
-  let configFile = c.workspace / AtlasWorkspace
-  writeFile(configFile, pretty %*config)
+proc readAtlasContext*(ctx: var AtlasContext, projectDir: Path) =
+  let configFile = projectDir.getProjectConfig()
+  info "atlas:config", "Reading config file: ", $configFile
+  let m = readConfigFile(configFile)
+
+  ctx.projectDir = projectDir
+
+  if m.deps.len > 0:
+    ctx.depsDir = m.deps.Path
+  
+  # Handle package name overrides
+  for key, val in m.nameOverrides:
+    let err = ctx.nameOverrides.addPattern(key, val)
+    if err.len > 0:
+      error configFile, "invalid name override pattern: " & err
+
+  # Handle URL overrides  
+  for key, val in m.urlOverrides:
+    let err = ctx.urlOverrides.addPattern(key, val)
+    if err.len > 0:
+      error configFile, "invalid URL override pattern: " & err
+
+  # Handle package overrides
+  for key, val in m.pkgOverrides:
+    ctx.pkgOverrides[key] = parseUri(val)
+  if m.resolver.len > 0:
+    try:
+      ctx.defaultAlgo = parseEnum[ResolutionAlgorithm](m.resolver)
+    except ValueError:
+      warn configFile, "ignored unknown resolver: " & m.resolver
+  if m.plugins.len > 0:
+    ctx.pluginsFile = m.plugins.Path
+    readPluginsDir(m.plugins.Path)
+  
+
+proc readConfig*() =
+  readAtlasContext(context(), project())
+  # trace "atlas:config", "read config file: ", repr context()
+
+proc writeConfig*() =
+  # TODO: serialize graph in a smarter way
+
+  let config = JsonConfig(
+    deps: $depsDir(relative=true),
+    nameOverrides: context().nameOverrides.toTable(),
+    urlOverrides: context().urlOverrides.toTable(),
+    pkgOverrides: context().pkgOverrides.pairs().toSeq().mapIt((it[0], $it[1])).toTable(),
+    plugins: $context().pluginsFile,
+    resolver: $context().defaultAlgo,
+    graph: newJNull()
+  )
+
+  let jcfg = toJson(config)
+  doAssert not jcfg.isNil()
+  let configFile = getProjectConfig()
+  debug "atlas", "writing config file: ", $configFile
+  writeFile($configFile, pretty(jcfg))
+
+proc writeDepGraph*(g: DepGraph, debug: bool = false) =
+  var configFile = depGraphCacheFile(context())
+  if debug:
+    configFile = configFile.changeFileExt("debug.json")
+  debug "atlas", "writing dep graph to: ", $configFile
+  dumpJson(g, $configFile, pretty = true)
+
+proc readDepGraph*(nc: var NimbleContext, ctx: AtlasContext, path: Path): DepGraph =
+  let configFile = depGraphCacheFile(ctx)
+  debug "atlas", "reading dep graph from: ", $configFile
+  result = loadJson(nc, $configFile)
+
+proc loadDepGraph*(nc: var NimbleContext, nimbleFile: Path): DepGraph =
+  doAssert nimbleFile.isAbsolute() and endsWith($nimbleFile, ".nimble") and fileExists($nimbleFile)
+  let projectDir = nimbleFile.parentDir()
+  var ctx = AtlasContext(projectDir: projectDir)
+  readAtlasContext(ctx, projectDir)
+  let configFile = depGraphCacheFile(ctx)
+  debug "atlas", "reading dep graph from: ", $configFile
+  result = loadJson(nc, $configFile)

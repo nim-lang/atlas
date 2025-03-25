@@ -201,13 +201,15 @@ type
     s: seq[(Pattern, string)]
     t: Table[string, string]
     strings: seq[string]
+    patterns: seq[(string, string)]  # Store original (input, output) pattern pairs
 
 proc initPatterns*(): Patterns =
-  Patterns(s: @[], t: initTable[string, string](), strings: @[])
+  Patterns(s: @[], t: initTable[string, string](), strings: @[], patterns: @[])
 
 proc addPattern*(p: var Patterns; inputPattern, outputPattern: string): string =
   if '$' notin inputPattern and '$' notin outputPattern:
     p.t[inputPattern] = outputPattern
+    p.patterns.add((inputPattern, outputPattern))
     result = ""
   else:
     let code = compile(inputPattern, p.strings)
@@ -215,10 +217,13 @@ proc addPattern*(p: var Patterns; inputPattern, outputPattern: string): string =
       result = code.error
     else:
       p.s.add (code, outputPattern)
+      p.patterns.add((inputPattern, outputPattern))
       result = ""
 
 proc substitute*(p: Patterns; input: string; didReplace: var bool): string =
-  result = p.t.getOrDefault(input)
+  if input in p.t:
+    didReplace = true
+    result = p.t[input]
   if result.len == 0:
     for i in 0..<p.s.len:
       let m = p.s[i][0].matches(p.strings, input)
@@ -236,6 +241,12 @@ proc replacePattern*(inputPattern, outputPattern, input: string): string =
   let code = compile(inputPattern, strings)
   result = replace(code, outputPattern, input)
 
+proc toTable*(p: Patterns): Table[string, string] =
+  ## Convert the patterns back to a table for serialization
+  result = initTable[string, string]()
+  for (input, output) in p.patterns:
+    result[input] = output
+
 when isMainModule:
   # foo$*bar -> https://gitlab.cross.de/$1
   const realInput = "$fooXXbar$z00end"
@@ -252,4 +263,12 @@ when isMainModule:
 
   var pat = initPatterns()
   discard pat.addPattern("$+", "file://./source/$#")
-  echo substitute(pat, "proj_a")
+  echo "proj_a: ", substitute(pat, "proj_a")
+
+  var pat2 = initPatterns()
+  discard pat2.addPattern("proj$+", "file://./source/proj$#")
+  echo "proj_a: ", substitute(pat2, "proj_a")
+
+  var pat3 = initPatterns()
+  discard pat3.addPattern("proj_a", "file://./source/proj_a")
+  echo "proj_a: ", substitute(pat3, "proj_a")

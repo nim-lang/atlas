@@ -1,14 +1,15 @@
 ## Utility API for Nim package managers.
 ## (c) 2021 Andreas Rumpf
 
-import std / strutils
+import std / [strutils, paths]
 
 import compiler / [ast, idents, msgs, syntaxes, options, pathutils, lineinfos]
+import reporters
 
 type
   NimbleFileInfo* = object
     requires*: seq[string]
-    srcDir*: string
+    srcDir*: Path
     version*: string
     tasks*: seq[(string, string)]
     hasInstallHooks*: bool
@@ -16,6 +17,35 @@ type
 
 proc eqIdent(a, b: string): bool {.inline.} =
   cmpIgnoreCase(a, b) == 0 and a[0] == b[0]
+
+proc handleError(cfg: ConfigRef, li: TLineInfo, mk: TMsgKind, msg: string) =
+  {.cast(gcsafe).}:
+    info("nimbleparser", "error parsing \"$1\" at $2" % [msg, cfg.toFileLineCol(li), repr mk])
+
+proc handleError(cfg: ConfigRef, mk: TMsgKind, li: TLineInfo, msg: string) =
+  handleError(cfg, li, warnUser, msg)
+
+proc handleError(cfg: ConfigRef, li: TLineInfo, msg: string) =
+  handleError(cfg, warnUser, li, msg)
+
+proc getDefinedName(n: PNode): string =
+  if n.kind == nkCall and n[0].kind == nkIdent and n[0].ident.s == "defined":
+    return n[1].ident.s
+  else:
+    return ""
+
+proc evalBasicDefines(sym: string): bool =
+  case sym:
+  of "windows":
+    when defined(windows): result = true
+  of "posix":
+    when defined(posix): result = true
+  of "linux":
+    when defined(linux): result = true
+  of "macosx":
+    when defined(macosx): result = true
+  else:
+    discard
 
 proc extract(n: PNode; conf: ConfigRef; result: var NimbleFileInfo) =
   case n.kind
@@ -32,7 +62,7 @@ proc extract(n: PNode; conf: ConfigRef; result: var NimbleFileInfo) =
           if ch.kind in {nkStrLit..nkTripleStrLit}:
             result.requires.add ch.strVal
           else:
-            localError(conf, ch.info, "'requires' takes string literals")
+            handleError(conf, ch.info, "'requires' takes string literals")
             result.hasErrors = true
       of "task":
         if n.len >= 3 and n[1].kind == nkIdent and n[2].kind in {nkStrLit..nkTripleStrLit}:
@@ -52,20 +82,47 @@ proc extract(n: PNode; conf: ConfigRef; result: var NimbleFileInfo) =
   of nkAsgn, nkFastAsgn:
     if n[0].kind == nkIdent and eqIdent(n[0].ident.s, "srcDir"):
       if n[1].kind in {nkStrLit..nkTripleStrLit}:
-        result.srcDir = n[1].strVal
+        result.srcDir = Path n[1].strVal
       else:
-        localError(conf, n[1].info, "assignments to 'srcDir' must be string literals")
+        handleError(conf, n[1].info, "assignments to 'srcDir' must be string literals")
         result.hasErrors = true
     elif n[0].kind == nkIdent and eqIdent(n[0].ident.s, "version"):
       if n[1].kind in {nkStrLit..nkTripleStrLit}:
         result.version = n[1].strVal
       else:
-        localError(conf, n[1].info, "assignments to 'version' must be string literals")
+        handleError(conf, n[1].info, "assignments to 'version' must be string literals")
         result.hasErrors = true
+  of nkWhenStmt:
+    # handles basic when statements for os
+    if n[0].kind == nkElifBranch:
+      let cond = n[0][0]
+      let body = n[0][1]
+
+      if cond.kind == nkPrefix: # handle when not defined
+        if cond[0].kind == nkIdent and cond[0].ident.s == "not":
+          let notCond = cond[1]
+          let name = getDefinedName(notCond)
+          if name.len > 0:
+            if not evalBasicDefines(name):
+              extract(body, conf, result)
+      elif getDefinedName(cond) != "": # handle when defined
+        let name = getDefinedName(cond)
+        if evalBasicDefines(name):
+          extract(body, conf, result)
+      elif cond.kind == nkInfix: # handle when or
+        if cond[0].kind == nkIdent and cond[0].ident.s == "or":
+          let orLeft = getDefinedName(cond[1])
+          let orRight = getDefinedName(cond[2])
+          if orLeft.len > 0 or orRight.len > 0:
+            if evalBasicDefines(orLeft):
+              extract(body, conf, result)
+            elif evalBasicDefines(orRight):
+              extract(body, conf, result)
+              
   else:
     discard
 
-proc extractRequiresInfo*(nimbleFile: string): NimbleFileInfo =
+proc extractRequiresInfo*(nimbleFile: Path): NimbleFileInfo =
   ## Extract the `requires` information from a Nimble file. This does **not**
   ## evaluate the Nimble file. Errors are produced on stderr/stdout and are
   ## formatted as the Nim compiler does it. The parser uses the Nim compiler
@@ -78,10 +135,13 @@ proc extractRequiresInfo*(nimbleFile: string): NimbleFileInfo =
   conf.errorMax = high(int)
   conf.structuredErrorHook = proc (config: ConfigRef; info: TLineInfo; msg: string;
                                 severity: Severity) {.gcsafe.} =
-    localError(config, info, warnUser, msg)
+    handleError(config, info, warnUser, msg)
 
   let fileIdx = fileInfoIdx(conf, AbsoluteFile nimbleFile)
   var parser: Parser
+  parser.lex.errorHandler = proc (config: ConfigRef, info: TLineInfo, mk: TMsgKind, msg: string;) {.closure, gcsafe.} =
+    handleError(config, info, mk, msg)
+
   if setupParser(parser, fileIdx, newIdentCache(), conf):
     extract(parseAll(parser), conf, result)
     closeParser(parser)
@@ -161,3 +221,6 @@ iterator tokenizeRequires*(s: string): string =
 when isMainModule:
   for x in tokenizeRequires("jester@#head >= 1.5 & <= 1.8"):
     echo x
+
+  let info = extractRequiresInfo(Path"tests/test_data/bad.nimble")
+  echo "bad nimble info: ", repr(info)

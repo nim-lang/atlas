@@ -6,15 +6,21 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [os, uri]
-import versions, parserequires, compiledpatterns, reporters
+import std / [os, uri, paths, files, tables]
+import versions, parse_requires, compiledpatterns, reporters
+
+export reporters
 
 const
   UnitTests* = defined(atlasUnitTests)
   TestsDir* = "atlas/tests"
 
 const
-  AtlasWorkspace* = "atlas.workspace"
+  AtlasProjectConfig = Path"atlas.config"
+  DefaultPackagesSubDir* = Path"_packages"
+  DefaultCachesSubDir* = Path"_caches"
+  DefaultNimbleCachesSubDir* = Path"_nimbles"
+
 
 type
   CfgPath* = distinct string # put into a config `--path:"../x"`
@@ -28,67 +34,93 @@ type
   Flag* = enum
     KeepCommits
     CfgHere
-    UsesOverrides
     Keep
     KeepWorkspace
     ShowGraph
     AutoEnv
     NoExec
+    UpdateRepos
     ListVersions
+    ListVersionsOff
     GlobalWorkspace
-    FullClones
-    IgnoreUrls
+    ShallowClones
+    IgnoreGitRemoteUrls
+    IgnoreErrors
+    DumpFormular
+    DumpGraphs
+    DumbProxy
+    ForceGitToHttps
+    IncludeTagsAndNimbleCommits # include nimble commits and tags in the solver
+    NimbleCommitsMax # takes the newest commit for each version
 
-  AtlasContext* = object of Reporter
-    projectDir*, workspace*, origDepsDir*, currentDir*: string
-    flags*: set[Flag]
-    #urlMapping*: Table[string, Package] # name -> url mapping
-    overrides*: Patterns
-    defaultAlgo*: ResolutionAlgorithm
+  AtlasContext* = object
+    projectDir*: Path = Path"."
+    depsDir*: Path = Path"deps"
+    flags*: set[Flag] = {}
+    nameOverrides*: Patterns
+    urlOverrides*: Patterns
+    pkgOverrides*: Table[string, Uri]
+    defaultAlgo*: ResolutionAlgorithm = SemVer
     plugins*: PluginInfo
-    overridesFile*: string
-    pluginsFile*: string
+    overridesFile*: Path
+    pluginsFile*: Path
     proxy*: Uri
-    dumbProxy*: bool
 
+var atlasContext = AtlasContext()
+
+proc setContext*(ctx: AtlasContext) =
+  atlasContext = ctx
+proc context*(): var AtlasContext =
+  atlasContext
+
+proc project*(): Path =
+  atlasContext.projectDir
+
+proc project*(ws: Path) =
+  atlasContext.projectDir = ws
+
+proc depsDir*(relative = false): Path =
+  if atlasContext.depsDir == Path"":
+    result = Path""
+  elif relative or atlasContext.depsDir.isAbsolute:
+    result = atlasContext.depsDir
+  else:
+    result = atlasContext.projectDir / atlasContext.depsDir
+
+proc packagesDirectory*(): Path =
+  depsDir() / DefaultPackagesSubDir
+
+proc cachesDirectory*(): Path =
+  depsDir() / DefaultCachesSubDir
+
+proc nimbleCachesDirectory*(): Path =
+  depsDir() / DefaultNimbleCachesSubDir
+
+proc depGraphCacheFile*(ctx: AtlasContext): Path =
+  ctx.projectDir / ctx.depsDir / Path"atlas.cache.json"
+
+proc relativeToWorkspace*(path: Path): string =
+  result = "$project/" & $path.relativePath(project())
+
+proc getProjectConfig*(dir = project()): Path =
+  ## prefer project atlas.config if found
+  ## otherwise default to one in deps/
+  ## the deps path will be the default for auto-created ones
+  result = dir / AtlasProjectConfig
+  if fileExists(result): return
+  result = depsDir() / AtlasProjectConfig
+
+proc isProject*(dir: Path): bool =
+  fileExists(getProjectConfig(dir))
 
 proc `==`*(a, b: CfgPath): bool {.borrow.}
 
-proc depsDir*(c: AtlasContext): string =
-  if c.origDepsDir == "":
-    c.workspace
-  elif c.origDepsDir.isAbsolute:
-    c.origDepsDir
-  else:
-    (c.workspace / c.origDepsDir).absolutePath
-
 proc displayName(c: AtlasContext; p: string): string =
-  if p == c.workspace:
+  if p == c.projectDir.string:
     p.absolutePath
-  elif c.depsDir != "" and p.isRelativeTo(c.depsDir):
-    p.relativePath(c.depsDir)
-  elif p.isRelativeTo(c.workspace):
-    p.relativePath(c.workspace)
+  elif $c.depsDir != "" and p.isRelativeTo($c.depsDir):
+    p.relativePath($c.depsDir)
+  elif p.isRelativeTo($c.projectDir):
+    p.relativePath($c.projectDir)
   else:
     p
-
-template projectFromCurrentDir*(): untyped = c.currentDir.absolutePath
-
-template withDir*(c: var AtlasContext; dir: string; body: untyped) =
-  let oldDir = getCurrentDir()
-  debug c, dir, "Current directory is now: " & dir
-  try:
-    setCurrentDir(dir)
-    body
-  finally:
-    setCurrentDir(oldDir)
-
-template tryWithDir*(c: var AtlasContext; dir: string; body: untyped) =
-  let oldDir = getCurrentDir()
-  try:
-    if dirExists(dir):
-      setCurrentDir(dir)
-      debug c, dir, "Current directory is now: " & dir
-      body
-  finally:
-    setCurrentDir(oldDir)

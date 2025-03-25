@@ -7,10 +7,10 @@
 #
 
 import std / [strutils, os, sha1, algorithm]
-import reporters, osutils
+import context, osutils
 import gitops
 
-proc updateSecureHash(checksum: var Sha1State; c: var Reporter; name, path: string) =
+proc updateSecureHash(checksum: var Sha1State; name, path: string) =
   if not path.fileExists(): return
   checksum.update(name)
 
@@ -20,7 +20,7 @@ proc updateSecureHash(checksum: var Sha1State; c: var Reporter; name, path: stri
       let path = expandSymlink(path)
       checksum.update(path)
     except OSError:
-      error c, name, "cannot follow symbolic link " & path
+      error name, "cannot follow symbolic link " & path
   else:
     # checksum file contents
     var file: File
@@ -33,22 +33,22 @@ proc updateSecureHash(checksum: var Sha1State; c: var Reporter; name, path: stri
         if bytesRead == 0: break
         checksum.update(buffer.toOpenArray(0, bytesRead - 1))
     except IOError:
-      error c, name, "error opening file " & path
+      error name, "error opening file " & path
     finally:
       file.close()
 
-proc nimbleChecksum*(c: var Reporter; name, path: string): string =
+proc nimbleChecksum*(name: string, path: Path): string =
   ## calculate a nimble style checksum from a `path`.
   ##
   ## Useful for exporting a Nimble sync file.
   ##
   withDir path:
-    var files = c.listFiles()
+    var files = listFiles(path)
     if files.len == 0:
-      error c, path, "couldn't list files"
+      error path, "couldn't list files"
     else:
       sort(files)
       var checksum = newSha1State()
       for file in files:
-        checksum.updateSecureHash(c, name, file)
+        checksum.updateSecureHash(name, file)
       result = toLowerAscii($SecureHash(checksum.finalize()))

@@ -6,71 +6,88 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [terminal]
+import std / [terminal, paths]
+export paths
 
 type
   MsgKind* = enum
-    Info = "[Info] ",
-    Warning = "[Warning] ",
-    Error = "[Error] "
-    Trace = "[Trace] "
-    Debug = "[Debug] "
+    Ignore = ""
+    Error =   "[Error]  "
+    Warning = "[Warn]   ",
+    Notice =  "[Notice] ",
+    Info =    "[Info]   ",
+    Debug =   "[Debug]  "
+    Trace =   "[Trace]  "
 
   Reporter* = object of RootObj
-    verbosity*: int
+    verbosity*: MsgKind
     noColors*: bool
     assertOnError*: bool
+    errorsColor* = fgRed
     warnings*: int
     errors*: int
-    messages: seq[(MsgKind, string, string)] # delayed output
+    messages: seq[(MsgKind, string, seq[string])] # delayed output
 
-proc writeMessage(c: var Reporter; category: string; p, arg: string) =
+var atlasReporter* = Reporter(verbosity: Notice)
+
+proc setAtlasVerbosity*(verbosity: MsgKind) =
+  atlasReporter.verbosity = verbosity
+
+proc setAtlasNoColors*(nc: bool) =
+  atlasReporter.noColors = nc
+
+proc setAtlasAssertOnError*(err: bool) =
+  atlasReporter.assertOnError = err
+
+proc atlasErrors*(): int =
+  atlasReporter.errors
+
+proc setAtlasErrorsColor*(color: ForegroundColor) =
+  atlasReporter.errorsColor = color
+
+proc writeMessageRaw(c: var Reporter; category: string; p: string, args: seq[string]) =
   var msg = category
   if p.len > 0: msg.add "(" & p & ") "
-  msg.add arg
+  for arg in args:
+    msg.add arg
+    msg.add " "
   stdout.writeLine msg
 
-proc writeMessage(c: var Reporter; k: MsgKind; p, arg: string) =
-  if k == Trace and c.verbosity < 1: return
-  elif k == Debug and c.verbosity < 2: return
+proc writeMessage(c: var Reporter; k: MsgKind; p: string, args: seq[string]) =
+  if k == Ignore: return
+  if k > c.verbosity: return
+  # if k == Trace and c.verbosity < 1: return
+  # elif k == Debug and c.verbosity < 2: return
 
   if c.noColors:
-    writeMessage(c, $k, p, arg)
+    writeMessageRaw(c, $k, p, args)
   else:
     let (color, style) =
       case k
-      of Debug: (fgWhite, styleDim)
-      of Trace: (fgBlue, styleBright)
+      of Ignore: (fgWhite, styleDim)
+      of Trace: (fgWhite, styleDim)
+      of Debug: (fgBlue, styleBright)
       of Info: (fgGreen, styleBright)
+      of Notice: (fgMagenta, styleBright)
       of Warning: (fgYellow, styleBright)
-      of Error: (fgRed, styleBright)
-    stdout.styledWriteLine(color, style, $k, resetStyle, fgCyan, "(", p, ")", resetStyle, " ", arg)
+      of Error: (c.errorsColor, styleBright)
+    
+    stdout.styledWrite(color, style, $k, resetStyle, fgCyan, "(", p, ")", resetStyle)
+    let colors = [fgWhite, fgMagenta]
+    for idx, arg in args:
+      stdout.styledWrite(colors[idx mod 2], " ", arg)
+    stdout.styledWriteLine(resetStyle, "")
 
-proc message(c: var Reporter; k: MsgKind; p, arg: string) =
+proc message(c: var Reporter; k: MsgKind; p: string, args: openArray[string]) =
   ## collects messages or prints them out immediately
   # c.messages.add (k, p, arg)
-  writeMessage c, k, p, arg
-
-
-proc warn*(c: var Reporter; p, arg: string) =
-  c.message(Warning, p, arg)
-  # writeMessage c, Warning, p, arg
-  inc c.warnings
-
-proc error*(c: var Reporter; p, arg: string) =
   if c.assertOnError:
-    raise newException(AssertionDefect, p & ": " & arg)
-  c.message(Error, p, arg)
-  inc c.errors
-
-proc info*(c: var Reporter; p, arg: string) =
-  c.message(Info, p, arg)
-
-proc trace*(c: var Reporter; p, arg: string) =
-  c.message(Trace, p, arg)
-
-proc debug*(c: var Reporter; p, arg: string) =
-  c.message(Debug, p, arg)
+    raise newException(AssertionDefect, p & ": " & $args)
+  if k == Warning:
+    inc c.warnings
+  elif k == Error:
+    inc c.errors
+  writeMessage c, k, p, @args
 
 proc writePendingMessages*(c: var Reporter) =
   for i in 0..<c.messages.len:
@@ -78,12 +95,61 @@ proc writePendingMessages*(c: var Reporter) =
     writeMessage c, k, p, arg
   c.messages.setLen 0
 
-proc infoNow*(c: var Reporter; p, arg: string) =
-  writeMessage c, Info, p, arg
+proc atlasWritePendingMessages*() =
+  atlasReporter.writePendingMessages()
 
-proc fatal*(c: var Reporter, msg: string, prefix = "fatal", code = 1) =
+proc doInfoNow*(c: var Reporter; p: string, args: seq[string]) =
+  writeMessage c, Info, p, @args
+
+proc doFatal*(c: var Reporter, msg: string, prefix = "fatal", code: int) =
   when defined(debug):
     writeStackTrace()
-  writeMessage(c, Error, prefix, msg)
-  quit 1
+  writeMessage(c, Error, prefix, @[msg])
+  quit code
 
+when not compiles($(Path("test"))):
+  template `$`*(x: Path): string =
+    string(x)
+
+when not compiles(len(Path("test"))):
+  template len*(x: Path): int =
+    x.string.len()
+
+proc toReporterName(s: string): string = s
+proc toReporterName(p: Path): string = $p.splitPath().tail
+
+proc message*[T](k: MsgKind; p: T, args: varargs[string]) =
+  mixin toReporterName
+  message(atlasReporter, k, toReporterName(p), @args)
+
+proc warn*[T](p: T, args: varargs[string]) =
+  mixin toReporterName
+  message(atlasReporter, Warning, toReporterName(p), @args)
+
+proc error*[T](p: T, args: varargs[string]) =
+  mixin toReporterName
+  message(atlasReporter, Error, toReporterName(p), @args)
+
+proc notice*[T](p: T, args: varargs[string]) =
+  mixin toReporterName
+  message(atlasReporter, Notice, toReporterName(p), @args)
+
+proc info*[T](p: T, args: varargs[string]) =
+  mixin toReporterName
+  message(atlasReporter, Info, toReporterName(p), @args)
+
+proc trace*[T](p: T, args: varargs[string]) =
+  mixin toReporterName
+  message(atlasReporter, Trace, toReporterName(p), @args)
+
+proc debug*[T](p: T, args: varargs[string]) =
+  mixin toReporterName
+  message(atlasReporter, Debug, toReporterName(p), @args)
+
+template fatal*(msg: string | Path, prefix = "fatal", code = 1) =
+  mixin toReporterName
+  doFatal(atlasReporter, toReporterName(msg), prefix, code)
+
+proc infoNow*[T](p: T, args: varargs[string]) =
+  mixin toReporterName
+  doInfoNow(atlasReporter, toReporterName(p), @args)

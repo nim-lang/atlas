@@ -6,8 +6,8 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [json, os, sets, strutils, httpclient, uri]
-import context, reporters
+import std / [json, os, sets, strutils, paths, dirs, httpclient, uri]
+import context, reporters, gitops
 
 const
   UnitTests = defined(atlasUnitTests)
@@ -20,18 +20,26 @@ when UnitTests:
       assert result != "", "atlas dir not found!"
 
 type
+  PackageKind* = enum
+    pkPackage,
+    pkAlias
+
   PackageInfo* = ref object
-    # Required fields in a PackageInfo.
     name*: string
-    url*: string # Download location.
-    license*: string
-    downloadMethod*: string
-    description*: string
-    tags*: seq[string] # \
-    # From here on, optional fields set to the empty string if not available.
-    version*: string
-    dvcsTag*: string
-    web*: string # Info url for humans.
+    case kind*: PackageKind
+    of pkAlias:
+      alias*: string
+    of pkPackage:
+      # Required fields in a PackageInfo.
+      url*: string # Download location.
+      license*: string
+      downloadMethod*: string
+      description*: string
+      tags*: seq[string] # \
+      # From here on, optional fields set to the empty string if not available.
+      version*: string
+      dvcsTag*: string
+      web*: string # Info url for humans.
 
 proc optionalField(obj: JsonNode, name: string, default = ""): string =
   if hasKey(obj, name) and obj[name].kind == JString:
@@ -39,25 +47,30 @@ proc optionalField(obj: JsonNode, name: string, default = ""): string =
   else:
     result = default
 
-proc requiredField(obj: JsonNode, name: string): string =
-  result = optionalField(obj, name, "")
+template requiredField(obj: JsonNode, name: string): string =
+  block:
+    let result = optionalField(obj, name, "")
+    if result.len == 0:
+      return nil
+    result
 
-proc fromJson*(obj: JSonNode): PackageInfo =
-  result = PackageInfo()
-  result.name = obj.requiredField("name")
-  if result.name.len == 0: return nil
-  result.version = obj.optionalField("version")
-  result.url = obj.requiredField("url")
-  if result.url.len == 0: return nil
-  result.downloadMethod = obj.requiredField("method")
-  if result.downloadMethod.len == 0: return nil
-  result.dvcsTag = obj.optionalField("dvcs-tag")
-  result.license = obj.optionalField("license")
-  result.tags = @[]
-  for t in obj["tags"]:
-    result.tags.add(t.str)
-  result.description = obj.requiredField("description")
-  result.web = obj.optionalField("web")
+proc fromJson*(obj: JsonNode): PackageInfo =
+  if "alias" in obj:
+    result = PackageInfo(kind: pkAlias)
+    result.name = obj.requiredField("name")
+    result.alias = obj.requiredField("alias")
+  else:
+    result = PackageInfo(kind: pkPackage)
+    result.name = obj.requiredField("name")
+    result.version = obj.optionalField("version")
+    result.url = obj.requiredField("url")
+    result.downloadMethod = obj.requiredField("method")
+    result.dvcsTag = obj.optionalField("dvcs-tag")
+    result.license = obj.optionalField("license")
+    result.tags = @[]
+    for t in obj["tags"]: result.tags.add(t.str)
+    result.description = obj.requiredField("description")
+    result.web = obj.optionalField("web")
 
 proc `$`*(pkg: PackageInfo): string =
   result = pkg.name & ":\n"
@@ -73,3 +86,25 @@ proc toTags*(j: JsonNode): seq[string] =
   if j.kind == JArray:
     for elem in items j:
       result.add elem.getStr("")
+
+proc getPackageInfos*(pkgsDir = packagesDirectory()): seq[PackageInfo] =
+  result = @[]
+  var uniqueNames = initHashSet[string]()
+  var jsonFiles = 0
+  for kind, path in walkDir(pkgsDir):
+    if kind == pcFile and path.string.endsWith(".json"):
+      inc jsonFiles
+      let packages = json.parseFile($path)
+      for p in packages:
+        let pkg = p.fromJson()
+        if pkg != nil and not uniqueNames.containsOrIncl(pkg.name):
+          result.add(pkg)
+
+proc updatePackages*(pkgsDir = packagesDirectory()) =
+  let pkgsDir = depsDir() / DefaultPackagesSubDir
+  if dirExists(pkgsDir):
+    gitPull(pkgsDir)
+  else:
+    let res = clone(parseUri "https://github.com/nim-lang/packages", pkgsDir)
+    if res[0] != Ok:
+      error DefaultPackagesSubDir, "cannot clone packages repo: " & res[1]

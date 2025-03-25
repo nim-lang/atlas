@@ -6,9 +6,9 @@
 #    distribution, for details about the copyright.
 #
 
-import basic/reporters
+import basic/context
 
-import std / [strutils, os, osproc]
+import std / [strutils, os, paths, osproc]
 
 const
   BuilderScriptTemplate* = """
@@ -60,12 +60,12 @@ include $1
 
 """
 
-proc runNimScript*(c: var Reporter; scriptContent: string; name: string) =
+proc runNimScript*(scriptContent: string; name: string) =
   var buildNims = "atlas_build_0.nims"
   var i = 1
   while fileExists(buildNims):
     if i >= 20:
-      error c, name, "could not create new: atlas_build_0.nims"
+      error name, "could not create new: atlas_build_0.nims"
       return
     buildNims = "atlas_build_" & $i & ".nims"
     inc i
@@ -74,14 +74,14 @@ proc runNimScript*(c: var Reporter; scriptContent: string; name: string) =
 
   let cmdLine = "nim e --hints:off -d:atlas " & quoteShell(buildNims)
   if os.execShellCmd(cmdLine) != 0:
-    error c, name, "Nimscript failed: " & cmdLine
+    error name, "Nimscript failed: " & cmdLine
   else:
     removeFile buildNims
 
-proc runNimScriptInstallHook*(c: var Reporter; nimbleFile, name: string) =
-  infoNow c, name, "running install hooks"
-  runNimScript c, InstallHookTemplate % [nimbleFile.escape], name
+proc runNimScriptInstallHook*(nimbleFile: Path, name: string) =
+  infoNow name, "running install hooks"
+  runNimScript InstallHookTemplate % [escape($(nimbleFile))], name
 
-proc runNimScriptBuilder*(c: var Reporter; p: (string, string); name: string) =
-  infoNow c, name, "running nimble build scripts"
-  runNimScript c, BuilderScriptTemplate % [p[0].escape, p[1].escape], name
+proc runNimScriptBuilder*(p: (string, string); name: string) =
+  infoNow name, "running nimble build scripts"
+  runNimScript BuilderScriptTemplate % [p[0].escape, p[1].escape], name
