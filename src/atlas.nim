@@ -527,7 +527,32 @@ proc atlasRun*(params: seq[string]) =
     var nc = createNimbleContext()
     installDependencies(nc, nimbleFile)
 
-  of "use", "update":
+  of "update":
+    singleArg()
+
+    var nc = createNimbleContext()
+    let graph = project().loadWorkspace(nc, CurrentCommit, onClone=DoNothing, doSolve=false)
+
+    let pkgUrl = nc.createUrl(args[0])
+    let pkg = graph.pkgs.getOrDefault(pkgUrl, nil)
+    if pkg.isNil:
+      fatal "package not found: " & args[0]
+      quit(1)
+
+    var deps: HashSet[Package] = initHashSet[Package]()
+    for ver, rel in pkg.versions:
+      info "atlas:update", "package:", $pkgUrl, "version:", $ver
+      for (depUrl, depVer) in rel.requirements:
+        info "atlas:update", "  dep:", $depUrl, "version:", $depVer
+        deps.incl graph.pkgs[depUrl]
+
+    for dep in deps:
+      notice dep.url.projectName, "Updating repo..."
+      gitops.updateRepo(dep.ondisk)
+
+    dumpJson(graph, "graph-update.json")
+
+  of "use":
     singleArg()
 
     if action == "update":
