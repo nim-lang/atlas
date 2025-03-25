@@ -63,7 +63,7 @@ The project structure looks like this:
 
 ```sh
 atlas use https://github.com/zedeus/nitter
-atlas use file://../../existingDepdency/
+atlas link ../../existingDepdency/
 ```
 
 ## Debugging
@@ -74,7 +74,7 @@ Sometimes it's helpful to understand what Atlas is doing. You can run commands w
 
 ```sh
 atlas env 2.0.0
-source nim-2.0.0/activate.sh
+source deps/nim-2.0.0/activate.sh
 ```
 
 ## Dependencies

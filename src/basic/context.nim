@@ -34,7 +34,7 @@ type
   Flag* = enum
     KeepCommits
     CfgHere
-    Keep
+    KeepNimEnv
     KeepWorkspace
     ShowGraph
     AutoEnv

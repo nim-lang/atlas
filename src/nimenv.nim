@@ -38,7 +38,7 @@ proc infoAboutActivation(nimDest: Path, nimVersion: string) =
   else:
     info nimDest, "RUN\nsource nim-" & nimVersion & "/activate.sh"
 
-proc setupNimEnv*(project: Path, nimVersion: string; keepCsources: bool) =
+proc setupNimEnv*(nimVersion: string; keepCsources: bool) =
     template isDevel(nimVersion: string): bool = nimVersion == "devel"
 
     template exec(command: string) =
@@ -48,8 +48,8 @@ proc setupNimEnv*(project: Path, nimVersion: string; keepCsources: bool) =
         return
 
     let nimDest = Path("nim-" & nimVersion)
-    if dirExists(project / nimDest):
-      if not fileExists(project / nimDest / ActivationFile):
+    if dirExists(depsDir() / nimDest):
+      if not fileExists(depsDir() / nimDest / ActivationFile):
         info nimDest, "already exists; remove or rename and try again"
       else:
         infoAboutActivation nimDest, nimVersion
@@ -68,11 +68,11 @@ proc setupNimEnv*(project: Path, nimVersion: string; keepCsources: bool) =
         "csources" # has some chance of working
       else:
         "csources_v1"
-    withDir $project:
+    withDir $depsDir():
       if not dirExists(csourcesVersion):
         exec "git clone https://github.com/nim-lang/" & csourcesVersion
       exec "git clone https://github.com/nim-lang/nim " & $nimDest
-    withDir $project / csourcesVersion:
+    withDir $depsDir() / csourcesVersion:
       when defined(windows):
         exec "build.bat"
       else:
@@ -82,8 +82,8 @@ proc setupNimEnv*(project: Path, nimVersion: string; keepCsources: bool) =
         else:
           exec "make"
     let nimExe0 = ".." / csourcesVersion / "bin" / "nim".addFileExt(ExeExt)
-    let dir = Path(project / nimDest)
-    withDir $(project / nimDest):
+    let dir = Path(depsDir() / nimDest)
+    withDir $(depsDir() / nimDest):
       let nimExe = "bin" / "nim".addFileExt(ExeExt)
       copyFileWithPermissions nimExe0, nimExe
       let query = createQueryEq(if nimVersion.isDevel: Version"#head" else: Version(nimVersion))
@@ -98,13 +98,13 @@ proc setupNimEnv*(project: Path, nimVersion: string; keepCsources: bool) =
       exec kochExe & " boot -d:release --skipUserCfg --skipParentCfg --hints:off"
       exec kochExe & " tools --skipUserCfg --skipParentCfg --hints:off"
       # remove any old atlas binary that we now would end up using:
-      if cmpPaths(getAppDir(), $(project / nimDest / "bin".Path)) != 0:
+      if cmpPaths(getAppDir(), $(depsDir() / nimDest / "bin".Path)) != 0:
         removeFile "bin" / "atlas".addFileExt(ExeExt)
       # unless --keep is used delete the csources because it takes up about 2GB and
       # is not necessary afterwards:
       if not keepCsources:
-        removeDir $project / csourcesVersion / "c_code"
-      let pathEntry = project / nimDest / "bin".Path
+        removeDir $depsDir() / csourcesVersion / "c_code"
+      let pathEntry = depsDir() / nimDest / "bin".Path
       when defined(windows):
         writeFile "activate.bat", BatchFile % $pathEntry.replace('/', '\\')
       else:
