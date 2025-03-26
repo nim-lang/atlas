@@ -140,6 +140,11 @@ jobs:
         run: |
           cd atlas
           nim test
+      
+      - name: Run Docs
+        run: |
+          cd atlas
+          nim docs
 
       - name: Test install with Nimble
         run: |
