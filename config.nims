@@ -1,4 +1,8 @@
 import std/[strformat, strutils]
+
+when defined(nimPreviewSlimSystem):
+  import std/syncio
+
 --path:"$nim"
 --path:"../sat/src/"
 
@@ -82,7 +86,7 @@ task test, "Runs all tests":
   testerTask()
 
 task docs, "build Atlas's docs":
-  exec "nim rst2html --putenv:atlasversion=$1 doc/atlas.md" % version
+  exec "nim rst2html --putenv:atlasversion=$1 --d:nimPreviewSlimSystem doc/atlas.md" % version
 
 # begin Nimble config (version 2)
 # when withDir(thisDir(), system.fileExists("nimble.paths")):
