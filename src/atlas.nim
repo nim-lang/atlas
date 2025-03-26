@@ -193,7 +193,7 @@ proc afterGraphActions(g: DepGraph) =
   if atlasErrors() == 0 and AutoEnv in context().flags:
     let v = g.bestNimVersion
     if v != Version"":
-      setupNimEnv project(), v.string, Keep in context().flags
+      setupNimEnv v.string, KeepNimEnv in context().flags
 
   if NoExec notin context().flags:
     g.runBuildSteps()
@@ -606,7 +606,7 @@ proc atlasRun*(params: seq[string]) =
     listChanged(Path(args[0]))
   of "env":
     singleArg()
-    setupNimEnv project(), args[0], Keep in context().flags
+    setupNimEnv args[0], KeepNimEnv in context().flags
   of "outdated":
     listOutdated()
   else:

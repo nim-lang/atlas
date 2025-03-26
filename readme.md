@@ -1,5 +1,5 @@
 # atlas
-The Atlas Package cloner. It manages an isolated project that contains projects and dependencies.
+The Atlas Package cloner. It manages project dependencies in an isolated `deps/` directory.
 
 # Installation
 
@@ -47,11 +47,23 @@ echo "import malebolgia" >myproject.nim
 nim c myproject.nim
 ```
 
+The project structure looks like this:
+
+```
+  $project / project.nimble
+  $project / nim.cfg
+  $project / other main project files...
+  $project / deps / atlas.config
+  $project / deps / dependency-A
+  $project / deps / dependency-B
+  $project / deps / dependency-C.nimble-link (for linked projects)
+```
+
 ## Using URLs and local folders
 
 ```sh
 atlas use https://github.com/zedeus/nitter
-atlas use file://../../existingDepdency/
+atlas link ../../existingDepdency/
 ```
 
 ## Debugging
@@ -62,17 +74,16 @@ Sometimes it's helpful to understand what Atlas is doing. You can run commands w
 
 ```sh
 atlas env 2.0.0
-source $WORKSPACE/nim-2.0.0/activate.sh
+source deps/nim-2.0.0/activate.sh
 ```
 
-## Vendoring with Atlas
+## Dependencies
 
-Atlas also supports vendoring using an "inverted project". The project layout is where the project is a top-level subfolder like `vendor/` or `deps/` in your project. Like this:
+Atlas places dependencies in a `deps/` directory. This is especially helpful for working with projects that have dependencies pinned as git submodules, which was common in the pre-Atlas era.
 
-```
-someProject/vendor/atlas.config
-someProject/vendor/dep1/
-...
-```
+The `deps/` directory contains:
+- `atlas.config`: Configuration file for dependency management
+- Individual dependency directories
+- `nimble-link` files for linked projects
 
-This is especially helpful for working with projects that have dependencies pinned as git submodules, which was common in the pre-Atlas era.
+Note that `atlas.config` file can be placed in the main project directory as well. In this case, the dependencies directory can modified by setting the `deps` field.
