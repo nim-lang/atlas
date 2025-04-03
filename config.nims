@@ -89,6 +89,6 @@ task docs, "build Atlas's docs":
   exec "nim rst2html --putenv:atlasversion=$1 --d:nimPreviewSlimSystem doc/atlas.md" % version
 
 # begin Nimble config (version 2)
-when withDir(thisDir(), system.fileExists("nimble.paths")):
-  include "nimble.paths"
+# when withDir(thisDir(), system.fileExists("nimble.paths")):
+#   include "nimble.paths"
 # end Nimble config
