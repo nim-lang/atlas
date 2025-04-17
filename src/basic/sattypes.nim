@@ -1,6 +1,6 @@
 
 when defined(nimAtlasBootstrap):
-  import ../dist/sat/src/sat/satvars
+  import ../../dist/sat/src/sat/satvars
 else:
   import sat/satvars
 
