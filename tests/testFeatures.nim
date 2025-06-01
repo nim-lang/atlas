@@ -33,10 +33,10 @@ suite "test features":
 
         expectedVersionWithGitTags()
         var nc = createNimbleContext()
-        nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraphNoGitTags/proj_a", true))
-        nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraphNoGitTags/proj_b", true))
-        nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraphNoGitTags/proj_c", true))
-        nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraphNoGitTags/proj_d", true))
+        nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a", true))
+        nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b", true))
+        nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c", true))
+        nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d", true))
 
         check nc.lookup("proj_a").hasShortName
         check nc.lookup("proj_a").projectName == "proj_a"
@@ -54,6 +54,28 @@ suite "test features":
         #   """)
         #   exec "git commit -a -m \"feat: add proj_a.nimble\""
         #   exec "git tag v1.2.0"
+
+
+  test "setup and test target project":
+      # setAtlasVerbosity(Info)
+      setAtlasVerbosity(Error)
+      withDir "tests/ws_features":
+        # removeDir("deps")
+        project(paths.getCurrentDir())
+        context().flags = {ListVersions}
+        context().defaultAlgo = SemVer
+
+        expectedVersionWithGitTags()
+        var nc = createNimbleContext()
+        nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a", true))
+        nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b", true))
+        nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c", true))
+        nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d", true))
+
+        check nc.lookup("proj_a").hasShortName
+        check nc.lookup("proj_a").projectName == "proj_a"
+
+        let dir = paths.getCurrentDir().absolutePath
 
         var graph = dir.loadWorkspace(nc, AllReleases, onClone=DoClone, doSolve=true)
         writeDepGraph(graph)
