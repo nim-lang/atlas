@@ -37,7 +37,6 @@ type
     hasInstallHooks*: bool
     srcDir*: Path
     err*: string
-    rid*: VarId = NoVar
     features*: Table[string, seq[(PkgUrl, VersionInterval)]]
     featureVars*: Table[string, VarId]
 
