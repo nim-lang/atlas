@@ -83,6 +83,7 @@ proc extract(n: PNode; conf: ConfigRef; currFeature: string; result: var NimbleF
         if n.len >= 3 and n[1].kind == nkIdent and n[1].ident.s == "install":
           result.hasInstallHooks = true
       of "feature":
+        echo "FEATURE: nimble parser "
         if n.len >= 3:
           var features = newSeq[string]()
           for c in n:

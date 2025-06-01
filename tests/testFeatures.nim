@@ -12,27 +12,7 @@ import atlas, confighandler
 
 ensureGitHttpServer()
 
-proc setupGraph*(): seq[string] =
-  let projs = @["proj_a", "proj_b", "proj_c", "proj_d"]
-  if not dirExists("buildGraph"):
-    createDir "buildGraph"
-    withDir "buildGraph":
-      for proj in projs:
-        exec("git clone http://localhost:4242/buildGraph/$1" % [proj])
-  for proj in projs:
-    result.add(ospaths2.getCurrentDir() / "buildGraph" / proj)
-
-proc setupGraphNoGitTags*(): seq[string] =
-  let projs = @["proj_a", "proj_b", "proj_c", "proj_d"]
-  if not dirExists("buildGraphNoGitTags"):
-    createDir "buildGraphNoGitTags"
-    withDir "buildGraphNoGitTags":
-      for proj in projs:
-        exec("git clone http://localhost:4242/buildGraphNoGitTags/$1" % [proj])
-  for proj in projs:
-    result.add(ospaths2.getCurrentDir() / "buildGraphNoGitTags" / proj)
-
-suite "test link integration":
+suite "test features":
   setup:
     # setAtlasVerbosity(Trace)
     context().nameOverrides = Patterns()
@@ -46,22 +26,34 @@ suite "test link integration":
       # setAtlasVerbosity(Info)
       setAtlasVerbosity(Error)
       withDir "tests/ws_features":
-        # removeDir("deps")
+        removeDir("deps")
         project(paths.getCurrentDir())
         context().flags = {ListVersions}
         context().defaultAlgo = SemVer
 
         expectedVersionWithGitTags()
         var nc = createNimbleContext()
-        nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a", true))
-        nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b", true))
-        nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c", true))
-        nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d", true))
+        nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraphNoGitTags/proj_a", true))
+        nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraphNoGitTags/proj_b", true))
+        nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraphNoGitTags/proj_c", true))
+        nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraphNoGitTags/proj_d", true))
 
         check nc.lookup("proj_a").hasShortName
         check nc.lookup("proj_a").projectName == "proj_a"
 
         let dir = paths.getCurrentDir().absolutePath
+
+        var graph0 = dir.loadWorkspace(nc, AllReleases, onClone=DoClone, doSolve=true)
+        writeDepGraph(graph0)
+
+        # withDir "deps" / "proj_a":
+        #   writeFile("proj_a.nimble", dedent"""
+        #   requires "proj_b >= 1.1.0"
+        #   feature "testing":
+        #     requires "proj_t >= 1.0.0"
+        #   """)
+        #   exec "git commit -a -m \"feat: add proj_a.nimble\""
+        #   exec "git tag v1.2.0"
 
         var graph = dir.loadWorkspace(nc, AllReleases, onClone=DoClone, doSolve=true)
         writeDepGraph(graph)
