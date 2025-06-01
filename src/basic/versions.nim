@@ -350,6 +350,11 @@ proc matches*(pattern: VersionInterval; v: Version): bool =
   else:
     result = matches(pattern.a, v)
 
+proc extractRequirementName*(req: string): string =
+  var i = 0
+  while i < req.len and req[i] notin {'#', '<', '=', '>'} + Whitespace: inc i
+  result = req.substr(0, i-1)
+
 const
   MinCommitLen = len("#baca3")
 

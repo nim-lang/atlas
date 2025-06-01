@@ -28,9 +28,7 @@ proc parseNimbleFile*(nc: var NimbleContext;
   )
 
   for req in nimbleInfo.requires:
-    var i = 0
-    while i < req.len and req[i] notin {'#', '<', '=', '>'} + Whitespace: inc i
-    let name = req.substr(0, i-1)
+    let name = extractRequirementName(req)
 
     var url: PkgUrl
     try:
