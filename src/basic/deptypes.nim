@@ -18,7 +18,6 @@ type
     url*: PkgUrl
     state*: PackageState
     versions*: OrderedTable[PackageVersion, NimbleRelease]
-    features*: HashSet[string]
     activeVersion*: PackageVersion
     module*: string
     ondisk*: Path
@@ -28,13 +27,14 @@ type
     isRoot*: bool
     errors*: seq[string]
     originHead*: CommitHash
+    features*: Table[string, VarId]
 
   NimbleRelease* = ref object
     version*: Version
     nimVersion*: Version
     status*: ReleaseStatus
     requirements*: seq[(PkgUrl, VersionInterval)]
-    features*: Table[PkgUrl, HashSet[string]]
+    features*: Table[string, seq[(PkgUrl, VersionInterval)]]
     # featuresAdded*: Table[PkgUrl, HashSet[string]]
     hasInstallHooks*: bool
     srcDir*: Path

@@ -79,7 +79,7 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
     # Add implications for each dependency
     for dep, query in items(rel.requirements):
       if dep notin graph.pkgs:
-        info pkg.url.projectName, "depdendency requirements not found:", $dep.projectName, "query:", $query
+        info pkg.url.projectName, "requirement depdendency not found:", $dep.projectName, "query:", $query
         continue
       let depNode = graph.pkgs[dep]
 
@@ -117,13 +117,17 @@ proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
       of SemVer, MaxVer: p.versions.sort(sortVersionsAsc)
 
       # Assign a unique SAT variable to each version of the package
-      var i = 0
       for ver, rel in p.validVersions():
         ver.vid = VarId(result.idgen)
         # Map the SAT variable to package information for result interpretation
         result.mapping[ver.vid] = SatVarInfo( pkg: p, version: ver, release: rel)
         inc result.idgen
-        inc i
+      
+      # Add feature VarIds
+      for feature, varId in p.features.mpairs():
+        if varId == NoVar:
+          varId = VarId(result.idgen)
+          inc result.idgen
 
       doAssert p.state != NotInitialized, "package not initialized: " & $p.toJson(ToJsonOptions(enumMode: joptEnumString))
 
@@ -143,7 +147,7 @@ proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
         withOpenBr(b, ZeroOrOneOfForm):
           for ver, rel in p.validVersions():
             b.add ver.vid
-    
+      
     # This simpler deps loop was copied from Nimble after it was first ported from Atlas :)
     # It appears to acheive the same results, but it's a lot simpler
     for pkg in graph.pkgs.mvalues():
