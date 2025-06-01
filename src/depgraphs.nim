@@ -89,7 +89,7 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
       let depNode = graph.pkgs[dep]
 
       var compatibleVersions: seq[VarId] = @[]
-      for depVer, relVer in depNode.validVersions():
+      for depVer, nimbleRelease in depNode.validVersions():
         if query.matches(depVer):
           compatibleVersions.add(depVer.vid)
 
@@ -100,54 +100,34 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
           for compatVer in compatibleVersions:
             b.add(compatVer)
 
-    # Add implications for each feature flagged
-    for dep, flags in rel.featuresFlagged:
-      if dep notin graph.pkgs:
-        info pkg.url.projectName, "requirement depdendency not found:", $dep.projectName, "flags:", $flags
-        continue
-      let depNode = graph.pkgs[dep]
-
-      echo "FEATURE:FLAGGED: ", flags, " DEP: ", $depNode.projectName
-
-      for flag in flags:
-        withOpenBr(b, OrForm):
-          b.addNegated(ver.vid)  # not this version
-
-          withOpenBr(b, OrForm):
-            for ver, relVer in depNode.validVersions():
-              if flag in relVer.features:
-                let flagVarId = relVer.featureVars[flag]
-                echo "FEATURE:FLAG:EQ: ", flag, " VER: ", $ver
-                b.add(flagVarId)
-
-
     # Add implications for each feature requirement
-    for feature, reqs in rel.features:
-      let featVarId = rel.featureVars[feature]
-      let allFeatDepsCompatible = checkDeps(graph, ver, reqs)
+    if false:
+      for feature, reqs in rel.features:
+        let featVarId = rel.featureVars[feature]
+        let allFeatDepsCompatible = checkDeps(graph, ver, reqs)
 
-      if not allFeatDepsCompatible:
-        warn pkg.url.projectName, "all requirements needed for feature:", feature, "were not able to be satisfied:", $reqs.mapIt(it[0].projectName & " " & $it[1]).join("; ")
-        b.addNegated(featVarId)
-        break
+        if not allFeatDepsCompatible:
+          warn pkg.url.projectName, "all requirements needed for feature:", feature, "were not able to be satisfied:", $reqs.mapIt(it[0].projectName & " " & $it[1]).join("; ")
+          b.addNegated(featVarId)
+          break
 
-      for dep, query in items(reqs):
-        if dep notin graph.pkgs:
-          info pkg.url.projectName, "feature depdendency not found:", $dep.projectName, "query:", $query
-          continue
-        let depNode = graph.pkgs[dep]
+        for dep, query in items(reqs):
+          if dep notin graph.pkgs:
+            info pkg.url.projectName, "feature depdendency not found:", $dep.projectName, "query:", $query
+            continue
+          let depNode = graph.pkgs[dep]
 
-        var compatibleVersions: seq[VarId] = @[]
-        for depVer, relVer in depNode.validVersions():
-          if query.matches(depVer):
-            compatibleVersions.add(depVer.vid)
+          var compatibleVersions: seq[VarId] = @[]
+          for depVer, relVer in depNode.validVersions():
+            if query.matches(depVer):
+              compatibleVersions.add(depVer.vid)
 
-        withOpenBr(b, OrForm):
-          b.addNegated(ver.vid) # not this version
-          b.addNegated(featVarId) # not this feature
           withOpenBr(b, OrForm):
-            for compatVer in compatibleVersions:
-              b.add(compatVer)
+            b.addNegated(ver.vid) # not this version
+            b.addNegated(featVarId) # not this feature
+            withOpenBr(b, OrForm):
+              for compatVer in compatibleVersions:
+                b.add(compatVer)
 
   if not anyReleaseSatisfied:
     error pkg.url.projectName, "no versions satisfied for this package:", $pkg.url

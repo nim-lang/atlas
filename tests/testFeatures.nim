@@ -108,6 +108,7 @@ suite "test features":
 
         check $graph.root.activeVersion == "#head@-"
         # check $graph.pkgs[nc.createUrl("proj_a")].activeVersion == $findCommit("proj_a", "1.1.0")
+        check $graph.pkgs[nc.createUrl("proj_a")].activeVersion.vtag.version == "1.2.0"
         check $graph.pkgs[nc.createUrl("proj_b")].activeVersion == $findCommit("proj_b", "1.1.0")
         check $graph.pkgs[nc.createUrl("proj_c")].activeVersion == $findCommit("proj_c", "1.2.0")
         check $graph.pkgs[nc.createUrl("proj_d")].activeVersion == $findCommit("proj_d", "1.0.0")
