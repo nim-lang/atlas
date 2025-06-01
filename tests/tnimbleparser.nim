@@ -38,3 +38,12 @@ suite "nimbleparser":
       check doesContain(res, "httpbeast")
     else:
       check not doesContain(res, "httpbeast")
+
+  test "parse nimble file with features":
+    let nimbleFile = Path("tests" / "test_data" / "jester_feature.nimble")
+    var res = extractRequiresInfo(nimbleFile)
+    echo "Nimble release: ", $res
+    check res.requires.len == 1
+    check res.features.hasKey("useHttpbeast")
+    check res.features["useHttpbeast"].len == 1
+    check res.features["useHttpbeast"][0] == "httpbeast >= 0.4.0"

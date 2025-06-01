@@ -1,7 +1,7 @@
 ## Utility API for Nim package managers.
 ## (c) 2021 Andreas Rumpf
 
-import std / [strutils, paths]
+import std / [strutils, paths, tables]
 
 import compiler / [ast, idents, msgs, syntaxes, options, pathutils, lineinfos]
 import reporters
@@ -9,6 +9,7 @@ import reporters
 type
   NimbleFileInfo* = object
     requires*: seq[string]
+    features*: Table[string, seq[string]]
     srcDir*: Path
     version*: string
     tasks*: seq[(string, string)]
@@ -47,11 +48,11 @@ proc evalBasicDefines(sym: string): bool =
   else:
     discard
 
-proc extract(n: PNode; conf: ConfigRef; result: var NimbleFileInfo) =
+proc extract(n: PNode; conf: ConfigRef; currFeature: string; result: var NimbleFileInfo) =
   case n.kind
   of nkStmtList, nkStmtListExpr:
     for child in n:
-      extract(child, conf, result)
+      extract(child, conf, currFeature, result)
   of nkCallKinds:
     if n[0].kind == nkIdent:
       case n[0].ident.s
@@ -60,7 +61,10 @@ proc extract(n: PNode; conf: ConfigRef; result: var NimbleFileInfo) =
           var ch = n[i]
           while ch.kind in {nkStmtListExpr, nkStmtList} and ch.len > 0: ch = ch.lastSon
           if ch.kind in {nkStrLit..nkTripleStrLit}:
-            result.requires.add ch.strVal
+            if currFeature.len > 0:
+              result.features[currFeature].add ch.strVal
+            else:
+              result.requires.add ch.strVal
           else:
             handleError(conf, ch.info, "'requires' takes string literals")
             result.hasErrors = true
@@ -78,7 +82,20 @@ proc extract(n: PNode; conf: ConfigRef; result: var NimbleFileInfo) =
         ]#
         if n.len >= 3 and n[1].kind == nkIdent and n[1].ident.s == "install":
           result.hasInstallHooks = true
-      else: discard
+      of "feature":
+        if n.len >= 3:
+          var features = newSeq[string]()
+          for c in n:
+            if c.kind != nkStrLit:
+              handleError(conf, n.info, "feature requires string literals")
+              result.hasErrors = true
+            else:
+              features.add(c.strVal)
+          for f in features:
+            result.features[f] = newSeq[string]()
+            extract(n[^1], conf, f, result)
+      else:
+        discard
   of nkAsgn, nkFastAsgn:
     if n[0].kind == nkIdent and eqIdent(n[0].ident.s, "srcDir"):
       if n[1].kind in {nkStrLit..nkTripleStrLit}:
@@ -104,20 +121,20 @@ proc extract(n: PNode; conf: ConfigRef; result: var NimbleFileInfo) =
           let name = getDefinedName(notCond)
           if name.len > 0:
             if not evalBasicDefines(name):
-              extract(body, conf, result)
+              extract(body, conf, currFeature, result)
       elif getDefinedName(cond) != "": # handle when defined
         let name = getDefinedName(cond)
         if evalBasicDefines(name):
-          extract(body, conf, result)
+          extract(body, conf, currFeature, result)
       elif cond.kind == nkInfix: # handle when or
         if cond[0].kind == nkIdent and cond[0].ident.s == "or":
           let orLeft = getDefinedName(cond[1])
           let orRight = getDefinedName(cond[2])
           if orLeft.len > 0 or orRight.len > 0:
             if evalBasicDefines(orLeft):
-              extract(body, conf, result)
+              extract(body, conf, currFeature, result)
             elif evalBasicDefines(orRight):
-              extract(body, conf, result)
+              extract(body, conf, currFeature, result)
               
   else:
     discard
@@ -143,7 +160,7 @@ proc extractRequiresInfo*(nimbleFile: Path): NimbleFileInfo =
     handleError(config, info, mk, msg)
 
   if setupParser(parser, fileIdx, newIdentCache(), conf):
-    extract(parseAll(parser), conf, result)
+    extract(parseAll(parser), conf, "", result)
     closeParser(parser)
   result.hasErrors = result.hasErrors or conf.errorCounter > 0
 
