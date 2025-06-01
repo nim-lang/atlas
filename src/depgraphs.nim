@@ -43,7 +43,7 @@ template withOpenBr(b, op, blk) =
 proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
   var anyReleaseSatisfied = false
 
-  proc checkDeps(ver: PackageVersion, reqs: seq[(PkgUrl, VersionInterval)]): bool =
+  proc checkDeps(graph: var DepGraph, ver: PackageVersion, reqs: seq[(PkgUrl, VersionInterval)]): bool =
     var allDepsCompatible = true
 
     # First check if all dependencies can be satisfied
@@ -71,7 +71,7 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
     return allDepsCompatible
 
   for ver, rel in validVersions(pkg):
-    let allDepsCompatible = checkDeps(ver, rel.requirements)
+    let allDepsCompatible = checkDeps(graph, ver, rel.requirements)
 
     # If any dependency can't be satisfied, make this version unsatisfiable
     if not allDepsCompatible:
@@ -103,7 +103,7 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
     # Add implications for each feature requirement
     for feature, reqs in rel.features:
       let featVarId = rel.featureVars[feature]
-      let allFeatDepsCompatible = checkDeps(ver, reqs)
+      let allFeatDepsCompatible = checkDeps(graph, ver, reqs)
 
       if not allFeatDepsCompatible:
         warn pkg.url.projectName, "all requirements needed for feature:", feature, "were not able to be satisfied:", $reqs.mapIt(it[0].projectName & " " & $it[1]).join("; ")
