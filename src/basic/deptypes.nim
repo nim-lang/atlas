@@ -1,4 +1,4 @@
-import std/[paths, tables, json, jsonutils, hashes]
+import std/[paths, tables, json, jsonutils, hashes, sets]
 import sattypes, pkgurls, versions, context
 
 export tables
@@ -33,6 +33,7 @@ type
     nimVersion*: Version
     status*: ReleaseStatus
     requirements*: seq[(PkgUrl, VersionInterval)]
+    feature*: Table[PkgUrl, HashSet[string]]
     hasInstallHooks*: bool
     srcDir*: Path
     err*: string
