@@ -144,7 +144,7 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
                 b.add(compatVer)
 
   if not anyReleaseSatisfied:
-    error pkg.url.projectName, "no versions satisfied for this package:", $pkg.url
+    warn pkg.url.projectName, "no versions satisfied for this package:", $pkg.url
 
 proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
   result = Form()

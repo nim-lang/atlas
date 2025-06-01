@@ -27,6 +27,7 @@ type
     isRoot*: bool
     errors*: seq[string]
     originHead*: CommitHash
+    lazyClone*: bool
 
   NimbleRelease* = ref object
     version*: Version

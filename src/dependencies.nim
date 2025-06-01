@@ -68,12 +68,7 @@ proc processNimbleRelease(
     result = nc.parseNimbleFile(nimbleFile)
 
     if result.status == Normal:
-      var reqs = result.requirements
-      for feature, rq in result.features:
-        debug pkg.url.projectName, "Found new feature:", feature
-        reqs.add(rq)
-
-      for pkgUrl, interval in items(reqs):
+      for pkgUrl, interval in items(result.requirements):
         # debug pkg.url.projectName, "INTERVAL: ", $interval, "isSpecial:", $interval.isSpecial, "explicit:", $interval.extractSpecificCommit()
         if interval.isSpecial:
           let commit = interval.extractSpecificCommit()
@@ -84,6 +79,17 @@ proc processNimbleRelease(
           # debug pkg.url.projectName, "Found new pkg:", pkgUrl.projectName, "repr:", $pkgUrl.repr
           let pkgDep = Package(url: pkgUrl, state: NotInitialized)
           nc.packageToDependency[pkgUrl] = pkgDep
+
+      for feature, rq in result.features:
+        for pkgUrl, interval in items(rq):
+          if interval.isSpecial:
+            let commit = interval.extractSpecificCommit()
+            nc.explicitVersions.mgetOrPut(pkgUrl).incl(VersionTag(v: Version($(interval)), c: commit))
+
+          if pkgUrl notin nc.packageToDependency:
+            debug pkg.url.projectName, "Found new pkg:", pkgUrl.projectName, "url:", $pkgUrl.url, "projectName:", $pkgUrl.projectName
+            let pkgDep = Package(url: pkgUrl, state: NotInitialized, lazyClone: true)
+            nc.packageToDependency[pkgUrl] = pkgDep
 
 proc addRelease(
     versions: var seq[(PackageVersion, NimbleRelease)],
