@@ -404,6 +404,8 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
       of "keepworkspace": context().flags.incl KeepWorkspace
       of "autoenv": context().flags.incl AutoEnv
       of "noexec": context().flags.incl NoExec
+      of "feature":
+        context().features.incl val.normalize
       of "list":
         if val.normalize in ["on", ""]:
           context().flags.incl ListVersions
