@@ -33,7 +33,8 @@ type
     nimVersion*: Version
     status*: ReleaseStatus
     requirements*: seq[(PkgUrl, VersionInterval)]
-    feature*: Table[PkgUrl, HashSet[string]]
+    features*: Table[PkgUrl, HashSet[string]]
+    # featuresAdded*: Table[PkgUrl, HashSet[string]]
     hasInstallHooks*: bool
     srcDir*: Path
     err*: string
