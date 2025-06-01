@@ -343,7 +343,10 @@ proc solve*(graph: var DepGraph; form: Form) =
         assert not pkg.isNil, "too bad: " & $pkg.url
         assert not mapInfo.release.isNil, "too bad: " & $pkg.url
         pkg.activeVersion = mapInfo.version
-        debug pkg.url.projectName, "package satisfiable"
+        if mapInfo.feature.len > 0:
+          debug pkg.url.projectName, "package satisfiable", "feature: ", mapInfo.feature
+        else:
+          debug pkg.url.projectName, "package satisfiable"
 
     checkDuplicateModules(graph)
 
