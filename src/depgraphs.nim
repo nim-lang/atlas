@@ -116,7 +116,7 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
               b.add(compatVer)
 
     # Add implications for each feature requirement
-    if false:
+    if true:
       for feature, reqs in rel.features:
         let featVarId = rel.featureVars[feature]
         let allFeatDepsCompatible = checkDeps(graph, ver, reqs)
@@ -138,7 +138,7 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
               compatibleVersions.add(depVer.vid)
 
           withOpenBr(b, OrForm):
-            b.addNegated(ver.vid) # not this version
+            # b.addNegated(ver.vid) # not this version
             b.addNegated(featVarId) # not this feature
             withOpenBr(b, OrForm):
               for compatVer in compatibleVersions:
