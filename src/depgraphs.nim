@@ -28,7 +28,7 @@ type
     pkg*: Package
     version*: PackageVersion
     release*: NimbleRelease
-    # index*: int
+    feature*: string
 
   Form* = object
     formula*: Formular
@@ -95,6 +95,22 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
           for compatVer in compatibleVersions:
             b.add(compatVer)
 
+    # Add implications for each feature
+    for feature, reqs in pairs(rel.features):
+      let featVarId = pkg.features[feature]
+      for dep, query in reqs:
+        if dep notin graph.pkgs:
+          info pkg.url.projectName, "feature depdendency not found:", $dep.projectName, "query:", $query
+          continue
+        let depNode = graph.pkgs[dep]
+
+        withOpenBr(b, OrForm):
+          b.addNegated(ver.vid) # not this version
+          b.addNegated(featVarId) # not this feature
+          withOpenBr(b, OrForm):
+            for compatVer in compatibleVersions:
+              b.add(compatVer)
+
   if not anyReleaseSatisfied:
     error pkg.url.projectName, "no versions satisfied for this package:", $pkg.url
 
@@ -120,14 +136,16 @@ proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
       for ver, rel in p.validVersions():
         ver.vid = VarId(result.idgen)
         # Map the SAT variable to package information for result interpretation
-        result.mapping[ver.vid] = SatVarInfo( pkg: p, version: ver, release: rel)
+        result.mapping[ver.vid] = SatVarInfo(pkg: p, version: ver, release: rel)
         inc result.idgen
       
-      # Add feature VarIds
+      # Add feature VarIds - these are not version variables, but are used to track feature selection
       for feature, varId in p.features.mpairs():
         if varId == NoVar:
           varId = VarId(result.idgen)
-          inc result.idgen
+        # Map the SAT variable to package information for result interpretation
+        result.mapping[varId] = SatVarInfo(pkg: p, version: ver, release: rel, feature: feature)
+        inc result.idgen
 
       doAssert p.state != NotInitialized, "package not initialized: " & $p.toJson(ToJsonOptions(enumMode: joptEnumString))
 

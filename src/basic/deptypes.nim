@@ -34,12 +34,12 @@ type
     nimVersion*: Version
     status*: ReleaseStatus
     requirements*: seq[(PkgUrl, VersionInterval)]
-    features*: Table[string, seq[(PkgUrl, VersionInterval)]]
     # featuresAdded*: Table[PkgUrl, HashSet[string]]
     hasInstallHooks*: bool
     srcDir*: Path
     err*: string
     rid*: VarId = NoVar
+    features*: Table[string, seq[(PkgUrl, VersionInterval)]]
 
   PackageVersion* = ref object
     vtag*: VersionTag
