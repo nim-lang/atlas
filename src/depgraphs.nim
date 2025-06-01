@@ -100,6 +100,17 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
           for compatVer in compatibleVersions:
             b.add(compatVer)
 
+    # Add implications for each feature flagged
+    for dep, flags in rel.featuresFlagged:
+      if dep notin graph.pkgs:
+        info pkg.url.projectName, "requirement depdendency not found:", $dep.projectName, "flags:", $flags
+        continue
+      let depNode = graph.pkgs[dep]
+
+      echo "FEATURE:FLAGGED: ", flags, " DEP: ", $depNode.projectName
+
+
+
     # Add implications for each feature requirement
     for feature, reqs in rel.features:
       let featVarId = rel.featureVars[feature]
