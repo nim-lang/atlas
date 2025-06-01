@@ -351,9 +351,24 @@ proc matches*(pattern: VersionInterval; v: Version): bool =
     result = matches(pattern.a, v)
 
 proc extractRequirementName*(req: string): (string, seq[string], int) =
+  const verChars = {'#', '<', '=', '>', '['}
   var i = 0
-  while i < req.len and req[i] notin {'#', '<', '=', '>', '['} + Whitespace: inc i
-  result = (req.substr(0, i-1), @[], i)
+  while i < req.len and req[i] notin verChars + Whitespace:
+    inc i
+  let name = req.substr(0, i-1)
+  if i < req.len and req[i] == '[':
+    inc i
+    var features: seq[string]
+    while i < req.len and req[i] notin verChars + {']'}:
+      while i < req.len and req[i] in verChars + {','} + Whitespace:
+        inc i
+      let start = i
+      while i < req.len and req[i] notin verChars + {',', ']'} + Whitespace:
+        inc i
+      features.add req.substr(start, i-1)
+    result = (name, features, i+1)
+  else:
+    result = (name, @[], i)
 
 const
   MinCommitLen = len("#baca3")
