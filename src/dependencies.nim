@@ -79,13 +79,15 @@ proc processNimbleRelease(
           # debug pkg.url.projectName, "Found new pkg:", pkgUrl.projectName, "repr:", $pkgUrl.repr
           let pkgDep = Package(url: pkgUrl, state: NotInitialized)
           nc.packageToDependency[pkgUrl] = pkgDep
+        else:
+          let pkg = nc.packageToDependency[pkgUrl]
+          pkg.lazyClone = false
 
       for feature, rq in result.features:
         for pkgUrl, interval in items(rq):
           if interval.isSpecial:
             let commit = interval.extractSpecificCommit()
             nc.explicitVersions.mgetOrPut(pkgUrl).incl(VersionTag(v: Version($(interval)), c: commit))
-
           if pkgUrl notin nc.packageToDependency:
             debug pkg.url.projectName, "Found new pkg:", pkgUrl.projectName, "url:", $pkgUrl.url, "projectName:", $pkgUrl.projectName
             let pkgDep = Package(url: pkgUrl, state: NotInitialized, lazyClone: true)
