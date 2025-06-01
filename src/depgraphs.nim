@@ -43,11 +43,11 @@ template withOpenBr(b, op, blk) =
 proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
   var anyReleaseSatisfied = false
 
-  for ver, rel in validVersions(pkg):
+  proc checkDeps(ver: PackageVersion, reqs: seq[(PkgUrl, VersionInterval)]): bool =
     var allDepsCompatible = true
 
     # First check if all dependencies can be satisfied
-    for dep, query in items(rel.requirements):
+    for dep, query in items(reqs):
       if dep notin graph.pkgs:
         debug pkg.url.projectName, "checking dependency for ", $ver, "not found:", $dep.projectName, "query:", $query
         allDepsCompatible = false
@@ -67,6 +67,11 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
         allDepsCompatible = false
         warn pkg.url.projectName, "no versions matched requirements for the dependency:", $dep.projectName
         break
+
+    return allDepsCompatible
+
+  for ver, rel in validVersions(pkg):
+    let allDepsCompatible = checkDeps(ver, rel.requirements)
 
     # If any dependency can't be satisfied, make this version unsatisfiable
     if not allDepsCompatible:
@@ -96,13 +101,25 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
             b.add(compatVer)
 
     # Add implications for each feature
-    for feature, reqs in pairs(rel.features):
+    for feature, reqs in rel.features:
       let featVarId = pkg.features[feature]
-      for dep, query in reqs:
+      let allFeatDepsCompatible = checkDeps(ver, reqs)
+
+      if not allFeatDepsCompatible:
+        warn pkg.url.projectName, "all requirements needed for feature:", feature, "were not able to be satisfied:", $reqs.mapIt(it[0].projectName & " " & $it[1]).join("; ")
+        b.addNegated(featVarId)
+        break
+
+      for dep, query in items(reqs):
         if dep notin graph.pkgs:
           info pkg.url.projectName, "feature depdendency not found:", $dep.projectName, "query:", $query
           continue
         let depNode = graph.pkgs[dep]
+
+        var compatibleVersions: seq[VarId] = @[]
+        for depVer, relVer in depNode.validVersions():
+          if query.matches(depVer):
+            compatibleVersions.add(depVer.vid)
 
         withOpenBr(b, OrForm):
           b.addNegated(ver.vid) # not this version
@@ -144,7 +161,7 @@ proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
         if varId == NoVar:
           varId = VarId(result.idgen)
         # Map the SAT variable to package information for result interpretation
-        result.mapping[varId] = SatVarInfo(pkg: p, version: ver, release: rel, feature: feature)
+        result.mapping[varId] = SatVarInfo(pkg: p, version: nil, release: nil, feature: feature)
         inc result.idgen
 
       doAssert p.state != NotInitialized, "package not initialized: " & $p.toJson(ToJsonOptions(enumMode: joptEnumString))
