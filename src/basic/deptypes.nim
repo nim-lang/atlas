@@ -18,6 +18,7 @@ type
     url*: PkgUrl
     state*: PackageState
     versions*: OrderedTable[PackageVersion, NimbleRelease]
+    features*: HashSet[string]
     activeVersion*: PackageVersion
     module*: string
     ondisk*: Path
