@@ -1,4 +1,4 @@
-import std/[json, jsonutils, paths, strutils, tables, sequtils]
+import std/[json, jsonutils, paths, strutils, tables, sequtils, sets]
 import sattypes, deptypes, depgraphtypes, nimblecontext, pkgurls, versions
 
 export json, jsonutils
@@ -40,6 +40,15 @@ proc toJsonHook*(v: (PkgUrl, VersionInterval), opt: ToJsonOptions): JsonNode =
 proc fromJsonHook*(a: var (PkgUrl, VersionInterval); b: JsonNode; opt = Joptions()) =
   a[0].fromJson(b["url"])
   a[1].fromJson(b["version"])
+
+proc toJsonHook*(v: Table[PkgUrl, HashSet[string]], opt: ToJsonOptions): JsonNode =
+  result = newJObject()
+  for k, v in v:
+    result[$(k)] = toJson(v, opt)
+
+proc fromJsonHook*(a: var (PkgUrl, HashSet[string]); b: JsonNode; opt = Joptions()) =
+  a[0].fromJson(b["url"])
+  a[1].fromJson(b["features"])
 
 proc toJsonHook*(t: OrderedTable[PackageVersion, NimbleRelease], opt: ToJsonOptions): JsonNode =
   result = newJArray()

@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [os, uri, paths, strutils, json]
+import std / [os, uri, paths, strutils, json, sets]
 import deptypes, nimblecontext, versions, context, reporters, parse_requires, pkgurls
 
 proc addError*(err: var string; nimbleFile: string; msg: string) =
@@ -47,6 +47,9 @@ proc processRequirement(nc: var NimbleContext;
         result.features.mgetOrPut(feature, @[]).add((url, query))
       else:
         result.requirements.add((url, query))
+        for feature in featuresAdded:
+          echo "FEATURE:ADDED: ", feature
+          result.featuresAdded.mgetOrPut(url, initHashSet[string]()).incl(feature)
 
 proc parseNimbleFile*(nc: var NimbleContext;
                       nimbleFile: Path): NimbleRelease =
