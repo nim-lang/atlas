@@ -77,7 +77,7 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
     if not allDepsCompatible:
       warn pkg.url.projectName, "all requirements needed for nimble release:", $ver, "were not able to be satisfied:", $rel.requirements.mapIt(it[0].projectName & " " & $it[1]).join("; ")
       b.addNegated(ver.vid)
-      break
+      continue
 
     anyReleaseSatisfied = true
 
