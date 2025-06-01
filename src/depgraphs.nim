@@ -138,7 +138,6 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
               compatibleVersions.add(depVer.vid)
 
           withOpenBr(b, OrForm):
-            # b.addNegated(ver.vid) # not this version
             b.addNegated(featVarId) # not this feature
             withOpenBr(b, OrForm):
               for compatVer in compatibleVersions:
