@@ -15,12 +15,9 @@ const
   configPatternBegin = "############# begin Atlas config section ##########\n"
   configPatternEnd =   "############# end Atlas config section   ##########\n"
 
-proc parseNimble*(nimble: Path): NimbleFileInfo =
-  result = extractRequiresInfo(nimble)
-
 proc findCfgDir*(dir: Path): CfgPath =
   for nimbleFile in walkPattern($dir / "*.nimble"):
-    let nimbleInfo = parseNimble(Path nimbleFile)
+    let nimbleInfo = extractRequiresInfo(Path nimbleFile)
     return CfgPath dir / nimbleInfo.srcDir
   return CfgPath dir
 
