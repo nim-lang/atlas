@@ -260,7 +260,10 @@ proc loadDependency*(
   debug pkg.url.projectName, "loading dependency todo:", $todo, "ondisk:", $pkg.ondisk
   case todo
   of DoClone:
-    if onClone == DoNothing:
+    if pkg.lazyClone:
+      pkg.state = Error
+      pkg.errors.add "Lazy clone, not loaded"
+    elif onClone == DoNothing:
       pkg.state = Error
       pkg.errors.add "Not found"
     else:

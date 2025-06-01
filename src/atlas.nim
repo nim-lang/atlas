@@ -71,7 +71,7 @@ Options:
   --noexec              do not perform any action that may run arbitrary code
   --autoenv             detect the minimal Nim $version and setup a
                         corresponding Nim virtual environment
-  --autoinit            auto initialize an atlas project
+  --noautoinit          do not auto initialize an atlas project
   --resolver=minver|semver|maxver
                         which resolution algorithm to use, default is semver
   --proxy=url           use the given proxy URL for all git operations
@@ -364,7 +364,7 @@ proc newProject(projectName: string) =
     quit(1)
 
 proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[string]) =
-  var autoinit = false
+  var autoinit = true
   if existsEnv("NO_COLOR") or not isatty(stdout) or (getEnv("TERM") == "dumb"):
     setAtlasNoColors(true)
   for kind, key, val in getopt(params):
@@ -396,7 +396,7 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
           writeHelp()
       of "shallow": context().flags.incl ShallowClones
       of "full": context().flags.excl ShallowClones
-      of "autoinit": autoinit = true
+      of "noautoinit": autoinit = false
       of "ignoreerrors": context().flags.incl IgnoreErrors
       of "dumpformular": context().flags.incl DumpFormular
       of "showgraph": context().flags.incl ShowGraph
