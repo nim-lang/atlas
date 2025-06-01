@@ -15,6 +15,9 @@ requires "nim >= 1.0.0"
 feature "useHttpbeast":
   requires "httpbeast >= 0.4.0"
 
+feature "useAsyncTools", "useOldAsyncTools":
+  requires "asynctools >= 0.1.0"
+
 task test, "Runs the test suite.":
   exec "nimble install -y asynctools@#0e6bdc3ed5bae8c7cc9"
   exec "nim c -r tests/tester"

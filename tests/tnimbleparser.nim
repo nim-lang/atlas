@@ -44,6 +44,13 @@ suite "nimbleparser":
     var res = extractRequiresInfo(nimbleFile)
     echo "Nimble release: ", $res
     check res.requires.len == 1
+    check res.features.len == 3
     check res.features.hasKey("useHttpbeast")
     check res.features["useHttpbeast"].len == 1
     check res.features["useHttpbeast"][0] == "httpbeast >= 0.4.0"
+    check res.features.hasKey("useAsyncTools")
+    check res.features["useAsyncTools"].len == 1
+    check res.features["useAsyncTools"][0] == "asynctools >= 0.1.0"
+    check res.features.hasKey("useOldAsyncTools")
+    check res.features["useOldAsyncTools"].len == 1
+    check res.features["useOldAsyncTools"][0] == "asynctools >= 0.1.0"
