@@ -43,8 +43,10 @@ proc processRequirement(nc: var NimbleContext;
         let v = extractGeQuery(query)
         if v != Version"":
           result.nimVersion = v
+      elif feature.len > 0:
+        result.features[feature].add((url, query))
       else:
-        result.requirements.add (url, query)
+        result.requirements.add((url, query))
 
 proc parseNimbleFile*(nc: var NimbleContext;
                       nimbleFile: Path): NimbleRelease =
