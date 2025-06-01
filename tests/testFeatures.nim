@@ -31,16 +31,6 @@ suite "test features":
         context().flags = {ListVersions}
         context().defaultAlgo = SemVer
 
-        createDir "deps" / "proj_test"
-        withDir "deps" / "proj_test":
-          writeFile("proj_test.nimble", dedent"""
-          version "1.0.0"
-          """)
-          exec "git init"
-          exec "git add proj_test.nimble"
-          exec "git commit -m \"feat: add proj_test.nimble\""
-          exec "git tag v1.0.0"
-
         expectedVersionWithGitTags()
         var nc = createNimbleContext()
         nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a", true))
@@ -66,6 +56,15 @@ suite "test features":
           exec "git commit -a -m \"feat: add proj_a.nimble\""
           exec "git tag v1.2.0"
 
+        createDir "deps" / "proj_test"
+        withDir "deps" / "proj_test":
+          writeFile("proj_test.nimble", dedent"""
+          version "1.0.0"
+          """)
+          exec "git init"
+          exec "git add proj_test.nimble"
+          exec "git commit -m \"feat: add proj_test.nimble\""
+          exec "git tag v1.0.0"
 
   test "setup and test target project":
       # setAtlasVerbosity(Info)
