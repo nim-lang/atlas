@@ -87,6 +87,10 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
         info pkg.url.projectName, "requirement depdendency not found:", $dep.projectName, "query:", $query
         continue
       let depNode = graph.pkgs[dep]
+        
+      var flags: seq[string]
+      if dep in rel.reqsFeatures:
+        flags = rel.reqsFeatures[dep].toSeq()
 
       var compatibleVersions: seq[VarId] = @[]
       for depVer, nimbleRelease in depNode.validVersions():
