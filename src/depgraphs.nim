@@ -100,9 +100,9 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
           for compatVer in compatibleVersions:
             b.add(compatVer)
 
-    # Add implications for each feature
+    # Add implications for each feature requirement
     for feature, reqs in rel.features:
-      let featVarId = pkg.features[feature]
+      let featVarId = rel.featureVars[feature]
       let allFeatDepsCompatible = checkDeps(ver, reqs)
 
       if not allFeatDepsCompatible:
@@ -156,13 +156,14 @@ proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
         result.mapping[ver.vid] = SatVarInfo(pkg: p, version: ver, release: rel)
         inc result.idgen
       
-      # Add feature VarIds - these are not version variables, but are used to track feature selection
-      for feature, varId in p.features.mpairs():
-        if varId == NoVar:
-          varId = VarId(result.idgen)
-        # Map the SAT variable to package information for result interpretation
-        result.mapping[varId] = SatVarInfo(pkg: p, version: nil, release: nil, feature: feature)
-        inc result.idgen
+        # Add feature VarIds - these are not version variables, but are used to track feature selection
+        for feature in rel.features.keys():
+          if feature notin rel.featureVars:
+            let featureVarId = VarId(result.idgen)
+            rel.featureVars[feature] = featureVarId
+            # Map the SAT variable to package information for result interpretation
+            result.mapping[featureVarId] = SatVarInfo(pkg: p, version: ver, release: rel, feature: feature)
+            inc result.idgen
 
       doAssert p.state != NotInitialized, "package not initialized: " & $p.toJson(ToJsonOptions(enumMode: joptEnumString))
 

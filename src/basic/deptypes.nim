@@ -27,7 +27,6 @@ type
     isRoot*: bool
     errors*: seq[string]
     originHead*: CommitHash
-    features*: Table[string, VarId]
 
   NimbleRelease* = ref object
     version*: Version
@@ -40,6 +39,7 @@ type
     err*: string
     rid*: VarId = NoVar
     features*: Table[string, seq[(PkgUrl, VersionInterval)]]
+    featureVars*: Table[string, VarId]
 
   PackageVersion* = ref object
     vtag*: VersionTag
