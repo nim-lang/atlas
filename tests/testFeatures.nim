@@ -74,6 +74,7 @@ suite "test features":
         project(paths.getCurrentDir())
         context().flags = {ListVersions}
         context().defaultAlgo = SemVer
+        context().flags.incl DumpFormular
 
         expectedVersionWithGitTags()
         var nc = createNimbleContext()
@@ -95,10 +96,10 @@ suite "test features":
 
         # check false
 
-        let form = graph.toFormular(SemVer)
-        context().flags.incl DumpGraphs
-        var sol: Solution
-        solve(graph, form)
+        # let form = graph.toFormular(SemVer)
+        # context().flags.incl DumpGraphs
+        # var sol: Solution
+        # solve(graph, form)
 
         check graph.root.active
         check graph.pkgs[nc.createUrl("proj_a")].active

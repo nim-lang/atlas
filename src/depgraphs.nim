@@ -107,7 +107,14 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
         b.addNegated(ver.vid)  # not this version
         withOpenBr(b, OrForm):
           for compatVer in compatibleVersions:
-            b.add(compatVer)
+            if featureVersions.hasKey(compatVer):
+              withOpenBr(b, AndForm):
+                b.add(compatVer)
+                withOpenBr(b, OrForm):
+                  for featureVer in featureVersions[compatVer]:
+                    b.add(featureVer)
+            else:
+              b.add(compatVer)
 
     # Add implications for each feature requirement
     if false:
@@ -173,6 +180,7 @@ proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
             rel.featureVars[feature] = featureVarId
             # Map the SAT variable to package information for result interpretation
             result.mapping[featureVarId] = SatVarInfo(pkg: p, version: ver, release: rel, feature: feature)
+            debug p.url.projectName, "adding feature var:", feature, "id:", $(int(featureVarId)), " result: ", $result.mapping[featureVarId]
             inc result.idgen
 
       doAssert p.state != NotInitialized, "package not initialized: " & $p.toJson(ToJsonOptions(enumMode: joptEnumString))
@@ -203,7 +211,7 @@ proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
 
 
 proc toString(info: SatVarInfo): string =
-  "(" & info.pkg.url.projectName & ", " & $info.version & ")"
+  "(" & info.pkg.url.projectName & ", " & $info.version & ", f: " & info.feature & ")"
 
 proc debugFormular*(graph: var DepGraph; form: Form; solution: Solution) =
   echo "FORM:\n\t", form.formula
@@ -211,7 +219,7 @@ proc debugFormular*(graph: var DepGraph; form: Form; solution: Solution) =
   keys.sort(proc (a, b: VarId): int = cmp(a.int, b.int))
   for key in keys:
     let value = form.mapping[key]
-    echo "\tv", key.int, ": ", value
+    echo "\tv", key.int, ": ", value.pkg.url.projectName, ", ", $value.version, ", f: ", value.feature
   let maxVar = maxVariable(form.formula)
   echo "solutions:"
   for varIdx in 0 ..< maxVar:
@@ -327,7 +335,7 @@ proc solve*(graph: var DepGraph; form: Form) =
       let vid = VarId varIdx
       if vid in form.mapping:
         let mapInfo = form.mapping[vid]
-        trace mapInfo.pkg.projectName, "v" & $varIdx & " sat var: " & $solution.getVar(vid).toPretty()
+        debug mapInfo.pkg.projectName, "v" & $varIdx & " sat var: " & $solution.getVar(vid).toPretty()
 
       if solution.isTrue(VarId(varIdx)) and form.mapping.hasKey(VarId varIdx):
         let mapInfo = form.mapping[VarId varIdx]
