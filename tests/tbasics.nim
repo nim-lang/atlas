@@ -396,6 +396,15 @@ suite "versions":
     check lastPathComponent("meh/longer/here/") == "here"
     check lastPathComponent("meh/longer/here") == "here"
 
+  test "extractRequirementName":
+    # Test basic package names
+    check extractRequirementName("mypackage") == ("mypackage", @[], 9)
+    check extractRequirementName("mypackage >= 1.0") == ("mypackage", @[], 9)
+    check extractRequirementName("mypackage <= 2.0") == ("mypackage", @[], 9)
+    check extractRequirementName("mypackage == 1.5") == ("mypackage", @[], 9)
+    check extractRequirementName("mypackage > 1.0") == ("mypackage", @[], 9)
+    check extractRequirementName("mypackage < 2.0") == ("mypackage", @[], 9)
+
   test "onlyCommits with parseTaggedVersions":
     let tags = parseTaggedVersions(onlyCommits, false)
     echo "TAGS: ", $tags

@@ -28,7 +28,7 @@ proc parseNimbleFile*(nc: var NimbleContext;
   )
 
   for req in nimbleInfo.requires:
-    let name = extractRequirementName(req)
+    let (name, features, verIdx) = extractRequirementName(req)
 
     var url: PkgUrl
     try:
@@ -41,7 +41,7 @@ proc parseNimbleFile*(nc: var NimbleContext;
       url = toPkgUriRaw(parseUri("error://" & name))
 
     var err = false
-    let query = parseVersionInterval(req, i, err) # update err
+    let query = parseVersionInterval(req, verIdx, err) # update err
     if err:
       if result.status != HasBrokenDep:
         warn nimbleFile, "broken nimble file: " & name
