@@ -44,7 +44,7 @@ proc processRequirement(nc: var NimbleContext;
         if v != Version"":
           result.nimVersion = v
       elif feature.len > 0:
-        result.features[feature].add((url, query))
+        result.features.mgetOrPut(feature, @[]).add((url, query))
       else:
         result.requirements.add((url, query))
 

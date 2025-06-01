@@ -37,24 +37,34 @@ suite "test features":
         nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b", true))
         nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c", true))
         nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d", true))
+        nc.put("proj_test", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_test", true))
 
         check nc.lookup("proj_a").hasShortName
         check nc.lookup("proj_a").projectName == "proj_a"
 
         let dir = paths.getCurrentDir().absolutePath
 
-        var graph0 = dir.loadWorkspace(nc, AllReleases, onClone=DoClone, doSolve=true)
+        var graph0 = dir.loadWorkspace(nc, AllReleases, onClone=DoClone, doSolve=false)
         writeDepGraph(graph0)
 
-        # withDir "deps" / "proj_a":
-        #   writeFile("proj_a.nimble", dedent"""
-        #   requires "proj_b >= 1.1.0"
-        #   feature "testing":
-        #     requires "proj_t >= 1.0.0"
-        #   """)
-        #   exec "git commit -a -m \"feat: add proj_a.nimble\""
-        #   exec "git tag v1.2.0"
+        withDir "deps" / "proj_a":
+          writeFile("proj_a.nimble", dedent"""
+          requires "proj_b >= 1.1.0"
+          feature "testing":
+            requires "proj_test >= 1.0.0"
+          """)
+          exec "git commit -a -m \"feat: add proj_a.nimble\""
+          exec "git tag v1.2.0"
 
+        createDir "deps" / "proj_test"
+        withDir "deps" / "proj_test":
+          writeFile("proj_test.nimble", dedent"""
+          version "1.0.0"
+          """)
+          exec "git init"
+          exec "git add proj_test.nimble"
+          exec "git commit -m \"feat: add proj_test.nimble\""
+          exec "git tag v1.0.0"
 
   test "setup and test target project":
       # setAtlasVerbosity(Info)
@@ -71,6 +81,7 @@ suite "test features":
         nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b", true))
         nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c", true))
         nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d", true))
+        nc.put("proj_test", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_test", true))
 
         check nc.lookup("proj_a").hasShortName
         check nc.lookup("proj_a").projectName == "proj_a"
@@ -80,8 +91,7 @@ suite "test features":
         var graph = dir.loadWorkspace(nc, AllReleases, onClone=DoClone, doSolve=true)
         writeDepGraph(graph)
 
-        checkpoint "\tgraph:\n" & $graph.toJson(ToJsonOptions(enumMode: joptEnumString))
-
+        # checkpoint "\tgraph:\n" & $graph.toJson(ToJsonOptions(enumMode: joptEnumString))
 
         check false
 
