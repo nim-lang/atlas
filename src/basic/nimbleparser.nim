@@ -14,7 +14,11 @@ proc addError*(err: var string; nimbleFile: string; msg: string) =
   else: err.add "in file: " & nimbleFile & "\n"
   err.add msg
 
-proc processRequirement(nc: var NimbleContext; nimbleFile: Path; req: string; result: var NimbleRelease) =
+proc processRequirement(nc: var NimbleContext;
+                        nimbleFile: Path;
+                        req: string;
+                        feature: string;
+                        result: var NimbleRelease) =
     let (name, featuresAdded, verIdx) = extractRequirementName(req)
 
     var url: PkgUrl
@@ -56,8 +60,11 @@ proc parseNimbleFile*(nc: var NimbleContext;
   )
 
   for req in nimbleInfo.requires:
-    processRequirement(nc, nimbleFile, req, result)
+    processRequirement(nc, nimbleFile, req, "", result)
   
+  for feature, reqs in nimbleInfo.features:
+    for req in reqs:
+      processRequirement(nc, nimbleFile, req, feature, result)
 
 proc genRequiresLine(u: string): string =
   result = "requires \"$1\"\n" % u.escape("", "")
