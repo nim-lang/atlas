@@ -40,6 +40,7 @@ suite "nimbleparser":
       check not doesContain(res, "httpbeast")
 
   test "parse nimble file with features":
+    setAtlasVerbosity(Trace)
     let nimbleFile = Path("tests" / "test_data" / "jester_feature.nimble")
     var res = extractRequiresInfo(nimbleFile)
     echo "Nimble release: ", $res
