@@ -27,10 +27,10 @@ proc parseNimbleFile*(nc: var NimbleContext;
     version: parseExplicitVersion(nimbleInfo.version)
   )
 
-  for r in nimbleInfo.requires:
+  for req in nimbleInfo.requires:
     var i = 0
-    while i < r.len and r[i] notin {'#', '<', '=', '>'} + Whitespace: inc i
-    let name = r.substr(0, i-1)
+    while i < req.len and req[i] notin {'#', '<', '=', '>'} + Whitespace: inc i
+    let name = req.substr(0, i-1)
 
     var url: PkgUrl
     try:
@@ -43,12 +43,12 @@ proc parseNimbleFile*(nc: var NimbleContext;
       url = toPkgUriRaw(parseUri("error://" & name))
 
     var err = false
-    let query = parseVersionInterval(r, i, err) # update err
+    let query = parseVersionInterval(req, i, err) # update err
     if err:
       if result.status != HasBrokenDep:
         warn nimbleFile, "broken nimble file: " & name
         result.status = HasBrokenNimbleFile
-        result.err.addError $nimbleFile, "invalid 'requires' syntax in nimble file: " & r
+        result.err.addError $nimbleFile, "invalid 'requires' syntax in nimble file: " & req
     else:
       if cmpIgnoreCase(name, "nim") == 0 or cmpIgnoreCase($url, "https://github.com/nim-lang/Nim") == 0:
         let v = extractGeQuery(query)
