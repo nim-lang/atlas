@@ -86,13 +86,14 @@ proc extract(n: PNode; conf: ConfigRef; currFeature: string; result: var NimbleF
         echo "FEATURE: nimble parser "
         if n.len >= 3:
           var features = newSeq[string]()
+          if n[0].kind != nkStrLit:
+            handleError(conf, n.info, "feature requires string literals")
+            result.hasErrors = true
           for c in n:
-            if c.kind != nkStrLit:
-              handleError(conf, n.info, "feature requires string literals")
-              result.hasErrors = true
-            else:
+            if c.kind == nkStrLit:
               features.add(c.strVal)
           for f in features:
+            echo "FEATURE: nimble parser ", n[^1].repr
             result.features[f] = newSeq[string]()
             extract(n[^1], conf, f, result)
       else:

@@ -68,7 +68,12 @@ proc processNimbleRelease(
     result = nc.parseNimbleFile(nimbleFile)
 
     if result.status == Normal:
-      for pkgUrl, interval in items(result.requirements):
+      var reqs = result.requirements
+      for feature, rq in result.features:
+        debug pkg.url.projectName, "Found new feature:", feature
+        reqs.add(rq)
+
+      for pkgUrl, interval in items(reqs):
         # debug pkg.url.projectName, "INTERVAL: ", $interval, "isSpecial:", $interval.isSpecial, "explicit:", $interval.extractSpecificCommit()
         if interval.isSpecial:
           let commit = interval.extractSpecificCommit()
