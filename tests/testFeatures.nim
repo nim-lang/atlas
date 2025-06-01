@@ -46,7 +46,7 @@ suite "test link integration":
       # setAtlasVerbosity(Info)
       setAtlasVerbosity(Error)
       withDir "tests/ws_features":
-        removeDir("deps")
+        # removeDir("deps")
         project(paths.getCurrentDir())
         context().flags = {ListVersions}
         context().defaultAlgo = SemVer
@@ -67,6 +67,9 @@ suite "test link integration":
         writeDepGraph(graph)
 
         checkpoint "\tgraph:\n" & $graph.toJson(ToJsonOptions(enumMode: joptEnumString))
+
+
+        check false
 
         let form = graph.toFormular(SemVer)
         context().flags.incl DumpGraphs

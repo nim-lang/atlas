@@ -14,21 +14,8 @@ proc addError*(err: var string; nimbleFile: string; msg: string) =
   else: err.add "in file: " & nimbleFile & "\n"
   err.add msg
 
-proc parseNimbleFile*(nc: var NimbleContext;
-                      nimbleFile: Path): NimbleRelease =
-  let nimbleInfo = extractRequiresInfo(nimbleFile)
-  # let nimbleHash = secureHashFile($nimbleFile)
-
-  result = NimbleRelease(
-    hasInstallHooks: nimbleInfo.hasInstallHooks,
-    srcDir: nimbleInfo.srcDir,
-    status: if nimbleInfo.hasErrors: HasBrokenNimbleFile else: Normal,
-    # nimbleHash: nimbleHash,
-    version: parseExplicitVersion(nimbleInfo.version)
-  )
-
-  for req in nimbleInfo.requires:
-    let (name, features, verIdx) = extractRequirementName(req)
+proc processRequirement(nc: var NimbleContext; nimbleFile: Path; req: string; result: var NimbleRelease) =
+    let (name, featuresAdded, verIdx) = extractRequirementName(req)
 
     var url: PkgUrl
     try:
@@ -54,6 +41,23 @@ proc parseNimbleFile*(nc: var NimbleContext;
           result.nimVersion = v
       else:
         result.requirements.add (url, query)
+
+proc parseNimbleFile*(nc: var NimbleContext;
+                      nimbleFile: Path): NimbleRelease =
+  let nimbleInfo = extractRequiresInfo(nimbleFile)
+  # let nimbleHash = secureHashFile($nimbleFile)
+
+  result = NimbleRelease(
+    hasInstallHooks: nimbleInfo.hasInstallHooks,
+    srcDir: nimbleInfo.srcDir,
+    status: if nimbleInfo.hasErrors: HasBrokenNimbleFile else: Normal,
+    # nimbleHash: nimbleHash,
+    version: parseExplicitVersion(nimbleInfo.version)
+  )
+
+  for req in nimbleInfo.requires:
+    processRequirement(nc, nimbleFile, req, result)
+  
 
 proc genRequiresLine(u: string): string =
   result = "requires \"$1\"\n" % u.escape("", "")
