@@ -92,10 +92,15 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
       if dep in rel.reqsFeatures:
         flags = rel.reqsFeatures[dep].toSeq()
 
-      var compatibleVersions: seq[VarId] = @[]
+      var compatibleVersions: seq[VarId]
+      var featureVersions: Table[VarId, seq[VarId]]
       for depVer, nimbleRelease in depNode.validVersions():
         if query.matches(depVer):
           compatibleVersions.add(depVer.vid)
+        for feature in flags:
+          if feature in nimbleRelease.features:
+            let featureVarId = nimbleRelease.featureVars[feature]
+            featureVersions.mgetOrPut(featureVarId, @[]).add(depVer.vid)
 
       # Add implication: if this version is selected, one of its compatible deps must be selected
       withOpenBr(b, OrForm):
