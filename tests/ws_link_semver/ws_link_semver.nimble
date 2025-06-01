@@ -1,1 +1,1 @@
-requires "proj_a[testing]"
+requires "proj_a"
