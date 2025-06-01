@@ -109,6 +109,16 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
 
       echo "FEATURE:FLAGGED: ", flags, " DEP: ", $depNode.projectName
 
+      for flag in flags:
+        withOpenBr(b, OrForm):
+          b.addNegated(ver.vid)  # not this version
+
+          withOpenBr(b, OrForm):
+            for ver, relVer in depNode.validVersions():
+              if flag in relVer.features:
+                let flagVarId = relVer.featureVars[flag]
+                echo "FEATURE:FLAG:EQ: ", flag, " VER: ", $ver
+                b.add(flagVarId)
 
 
     # Add implications for each feature requirement

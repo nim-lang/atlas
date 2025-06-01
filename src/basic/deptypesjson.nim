@@ -46,9 +46,13 @@ proc toJsonHook*(v: Table[PkgUrl, HashSet[string]], opt: ToJsonOptions): JsonNod
   for k, v in v:
     result[$(k)] = toJson(v, opt)
 
-proc fromJsonHook*(a: var (PkgUrl, HashSet[string]); b: JsonNode; opt = Joptions()) =
-  a[0].fromJson(b["url"])
-  a[1].fromJson(b["features"])
+proc fromJsonHook*(a: var Table[PkgUrl, HashSet[string]]; b: JsonNode; opt = Joptions()) =
+  for k, v in b:
+    var url: PkgUrl
+    url.fromJson(toJson(k))
+    var flags: HashSet[string]
+    flags.fromJson(toJson(v))
+    a[url] = flags
 
 proc toJsonHook*(t: OrderedTable[PackageVersion, NimbleRelease], opt: ToJsonOptions): JsonNode =
   result = newJArray()
