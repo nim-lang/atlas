@@ -490,3 +490,7 @@ proc hash*(v: VersionTag): Hash =
 
 proc `==`*(a, b: VersionTag): bool =
   result = a.v == b.v and a.c == b.c
+
+when isMainModule:
+  let vt = toVersionTag("*@head")
+  echo $vt

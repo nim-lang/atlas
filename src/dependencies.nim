@@ -334,6 +334,12 @@ proc expandGraph*(path: Path, nc: var NimbleContext; mode: TraversalMode, onClon
         nc.loadDependency(pkg, onClone)
         trace pkg.projectName, "expanded pkg:", pkg.repr
         processing = true
+      of LazyDeferred:
+        info pkg.projectName, "Skipping lazy deferred package:", $pkg.url
+        # nc.traverseDependency(pkg, CurrentCommit, @[])
+        pkg.versions[VersionTag(v: Version"*", c: initCommitHash("#head", FromHead)).toPkgVer] = NimbleRelease(version: Version"#head", status: Normal)
+        pkg.state = LazyDeferred
+        result.pkgs[pkgUrl] = pkg
       of Found:
         info pkg.projectName, "Processing package at:", pkg.ondisk.relativeToWorkspace()
         # processing = true
