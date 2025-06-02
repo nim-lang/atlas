@@ -57,7 +57,7 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
 
       if depNode.state == LazyDeferred:
         allDepsCompatible = true
-        warn pkg.url.projectName, "dependency:", $dep.projectName, "is lazy cloned and not loaded"
+        warn pkg.url.projectName, "dependency:", $dep.projectName, "is lazily deferred and not loaded"
         continue
 
       var hasCompatible = false
