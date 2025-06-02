@@ -37,7 +37,8 @@ suite "test features":
         nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b", true))
         nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c", true))
         nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d", true))
-        nc.put("proj_test", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_test", true))
+        # nc.put("proj_test", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_test", true))
+        nc.put("proj_test", toPkgUriRaw(parseUri "file://" & (ospaths2.getCurrentDir() / "proj_test").absolutePath, true))
 
         check nc.lookup("proj_a").hasShortName
         check nc.lookup("proj_a").projectName == "proj_a"
@@ -56,8 +57,9 @@ suite "test features":
           exec "git commit -a -m \"feat: add proj_a.nimble\""
           exec "git tag v1.2.0"
 
-        createDir "deps" / "proj_test"
-        withDir "deps" / "proj_test":
+        removeDir "proj_test"
+        createDir "proj_test"
+        withDir "proj_test":
           writeFile("proj_test.nimble", dedent"""
           version "1.0.0"
           """)
@@ -82,7 +84,8 @@ suite "test features":
         nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b", true))
         nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c", true))
         nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d", true))
-        nc.put("proj_test", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_test", true))
+        # nc.put("proj_test", toPkgUriRaw(parseUri "deps/proj_test_git", true))
+        nc.put("proj_test", toPkgUriRaw(parseUri "file://" & (ospaths2.getCurrentDir() / "proj_test").absolutePath, true))
 
         check nc.lookup("proj_a").hasShortName
         check nc.lookup("proj_a").projectName == "proj_a"

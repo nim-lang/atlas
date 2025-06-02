@@ -262,6 +262,7 @@ proc loadDependency*(
   case todo
   of DoClone:
     if pkg.lazyClone:
+      info pkg.url.projectName, "loading dependency lazy cloning", "ondisk:", $pkg.ondisk
       pkg.state = Error
       pkg.errors.add "Lazy clone, not loaded"
     elif onClone == DoNothing:
