@@ -80,8 +80,9 @@ proc processNimbleRelease(
           let pkgDep = Package(url: pkgUrl, state: NotInitialized)
           nc.packageToDependency[pkgUrl] = pkgDep
         else:
-          let pkg = nc.packageToDependency[pkgUrl]
-          pkg.lazyClone = false
+          if nc.packageToDependency[pkgUrl].state == LazyDeferred:
+            warn pkg.url.projectName, "Changing LazyDeferred pkg to DoLoad:", $pkgUrl.url
+            nc.packageToDependency[pkgUrl].state = DoLoad
 
       for feature, rq in result.features:
         for pkgUrl, interval in items(rq):
@@ -89,9 +90,9 @@ proc processNimbleRelease(
             let commit = interval.extractSpecificCommit()
             nc.explicitVersions.mgetOrPut(pkgUrl).incl(VersionTag(v: Version($(interval)), c: commit))
           if pkgUrl notin nc.packageToDependency:
-            debug pkg.url.projectName, "Found new pkg:", pkgUrl.projectName, "url:", $pkgUrl.url, "projectName:", $pkgUrl.projectName
-            let isLazy = feature notin context().features
-            let pkgDep = Package(url: pkgUrl, state: NotInitialized, lazyClone: isLazy)
+            let state = if feature notin context().features: LazyDeferred else: NotInitialized
+            debug pkg.url.projectName, "Found new feature pkg:", pkgUrl.projectName, "url:", $pkgUrl.url, "projectName:", $pkgUrl.projectName, "state:", $state
+            let pkgDep = Package(url: pkgUrl, state: state)
             nc.packageToDependency[pkgUrl] = pkgDep
 
 proc addRelease(
@@ -255,17 +256,16 @@ proc loadDependency*(
   doAssert pkg.ondisk.string == ""
   pkg.ondisk = pkg.url.toDirectoryPath()
   pkg.isAtlasProject = pkg.url.isAtlasProject()
-  let todo = if dirExists(pkg.ondisk): DoNothing else: DoClone
+  var todo = if dirExists(pkg.ondisk): DoNothing else: DoClone
+
+  if pkg.state == LazyDeferred:
+    todo = DoNothing
 
   debug pkg.url.projectName, "loading dependency isLinked:", $pkg.isAtlasProject
   debug pkg.url.projectName, "loading dependency todo:", $todo, "ondisk:", $pkg.ondisk
   case todo
   of DoClone:
-    if pkg.lazyClone:
-      info pkg.url.projectName, "loading dependency lazy cloning", "ondisk:", $pkg.ondisk
-      pkg.state = Error
-      pkg.errors.add "Lazy clone, not loaded"
-    elif onClone == DoNothing:
+    if onClone == DoNothing:
       pkg.state = Error
       pkg.errors.add "Not found"
     else:
@@ -329,7 +329,7 @@ proc expandGraph*(path: Path, nc: var NimbleContext; mode: TraversalMode, onClon
     for pkgUrl in pkgUrls:
       var pkg = nc.packageToDependency[pkgUrl]
       case pkg.state:
-      of NotInitialized:
+      of NotInitialized, DoLoad:
         info pkg.projectName, "Initializing package:", $pkg.url
         nc.loadDependency(pkg, onClone)
         trace pkg.projectName, "expanded pkg:", pkg.repr

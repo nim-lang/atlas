@@ -55,6 +55,11 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
       debug pkg.url.projectName, "checking dependency for ", $ver, ":", $dep.projectName, "query:", $query
       let depNode = graph.pkgs[dep]
 
+      if depNode.state == LazyDeferred:
+        allDepsCompatible = true
+        warn pkg.url.projectName, "dependency:", $dep.projectName, "is lazy cloned and not loaded"
+        continue
+
       var hasCompatible = false
       for depVer, relVer in depNode.validVersions():
         trace pkg.url.projectName, "checking dependnecy version:", $depVer, "query:", $query, "matches:", $query.matches(depVer)

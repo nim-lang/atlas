@@ -7,6 +7,8 @@ type
 
   PackageState* = enum
     NotInitialized
+    LazyDeferred
+    DoLoad
     Found
     Processed
     Error
@@ -27,7 +29,6 @@ type
     isRoot*: bool
     errors*: seq[string]
     originHead*: CommitHash
-    lazyClone*: bool
 
   NimbleRelease* = ref object
     version*: Version
