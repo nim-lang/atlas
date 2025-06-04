@@ -24,10 +24,10 @@ type
     GitSubModUpdate = "git submodule update --init",
     GitPush = "git -C $DIR push origin",
     GitPull = "git -C $DIR pull",
-    GitCurrentCommit = "git -C $DIR log -n 1 --format=%H"
+    GitCurrentCommit = "git -C $DIR log -n1 --format=%H"
     GitMergeBase = "git -C $DIR merge-base"
     GitLsFiles = "git -C $DIR ls-files"
-    GitLog = "git -C $DIR log --format=%H origin/HEAD"
+    GitLog = "git -C $DIR log -n1 --format=%H origin/HEAD"
     GitCurrentBranch = "git rev-parse --abbrev-ref HEAD"
     GitLsRemote = "git -C $DIR ls-remote --quiet --tags"
     GitShowFiles = "git -C $DIR show"
