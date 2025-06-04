@@ -115,6 +115,7 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
           for compatVer in compatibleVersions:
             if featureVersions.hasKey(compatVer):
               withOpenBr(b, AndForm):
+                debug pkg.url.projectName, "adding compatVer requirement:", $int(compatVer), "featureVersions:", $featureVersions[compatVer].mapIt(int(it)).join(", ")
                 b.add(compatVer)
                 for featureVer in featureVersions[compatVer]:
                   b.add(featureVer)
@@ -141,11 +142,15 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
         for depVer, relVer in depNode.validVersions():
           if query.matches(depVer):
             compatibleVersions.add(depVer.vid)
+          elif depVer == toVersionTag("*@head").toPkgVer:
+            compatibleVersions.add(depVer.vid)
+        debug pkg.url.projectName, "checking feature dep:", $dep.projectName, "query:", $query, "compat versions:", $compatibleVersions.mapIt(int(it)).join(", "), "from versions:", $depNode.validVersions().toSeq().mapIt(it[0].version()).join(", ")
 
         withOpenBr(b, OrForm):
           b.addNegated(featVarId) # not this feature
           withOpenBr(b, OrForm):
             for compatVer in compatibleVersions:
+              debug pkg.url.projectName, "adding compatVer feature dep:", $int(compatVer), "featureVersions:", $compatibleVersions.mapIt(int(it)).join(", ")
               b.add(compatVer)
 
   if not anyReleaseSatisfied:

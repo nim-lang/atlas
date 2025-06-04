@@ -97,7 +97,7 @@ iterator allNodes*(g: DepGraph): Package =
 iterator allActiveNodes*(g: DepGraph): Package =
   for pkg in values(g.pkgs):
     if pkg.active and not pkg.activeVersion.isNil:
-      doAssert pkg.state == Processed
+      doAssert pkg.state == Processed or pkg.state == LazyDeferred
       yield pkg
 
 proc getCfgPath*(g: DepGraph; d: Package): lent CfgPath =
