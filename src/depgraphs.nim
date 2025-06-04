@@ -104,7 +104,7 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
       var compatibleVersions: seq[VarId]
       var featureVersions: Table[VarId, seq[VarId]]
       for depVer, nimbleRelease in depNode.validVersions():
-        trace pkg.url.projectName, "adding feature dependency version:", $depVer, "query:", $query, "matches:", $query.matches(depVer)
+        trace pkg.url.projectName, "checking dependency:", depNode.url.projectName, "version:", $depVer, "query:", $query, "matches:", $query.matches(depVer)
         if query.matches(depVer):
           compatibleVersions.add(depVer.vid)
         for feature in flags:
@@ -160,17 +160,17 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
         
         # Add implictations for globally set features
         let pkgFeature = "feature." & feature & "." & pkg.url.projectName
-        if (pkg.isRoot and pkgFeature in context().features) or (pkgFeature in context().features):
+        if (pkg.isRoot and feature in context().features) or (pkgFeature in context().features):
           debug pkg.url.projectName, "checking global feature:", $feature, "in version:", $ver, "pkgFeature:", $pkgFeature, "context().features:", $context().features.toSeq().mapIt($it).join(", ")
           var featureVersions: Table[VarId, seq[VarId]]
           for depVer, nimbleRelease in depNode.validVersions():
-            trace pkg.url.projectName, "adding feature dependency version:", $depVer, "query:", $query, "matches:", $query.matches(depVer)
+            trace pkg.url.projectName, "checking global feature dependency:", depNode.url.projectName, "version:", $depVer
             if feature in nimbleRelease.features:
               let featureVarId = nimbleRelease.featureVars[feature]
               featureVersions.mgetOrPut(depVer.vid, @[]).add(featureVarId)
 
           # Add implication: if this version is selected, one of its compatible deps must be selected
-          if featureVersions.len > 0:
+          if true:
             withOpenBr(b, OrForm):
               b.addNegated(ver.vid)  # not this version
               withOpenBr(b, OrForm):
