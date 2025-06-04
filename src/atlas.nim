@@ -331,7 +331,10 @@ proc updateWorkspace(filter: string) =
 
   let graph = dir.loadWorkspace(nc, CurrentCommit, onClone=DoNothing, doSolve=false)
   for pkg in allNodes(graph):
+    info "atlas:update", "checking package:", $pkg.url.projectName, "state:", $pkg.state
     if pkg.isRoot:
+      continue
+    if pkg.state != Processed:
       continue
     
     let url = gitops.getRemoteUrl(pkg.ondisk)

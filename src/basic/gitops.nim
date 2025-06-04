@@ -378,6 +378,7 @@ proc updateRepo*(path: Path) =
 proc getRemoteUrl*(path: Path): string =
   let (cc, status) = exec(GitRemoteUrl, path, [])
   if status != RES_OK:
+    error(path, "could not get remote url: " & $status & " " & $path)
     return ""
   else:
     return cc.strip()
