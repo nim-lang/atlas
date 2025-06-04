@@ -95,6 +95,31 @@ proc processNimbleRelease(
             let pkgDep = Package(url: pkgUrl, state: state)
             nc.packageToDependency[pkgUrl] = pkgDep
 
+proc addFeatureDependencies(pkg: Package) =
+
+  var featuresAdded = false
+  warn pkg.url.projectName, "adding feature dependencies for root package; features:", $(context().features.toSeq().join(", ")), "versions:", $(pkg.versions.keys().toSeq().mapIt($it).join(", "))
+  for flag in items(context().features):
+    for ver, rel in pkg.versions:
+      info pkg.url.projectName, "checking feature:", $flag, "for:", $rel.version
+      if flag in rel.features:
+        let fdep = rel.features[flag]
+        for pkgUrl, interval in items(fdep):
+          info pkg.url.projectName, "adding feature dependency:", $flag, "for:", $pkgUrl.url
+          withValue(rel.reqsFeatures, pkgUrl, reqsFeatures):
+            if flag notin reqsFeatures[]:
+              reqsFeatures[].incl(flag)
+              featuresAdded = true
+          do:
+            rel.reqsFeatures[pkgUrl] = initHashSet[string]()
+            rel.reqsFeatures[pkgUrl].incl(flag)
+      else:
+        info pkg.url.projectName, "feature:", $flag, "not found for:", $rel.version
+  
+  if featuresAdded:
+    warn pkg.url.projectName, "feature dependencies added"
+    pkg.state = Found
+
 proc addRelease(
     versions: var seq[(PackageVersion, NimbleRelease)],
     # pkg: var Package,
@@ -116,6 +141,7 @@ proc addRelease(
     info pkg.url.projectName, "version mismatch between version tag:", $vtag.v, "and nimble version:", $release.version
   
   versions.add((pkgver, release))
+
   result = pkgver
 
 proc traverseDependency*(
@@ -248,6 +274,10 @@ proc traverseDependency*(
   # TODO: filter by unique versions first?
   pkg.state = Processed
 
+  if pkg.isRoot and context().features.len > 0:
+    addFeatureDependencies(pkg)
+
+
 proc loadDependency*(
     nc: NimbleContext,
     pkg: var Package,
@@ -350,7 +380,8 @@ proc expandGraph*(path: Path, nc: var NimbleContext; mode: TraversalMode, onClon
         nc.traverseDependency(pkg, mode, @[])
         trace pkg.projectName, "processed pkg:", $pkg
         processing = true
-        result.pkgs[pkgUrl] = pkg
+        # if pkgUrl notin result.pkgs:
+        #   result.pkgs[pkgUrl] = pkg
       of Processed:
         if pkgUrl notin result.pkgs:
           result.pkgs[pkgUrl] = pkg

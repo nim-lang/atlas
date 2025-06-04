@@ -100,7 +100,7 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
       var compatibleVersions: seq[VarId]
       var featureVersions: Table[VarId, seq[VarId]]
       for depVer, nimbleRelease in depNode.validVersions():
-        info pkg.url.projectName, "checking dependency version:", $depVer, "query:", $query, "matches:", $query.matches(depVer)
+        trace pkg.url.projectName, "adding feature dependency version:", $depVer, "query:", $query, "matches:", $query.matches(depVer)
         if query.matches(depVer):
           compatibleVersions.add(depVer.vid)
         for feature in flags:
