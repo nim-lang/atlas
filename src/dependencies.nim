@@ -270,8 +270,8 @@ proc loadDependency*(
     else:
       let (status, msg) =
         if pkg.url.isFileProtocol:
+          pkg.isLocalOnly = true
           copyFromDisk(pkg, pkg.ondisk)
-          pkg.isLocalCopy = true
         else:
           gitops.clone(pkg.url.toUri, pkg.ondisk)
       if status == Ok:

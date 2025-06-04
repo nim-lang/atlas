@@ -136,7 +136,7 @@ proc gitDescribeRefTag*(path: Path, commit: string): string =
   let (lt, status) = exec(GitDescribe, path, ["--tags", commit])
   result = if status == RES_OK: strutils.strip(lt) else: ""
 
-proc gitFindOriginTip*(path: Path, errorReportLevel: MsgKind = Warning): VersionTag =
+proc gitFindOriginTip*(path: Path, errorReportLevel: MsgKind = Warning, isLocalOnly = false): VersionTag =
   let (outp1, status1) = exec(GitLog, path, ["-n1"], Warning)
   var allVersions: seq[VersionTag]
   if status1 == RES_OK:
@@ -147,8 +147,8 @@ proc gitFindOriginTip*(path: Path, errorReportLevel: MsgKind = Warning): Version
   else:
     message(errorReportLevel, path, "could not find origin head at:", $path)
 
-proc collectTaggedVersions*(path: Path, errorReportLevel: MsgKind = Debug): seq[VersionTag] =
-  let tip = gitFindOriginTip(path, errorReportLevel)
+proc collectTaggedVersions*(path: Path, errorReportLevel: MsgKind = Debug, isLocalOnly = false): seq[VersionTag] =
+  let tip = gitFindOriginTip(path, errorReportLevel, isLocalOnly)
 
   let (outp, status) = exec(GitTags, path, [], errorReportLevel)
   if status == RES_OK:
@@ -159,8 +159,8 @@ proc collectTaggedVersions*(path: Path, errorReportLevel: MsgKind = Debug): seq[
   else:
     message(errorReportLevel, path, "could not collect tagged commits at:", $path)
 
-proc collectFileCommits*(path, file: Path, errorReportLevel: MsgKind = Warning): seq[VersionTag] =
-  let tip = gitFindOriginTip(path, errorReportLevel)
+proc collectFileCommits*(path, file: Path, errorReportLevel: MsgKind = Warning, isLocalOnly = false): seq[VersionTag] =
+  let tip = gitFindOriginTip(path, errorReportLevel, isLocalOnly)
 
   let (outp, status) = exec(GitLog, path, ["--",$file], Warning)
   if status == RES_OK:
@@ -190,9 +190,9 @@ proc shortToCommit*(path: Path, short: CommitHash): CommitHash =
     if vtags.len() == 1:
       result = vtags[0].c
 
-proc expandSpecial*(path: Path, vtag: VersionTag, errorReportLevel: MsgKind = Warning): VersionTag =
+proc expandSpecial*(path: Path, vtag: VersionTag, errorReportLevel: MsgKind = Warning, isLocalOnly = false): VersionTag =
   if vtag.version.isHead():
-    return gitFindOriginTip(path, errorReportLevel)
+    return gitFindOriginTip(path, errorReportLevel, isLocalOnly)
 
   let (cc, status) = exec(GitRevParse, path, [vtag.version.string.substr(1)], errorReportLevel)
 
