@@ -132,6 +132,24 @@ Creates or patches a `nim.cfg` file with the required `--path` entries.
 If a `<package name>` is given instead the name is first translated into an URL
 via `packages.json` or via a github search.
 
+### Feature
+
+Features in Nimble files look like: 
+
+```nim
+require "normallib"
+
+feature "testing":
+  require "mytestlib"
+```
+
+Features are lazily cloned by Atlas until they are specified by either a requires feature or passed from the command line.
+
+In Nimble files you can enable features for a a given package like so:
+```nim
+require "somelib[testing]"
+require "anotherlib[testing, async]"
+```
 
 ### Search <term term2 term3 ...>
 
