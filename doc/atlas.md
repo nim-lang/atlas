@@ -134,7 +134,7 @@ via `packages.json` or via a github search.
 
 ### Feature
 
-Features in Nimble files enable optional requirements for things different use cases. This is particularly useful for test only dependencies.
+Features in Nimble files enable optional requirements for things different use cases. This is particularly useful hwne dealing with test only dependencies.
 
 *Note*: Currently features aren't saved to the Atlas config you must always pass `atlas --feature:foobar` when doing any command. This simplifies Atlas'es state and makes it do only what you ask it to do. 
 
