@@ -213,17 +213,6 @@ proc installDependencies(nc: var NimbleContext; nimbleFile: Path) =
   patchNimCfg(paths, cfgPath)
   afterGraphActions graph
 
-proc updateDir(dir, filter: string) =
-  ## update the package's VCS
-  ##
-  ## this will walk the directory and update the package's VCS if it is a git
-  ## repository
-  for kind, file in walkDir(dir):
-    debug (project() / Path("updating")), "checking directory: " & $kind & " file: " & file.absolutePath
-    if kind == pcDir and isGitDir(file):
-      trace file, "updating directory"
-      gitops.updateDir(file.Path, filter)
-
 proc linkPackage(linkDir, linkedNimble: Path) =
   ## link a project into the current project
   ##

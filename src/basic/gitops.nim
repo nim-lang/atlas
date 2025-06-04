@@ -403,6 +403,7 @@ proc isOutdated*(path: Path): bool =
     return false
 
   if remoteTags > localTags:
+    warn path, "got new versions:", $(remoteTags - localTags)
     return true
 
   return false
