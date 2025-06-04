@@ -126,12 +126,13 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
 
     # Add implications for each feature requirement
     for feature, reqs in rel.features:
-      let featVarId = rel.featureVars[feature]
+      let featureVarId = rel.featureVars[feature]
       let allFeatDepsCompatible = checkDeps(graph, ver, reqs)
 
+      debug pkg.url.projectName, "checking feature dep:", $feature, "query:", $reqs, "compat versions:", $allFeatDepsCompatible
       if not allFeatDepsCompatible:
         warn pkg.url.projectName, "all requirements needed for feature:", feature, "were not able to be satisfied:", $reqs.mapIt(it[0].projectName & " " & $it[1]).join("; ")
-        b.addNegated(featVarId)
+        b.addNegated(featureVarId)
         break
 
       for dep, query in items(reqs):
@@ -149,7 +150,7 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
         debug pkg.url.projectName, "checking feature dep:", $dep.projectName, "query:", $query, "compat versions:", $compatibleVersions.mapIt(int(it)).join(", "), "from versions:", $depNode.validVersions().toSeq().mapIt(it[0].version()).join(", ")
 
         withOpenBr(b, OrForm):
-          b.addNegated(featVarId) # not this feature
+          b.addNegated(featureVarId) # not this feature
           withOpenBr(b, OrForm):
             for compatVer in compatibleVersions:
               debug pkg.url.projectName, "adding compatVer feature dep:", $int(compatVer), "featureVersions:", $compatibleVersions.mapIt(int(it)).join(", ")
