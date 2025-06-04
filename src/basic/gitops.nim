@@ -27,8 +27,8 @@ type
     GitCurrentCommit = "git -C $DIR log -n1 --format=%H"
     GitMergeBase = "git -C $DIR merge-base"
     GitLsFiles = "git -C $DIR ls-files"
-    GitLog = "git -C $DIR log -n1 --format=%H origin/HEAD"
-    GitLogLocal = "git -C $DIR log -n1 --format=%H HEAD"
+    GitLog = "git -C $DIR log --format=%H origin/HEAD"
+    GitLogLocal = "git -C $DIR log --format=%H HEAD"
     GitCurrentBranch = "git rev-parse --abbrev-ref HEAD"
     GitLsRemote = "git -C $DIR ls-remote --quiet --tags"
     GitShowFiles = "git -C $DIR show"
@@ -165,7 +165,7 @@ proc collectFileCommits*(path, file: Path, errorReportLevel: MsgKind = Warning, 
   let tip = findOriginTip(path, errorReportLevel, isLocalOnly)
 
   let cmd = if isLocalOnly: GitLogLocal else: GitLog
-  let (outp, status) = exec(cmd, path, ["--",$file], Warning)
+  let (outp, status) = exec(cmd, path, ["--", $file], Warning)
   if status == RES_OK:
     result = parseTaggedVersions(outp, requireVersions = false)
     if result.len > 0 and tip.isTip:
