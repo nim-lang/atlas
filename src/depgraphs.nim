@@ -370,6 +370,7 @@ proc solve*(graph: var DepGraph; form: Form, rerun: var bool) =
       notice "atlas:resolved", "rerunning SAT; found lazy deferred packages:", lazyDefersNeeded.mapIt(it.url.projectName).join(", ")
       for pkg in lazyDefersNeeded:
         pkg.state = DoLoad
+        pkg.versions.clear()
 
       rerun = true
       return
