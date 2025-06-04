@@ -327,6 +327,7 @@ proc updateWorkspace(filter: string) =
   ## updating them if they are outdated
   let dir = project()
   var nc = createNimbleContext()
+  var needsUpdate = false
 
   let graph = dir.loadWorkspace(nc, CurrentCommit, onClone=DoNothing, doSolve=false)
   for pkg in allNodes(graph):
@@ -341,8 +342,12 @@ proc updateWorkspace(filter: string) =
     if gitops.isOutdated(pkg.ondisk):
       warn pkg.url.projectName, "is outdated, updating..."
       gitops.updateRepo(pkg.ondisk)
+      needsUpdate = true
     else:
       notice pkg.url.projectName, "is up to date"
+  
+  if needsUpdate:
+    notice project(), "new dep versions available, run `atlas install` to update"
 
 proc newProject(projectName: string) =
   ## Tries to create a new project directory in the current dir
