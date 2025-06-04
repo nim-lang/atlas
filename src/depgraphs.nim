@@ -72,6 +72,8 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
         allDepsCompatible = false
         warn pkg.url.projectName, "no versions matched requirements for the dependency:", $dep.projectName
         break
+      else:
+        debug pkg.url.projectName, "a compatible version matched requirements for the dependency version:", $depNode.url.projectName
 
     return allDepsCompatible
 
