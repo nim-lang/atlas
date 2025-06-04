@@ -1,6 +1,6 @@
 # Small program that runs the test cases
 
-import std / [strutils, os, uri, jsonutils, json, tables, sequtils, unittest]
+import std / [strutils, os, uri, jsonutils, json, tables, sequtils, sets, unittest]
 import std/terminal
 
 import basic/[sattypes, context, reporters, pkgurls, compiledpatterns, versions]
@@ -178,6 +178,7 @@ suite "test global features":
         context().flags = {ListVersions}
         context().defaultAlgo = SemVer
         context().flags.incl DumpFormular
+        context().features.incl "feature.proj_a.testing"
 
         expectedVersionWithGitTags()
         var nc = createNimbleContext()
