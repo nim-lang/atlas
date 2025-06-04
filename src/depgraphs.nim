@@ -1,14 +1,14 @@
 import std / [sets, tables, sequtils, paths, files, os, strutils, json, jsonutils, algorithm]
 
-import basic/[deptypes, versions, depgraphtypes, osutils, context, gitops, reporters, nimblecontext, pkgurls, deptypesjson]
+import basic/[deptypes, versions, depgraphtypes, osutils, context, gitops, reporters, nimblecontext, pkgurls, deptypesjson, sattypes]
 import dependencies, runners 
 
 export depgraphtypes, deptypesjson
 
 when defined(nimAtlasBootstrap):
-  import ../dist/sat/src/sat/[sat, satvars]
+  import ../dist/sat/src/sat/[sat]
 else:
-  import sat/[sat, satvars]
+  import sat/[sat]
 
 export sat
 
@@ -117,7 +117,7 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
           for compatVer in compatibleVersions:
             if featureVersions.hasKey(compatVer):
               withOpenBr(b, AndForm):
-                debug pkg.url.projectName, "adding compatVer requirement:", $int(compatVer), "featureVersions:", $featureVersions[compatVer].mapIt(int(it)).join(", ")
+                debug pkg.url.projectName, "adding compatVer requirement:", $compatVer, "featureVersions:", $featureVersions[compatVer].mapIt($it).join(", ")
                 b.add(compatVer)
                 for featureVer in featureVersions[compatVer]:
                   b.add(featureVer)
@@ -147,14 +147,14 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
             compatibleVersions.add(depVer.vid)
           elif depVer == toVersionTag("*@head").toPkgVer:
             compatibleVersions.add(depVer.vid)
-        debug pkg.url.projectName, "checking feature dep:", $dep.projectName, "query:", $query, "compat versions:", $compatibleVersions.mapIt(int(it)).join(", "), "from versions:", $depNode.validVersions().toSeq().mapIt(it[0].version()).join(", ")
+        debug pkg.url.projectName, "checking feature dep:", $dep.projectName, "query:", $query, "compat versions:", $compatibleVersions.mapIt($it).join(", "), "from versions:", $depNode.validVersions().toSeq().mapIt(it[0].version()).join(", ")
 
         withOpenBr(b, OrForm):
           b.addNegated(featureVarId) # not this feature
           withOpenBr(b, OrForm):
             for compatVer in compatibleVersions:
-              debug pkg.url.projectName, "adding compatVer feature dep:", $int(compatVer), "featureVersions:", $compatibleVersions.mapIt(int(it)).join(", ")
               b.add(compatVer)
+          debug pkg.url.projectName, "added compatVer feature dep variables:", $compatibleVersions.mapIt($it).join(", ")
 
   if not anyReleaseSatisfied:
     warn pkg.url.projectName, "no versions satisfied for this package:", $pkg.url
@@ -191,7 +191,7 @@ proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
             rel.featureVars[feature] = featureVarId
             # Map the SAT variable to package information for result interpretation
             result.mapping[featureVarId] = SatVarInfo(pkg: p, version: ver, release: rel, feature: feature)
-            debug p.url.projectName, "adding feature var:", feature, "id:", $(int(featureVarId)), " result: ", $result.mapping[featureVarId]
+            debug p.url.projectName, "adding feature var:", feature, "id:", $(featureVarId), " result: ", $result.mapping[featureVarId]
             inc result.idgen
 
       doAssert p.state != NotInitialized, "package not initialized: " & $p.toJson(ToJsonOptions(enumMode: joptEnumString))
@@ -206,7 +206,7 @@ proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
         # If it's a root package, enforce that exactly one version must be selected
         withOpenBr(b, ExactlyOneOfForm):
           for ver, rel in p.validVersions():
-            debug p.url.projectName, "adding root package version:", $ver, "vid:", $int(ver.vid)
+            debug p.url.projectName, "adding root package version:", $ver, "vid:", $ver.vid
             b.add ver.vid
       else:
         # For non-root packages, they can either have one version selected or none at all
@@ -368,7 +368,7 @@ proc solve*(graph: var DepGraph; form: Form, rerun: var bool) =
     for varId, mapping in form.mapping:
       if mapping.pkg.state == LazyDeferred and solution.isTrue(varId):
         lazyDefersNeeded.add mapping.pkg
-        debug mapping.pkg.url.projectName, "lazy deferred package found in SAT solution:", $(int(varId))
+        debug mapping.pkg.url.projectName, "lazy deferred package found in SAT solution:", $(varId)
 
     if lazyDefersNeeded.len > 0:
       notice "atlas:resolved", "rerunning SAT; found lazy deferred packages:", lazyDefersNeeded.mapIt(it.url.projectName).join(", ")
