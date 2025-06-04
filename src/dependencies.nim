@@ -380,11 +380,12 @@ proc expandGraph*(path: Path, nc: var NimbleContext; mode: TraversalMode, onClon
         nc.traverseDependency(pkg, mode, @[])
         trace pkg.projectName, "processed pkg:", $pkg
         processing = true
-        # if pkgUrl notin result.pkgs:
-        #   result.pkgs[pkgUrl] = pkg
-      of Processed:
         if pkgUrl notin result.pkgs:
           result.pkgs[pkgUrl] = pkg
+      of Processed:
+        discard
+        # if pkgUrl notin result.pkgs:
+        #   result.pkgs[pkgUrl] = pkg
       else:
         discard
         info pkg.projectName, "Skipping package:", $pkg.url, "state:", $pkg.state
