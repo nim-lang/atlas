@@ -261,8 +261,7 @@ proc loadDependency*(
   if pkg.state == LazyDeferred:
     todo = DoNothing
 
-  debug pkg.url.projectName, "loading dependency isLinked:", $pkg.isAtlasProject
-  debug pkg.url.projectName, "loading dependency todo:", $todo, "ondisk:", $pkg.ondisk
+  debug pkg.url.projectName, "loading dependency todo:", $todo, "ondisk:", $pkg.ondisk, "isLinked:", $pkg.url.isFileProtocol, "isLazyDeferred:", $(pkg.state == LazyDeferred)
   case todo
   of DoClone:
     if onClone == DoNothing:
@@ -335,11 +334,14 @@ proc expandGraph*(path: Path, nc: var NimbleContext; mode: TraversalMode, onClon
         trace pkg.projectName, "expanded pkg:", pkg.repr
         processing = true
       of LazyDeferred:
-        info pkg.projectName, "Skipping lazy deferred package:", $pkg.url
-        # nc.traverseDependency(pkg, CurrentCommit, @[])
-        pkg.versions[VersionTag(v: Version"*", c: initCommitHash("#head", FromHead)).toPkgVer] = NimbleRelease(version: Version"#head", status: Normal)
+        if pkgUrl notin result.pkgs:
+          result.pkgs[pkgUrl] = pkg
+          pkg.versions[VersionTag(v: Version"*", c: initCommitHash("#head", FromHead)).toPkgVer] = NimbleRelease(version: Version"#head", status: Normal)
+          result.pkgs[pkgUrl] = pkg
+          info pkg.projectName, "Adding lazy deferred package to pkgs list:", $pkg.url
+        else:
+          trace pkg.projectName, "Skipping lazy deferred package:", $pkg.url
         pkg.state = LazyDeferred
-        result.pkgs[pkgUrl] = pkg
       of Found:
         info pkg.projectName, "Processing package at:", pkg.ondisk.relativeToWorkspace()
         # processing = true
@@ -350,6 +352,7 @@ proc expandGraph*(path: Path, nc: var NimbleContext; mode: TraversalMode, onClon
         result.pkgs[pkgUrl] = pkg
       else:
         discard
+        info pkg.projectName, "Skipping package:", $pkg.url, "state:", $pkg.state
 
   for pkgUrl, versions in nc.explicitVersions:
     info pkgUrl.projectName, "explicit versions: ", versions.toSeq().mapIt($it).join(", ")

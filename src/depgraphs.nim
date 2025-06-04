@@ -276,9 +276,15 @@ proc checkDuplicateModules(graph: var DepGraph) =
 
 proc printVersionSelections(graph: DepGraph, solution: Solution, form: Form) =
   var inactives: seq[string]
+  var lazyDefers: seq[string]
   for pkg in values(graph.pkgs):
     if not pkg.isRoot and not pkg.active:
       inactives.add pkg.url.projectName
+    elif pkg.state == LazyDeferred:
+      lazyDefers.add pkg.url.projectName
+
+  if lazyDefers.len > 0:
+    notice "atlas:resolved", "lazy deferred packages:", lazyDefers.join(", ")
   if inactives.len > 0:
     notice "atlas:resolved", "inactive packages:", inactives.join(", ")
 
