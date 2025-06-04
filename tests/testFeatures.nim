@@ -37,8 +37,8 @@ suite "test features":
         nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b", true))
         nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c", true))
         nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d", true))
-        # nc.put("proj_test", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_test", true))
-        nc.put("proj_test", toPkgUriRaw(parseUri "file://" & (ospaths2.getCurrentDir() / "proj_test").absolutePath, true))
+        # nc.put("proj_feature_dep", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_feature_dep", true))
+        nc.put("proj_feature_dep", toPkgUriRaw(parseUri "file://" & (ospaths2.getCurrentDir() / "proj_feature_dep").absolutePath, true))
 
         check nc.lookup("proj_a").hasShortName
         check nc.lookup("proj_a").projectName == "proj_a"
@@ -52,20 +52,20 @@ suite "test features":
           writeFile("proj_a.nimble", dedent"""
           requires "proj_b >= 1.1.0"
           feature "testing":
-            requires "proj_test >= 1.0.0"
+            requires "proj_feature_dep >= 1.0.0"
           """)
           exec "git commit -a -m \"feat: add proj_a.nimble\""
           exec "git tag v1.2.0"
 
-        removeDir "proj_test"
-        createDir "proj_test"
-        withDir "proj_test":
-          writeFile("proj_test.nimble", dedent"""
+        removeDir "proj_feature_dep"
+        createDir "proj_feature_dep"
+        withDir "proj_feature_dep":
+          writeFile("proj_feature_dep.nimble", dedent"""
           version "1.0.0"
           """)
           exec "git init"
-          exec "git add proj_test.nimble"
-          exec "git commit -m \"feat: add proj_test.nimble\""
+          exec "git add proj_feature_dep.nimble"
+          exec "git commit -m \"feat: add proj_feature_dep.nimble\""
           exec "git tag v1.0.0"
 
   test "setup and test target project":
@@ -84,8 +84,8 @@ suite "test features":
         nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b", true))
         nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c", true))
         nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d", true))
-        # nc.put("proj_test", toPkgUriRaw(parseUri "deps/proj_test_git", true))
-        nc.put("proj_test", toPkgUriRaw(parseUri "file://" & (ospaths2.getCurrentDir() / "proj_test").absolutePath, true))
+        # nc.put("proj_feature_dep", toPkgUriRaw(parseUri "deps/proj_feature_dep_git", true))
+        nc.put("proj_feature_dep", toPkgUriRaw(parseUri "file://" & (ospaths2.getCurrentDir() / "proj_feature_dep").absolutePath, true))
 
         check nc.lookup("proj_a").hasShortName
         check nc.lookup("proj_a").projectName == "proj_a"
