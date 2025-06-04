@@ -69,7 +69,7 @@ Command:
 Options:
   --feature=<feature>   enables the given feature, pass multiple for multiple features
                         for project specific use: `feature.<project>.<feature>`
-                        (note must be passed for each command currently)
+                        (note always be passed when you want to use features)
   --keepCommits         do not perform any `git checkouts`
   --noexec              do not perform any action that may run arbitrary code
   --autoenv             detect the minimal Nim $version and setup a
