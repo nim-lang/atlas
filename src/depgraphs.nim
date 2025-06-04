@@ -432,6 +432,10 @@ proc solve*(graph: var DepGraph; form: Form, rerun: var bool) =
     info "atlas:graph", "dumping graph after solving"
     dumpJson(graph, "graph-solved.json")
 
+proc solve*(graph: var DepGraph; form: Form) =
+  var rerun = false
+  solve(graph, form, rerun)
+
 proc loadWorkspace*(path: Path, nc: var NimbleContext, mode: TraversalMode, onClone: PackageAction, doSolve: bool): DepGraph =
   result = path.expandGraph(nc, mode, onClone)
 
