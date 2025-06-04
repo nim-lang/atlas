@@ -106,13 +106,13 @@ proc addFeatureDependencies(pkg: Package) =
         let fdep = rel.features[flag]
         for pkgUrl, interval in items(fdep):
           info pkg.url.projectName, "adding feature dependency:", $flag, "for:", $pkgUrl.url
-          withValue(rel.reqsFeatures, pkgUrl, reqsFeatures):
-            if flag notin reqsFeatures[]:
-              reqsFeatures[].incl(flag)
+          withValue(rel.reqsByFeatures, pkgUrl, reqsByFeatures):
+            if flag notin reqsByFeatures[]:
+              reqsByFeatures[].incl(flag)
               featuresAdded = true
           do:
-            rel.reqsFeatures[pkgUrl] = initHashSet[string]()
-            rel.reqsFeatures[pkgUrl].incl(flag)
+            rel.reqsByFeatures[pkgUrl] = initHashSet[string]()
+            rel.reqsByFeatures[pkgUrl].incl(flag)
       else:
         info pkg.url.projectName, "feature:", $flag, "not found for:", $rel.version
   

@@ -19,7 +19,7 @@ proc processRequirement(nc: var NimbleContext;
                         req: string;
                         feature: string;
                         result: var NimbleRelease) =
-    let (name, reqsFeatures, verIdx) = extractRequirementName(req)
+    let (name, reqsByFeatures, verIdx) = extractRequirementName(req)
 
     var url: PkgUrl
     try:
@@ -47,9 +47,9 @@ proc processRequirement(nc: var NimbleContext;
         result.features.mgetOrPut(feature, @[]).add((url, query))
       else:
         result.requirements.add((url, query))
-        for feature in reqsFeatures:
+        for feature in reqsByFeatures:
           echo "FEATURE:ADDED: ", feature
-          result.reqsFeatures.mgetOrPut(url, initHashSet[string]()).incl(feature)
+          result.reqsByFeatures.mgetOrPut(url, initHashSet[string]()).incl(feature)
 
 proc parseNimbleFile*(nc: var NimbleContext;
                       nimbleFile: Path): NimbleRelease =

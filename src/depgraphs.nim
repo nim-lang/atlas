@@ -96,8 +96,8 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
       let depNode = graph.pkgs[dep]
         
       var flags: seq[string]
-      if dep in rel.reqsFeatures:
-        flags = rel.reqsFeatures[dep].toSeq()
+      if dep in rel.reqsByFeatures:
+        flags = rel.reqsByFeatures[dep].toSeq()
 
       var compatibleVersions: seq[VarId]
       var featureVersions: Table[VarId, seq[VarId]]
