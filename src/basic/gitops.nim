@@ -406,7 +406,6 @@ proc isOutdated*(path: Path): bool =
 
   return false
 
-
 proc updateDir*(path: Path, filter: string) =
   let (remote, _) = osproc.execCmdEx("git remote -v")
   if filter.len == 0 or filter in remote:
