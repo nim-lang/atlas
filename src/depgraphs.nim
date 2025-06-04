@@ -276,15 +276,10 @@ proc checkDuplicateModules(graph: var DepGraph) =
 
 proc printVersionSelections(graph: DepGraph, solution: Solution, form: Form) =
   var inactives: seq[string]
-  var lazyDefers: seq[string]
   for pkg in values(graph.pkgs):
     if not pkg.isRoot and not pkg.active:
       inactives.add pkg.url.projectName
-    elif pkg.state == LazyDeferred:
-      lazyDefers.add pkg.url.projectName
 
-  if lazyDefers.len > 0:
-    notice "atlas:resolved", "lazy deferred packages:", lazyDefers.join(", ")
   if inactives.len > 0:
     notice "atlas:resolved", "inactive packages:", inactives.join(", ")
 
@@ -328,7 +323,7 @@ proc printVersionSelections(graph: DepGraph, solution: Solution, form: Form) =
     notice "atlas:resolved", str
   notice "atlas:resolved", "end of selection"
 
-proc solve*(graph: var DepGraph; form: Form) =
+proc solve*(graph: var DepGraph; form: Form, rerun: var bool) =
   for pkg in graph.pkgs.mvalues():
     pkg.activeVersion = nil
     pkg.active = false
@@ -365,6 +360,20 @@ proc solve*(graph: var DepGraph; form: Form) =
 
     checkDuplicateModules(graph)
 
+    var lazyDefersNeeded: seq[Package]
+    for varId, mapping in form.mapping:
+      if mapping.pkg.state == LazyDeferred and solution.isTrue(varId):
+        lazyDefersNeeded.add mapping.pkg
+        debug mapping.pkg.url.projectName, "lazy deferred package found in SAT solution:", $(int(varId))
+
+    if lazyDefersNeeded.len > 0:
+      notice "atlas:resolved", "rerunning SAT; found lazy deferred packages:", lazyDefersNeeded.mapIt(it.url.projectName).join(", ")
+      for pkg in lazyDefersNeeded:
+        pkg.state = DoLoad
+
+      rerun = true
+      return
+
     if ListVersions in context().flags and ListVersionsOff notin context().flags:
       printVersionSelections(graph, solution, form)
 
@@ -385,6 +394,7 @@ proc solve*(graph: var DepGraph; form: Form) =
         for (ver, rel) in validVersions(pkg):
           if solution.isTrue(ver.vid):
             error pkg.url.projectName, string(ver.version()) & " required"
+
   if DumpGraphs in context().flags:
     info "atlas:graph", "dumping graph after solving"
     dumpJson(graph, "graph-solved.json")
@@ -394,7 +404,11 @@ proc loadWorkspace*(path: Path, nc: var NimbleContext, mode: TraversalMode, onCl
 
   if doSolve:
     let form = result.toFormular(context().defaultAlgo)
-    solve(result, form)
+    var rerun = false
+    solve(result, form, rerun)
+
+    if rerun:
+      result = loadWorkspace(path, nc, mode, onClone, doSolve)
 
 
 proc runBuildSteps*(graph: DepGraph) =
