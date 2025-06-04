@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std/[os, files, dirs, paths, osproc, sequtils, strutils, uri]
+import std/[os, files, dirs, paths, osproc, sequtils, strutils, uri, sets]
 import reporters, osutils, versions, context
 
 type
@@ -375,6 +375,13 @@ proc updateRepo*(path: Path) =
   else:
     info(path, "successfully updated repo")
 
+proc getRemoteUrl*(path: Path): string =
+  let (cc, status) = exec(GitRemoteUrl, path, [])
+  if status != RES_OK:
+    return ""
+  else:
+    return cc.strip()
+
 proc isOutdated*(path: Path): bool =
   ## determine if the given git repo `f` is updateable
   ##
@@ -382,40 +389,23 @@ proc isOutdated*(path: Path): bool =
   info path, "checking is package is up to date..."
 
   # TODO: does --update-shallow fetch tags on a shallow repo?
-  let extraArgs =
-    if DumbProxy in context().flags: ""
-    else: "--update-shallow"
-  let (outp, status) = exec(GitFetch, path, [extraArgs, "--tags"])
+  let localTags = collectTaggedVersions(path, isLocalOnly = true).toHashSet()
 
-  if status == RES_OK:
-    let (cc, status) = exec(GitLastTaggedRef, path, [])
-    let latestVersion = strutils.strip(cc)
-    if status == RES_OK and latestVersion.len > 0:
-      # see if we're past that commit:
-      let (cc, status) = exec(GitCurrentCommit, path, [])
-      if status == RES_OK:
-        let currentCommit = strutils.strip(cc)
-        if currentCommit != latestVersion:
-          # checkout the later commit:
-          # git merge-base --is-ancestor <commit> <commit>
-          let (cc, status) = exec(GitMergeBase, path, [currentCommit, latestVersion])
-          let mergeBase = strutils.strip(cc)
-          #if mergeBase != latestVersion:
-          #  echo f, " I'm at ", currentCommit, " release is at ", latestVersion, " merge base is ", mergeBase
-          if status == RES_OK and mergeBase == currentCommit:
-            let v = extractVersion gitDescribeRefTag(path, latestVersion)
-            if v.len > 0:
-              info path, "new version available: " & v
-              result = true
-  else:
-    warn path, "`git fetch` failed: " & outp
+  let url = getRemoteUrl(path)
+  if url.len == 0:
+    return false
+  let (remoteTagsList, lsStatus) = listRemoteTags(path, url)
+  let remoteTags = remoteTagsList.toHashSet()
 
-proc getRemoteUrl*(path: Path): string =
-  let (cc, status) = exec(GitRemoteUrl, path, [])
-  if status != RES_OK:
-    return ""
-  else:
-    return cc.strip()
+  if not lsStatus:
+    warn path, "git list remote tags failed, skipping"
+    return false
+
+  if remoteTags > localTags:
+    return true
+
+  return false
+
 
 proc updateDir*(path: Path, filter: string) =
   let (remote, _) = osproc.execCmdEx("git remote -v")

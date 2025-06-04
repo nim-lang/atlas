@@ -320,6 +320,30 @@ proc listOutdated() =
   if updateable == 0:
     info project(), "all packages are up to date"
 
+proc updateWorkspace(filter: string) =
+  ## update the workspace
+  ##
+  ## this will update the workspace by checking for outdated packages and
+  ## updating them if they are outdated
+  let dir = project()
+  var nc = createNimbleContext()
+
+  let graph = dir.loadWorkspace(nc, CurrentCommit, onClone=DoNothing, doSolve=false)
+  for pkg in allNodes(graph):
+    if pkg.isRoot:
+      continue
+    
+    let url = gitops.getRemoteUrl(pkg.ondisk)
+    if url.len == 0 or filter notin url or filter notin pkg.url.projectName:
+      warn pkg.url.projectName, "not checking for updates"
+      continue
+
+    if gitops.isOutdated(pkg.ondisk):
+      warn pkg.url.projectName, "is outdated, updating..."
+      gitops.updateRepo(pkg.ondisk)
+    else:
+      notice pkg.url.projectName, "is up to date"
+
 proc newProject(projectName: string) =
   ## Tries to create a new project directory in the current dir
   ## with a single bare `projectname.nim` file inside.
@@ -530,31 +554,7 @@ proc atlasRun*(params: seq[string]) =
     installDependencies(nc, nimbleFile)
 
   of "update":
-    singleArg()
-
-    var nc = createNimbleContext()
-    let graph = project().loadWorkspace(nc, CurrentCommit, onClone=DoNothing, doSolve=false)
-
-    let pkgUrl = nc.createUrl(args[0])
-    let pkg = graph.pkgs.getOrDefault(pkgUrl, nil)
-    if pkg.isNil:
-      fatal "package not found: " & args[0]
-      quit(1)
-
-    var deps: HashSet[Package] = initHashSet[Package]()
-    for ver, rel in pkg.versions:
-      info "atlas:update", "package:", $pkgUrl, "version:", $ver
-      for (depUrl, depVer) in rel.requirements:
-        info "atlas:update", "  dep:", $depUrl, "version:", $depVer
-        deps.incl graph.pkgs[depUrl]
-
-    for dep in deps:
-      notice dep.url.projectName, "Updating repo..."
-      gitops.updateRepo(dep.ondisk)
-
-    let nimbleFile = findProjectNimbleFile()
-    var ncPost = createNimbleContext()
-    installDependencies(ncPost, nimbleFile)
+    updateWorkspace(if args.len == 0: "" else: args[0])
 
   of "use":
     singleArg()
@@ -572,9 +572,6 @@ proc atlasRun*(params: seq[string]) =
       fatal "cannot continue"
 
     installDependencies(nc, nimbleFile)
-
-  of "updatedeps":
-    updateDir(project(), if args.len == 0: "" else: args[0])
 
   of "link":
     singleArg()
