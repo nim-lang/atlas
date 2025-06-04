@@ -104,7 +104,7 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
       var compatibleVersions: seq[VarId]
       var featureVersions: Table[VarId, seq[VarId]]
       for depVer, nimbleRelease in depNode.validVersions():
-        debug pkg.url.projectName, "adding feature dependency version:", $depVer, "query:", $query, "matches:", $query.matches(depVer)
+        trace pkg.url.projectName, "adding feature dependency version:", $depVer, "query:", $query, "matches:", $query.matches(depVer)
         if query.matches(depVer):
           compatibleVersions.add(depVer.vid)
         for feature in flags:
@@ -161,27 +161,28 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
         # Add implictations for globally set features
         let pkgFeature = "feature." & feature & "." & pkg.url.projectName
         if (pkg.isRoot and pkgFeature in context().features) or (pkgFeature in context().features):
+          debug pkg.url.projectName, "checking global feature:", $feature, "in version:", $ver, "pkgFeature:", $pkgFeature, "context().features:", $context().features.toSeq().mapIt($it).join(", ")
           var featureVersions: Table[VarId, seq[VarId]]
           for depVer, nimbleRelease in depNode.validVersions():
-            debug pkg.url.projectName, "adding feature dependency version:", $depVer, "query:", $query, "matches:", $query.matches(depVer)
+            trace pkg.url.projectName, "adding feature dependency version:", $depVer, "query:", $query, "matches:", $query.matches(depVer)
             if feature in nimbleRelease.features:
               let featureVarId = nimbleRelease.featureVars[feature]
               featureVersions.mgetOrPut(depVer.vid, @[]).add(featureVarId)
 
-          debug pkg.url.projectName, "adding feature dep:", $feature
           # Add implication: if this version is selected, one of its compatible deps must be selected
-          withOpenBr(b, OrForm):
-            b.addNegated(ver.vid)  # not this version
+          if featureVersions.len > 0:
             withOpenBr(b, OrForm):
-              for compatVer in compatibleVersions:
-                if featureVersions.hasKey(compatVer):
-                  withOpenBr(b, AndForm):
-                    debug pkg.url.projectName, "adding compatVer requirement:", $compatVer, "featureVersions:", $featureVersions[compatVer].mapIt($it).join(", ")
+              b.addNegated(ver.vid)  # not this version
+              withOpenBr(b, OrForm):
+                for compatVer in compatibleVersions:
+                  if featureVersions.hasKey(compatVer):
+                    withOpenBr(b, AndForm):
+                      debug pkg.url.projectName, "adding compatVer requirement:", $compatVer, "featureVersions:", $featureVersions[compatVer].mapIt($it).join(", ")
+                      b.add(compatVer)
+                      for featureVer in featureVersions[compatVer]:
+                        b.add(featureVer)
+                  else:
                     b.add(compatVer)
-                    for featureVer in featureVersions[compatVer]:
-                      b.add(featureVer)
-                else:
-                  b.add(compatVer)
 
   if not anyReleaseSatisfied:
     warn pkg.url.projectName, "no versions satisfied for this package:", $pkg.url
