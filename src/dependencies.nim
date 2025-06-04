@@ -17,7 +17,7 @@ proc collectNimbleVersions*(nc: NimbleContext; pkg: Package): seq[VersionTag] =
   doAssert(pkg.ondisk.string != "", "Package ondisk must be set before collectNimbleVersions can be called! Package: " & $(pkg))
   result = @[]
   if nimbleFiles.len() == 1:
-    result = collectFileCommits(dir, nimbleFiles[0])
+    result = collectFileCommits(dir, nimbleFiles[0], isLocalOnly = pkg.isLocalOnly)
     result.reverse()
     trace pkg, "collectNimbleVersions commits:", mapIt(result, it.c.short()).join(", "), "nimble:", $nimbleFiles[0]
 
@@ -129,7 +129,7 @@ proc traverseDependency*(
   var versions: seq[(PackageVersion, NimbleRelease)]
 
   let currentCommit = currentGitCommit(pkg.ondisk, Warning)
-  pkg.originHead = gitops.gitFindOriginTip(pkg.ondisk, Warning).commit()
+  pkg.originHead = gitops.findOriginTip(pkg.ondisk, Warning, isLocalOnly = pkg.isLocalOnly).commit()
 
   if mode == CurrentCommit and currentCommit.isEmpty():
     # let vtag = VersionTag(v: Version"#head", c: initCommitHash("", FromHead))
@@ -193,7 +193,7 @@ proc traverseDependency*(
             discard versions.addRelease(nc, pkg, vtag)
 
       ## Note: always prefer tagged versions
-      let tags = collectTaggedVersions(pkg.ondisk)
+      let tags = collectTaggedVersions(pkg.ondisk, isLocalOnly = pkg.isLocalOnly)
       debug pkg.url.projectName, "nimble tags:", $tags
       for tag in tags:
         if not uniqueCommits.containsOrIncl(tag.c):

@@ -28,6 +28,7 @@ type
     GitMergeBase = "git -C $DIR merge-base"
     GitLsFiles = "git -C $DIR ls-files"
     GitLog = "git -C $DIR log -n1 --format=%H origin/HEAD"
+    GitLogLocal = "git -C $DIR log -n1 --format=%H HEAD"
     GitCurrentBranch = "git rev-parse --abbrev-ref HEAD"
     GitLsRemote = "git -C $DIR ls-remote --quiet --tags"
     GitShowFiles = "git -C $DIR show"
@@ -136,8 +137,9 @@ proc gitDescribeRefTag*(path: Path, commit: string): string =
   let (lt, status) = exec(GitDescribe, path, ["--tags", commit])
   result = if status == RES_OK: strutils.strip(lt) else: ""
 
-proc gitFindOriginTip*(path: Path, errorReportLevel: MsgKind = Warning, isLocalOnly = false): VersionTag =
-  let (outp1, status1) = exec(GitLog, path, ["-n1"], Warning)
+proc findOriginTip*(path: Path, errorReportLevel: MsgKind = Warning, isLocalOnly = false): VersionTag =
+  let cmd = if isLocalOnly: GitLogLocal else: GitLog
+  let (outp1, status1) = exec(cmd, path, ["-n1"], Warning)
   var allVersions: seq[VersionTag]
   if status1 == RES_OK:
     allVersions = parseTaggedVersions(outp1, requireVersions = false)
@@ -148,7 +150,7 @@ proc gitFindOriginTip*(path: Path, errorReportLevel: MsgKind = Warning, isLocalO
     message(errorReportLevel, path, "could not find origin head at:", $path)
 
 proc collectTaggedVersions*(path: Path, errorReportLevel: MsgKind = Debug, isLocalOnly = false): seq[VersionTag] =
-  let tip = gitFindOriginTip(path, errorReportLevel, isLocalOnly)
+  let tip = findOriginTip(path, errorReportLevel, isLocalOnly)
 
   let (outp, status) = exec(GitTags, path, [], errorReportLevel)
   if status == RES_OK:
@@ -160,9 +162,10 @@ proc collectTaggedVersions*(path: Path, errorReportLevel: MsgKind = Debug, isLoc
     message(errorReportLevel, path, "could not collect tagged commits at:", $path)
 
 proc collectFileCommits*(path, file: Path, errorReportLevel: MsgKind = Warning, isLocalOnly = false): seq[VersionTag] =
-  let tip = gitFindOriginTip(path, errorReportLevel, isLocalOnly)
+  let tip = findOriginTip(path, errorReportLevel, isLocalOnly)
 
-  let (outp, status) = exec(GitLog, path, ["--",$file], Warning)
+  let cmd = if isLocalOnly: GitLogLocal else: GitLog
+  let (outp, status) = exec(cmd, path, ["--",$file], Warning)
   if status == RES_OK:
     result = parseTaggedVersions(outp, requireVersions = false)
     if result.len > 0 and tip.isTip:
@@ -192,7 +195,7 @@ proc shortToCommit*(path: Path, short: CommitHash): CommitHash =
 
 proc expandSpecial*(path: Path, vtag: VersionTag, errorReportLevel: MsgKind = Warning, isLocalOnly = false): VersionTag =
   if vtag.version.isHead():
-    return gitFindOriginTip(path, errorReportLevel, isLocalOnly)
+    return findOriginTip(path, errorReportLevel, isLocalOnly)
 
   let (cc, status) = exec(GitRevParse, path, [vtag.version.string.substr(1)], errorReportLevel)
 
