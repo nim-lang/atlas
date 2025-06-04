@@ -101,11 +101,11 @@ proc addFeatureDependencies(pkg: Package) =
   warn pkg.url.projectName, "adding feature dependencies for root package; features:", $(context().features.toSeq().join(", ")), "versions:", $(pkg.versions.keys().toSeq().mapIt($it).join(", "))
   for flag in items(context().features):
     for ver, rel in pkg.versions:
-      info pkg.url.projectName, "checking feature:", $flag, "for:", $rel.version
+      info pkg.url.projectName, "checking feature:", $flag, "in version:", $rel.version
       if flag in rel.features:
         let fdep = rel.features[flag]
         for pkgUrl, interval in items(fdep):
-          info pkg.url.projectName, "adding feature dependency:", $flag, "for:", $pkgUrl.url
+          info pkg.url.projectName, "adding feature reqsByFeatures:", $flag, "for:", $pkgUrl.url
           withValue(rel.reqsByFeatures, pkgUrl, reqsByFeatures):
             if flag notin reqsByFeatures[]:
               reqsByFeatures[].incl(flag)

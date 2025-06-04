@@ -98,11 +98,13 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
       var flags: seq[string]
       if dep in rel.reqsByFeatures:
         flags = rel.reqsByFeatures[dep].toSeq()
+      
+      debug pkg.url.projectName, "version constraints for requirement depdendency", "dep:", $dep, "flags:", flags.mapIt($it).join(", "), "reqsByFeatures:", rel.reqsByFeatures.values().toSeq().mapIt($it).join(", ")
 
       var compatibleVersions: seq[VarId]
       var featureVersions: Table[VarId, seq[VarId]]
       for depVer, nimbleRelease in depNode.validVersions():
-        trace pkg.url.projectName, "adding feature dependency version:", $depVer, "query:", $query, "matches:", $query.matches(depVer)
+        debug pkg.url.projectName, "adding feature dependency version:", $depVer, "query:", $query, "matches:", $query.matches(depVer)
         if query.matches(depVer):
           compatibleVersions.add(depVer.vid)
         for feature in flags:
@@ -147,7 +149,7 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
             compatibleVersions.add(depVer.vid)
           elif depVer == toVersionTag("*@head").toPkgVer:
             compatibleVersions.add(depVer.vid)
-        debug pkg.url.projectName, "checking feature dep:", $dep.projectName, "query:", $query, "compat versions:", $compatibleVersions.mapIt($it).join(", "), "from versions:", $depNode.validVersions().toSeq().mapIt(it[0].version()).join(", ")
+        debug pkg.url.projectName, "checking feature req:", $dep.projectName, "query:", $query, "compat versions:", $compatibleVersions.mapIt($it).join(", "), "from versions:", $depNode.validVersions().toSeq().mapIt(it[0].version()).join(", ")
 
         withOpenBr(b, OrForm):
           b.addNegated(featureVarId) # not this feature
@@ -155,6 +157,30 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
             for compatVer in compatibleVersions:
               b.add(compatVer)
           debug pkg.url.projectName, "added compatVer feature dep variables:", $compatibleVersions.mapIt($it).join(", ")
+        
+        let pkgFeature = "feature." & feature & "." & pkg.url.projectName
+        if (pkg.isRoot and pkgFeature in context().features) or (pkgFeature in context().features):
+          var featureVersions: Table[VarId, seq[VarId]]
+          for depVer, nimbleRelease in depNode.validVersions():
+            debug pkg.url.projectName, "adding feature dependency version:", $depVer, "query:", $query, "matches:", $query.matches(depVer)
+            if feature in nimbleRelease.features:
+              let featureVarId = nimbleRelease.featureVars[feature]
+              featureVersions.mgetOrPut(depVer.vid, @[]).add(featureVarId)
+
+          debug pkg.url.projectName, "adding feature dep:", $feature
+          # Add implication: if this version is selected, one of its compatible deps must be selected
+          withOpenBr(b, OrForm):
+            b.addNegated(ver.vid)  # not this version
+            withOpenBr(b, OrForm):
+              for compatVer in compatibleVersions:
+                if featureVersions.hasKey(compatVer):
+                  withOpenBr(b, AndForm):
+                    debug pkg.url.projectName, "adding compatVer requirement:", $compatVer, "featureVersions:", $featureVersions[compatVer].mapIt($it).join(", ")
+                    b.add(compatVer)
+                    for featureVer in featureVersions[compatVer]:
+                      b.add(featureVer)
+                else:
+                  b.add(compatVer)
 
   if not anyReleaseSatisfied:
     warn pkg.url.projectName, "no versions satisfied for this package:", $pkg.url
