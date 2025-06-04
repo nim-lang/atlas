@@ -408,6 +408,14 @@ proc loadWorkspace*(path: Path, nc: var NimbleContext, mode: TraversalMode, onCl
     solve(result, form, rerun)
 
     if rerun:
+      for pkg in result.pkgs.values():
+        for ver, rel in pkg.validVersions():
+          ver.vid = NoVar
+          rel.featureVars.clear()
+
+      let form = result.toFormular(context().defaultAlgo)
+      solve(result, form, rerun)
+
       result = loadWorkspace(path, nc, mode, onClone, doSolve)
 
 
