@@ -211,6 +211,7 @@ suite "test global features":
         check graph.pkgs[nc.createUrl("proj_b")].active
         check graph.pkgs[nc.createUrl("proj_c")].active
         check graph.pkgs[nc.createUrl("proj_d")].active
+        check nc.createUrl("proj_feature_dep") in graph.pkgs 
         check graph.pkgs[nc.createUrl("proj_feature_dep")].active
 
         check $graph.root.activeVersion == "#head@-"
