@@ -48,7 +48,6 @@ proc processRequirement(nc: var NimbleContext;
       else:
         result.requirements.add((url, query))
         for feature in reqsByFeatures:
-          echo "FEATURE:ADDED: ", feature
           result.reqsByFeatures.mgetOrPut(url, initHashSet[string]()).incl(feature)
 
 proc parseNimbleFile*(nc: var NimbleContext;
@@ -68,7 +67,6 @@ proc parseNimbleFile*(nc: var NimbleContext;
     processRequirement(nc, nimbleFile, req, "", result)
   
   for feature, reqs in nimbleInfo.features:
-    echo "FEATURE: ", feature
     for req in reqs:
       processRequirement(nc, nimbleFile, req, feature, result)
 
