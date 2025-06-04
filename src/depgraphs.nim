@@ -251,7 +251,7 @@ proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
 
 
 proc toString(info: SatVarInfo): string =
-  "(" & info.pkg.url.projectName & ", " & $info.version & ", f: " & info.feature & ")"
+  "(" & info.pkg.url.projectName & ", " & $info.version & ")"
 
 proc debugFormular*(graph: var DepGraph; form: Form; solution: Solution) =
   echo "FORM:\n\t", form.formula
