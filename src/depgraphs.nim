@@ -413,9 +413,6 @@ proc loadWorkspace*(path: Path, nc: var NimbleContext, mode: TraversalMode, onCl
           ver.vid = NoVar
           rel.featureVars.clear()
 
-      let form = result.toFormular(context().defaultAlgo)
-      solve(result, form, rerun)
-
       result = loadWorkspace(path, nc, mode, onClone, doSolve)
 
 
