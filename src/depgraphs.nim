@@ -100,6 +100,7 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
       var compatibleVersions: seq[VarId]
       var featureVersions: Table[VarId, seq[VarId]]
       for depVer, nimbleRelease in depNode.validVersions():
+        info pkg.url.projectName, "checking dependency version:", $depVer, "query:", $query, "matches:", $query.matches(depVer)
         if query.matches(depVer):
           compatibleVersions.add(depVer.vid)
         for feature in flags:
@@ -158,15 +159,6 @@ proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
 
     # First pass: Assign variables and encode version selection constraints
     for p in mvalues(graph.pkgs):
-      # if p.state == LazyDeferred:
-      #   info p.url.projectName, "skipping adding package variable as it is lazily deferred"
-      #   let anyVid = VarId(result.idgen)
-      #   # Map the SAT variable to package information for result interpretation
-      #   result.mapping[anyVid] = SatVarInfo(pkg: p, version: toVersionTag("*@head"), release: nil, feature: "")
-      #   debug p.url.projectName, "adding feature var:", "any", "id:", $(int(anyVid)), " result: ", $result.mapping[anyVid]
-      #   inc result.idgen
-      #   continue
-
       if p.versions.len == 0:
         debug p.url.projectName, "skipping adding package variable as it has no versions"
         continue
