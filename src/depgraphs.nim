@@ -158,6 +158,7 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
               b.add(compatVer)
           debug pkg.url.projectName, "added compatVer feature dep variables:", $compatibleVersions.mapIt($it).join(", ")
         
+        # Add implictations for globally set features
         let pkgFeature = "feature." & feature & "." & pkg.url.projectName
         if (pkg.isRoot and pkgFeature in context().features) or (pkgFeature in context().features):
           var featureVersions: Table[VarId, seq[VarId]]
