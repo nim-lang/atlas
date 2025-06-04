@@ -205,6 +205,7 @@ proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
         # If it's a root package, enforce that exactly one version must be selected
         withOpenBr(b, ExactlyOneOfForm):
           for ver, rel in p.validVersions():
+            debug p.url.projectName, "adding root package version:", $ver, "vid:", $int(ver.vid)
             b.add ver.vid
       else:
         # For non-root packages, they can either have one version selected or none at all
