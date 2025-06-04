@@ -67,6 +67,9 @@ Command:
     --keep              keep the c_code subdirectory
 
 Options:
+  --feature=<feature>   enables the given feature, pass multiple for multiple features
+                        for project specific use: `feature.<project>.<feature>`
+                        (note must be passed for each command currently)
   --keepCommits         do not perform any `git checkouts`
   --noexec              do not perform any action that may run arbitrary code
   --autoenv             detect the minimal Nim $version and setup a
