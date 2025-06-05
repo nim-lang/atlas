@@ -29,12 +29,6 @@ proc handleError(cfg: ConfigRef, mk: TMsgKind, li: TLineInfo, msg: string) =
 proc handleError(cfg: ConfigRef, li: TLineInfo, msg: string) =
   handleError(cfg, warnUser, li, msg)
 
-proc getDefinedName(n: PNode): string =
-  if n.kind == nkCall and n[0].kind == nkIdent and n[0].ident.s == "defined":
-    return n[1].ident.s
-  else:
-    return ""
-
 proc evalBasicDefines(sym: string): bool =
   case sym:
   of "windows":
@@ -47,6 +41,40 @@ proc evalBasicDefines(sym: string): bool =
     when defined(macosx): result = true
   else:
     discard
+
+proc evalBooleanCondition(n: PNode): bool =
+  ## Recursively evaluate boolean conditions in when statements
+  case n.kind
+  of nkCall:
+    # Handle defined(platform) calls
+    if n[0].kind == nkIdent and n[0].ident.s == "defined" and n.len == 2:
+      if n[1].kind == nkIdent:
+        return evalBasicDefines(n[1].ident.s)
+    return false
+  of nkInfix:
+    # Handle binary operators: and, or
+    if n[0].kind == nkIdent and n.len == 3:
+      case n[0].ident.s
+      of "and":
+        return evalBooleanCondition(n[1]) and evalBooleanCondition(n[2])
+      of "or":
+        return evalBooleanCondition(n[1]) or evalBooleanCondition(n[2])
+    return false
+  of nkPrefix:
+    # Handle unary operators: not
+    if n[0].kind == nkIdent and n[0].ident.s == "not" and n.len == 2:
+      return not evalBooleanCondition(n[1])
+    return false
+  of nkPar:
+    # Handle parentheses - evaluate the content
+    if n.len == 1:
+      return evalBooleanCondition(n[0])
+    return false
+  of nkIdent:
+    # Handle direct identifiers (though this shouldn't happen in practice)
+    return evalBasicDefines(n.ident.s)
+  else:
+    return false
 
 proc extract(n: PNode; conf: ConfigRef; currFeature: string; result: var NimbleFileInfo) =
   case n.kind
@@ -116,32 +144,16 @@ proc extract(n: PNode; conf: ConfigRef; currFeature: string; result: var NimbleF
         handleError(conf, n[1].info, "assignments to 'version' must be string literals")
         result.hasErrors = true
   of nkWhenStmt:
-    # handles basic when statements for os
+    # handles arbitrary boolean conditions in when statements
+    echo "\n\nWHEN: nimble parser ", n.repr()
+
     if n[0].kind == nkElifBranch:
       let cond = n[0][0]
       let body = n[0][1]
-
-      if cond.kind == nkPrefix: # handle when not defined
-        if cond[0].kind == nkIdent and cond[0].ident.s == "not":
-          let notCond = cond[1]
-          let name = getDefinedName(notCond)
-          if name.len > 0:
-            if not evalBasicDefines(name):
-              extract(body, conf, currFeature, result)
-      elif getDefinedName(cond) != "": # handle when defined
-        let name = getDefinedName(cond)
-        if evalBasicDefines(name):
-          extract(body, conf, currFeature, result)
-      elif cond.kind == nkInfix: # handle when or
-        if cond[0].kind == nkIdent and cond[0].ident.s == "or":
-          let orLeft = getDefinedName(cond[1])
-          let orRight = getDefinedName(cond[2])
-          if orLeft.len > 0 or orRight.len > 0:
-            if evalBasicDefines(orLeft):
-              extract(body, conf, currFeature, result)
-            elif evalBasicDefines(orRight):
-              extract(body, conf, currFeature, result)
-              
+      
+      # Use the new recursive boolean evaluator
+      if evalBooleanCondition(cond):
+        extract(body, conf, currFeature, result)
   else:
     discard
 
@@ -245,5 +257,9 @@ when isMainModule:
   for x in tokenizeRequires("jester@#head >= 1.5 & <= 1.8"):
     echo x
 
-  let info = extractRequiresInfo(Path"tests/test_data/bad.nimble")
-  echo "bad nimble info: ", repr(info)
+  let badInfo = extractRequiresInfo(Path"tests/test_data/bad.nimble")
+  echo "bad nimble info: ", repr(badInfo)
+  
+  echo "\n--- Testing boolean logic parsing ---"
+  let jesterInfo = extractRequiresInfo(Path"tests/test_data/jester_boolean.nimble")
+  echo "jester boolean nimble info: ", repr(jesterInfo)

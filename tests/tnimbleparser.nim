@@ -55,3 +55,8 @@ suite "nimbleparser":
     check res.features.hasKey("useOldAsyncTools")
     check res.features["useOldAsyncTools"].len == 1
     check res.features["useOldAsyncTools"][0] == "asynctools >= 0.1.0"
+
+  test "parse nimble file with when statements":
+    let nimbleFile = Path("tests" / "test_data" / "jester_boolean.nimble")
+    var res = extractRequiresInfo(nimbleFile)
+    echo "Nimble release: ", $res
