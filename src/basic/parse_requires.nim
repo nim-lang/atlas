@@ -31,32 +31,32 @@ proc handleError(cfg: ConfigRef, li: TLineInfo, msg: string) =
 
 proc compileDefines(): Table[string, bool] =
   result = initTable[string, bool]()
-  when defined(windows): result["windows"] = true
-  when defined(posix): result["posix"] = true
-  when defined(linux): result["linux"] = true
-  when defined(macosx): result["macosx"] = true
-  when defined(freebsd): result["freebsd"] = true
-  when defined(openbsd): result["openbsd"] = true
-  when defined(netbsd): result["netbsd"] = true
-  when defined(solaris): result["solaris"] = true
-  when defined(amd64): result["amd64"] = true
-  when defined(x86_64): result["x86_64"] = true
-  when defined(i386): result["i386"] = true
-  when defined(arm): result["arm"] = true
-  when defined(arm64): result["arm64"] = true
-  when defined(mips): result["mips"] = true
-  when defined(powerpc): result["powerpc"] = true
-  when defined(debug): result["debug"] = true
-  when defined(danger): result["danger"] = true
-  when defined(gcArc): result["gcArc"] = true
-  when defined(gcOrc): result["gcOrc"] = true
-  when defined(gcRefc): result["gcRefc"] = true
-  when defined(gcMarkAndSweep): result["gcMarkAndSweep"] = true
-  when defined(c): result["c"] = true
-  when defined(cpp): result["cpp"] = true
-  when defined(js): result["js"] = true
-  when defined(nimvm): result["nimvm"] = true
-  when defined(nimscript): result["nimscript"] = true
+  result["windows"] = defined(windows)
+  result["posix"] = defined(posix)
+  result["linux"] = defined(linux)
+  result["macosx"] = defined(macosx)
+  result["freebsd"] = defined(freebsd)
+  result["openbsd"] = defined(openbsd)
+  result["netbsd"] = defined(netbsd)
+  result["solaris"] = defined(solaris)
+  result["amd64"] = defined(amd64)
+  result["x86_64"] = defined(x86_64)
+  result["i386"] = defined(i386)
+  result["arm"] = defined(arm)
+  result["arm64"] = defined(arm64)
+  result["mips"] = defined(mips)
+  result["powerpc"] = defined(powerpc)
+  result["debug"] = defined(debug)
+  result["danger"] = defined(danger)
+  result["gcArc"] = defined(gcArc)
+  result["gcOrc"] = defined(gcOrc)
+  result["gcRefc"] = defined(gcRefc)
+  result["gcMarkAndSweep"] = defined(gcMarkAndSweep)
+  result["nimscript"] = defined(nimscript)
+  result["c"] = defined(c)
+  result["cpp"] = defined(cpp)
+  result["js"] = defined(js)
+  result["nimvm"] = defined(nimvm)
 
 var definedSymbols: Table[string, bool] = compileDefines()
 
@@ -67,7 +67,7 @@ proc setBasicDefines*(sym: string, value: bool) {.inline.} =
   definedSymbols[sym] = value
 
 proc evalBasicDefines(sym: string): Option[bool] =
-  if definedSymbols.hasKey(sym):
+  if sym in definedSymbols:
     return some(definedSymbols[sym])
   else:
     return none(bool)
