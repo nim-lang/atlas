@@ -29,65 +29,48 @@ proc handleError(cfg: ConfigRef, mk: TMsgKind, li: TLineInfo, msg: string) =
 proc handleError(cfg: ConfigRef, li: TLineInfo, msg: string) =
   handleError(cfg, warnUser, li, msg)
 
+proc compileDefines(): Table[string, bool] =
+  result = initTable[string, bool]()
+  when defined(windows): result["windows"] = true
+  when defined(posix): result["posix"] = true
+  when defined(linux): result["linux"] = true
+  when defined(macosx): result["macosx"] = true
+  when defined(freebsd): result["freebsd"] = true
+  when defined(openbsd): result["openbsd"] = true
+  when defined(netbsd): result["netbsd"] = true
+  when defined(solaris): result["solaris"] = true
+  when defined(amd64): result["amd64"] = true
+  when defined(x86_64): result["x86_64"] = true
+  when defined(i386): result["i386"] = true
+  when defined(arm): result["arm"] = true
+  when defined(arm64): result["arm64"] = true
+  when defined(mips): result["mips"] = true
+  when defined(powerpc): result["powerpc"] = true
+  when defined(debug): result["debug"] = true
+  when defined(danger): result["danger"] = true
+  when defined(gcArc): result["gcArc"] = true
+  when defined(gcOrc): result["gcOrc"] = true
+  when defined(gcRefc): result["gcRefc"] = true
+  when defined(gcMarkAndSweep): result["gcMarkAndSweep"] = true
+  when defined(c): result["c"] = true
+  when defined(cpp): result["cpp"] = true
+  when defined(js): result["js"] = true
+  when defined(nimvm): result["nimvm"] = true
+  when defined(nimscript): result["nimscript"] = true
+
+var definedSymbols: Table[string, bool] = compileDefines()
+
+proc getBasicDefines*(): Table[string, bool] =
+  return definedSymbols
+
+proc setBasicDefines*(sym: string, value: bool) {.inline.} =
+  definedSymbols[sym] = value
+
 proc evalBasicDefines(sym: string): Option[bool] =
-  result = some(false)
-  case sym:
-  of "windows":
-    when defined(windows): result = some(true)
-  of "posix":
-    when defined(posix): result = some(true)
-  of "linux":
-    when defined(linux): result = some(true)
-  of "macosx":
-    when defined(macosx): result = some(true)
-  of "freebsd":
-    when defined(freebsd): result = some(true)
-  of "openbsd":
-    when defined(openbsd): result = some(true)
-  of "netbsd":
-    when defined(netbsd): result = some(true)
-  of "solaris":
-    when defined(solaris): result = some(true)
-  of "amd64":
-    when defined(amd64): result = some(true)
-  of "x86_64":
-    when defined(x86_64): result = some(true)
-  of "i386":
-    when defined(i386): result = some(true)
-  of "arm":
-    when defined(arm): result = some(true)
-  of "arm64":
-    when defined(arm64): result = some(true)
-  of "mips":
-    when defined(mips): result = some(true)
-  of "powerpc":
-    when defined(powerpc): result = some(true)
-  of "debug":
-    when defined(debug): result = some(true)
-  of "release":
-    when defined(release): result = some(true)
-  of "danger":
-    when defined(danger): result = some(true)
-  of "gcArc":
-    when defined(gcArc): result = some(true)
-  of "gcOrc":
-    when defined(gcOrc): result = some(true)
-  of "gcRefc":
-    when defined(gcRefc): result = some(true)
-  of "gcMarkAndSweep":
-    when defined(gcMarkAndSweep): result = some(true)
-  of "c":
-    when defined(c): result = some(true)
-  of "cpp":
-    when defined(cpp): result = some(true)
-  of "js":
-    when defined(js): result = some(true)
-  of "nimvm":
-    when defined(nimvm): result = some(true)
-  of "nimscript":
-    when defined(nimscript): result = some(true)
+  if definedSymbols.hasKey(sym):
+    return some(definedSymbols[sym])
   else:
-    result = none(bool)
+    return none(bool)
 
 proc evalBooleanCondition(n: PNode): Option[bool] =
   ## Recursively evaluate boolean conditions in when statements
@@ -114,6 +97,13 @@ proc evalBooleanCondition(n: PNode): Option[bool] =
         let right = evalBooleanCondition(n[2])
         if left.isSome and right.isSome:
           return some(left.get or right.get)
+        else:
+          return none(bool)
+      of "xor":
+        let left = evalBooleanCondition(n[1])
+        let right = evalBooleanCondition(n[2])
+        if left.isSome and right.isSome:
+          return some(left.get xor right.get)
         else:
           return none(bool)
     return none(bool)
