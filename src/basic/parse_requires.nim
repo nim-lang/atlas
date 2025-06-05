@@ -172,7 +172,6 @@ proc extract(n: PNode; conf: ConfigRef; currFeature: string; result: var NimbleF
         if n.len >= 3 and n[1].kind == nkIdent and n[1].ident.s == "install":
           result.hasInstallHooks = true
       of "feature":
-        echo "FEATURE: nimble parser "
         if n.len >= 3:
           var features = newSeq[string]()
           # for c in n:
@@ -206,16 +205,18 @@ proc extract(n: PNode; conf: ConfigRef; currFeature: string; result: var NimbleF
         result.hasErrors = true
   of nkWhenStmt:
     # handles arbitrary boolean conditions in when statements
-    echo "\n\nWHEN: nimble parser ", n.repr()
-
     if n[0].kind == nkElifBranch:
       let cond = n[0][0]
       let body = n[0][1]
       
       # Use the new recursive boolean evaluator
       let condResult = evalBooleanCondition(cond)
-      if condResult.isSome and condResult.get:
-        extract(body, conf, currFeature, result)
+      if condResult.isSome: 
+        if condResult.get:
+          extract(body, conf, currFeature, result)
+      else:
+        handleError(conf, n.info, "when statement condition is not a boolean or uses undefined symbols")
+        result.hasErrors = true
   else:
     discard
 
