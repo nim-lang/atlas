@@ -43,6 +43,21 @@ proc evalBasicDefines(sym: string): Option[bool] =
   of "macosx":
     when defined(macosx): result = some(true)
     else: result = some(false)
+  of "freebsd":
+    when defined(freebsd): result = some(true)
+    else: result = some(false)
+  of "openbsd":
+    when defined(openbsd): result = some(true)
+    else: result = some(false)
+  of "netbsd":
+    when defined(netbsd): result = some(true)
+    else: result = some(false)
+  of "solaris":
+    when defined(solaris): result = some(true)
+    else: result = some(false)
+  of "posix":
+    when defined(posix): result = some(true)
+    else: result = some(false)
   else:
     result = none(bool)
 
