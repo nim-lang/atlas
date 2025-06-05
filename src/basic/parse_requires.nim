@@ -21,7 +21,7 @@ proc eqIdent(a, b: string): bool {.inline.} =
 
 proc handleError(cfg: ConfigRef, li: TLineInfo, mk: TMsgKind, msg: string) =
   {.cast(gcsafe).}:
-    info("nimbleparser", "error parsing \"$1\" at $2" % [msg, cfg.toFileLineCol(li), repr mk])
+    info("atlas:nimbleparser", "error parsing \"$1\" at $2" % [msg, cfg.toFileLineCol(li), repr mk])
 
 proc handleError(cfg: ConfigRef, mk: TMsgKind, li: TLineInfo, msg: string) =
   handleError(cfg, li, warnUser, msg)
@@ -34,6 +34,7 @@ proc compileDefines(): Table[string, bool] =
   result["windows"] = defined(windows)
   result["posix"] = defined(posix)
   result["linux"] = defined(linux)
+  result["android"] = defined(android)
   result["macosx"] = defined(macosx)
   result["freebsd"] = defined(freebsd)
   result["openbsd"] = defined(openbsd)
@@ -191,7 +192,7 @@ proc extract(n: PNode; conf: ConfigRef; currFeature: string; result: var NimbleF
           extract(body, conf, currFeature, result)
       else:
         handleError(conf, n.info, "when statement condition is not a boolean or uses undefined symbols")
-        result.hasErrors = true
+        # result.hasErrors = true
   else:
     discard
 
