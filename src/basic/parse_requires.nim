@@ -30,34 +30,64 @@ proc handleError(cfg: ConfigRef, li: TLineInfo, msg: string) =
   handleError(cfg, warnUser, li, msg)
 
 proc evalBasicDefines(sym: string): Option[bool] =
+  result = some(false)
   case sym:
   of "windows":
     when defined(windows): result = some(true)
-    else: result = some(false)
   of "posix":
     when defined(posix): result = some(true)
-    else: result = some(false)
   of "linux":
     when defined(linux): result = some(true)
-    else: result = some(false)
   of "macosx":
     when defined(macosx): result = some(true)
-    else: result = some(false)
   of "freebsd":
     when defined(freebsd): result = some(true)
-    else: result = some(false)
   of "openbsd":
     when defined(openbsd): result = some(true)
-    else: result = some(false)
   of "netbsd":
     when defined(netbsd): result = some(true)
-    else: result = some(false)
   of "solaris":
     when defined(solaris): result = some(true)
-    else: result = some(false)
   of "posix":
     when defined(posix): result = some(true)
-    else: result = some(false)
+  of "amd64":
+    when defined(amd64): result = some(true)
+  of "x86_64":
+    when defined(x86_64): result = some(true)
+  of "i386":
+    when defined(i386): result = some(true)
+  of "arm":
+    when defined(arm): result = some(true)
+  of "arm64":
+    when defined(arm64): result = some(true)
+  of "mips":
+    when defined(mips): result = some(true)
+  of "powerpc":
+    when defined(powerpc): result = some(true)
+  of "debug":
+    when defined(debug): result = some(true)
+  of "release":
+    when defined(release): result = some(true)
+  of "danger":
+    when defined(danger): result = some(true)
+  of "gcArc":
+    when defined(gcArc): result = some(true)
+  of "gcOrc":
+    when defined(gcOrc): result = some(true)
+  of "gcRefc":
+    when defined(gcRefc): result = some(true)
+  of "gcMarkAndSweep":
+    when defined(gcMarkAndSweep): result = some(true)
+  of "c":
+    when defined(c): result = some(true)
+  of "cpp":
+    when defined(cpp): result = some(true)
+  of "js":
+    when defined(js): result = some(true)
+  of "nimvm":
+    when defined(nimvm): result = some(true)
+  of "nimscript":
+    when defined(nimscript): result = some(true)
   else:
     result = none(bool)
 
