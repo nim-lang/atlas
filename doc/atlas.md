@@ -134,14 +134,14 @@ via `packages.json` or via a github search.
 
 ## When Statements
 
-Support for boolean expressions for a subset of compile time defines is supported: 
+When statements provide support for boolean expressions with a subset of compile time defines. The defines currently supported: 
 
   windows, posix, linux, macosx, freebsd, openbsd, netbsd, solaris;
   amd64, x86_64, i386, arm, arm64, mips, powerpc;
 
 ### Feature Statements
 
-Features in Nimble files enable optional requirements for things different use cases. This is particularly useful hwne dealing with test only dependencies.
+Features in Nimble files enable optional requirements for things different scenarios. This is useful when dealing with scenarios like testing only dependencies.
 
 *Note*: Currently features aren't saved to the Atlas config you must always pass `atlas --feature:foobar` when doing any command. This simplifies Atlas'es state and makes it do only what you ask it to do. 
 
