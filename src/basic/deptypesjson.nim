@@ -128,7 +128,6 @@ proc loadJson*(nc: var NimbleContext, json: JsonNode): DepGraph =
 
   for url, pkg in pkgs:
     let url2 = nc.createUrl($pkg.url)
-    echo "restoring url: ", $pkg.url, " to ", $url2.projectName()
     pkg.url = url2
     result.pkgs[url2] = pkg
   
