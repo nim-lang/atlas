@@ -103,3 +103,36 @@ suite "nimbleparser":
     # Verify no errors occurred during parsing
     check not res.hasErrors
 
+  test "parse nimble file with when statements runtime defines":
+    let nimbleFile = Path("tests" / "test_data" / "jester_boolean.nimble")
+
+    setBasicDefines("linux", true)
+    setBasicDefines("macosx", true)
+    setBasicDefines("windows", true)
+    setBasicDefines("posix", true)
+    setBasicDefines("freebsd", false)
+    setBasicDefines("openbsd", false)
+    setBasicDefines("netbsd", false)
+
+    var res = extractRequiresInfo(nimbleFile)
+    echo "Nimble release: ", $res
+    
+    # Check basic package info is parsed correctly
+    check res.version == "0.6.0"
+    
+    # Should always have the base requirement
+    check doesContain(res, "nim >= 1.0.0")
+    
+    # Count how many httpbeast requirements we expect based on platform
+    var expectedHttpbeastCount = 4
+    
+    var actualHttpbeastCount = 0
+    for req in res.requires:
+      echo "Req: ", req
+      if req.contains("httpbeast"):
+        actualHttpbeastCount += 1
+    
+    echo "Expected httpbeast count: ", expectedHttpbeastCount
+    echo "Actual httpbeast count: ", actualHttpbeastCount
+    check actualHttpbeastCount == expectedHttpbeastCount
+
