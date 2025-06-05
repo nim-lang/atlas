@@ -56,42 +56,43 @@ proc getBasicDefines*(): Table[string, bool] =
 proc setBasicDefines*(sym: string, value: bool) {.inline.} =
   definedSymbols[sym] = value
 
-proc evalBasicDefines(sym: string): Option[bool] =
+proc evalBasicDefines(sym: string; conf: ConfigRef; n: PNode): Option[bool] =
   if sym in definedSymbols:
     return some(definedSymbols[sym])
   else:
+    handleError(conf, n.info, "undefined symbol: " & sym)
     return none(bool)
 
-proc evalBooleanCondition(n: PNode): Option[bool] =
+proc evalBooleanCondition(n: PNode; conf: ConfigRef): Option[bool] =
   ## Recursively evaluate boolean conditions in when statements
   case n.kind
   of nkCall:
     # Handle defined(platform) calls
     if n[0].kind == nkIdent and n[0].ident.s == "defined" and n.len == 2:
       if n[1].kind == nkIdent:
-        return evalBasicDefines(n[1].ident.s)
+        return evalBasicDefines(n[1].ident.s, conf, n)
     return none(bool)
   of nkInfix:
     # Handle binary operators: and, or
     if n[0].kind == nkIdent and n.len == 3:
       case n[0].ident.s
       of "and":
-        let left = evalBooleanCondition(n[1])
-        let right = evalBooleanCondition(n[2])
+        let left = evalBooleanCondition(n[1], conf)
+        let right = evalBooleanCondition(n[2], conf)
         if left.isSome and right.isSome:
           return some(left.get and right.get)
         else:
           return none(bool)
       of "or":
-        let left = evalBooleanCondition(n[1])
-        let right = evalBooleanCondition(n[2])
+        let left = evalBooleanCondition(n[1], conf)
+        let right = evalBooleanCondition(n[2], conf)
         if left.isSome and right.isSome:
           return some(left.get or right.get)
         else:
           return none(bool)
       of "xor":
-        let left = evalBooleanCondition(n[1])
-        let right = evalBooleanCondition(n[2])
+        let left = evalBooleanCondition(n[1], conf)
+        let right = evalBooleanCondition(n[2], conf)
         if left.isSome and right.isSome:
           return some(left.get xor right.get)
         else:
@@ -100,7 +101,7 @@ proc evalBooleanCondition(n: PNode): Option[bool] =
   of nkPrefix:
     # Handle unary operators: not
     if n[0].kind == nkIdent and n[0].ident.s == "not" and n.len == 2:
-      let inner = evalBooleanCondition(n[1])
+      let inner = evalBooleanCondition(n[1], conf)
       if inner.isSome:
         return some(not inner.get)
       else:
@@ -109,11 +110,11 @@ proc evalBooleanCondition(n: PNode): Option[bool] =
   of nkPar:
     # Handle parentheses - evaluate the content
     if n.len == 1:
-      return evalBooleanCondition(n[0])
+      return evalBooleanCondition(n[0], conf)
     return none(bool)
   of nkIdent:
     # Handle direct identifiers (though this shouldn't happen in practice)
-    return evalBasicDefines(n.ident.s)
+    return evalBasicDefines(n.ident.s, conf, n)
   else:
     return none(bool)
 
@@ -136,7 +137,7 @@ proc extract(n: PNode; conf: ConfigRef; currFeature: string; result: var NimbleF
               result.requires.add ch.strVal
           else:
             handleError(conf, ch.info, "'requires' takes string literals")
-            result.hasErrors = true
+            # result.hasErrors = true
       of "task":
         if n.len >= 3 and n[1].kind == nkIdent and n[2].kind in {nkStrLit..nkTripleStrLit}:
           result.tasks.add((n[1].ident.s, n[2].strVal))
@@ -160,7 +161,7 @@ proc extract(n: PNode; conf: ConfigRef; currFeature: string; result: var NimbleF
               features.add(c.strVal)
             else:
               handleError(conf, n.info, "feature requires string literals")
-              result.hasErrors = true
+              # result.hasErrors = true
           for f in features:
             result.features[f] = newSeq[string]()
             extract(n[^1], conf, f, result)
@@ -172,13 +173,13 @@ proc extract(n: PNode; conf: ConfigRef; currFeature: string; result: var NimbleF
         result.srcDir = Path n[1].strVal
       else:
         handleError(conf, n[1].info, "assignments to 'srcDir' must be string literals")
-        result.hasErrors = true
+        # result.hasErrors = true
     elif n[0].kind == nkIdent and eqIdent(n[0].ident.s, "version"):
       if n[1].kind in {nkStrLit..nkTripleStrLit}:
         result.version = n[1].strVal
       else:
         handleError(conf, n[1].info, "assignments to 'version' must be string literals")
-        result.hasErrors = true
+        # result.hasErrors = true
   of nkWhenStmt:
     # handles arbitrary boolean conditions in when statements
     if n[0].kind == nkElifBranch:
@@ -186,7 +187,7 @@ proc extract(n: PNode; conf: ConfigRef; currFeature: string; result: var NimbleF
       let body = n[0][1]
       
       # Use the new recursive boolean evaluator
-      let condResult = evalBooleanCondition(cond)
+      let condResult = evalBooleanCondition(cond, conf)
       if condResult.isSome: 
         if condResult.get:
           extract(body, conf, currFeature, result)
