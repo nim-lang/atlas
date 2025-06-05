@@ -1,4 +1,3 @@
-
 import std/[unittest, os, algorithm, strutils, importutils, terminal]
 import basic/[context, pkgurls, deptypes, nimblecontext, compiledpatterns, osutils, versions]
 import basic/nimbleparser
@@ -60,3 +59,47 @@ suite "nimbleparser":
     let nimbleFile = Path("tests" / "test_data" / "jester_boolean.nimble")
     var res = extractRequiresInfo(nimbleFile)
     echo "Nimble release: ", $res
+    
+    # Check basic package info is parsed correctly
+    check res.version == "0.6.0"
+    
+    # Should always have the base requirement
+    check doesContain(res, "nim >= 1.0.0")
+    
+    # Count how many httpbeast requirements we expect based on platform
+    var expectedHttpbeastCount = 0
+    
+    # when defined(linux): -> only true on Linux
+    when defined(linux):
+      expectedHttpbeastCount += 1
+    
+    # when defined(linux) or defined(macosx): -> true on Linux or macOS
+    when defined(linux) or defined(macosx):
+      expectedHttpbeastCount += 1
+    
+    # when not defined(linux) or defined(macosx): -> true when NOT Linux OR when macOS
+    # This is true on macOS, Windows, and other non-Linux platforms
+    when not defined(linux) or defined(macosx):
+      expectedHttpbeastCount += 1
+    
+    # when not (defined(linux) or defined(macosx)): -> true when neither Linux nor macOS
+    when not (defined(linux) or defined(macosx)):
+      expectedHttpbeastCount += 1
+    
+    # when defined(windows) and (defined(linux) or defined(macosx)): -> impossible, always false
+    when defined(windows) and (defined(linux) or defined(macosx)):
+      expectedHttpbeastCount += 1
+    
+    # Count actual httpbeast requirements in the result
+    var actualHttpbeastCount = 0
+    for req in res.requires:
+      if req.contains("httpbeast"):
+        actualHttpbeastCount += 1
+    
+    echo "Expected httpbeast count: ", expectedHttpbeastCount
+    echo "Actual httpbeast count: ", actualHttpbeastCount
+    check actualHttpbeastCount == expectedHttpbeastCount
+    
+    # Verify no errors occurred during parsing
+    check not res.hasErrors
+
