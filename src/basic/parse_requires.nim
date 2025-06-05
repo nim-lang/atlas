@@ -46,17 +46,6 @@ proc compileDefines(): Table[string, bool] =
   result["arm64"] = defined(arm64)
   result["mips"] = defined(mips)
   result["powerpc"] = defined(powerpc)
-  result["debug"] = defined(debug)
-  result["danger"] = defined(danger)
-  result["gcArc"] = defined(gcArc)
-  result["gcOrc"] = defined(gcOrc)
-  result["gcRefc"] = defined(gcRefc)
-  result["gcMarkAndSweep"] = defined(gcMarkAndSweep)
-  result["nimscript"] = defined(nimscript)
-  result["c"] = defined(c)
-  result["cpp"] = defined(cpp)
-  result["js"] = defined(js)
-  result["nimvm"] = defined(nimvm)
 
 var definedSymbols: Table[string, bool] = compileDefines()
 
