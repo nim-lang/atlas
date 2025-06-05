@@ -128,7 +128,7 @@ suite "nimbleparser":
     
     var actualHttpbeastCount = 0
     for req in res.requires:
-      echo "Req: ", req
+      echo "got req: ", req
       if req.contains("httpbeast"):
         actualHttpbeastCount += 1
     
