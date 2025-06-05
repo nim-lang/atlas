@@ -1,7 +1,7 @@
 ## Utility API for Nim package managers.
 ## (c) 2021 Andreas Rumpf
 
-import std / [strutils, paths, tables]
+import std / [strutils, paths, tables, options]
 
 import compiler / [ast, idents, msgs, syntaxes, options, pathutils, lineinfos]
 import reporters
@@ -29,20 +29,24 @@ proc handleError(cfg: ConfigRef, mk: TMsgKind, li: TLineInfo, msg: string) =
 proc handleError(cfg: ConfigRef, li: TLineInfo, msg: string) =
   handleError(cfg, warnUser, li, msg)
 
-proc evalBasicDefines(sym: string): bool =
+proc evalBasicDefines(sym: string): Option[bool] =
   case sym:
   of "windows":
-    when defined(windows): result = true
+    when defined(windows): result = some(true)
+    else: result = some(false)
   of "posix":
-    when defined(posix): result = true
+    when defined(posix): result = some(true)
+    else: result = some(false)
   of "linux":
-    when defined(linux): result = true
+    when defined(linux): result = some(true)
+    else: result = some(false)
   of "macosx":
-    when defined(macosx): result = true
+    when defined(macosx): result = some(true)
+    else: result = some(false)
   else:
-    discard
+    result = none(bool)
 
-proc evalBooleanCondition(n: PNode): bool =
+proc evalBooleanCondition(n: PNode): Option[bool] =
   ## Recursively evaluate boolean conditions in when statements
   case n.kind
   of nkCall:
@@ -50,31 +54,45 @@ proc evalBooleanCondition(n: PNode): bool =
     if n[0].kind == nkIdent and n[0].ident.s == "defined" and n.len == 2:
       if n[1].kind == nkIdent:
         return evalBasicDefines(n[1].ident.s)
-    return false
+    return none(bool)
   of nkInfix:
     # Handle binary operators: and, or
     if n[0].kind == nkIdent and n.len == 3:
       case n[0].ident.s
       of "and":
-        return evalBooleanCondition(n[1]) and evalBooleanCondition(n[2])
+        let left = evalBooleanCondition(n[1])
+        let right = evalBooleanCondition(n[2])
+        if left.isSome and right.isSome:
+          return some(left.get and right.get)
+        else:
+          return none(bool)
       of "or":
-        return evalBooleanCondition(n[1]) or evalBooleanCondition(n[2])
-    return false
+        let left = evalBooleanCondition(n[1])
+        let right = evalBooleanCondition(n[2])
+        if left.isSome and right.isSome:
+          return some(left.get or right.get)
+        else:
+          return none(bool)
+    return none(bool)
   of nkPrefix:
     # Handle unary operators: not
     if n[0].kind == nkIdent and n[0].ident.s == "not" and n.len == 2:
-      return not evalBooleanCondition(n[1])
-    return false
+      let inner = evalBooleanCondition(n[1])
+      if inner.isSome:
+        return some(not inner.get)
+      else:
+        return none(bool)
+    return none(bool)
   of nkPar:
     # Handle parentheses - evaluate the content
     if n.len == 1:
       return evalBooleanCondition(n[0])
-    return false
+    return none(bool)
   of nkIdent:
     # Handle direct identifiers (though this shouldn't happen in practice)
     return evalBasicDefines(n.ident.s)
   else:
-    return false
+    return none(bool)
 
 proc extract(n: PNode; conf: ConfigRef; currFeature: string; result: var NimbleFileInfo) =
   case n.kind
@@ -152,7 +170,8 @@ proc extract(n: PNode; conf: ConfigRef; currFeature: string; result: var NimbleF
       let body = n[0][1]
       
       # Use the new recursive boolean evaluator
-      if evalBooleanCondition(cond):
+      let condResult = evalBooleanCondition(cond)
+      if condResult.isSome and condResult.get:
         extract(body, conf, currFeature, result)
   else:
     discard
