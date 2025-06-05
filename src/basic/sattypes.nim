@@ -4,4 +4,7 @@ when defined(nimAtlasBootstrap):
 else:
   import sat/satvars
 
+proc `$`*(v: VarId): string =
+  "v" & $v.int
+
 export satvars

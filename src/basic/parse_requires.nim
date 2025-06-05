@@ -1,7 +1,7 @@
 ## Utility API for Nim package managers.
 ## (c) 2021 Andreas Rumpf
 
-import std / [strutils, paths]
+import std / [strutils, paths, tables, options]
 
 import compiler / [ast, idents, msgs, syntaxes, options, pathutils, lineinfos]
 import reporters
@@ -9,6 +9,7 @@ import reporters
 type
   NimbleFileInfo* = object
     requires*: seq[string]
+    features*: Table[string, seq[string]]
     srcDir*: Path
     version*: string
     tasks*: seq[(string, string)]
@@ -20,7 +21,7 @@ proc eqIdent(a, b: string): bool {.inline.} =
 
 proc handleError(cfg: ConfigRef, li: TLineInfo, mk: TMsgKind, msg: string) =
   {.cast(gcsafe).}:
-    info("nimbleparser", "error parsing \"$1\" at $2" % [msg, cfg.toFileLineCol(li), repr mk])
+    info("atlas:nimbleparser", "error parsing \"$1\" at $2" % [msg, cfg.toFileLineCol(li), repr mk])
 
 proc handleError(cfg: ConfigRef, mk: TMsgKind, li: TLineInfo, msg: string) =
   handleError(cfg, li, warnUser, msg)
@@ -28,30 +29,100 @@ proc handleError(cfg: ConfigRef, mk: TMsgKind, li: TLineInfo, msg: string) =
 proc handleError(cfg: ConfigRef, li: TLineInfo, msg: string) =
   handleError(cfg, warnUser, li, msg)
 
-proc getDefinedName(n: PNode): string =
-  if n.kind == nkCall and n[0].kind == nkIdent and n[0].ident.s == "defined":
-    return n[1].ident.s
-  else:
-    return ""
+proc compileDefines(): Table[string, bool] =
+  result = initTable[string, bool]()
+  result["windows"] = defined(windows)
+  result["posix"] = defined(posix)
+  result["linux"] = defined(linux)
+  result["android"] = defined(android)
+  result["macosx"] = defined(macosx)
+  result["freebsd"] = defined(freebsd)
+  result["openbsd"] = defined(openbsd)
+  result["netbsd"] = defined(netbsd)
+  result["solaris"] = defined(solaris)
+  result["amd64"] = defined(amd64)
+  result["x86_64"] = defined(x86_64)
+  result["i386"] = defined(i386)
+  result["arm"] = defined(arm)
+  result["arm64"] = defined(arm64)
+  result["mips"] = defined(mips)
+  result["powerpc"] = defined(powerpc)
 
-proc evalBasicDefines(sym: string): bool =
-  case sym:
-  of "windows":
-    when defined(windows): result = true
-  of "posix":
-    when defined(posix): result = true
-  of "linux":
-    when defined(linux): result = true
-  of "macosx":
-    when defined(macosx): result = true
-  else:
-    discard
+var definedSymbols: Table[string, bool] = compileDefines()
 
-proc extract(n: PNode; conf: ConfigRef; result: var NimbleFileInfo) =
+proc getBasicDefines*(): Table[string, bool] =
+  return definedSymbols
+
+proc setBasicDefines*(sym: string, value: bool) {.inline.} =
+  definedSymbols[sym] = value
+
+proc evalBasicDefines(sym: string; conf: ConfigRef; n: PNode): Option[bool] =
+  if sym in definedSymbols:
+    return some(definedSymbols[sym])
+  else:
+    handleError(conf, n.info, "undefined symbol: " & sym)
+    return none(bool)
+
+proc evalBooleanCondition(n: PNode; conf: ConfigRef): Option[bool] =
+  ## Recursively evaluate boolean conditions in when statements
+  case n.kind
+  of nkCall:
+    # Handle defined(platform) calls
+    if n[0].kind == nkIdent and n[0].ident.s == "defined" and n.len == 2:
+      if n[1].kind == nkIdent:
+        return evalBasicDefines(n[1].ident.s, conf, n)
+    return none(bool)
+  of nkInfix:
+    # Handle binary operators: and, or
+    if n[0].kind == nkIdent and n.len == 3:
+      case n[0].ident.s
+      of "and":
+        let left = evalBooleanCondition(n[1], conf)
+        let right = evalBooleanCondition(n[2], conf)
+        if left.isSome and right.isSome:
+          return some(left.get and right.get)
+        else:
+          return none(bool)
+      of "or":
+        let left = evalBooleanCondition(n[1], conf)
+        let right = evalBooleanCondition(n[2], conf)
+        if left.isSome and right.isSome:
+          return some(left.get or right.get)
+        else:
+          return none(bool)
+      of "xor":
+        let left = evalBooleanCondition(n[1], conf)
+        let right = evalBooleanCondition(n[2], conf)
+        if left.isSome and right.isSome:
+          return some(left.get xor right.get)
+        else:
+          return none(bool)
+    return none(bool)
+  of nkPrefix:
+    # Handle unary operators: not
+    if n[0].kind == nkIdent and n[0].ident.s == "not" and n.len == 2:
+      let inner = evalBooleanCondition(n[1], conf)
+      if inner.isSome:
+        return some(not inner.get)
+      else:
+        return none(bool)
+    return none(bool)
+  of nkPar:
+    # Handle parentheses - evaluate the content
+    if n.len == 1:
+      return evalBooleanCondition(n[0], conf)
+    return none(bool)
+  of nkIdent:
+    # Handle direct identifiers (though this shouldn't happen in practice)
+    return evalBasicDefines(n.ident.s, conf, n)
+  else:
+    return none(bool)
+
+proc extract(n: PNode; conf: ConfigRef; currFeature: string; result: var NimbleFileInfo) =
   case n.kind
   of nkStmtList, nkStmtListExpr:
     for child in n:
-      extract(child, conf, result)
+      extract(child, conf, currFeature, result)
   of nkCallKinds:
     if n[0].kind == nkIdent:
       case n[0].ident.s
@@ -60,10 +131,13 @@ proc extract(n: PNode; conf: ConfigRef; result: var NimbleFileInfo) =
           var ch = n[i]
           while ch.kind in {nkStmtListExpr, nkStmtList} and ch.len > 0: ch = ch.lastSon
           if ch.kind in {nkStrLit..nkTripleStrLit}:
-            result.requires.add ch.strVal
+            if currFeature.len > 0:
+              result.features[currFeature].add ch.strVal
+            else:
+              result.requires.add ch.strVal
           else:
             handleError(conf, ch.info, "'requires' takes string literals")
-            result.hasErrors = true
+            # result.hasErrors = true
       of "task":
         if n.len >= 3 and n[1].kind == nkIdent and n[2].kind in {nkStrLit..nkTripleStrLit}:
           result.tasks.add((n[1].ident.s, n[2].strVal))
@@ -78,47 +152,48 @@ proc extract(n: PNode; conf: ConfigRef; result: var NimbleFileInfo) =
         ]#
         if n.len >= 3 and n[1].kind == nkIdent and n[1].ident.s == "install":
           result.hasInstallHooks = true
-      else: discard
+      of "feature":
+        if n.len >= 3:
+          var features = newSeq[string]()
+          for i in 1 ..< n.len - 1:
+            let c = n[i]
+            if c.kind == nkStrLit:
+              features.add(c.strVal)
+            else:
+              handleError(conf, n.info, "feature requires string literals")
+              # result.hasErrors = true
+          for f in features:
+            result.features[f] = newSeq[string]()
+            extract(n[^1], conf, f, result)
+      else:
+        discard
   of nkAsgn, nkFastAsgn:
     if n[0].kind == nkIdent and eqIdent(n[0].ident.s, "srcDir"):
       if n[1].kind in {nkStrLit..nkTripleStrLit}:
         result.srcDir = Path n[1].strVal
       else:
         handleError(conf, n[1].info, "assignments to 'srcDir' must be string literals")
-        result.hasErrors = true
+        # result.hasErrors = true
     elif n[0].kind == nkIdent and eqIdent(n[0].ident.s, "version"):
       if n[1].kind in {nkStrLit..nkTripleStrLit}:
         result.version = n[1].strVal
       else:
         handleError(conf, n[1].info, "assignments to 'version' must be string literals")
-        result.hasErrors = true
+        # result.hasErrors = true
   of nkWhenStmt:
-    # handles basic when statements for os
+    # handles arbitrary boolean conditions in when statements
     if n[0].kind == nkElifBranch:
       let cond = n[0][0]
       let body = n[0][1]
-
-      if cond.kind == nkPrefix: # handle when not defined
-        if cond[0].kind == nkIdent and cond[0].ident.s == "not":
-          let notCond = cond[1]
-          let name = getDefinedName(notCond)
-          if name.len > 0:
-            if not evalBasicDefines(name):
-              extract(body, conf, result)
-      elif getDefinedName(cond) != "": # handle when defined
-        let name = getDefinedName(cond)
-        if evalBasicDefines(name):
-          extract(body, conf, result)
-      elif cond.kind == nkInfix: # handle when or
-        if cond[0].kind == nkIdent and cond[0].ident.s == "or":
-          let orLeft = getDefinedName(cond[1])
-          let orRight = getDefinedName(cond[2])
-          if orLeft.len > 0 or orRight.len > 0:
-            if evalBasicDefines(orLeft):
-              extract(body, conf, result)
-            elif evalBasicDefines(orRight):
-              extract(body, conf, result)
-              
+      
+      # Use the new recursive boolean evaluator
+      let condResult = evalBooleanCondition(cond, conf)
+      if condResult.isSome: 
+        if condResult.get:
+          extract(body, conf, currFeature, result)
+      else:
+        handleError(conf, n.info, "when statement condition is not a boolean or uses undefined symbols")
+        # result.hasErrors = true
   else:
     discard
 
@@ -143,7 +218,7 @@ proc extractRequiresInfo*(nimbleFile: Path): NimbleFileInfo =
     handleError(config, info, mk, msg)
 
   if setupParser(parser, fileIdx, newIdentCache(), conf):
-    extract(parseAll(parser), conf, result)
+    extract(parseAll(parser), conf, "", result)
     closeParser(parser)
   result.hasErrors = result.hasErrors or conf.errorCounter > 0
 
@@ -222,5 +297,9 @@ when isMainModule:
   for x in tokenizeRequires("jester@#head >= 1.5 & <= 1.8"):
     echo x
 
-  let info = extractRequiresInfo(Path"tests/test_data/bad.nimble")
-  echo "bad nimble info: ", repr(info)
+  let badInfo = extractRequiresInfo(Path"tests/test_data/bad.nimble")
+  echo "bad nimble info: ", repr(badInfo)
+  
+  echo "\n--- Testing boolean logic parsing ---"
+  let jesterInfo = extractRequiresInfo(Path"tests/test_data/jester_boolean.nimble")
+  echo "jester boolean nimble info: ", repr(jesterInfo)

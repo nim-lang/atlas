@@ -67,11 +67,14 @@ Command:
     --keep              keep the c_code subdirectory
 
 Options:
+  --feature=<feature>   enables the given feature, pass multiple for multiple features
+                        for project specific use: `feature.<project>.<feature>`
+                        (note always be passed when you want to use features)
   --keepCommits         do not perform any `git checkouts`
   --noexec              do not perform any action that may run arbitrary code
   --autoenv             detect the minimal Nim $version and setup a
                         corresponding Nim virtual environment
-  --autoinit            auto initialize an atlas project
+  --noautoinit          do not auto initialize an atlas project
   --resolver=minver|semver|maxver
                         which resolution algorithm to use, default is semver
   --proxy=url           use the given proxy URL for all git operations
@@ -213,17 +216,6 @@ proc installDependencies(nc: var NimbleContext; nimbleFile: Path) =
   patchNimCfg(paths, cfgPath)
   afterGraphActions graph
 
-proc updateDir(dir, filter: string) =
-  ## update the package's VCS
-  ##
-  ## this will walk the directory and update the package's VCS if it is a git
-  ## repository
-  for kind, file in walkDir(dir):
-    debug (project() / Path("updating")), "checking directory: " & $kind & " file: " & file.absolutePath
-    if kind == pcDir and isGitDir(file):
-      trace file, "updating directory"
-      gitops.updateDir(file.Path, filter)
-
 proc linkPackage(linkDir, linkedNimble: Path) =
   ## link a project into the current project
   ##
@@ -320,6 +312,38 @@ proc listOutdated() =
   if updateable == 0:
     info project(), "all packages are up to date"
 
+proc updateWorkspace(filter: string) =
+  ## update the workspace
+  ##
+  ## this will update the workspace by checking for outdated packages and
+  ## updating them if they are outdated
+  let dir = project()
+  var nc = createNimbleContext()
+  var needsUpdate = false
+
+  let graph = dir.loadWorkspace(nc, CurrentCommit, onClone=DoNothing, doSolve=false)
+  for pkg in allNodes(graph):
+    info "atlas:update", "checking package:", $pkg.url.projectName, "state:", $pkg.state
+    if pkg.isRoot:
+      continue
+    if pkg.state != Processed:
+      continue
+    
+    let url = gitops.getRemoteUrl(pkg.ondisk)
+    if url.len == 0 or filter notin url or filter notin pkg.url.projectName:
+      warn pkg.url.projectName, "not checking for updates"
+      continue
+
+    if gitops.isOutdated(pkg.ondisk):
+      warn pkg.url.projectName, "is outdated, updating..."
+      gitops.updateRepo(pkg.ondisk)
+      needsUpdate = true
+    else:
+      notice pkg.url.projectName, "is up to date"
+  
+  if needsUpdate:
+    notice project(), "new dep versions available, run `atlas install` to update"
+
 proc newProject(projectName: string) =
   ## Tries to create a new project directory in the current dir
   ## with a single bare `projectname.nim` file inside.
@@ -364,7 +388,7 @@ proc newProject(projectName: string) =
     quit(1)
 
 proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[string]) =
-  var autoinit = false
+  var autoinit = true
   if existsEnv("NO_COLOR") or not isatty(stdout) or (getEnv("TERM") == "dumb"):
     setAtlasNoColors(true)
   for kind, key, val in getopt(params):
@@ -396,7 +420,7 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
           writeHelp()
       of "shallow": context().flags.incl ShallowClones
       of "full": context().flags.excl ShallowClones
-      of "autoinit": autoinit = true
+      of "noautoinit": autoinit = false
       of "ignoreerrors": context().flags.incl IgnoreErrors
       of "dumpformular": context().flags.incl DumpFormular
       of "showgraph": context().flags.incl ShowGraph
@@ -404,6 +428,8 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
       of "keepworkspace": context().flags.incl KeepWorkspace
       of "autoenv": context().flags.incl AutoEnv
       of "noexec": context().flags.incl NoExec
+      of "feature":
+        context().features.incl val.normalize
       of "list":
         if val.normalize in ["on", ""]:
           context().flags.incl ListVersions
@@ -528,31 +554,7 @@ proc atlasRun*(params: seq[string]) =
     installDependencies(nc, nimbleFile)
 
   of "update":
-    singleArg()
-
-    var nc = createNimbleContext()
-    let graph = project().loadWorkspace(nc, CurrentCommit, onClone=DoNothing, doSolve=false)
-
-    let pkgUrl = nc.createUrl(args[0])
-    let pkg = graph.pkgs.getOrDefault(pkgUrl, nil)
-    if pkg.isNil:
-      fatal "package not found: " & args[0]
-      quit(1)
-
-    var deps: HashSet[Package] = initHashSet[Package]()
-    for ver, rel in pkg.versions:
-      info "atlas:update", "package:", $pkgUrl, "version:", $ver
-      for (depUrl, depVer) in rel.requirements:
-        info "atlas:update", "  dep:", $depUrl, "version:", $depVer
-        deps.incl graph.pkgs[depUrl]
-
-    for dep in deps:
-      notice dep.url.projectName, "Updating repo..."
-      gitops.updateRepo(dep.ondisk)
-
-    let nimbleFile = findProjectNimbleFile()
-    var ncPost = createNimbleContext()
-    installDependencies(ncPost, nimbleFile)
+    updateWorkspace(if args.len == 0: "" else: args[0])
 
   of "use":
     singleArg()
@@ -570,9 +572,6 @@ proc atlasRun*(params: seq[string]) =
       fatal "cannot continue"
 
     installDependencies(nc, nimbleFile)
-
-  of "updatedeps":
-    updateDir(project(), if args.len == 0: "" else: args[0])
 
   of "link":
     singleArg()

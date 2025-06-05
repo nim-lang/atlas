@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std/[os, files, dirs, paths, osproc, sequtils, strutils, uri]
+import std/[os, files, dirs, paths, osproc, sequtils, strutils, uri, sets]
 import reporters, osutils, versions, context
 
 type
@@ -24,10 +24,11 @@ type
     GitSubModUpdate = "git submodule update --init",
     GitPush = "git -C $DIR push origin",
     GitPull = "git -C $DIR pull",
-    GitCurrentCommit = "git -C $DIR log -n 1 --format=%H"
+    GitCurrentCommit = "git -C $DIR log -n1 --format=%H"
     GitMergeBase = "git -C $DIR merge-base"
     GitLsFiles = "git -C $DIR ls-files"
     GitLog = "git -C $DIR log --format=%H origin/HEAD"
+    GitLogLocal = "git -C $DIR log --format=%H HEAD"
     GitCurrentBranch = "git rev-parse --abbrev-ref HEAD"
     GitLsRemote = "git -C $DIR ls-remote --quiet --tags"
     GitShowFiles = "git -C $DIR show"
@@ -136,8 +137,9 @@ proc gitDescribeRefTag*(path: Path, commit: string): string =
   let (lt, status) = exec(GitDescribe, path, ["--tags", commit])
   result = if status == RES_OK: strutils.strip(lt) else: ""
 
-proc gitFindOriginTip*(path: Path, errorReportLevel: MsgKind = Warning): VersionTag =
-  let (outp1, status1) = exec(GitLog, path, ["-n1"], Warning)
+proc findOriginTip*(path: Path, errorReportLevel: MsgKind = Warning, isLocalOnly = false): VersionTag =
+  let cmd = if isLocalOnly: GitLogLocal else: GitLog
+  let (outp1, status1) = exec(cmd, path, ["-n1"], Warning)
   var allVersions: seq[VersionTag]
   if status1 == RES_OK:
     allVersions = parseTaggedVersions(outp1, requireVersions = false)
@@ -147,8 +149,8 @@ proc gitFindOriginTip*(path: Path, errorReportLevel: MsgKind = Warning): Version
   else:
     message(errorReportLevel, path, "could not find origin head at:", $path)
 
-proc collectTaggedVersions*(path: Path, errorReportLevel: MsgKind = Debug): seq[VersionTag] =
-  let tip = gitFindOriginTip(path, errorReportLevel)
+proc collectTaggedVersions*(path: Path, errorReportLevel: MsgKind = Debug, isLocalOnly = false): seq[VersionTag] =
+  let tip = findOriginTip(path, errorReportLevel, isLocalOnly)
 
   let (outp, status) = exec(GitTags, path, [], errorReportLevel)
   if status == RES_OK:
@@ -159,10 +161,11 @@ proc collectTaggedVersions*(path: Path, errorReportLevel: MsgKind = Debug): seq[
   else:
     message(errorReportLevel, path, "could not collect tagged commits at:", $path)
 
-proc collectFileCommits*(path, file: Path, errorReportLevel: MsgKind = Warning): seq[VersionTag] =
-  let tip = gitFindOriginTip(path, errorReportLevel)
+proc collectFileCommits*(path, file: Path, errorReportLevel: MsgKind = Warning, isLocalOnly = false): seq[VersionTag] =
+  let tip = findOriginTip(path, errorReportLevel, isLocalOnly)
 
-  let (outp, status) = exec(GitLog, path, ["--",$file], Warning)
+  let cmd = if isLocalOnly: GitLogLocal else: GitLog
+  let (outp, status) = exec(cmd, path, ["--", $file], Warning)
   if status == RES_OK:
     result = parseTaggedVersions(outp, requireVersions = false)
     if result.len > 0 and tip.isTip:
@@ -190,9 +193,9 @@ proc shortToCommit*(path: Path, short: CommitHash): CommitHash =
     if vtags.len() == 1:
       result = vtags[0].c
 
-proc expandSpecial*(path: Path, vtag: VersionTag, errorReportLevel: MsgKind = Warning): VersionTag =
+proc expandSpecial*(path: Path, vtag: VersionTag, errorReportLevel: MsgKind = Warning, isLocalOnly = false): VersionTag =
   if vtag.version.isHead():
-    return gitFindOriginTip(path, errorReportLevel)
+    return findOriginTip(path, errorReportLevel, isLocalOnly)
 
   let (cc, status) = exec(GitRevParse, path, [vtag.version.string.substr(1)], errorReportLevel)
 
@@ -372,6 +375,14 @@ proc updateRepo*(path: Path) =
   else:
     info(path, "successfully updated repo")
 
+proc getRemoteUrl*(path: Path): string =
+  let (cc, status) = exec(GitRemoteUrl, path, [])
+  if status != RES_OK:
+    error(path, "could not get remote url: " & $status & " " & $path)
+    return ""
+  else:
+    return cc.strip()
+
 proc isOutdated*(path: Path): bool =
   ## determine if the given git repo `f` is updateable
   ##
@@ -379,40 +390,23 @@ proc isOutdated*(path: Path): bool =
   info path, "checking is package is up to date..."
 
   # TODO: does --update-shallow fetch tags on a shallow repo?
-  let extraArgs =
-    if DumbProxy in context().flags: ""
-    else: "--update-shallow"
-  let (outp, status) = exec(GitFetch, path, [extraArgs, "--tags"])
+  let localTags = collectTaggedVersions(path, isLocalOnly = true).toHashSet()
 
-  if status == RES_OK:
-    let (cc, status) = exec(GitLastTaggedRef, path, [])
-    let latestVersion = strutils.strip(cc)
-    if status == RES_OK and latestVersion.len > 0:
-      # see if we're past that commit:
-      let (cc, status) = exec(GitCurrentCommit, path, [])
-      if status == RES_OK:
-        let currentCommit = strutils.strip(cc)
-        if currentCommit != latestVersion:
-          # checkout the later commit:
-          # git merge-base --is-ancestor <commit> <commit>
-          let (cc, status) = exec(GitMergeBase, path, [currentCommit, latestVersion])
-          let mergeBase = strutils.strip(cc)
-          #if mergeBase != latestVersion:
-          #  echo f, " I'm at ", currentCommit, " release is at ", latestVersion, " merge base is ", mergeBase
-          if status == RES_OK and mergeBase == currentCommit:
-            let v = extractVersion gitDescribeRefTag(path, latestVersion)
-            if v.len > 0:
-              info path, "new version available: " & v
-              result = true
-  else:
-    warn path, "`git fetch` failed: " & outp
+  let url = getRemoteUrl(path)
+  if url.len == 0:
+    return false
+  let (remoteTagsList, lsStatus) = listRemoteTags(path, url)
+  let remoteTags = remoteTagsList.toHashSet()
 
-proc getRemoteUrl*(path: Path): string =
-  let (cc, status) = exec(GitRemoteUrl, path, [])
-  if status != RES_OK:
-    return ""
-  else:
-    return cc.strip()
+  if not lsStatus:
+    warn path, "git list remote tags failed, skipping"
+    return false
+
+  if remoteTags > localTags:
+    warn path, "got new versions:", $(remoteTags - localTags)
+    return true
+
+  return false
 
 proc updateDir*(path: Path, filter: string) =
   let (remote, _) = osproc.execCmdEx("git remote -v")

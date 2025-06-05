@@ -1,4 +1,4 @@
-import std/[json, jsonutils, paths, strutils, tables, sequtils]
+import std/[json, jsonutils, paths, strutils, tables, sequtils, sets]
 import sattypes, deptypes, depgraphtypes, nimblecontext, pkgurls, versions
 
 export json, jsonutils
@@ -40,6 +40,19 @@ proc toJsonHook*(v: (PkgUrl, VersionInterval), opt: ToJsonOptions): JsonNode =
 proc fromJsonHook*(a: var (PkgUrl, VersionInterval); b: JsonNode; opt = Joptions()) =
   a[0].fromJson(b["url"])
   a[1].fromJson(b["version"])
+
+proc toJsonHook*(v: Table[PkgUrl, HashSet[string]], opt: ToJsonOptions): JsonNode =
+  result = newJObject()
+  for k, v in v:
+    result[$(k)] = toJson(v, opt)
+
+proc fromJsonHook*(a: var Table[PkgUrl, HashSet[string]]; b: JsonNode; opt = Joptions()) =
+  for k, v in b:
+    var url: PkgUrl
+    url.fromJson(toJson(k))
+    var flags: HashSet[string]
+    flags.fromJson(toJson(v))
+    a[url] = flags
 
 proc toJsonHook*(t: OrderedTable[PackageVersion, NimbleRelease], opt: ToJsonOptions): JsonNode =
   result = newJArray()
@@ -115,7 +128,6 @@ proc loadJson*(nc: var NimbleContext, json: JsonNode): DepGraph =
 
   for url, pkg in pkgs:
     let url2 = nc.createUrl($pkg.url)
-    echo "restoring url: ", $pkg.url, " to ", $url2.projectName()
     pkg.url = url2
     result.pkgs[url2] = pkg
   

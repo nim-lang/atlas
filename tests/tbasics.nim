@@ -396,6 +396,24 @@ suite "versions":
     check lastPathComponent("meh/longer/here/") == "here"
     check lastPathComponent("meh/longer/here") == "here"
 
+  test "extractRequirementName":
+    # Test basic package names
+    check extractRequirementName("mypackage") == ("mypackage", @[], 9)
+    check extractRequirementName("mypackage >= 1.0") == ("mypackage", @[], 9)
+    check extractRequirementName("mypackage <= 2.0") == ("mypackage", @[], 9)
+    check extractRequirementName("mypackage == 1.5") == ("mypackage", @[], 9)
+    check extractRequirementName("mypackage > 1.0") == ("mypackage", @[], 9)
+    check extractRequirementName("mypackage < 2.0") == ("mypackage", @[], 9)
+
+    check extractRequirementName("mypackage[feature1]") == ("mypackage", @["feature1"], 19)
+
+    check extractRequirementName("mypackage[feature1, feature2]") == ("mypackage", @["feature1", "feature2"], 29)
+    check extractRequirementName("mypackage[feature1, feature2] >= 1.0") == ("mypackage", @["feature1", "feature2"], 29)
+    check extractRequirementName("mypackage[feature1, feature2] <= 2.0") == ("mypackage", @["feature1", "feature2"], 29)
+    check extractRequirementName("mypackage[feature1, feature2] == 1.5") == ("mypackage", @["feature1", "feature2"], 29)
+    check extractRequirementName("mypackage[feature1, feature2] > 1.0") == ("mypackage", @["feature1", "feature2"], 29)
+    check extractRequirementName("mypackage[feature1, feature2] < 2.0") == ("mypackage", @["feature1", "feature2"], 29)
+
   test "onlyCommits with parseTaggedVersions":
     let tags = parseTaggedVersions(onlyCommits, false)
     echo "TAGS: ", $tags

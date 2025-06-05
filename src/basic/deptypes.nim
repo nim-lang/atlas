@@ -1,4 +1,4 @@
-import std/[paths, tables, json, jsonutils, hashes]
+import std/[paths, tables, json, jsonutils, hashes, sets]
 import sattypes, pkgurls, versions, context
 
 export tables
@@ -7,6 +7,8 @@ type
 
   PackageState* = enum
     NotInitialized
+    LazyDeferred
+    DoLoad
     Found
     Processed
     Error
@@ -24,7 +26,7 @@ type
     nimbleFile*: Path
     active*: bool
     isAtlasProject*: bool # true if the package is an atlas project
-    isRoot*: bool
+    isRoot*, isLocalOnly*: bool
     errors*: seq[string]
     originHead*: CommitHash
 
@@ -33,10 +35,12 @@ type
     nimVersion*: Version
     status*: ReleaseStatus
     requirements*: seq[(PkgUrl, VersionInterval)]
+    reqsByFeatures*: Table[PkgUrl, HashSet[string]]
     hasInstallHooks*: bool
     srcDir*: Path
     err*: string
-    rid*: VarId = NoVar
+    features*: Table[string, seq[(PkgUrl, VersionInterval)]]
+    featureVars*: Table[string, VarId]
 
   PackageVersion* = ref object
     vtag*: VersionTag

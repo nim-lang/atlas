@@ -1,14 +1,14 @@
 import std / [sets, tables, sequtils, paths, files, os, strutils, json, jsonutils, algorithm]
 
-import basic/[deptypes, versions, depgraphtypes, osutils, context, gitops, reporters, nimblecontext, pkgurls, deptypesjson]
+import basic/[deptypes, versions, depgraphtypes, osutils, context, gitops, reporters, nimblecontext, pkgurls, deptypesjson, sattypes]
 import dependencies, runners 
 
 export depgraphtypes, deptypesjson
 
 when defined(nimAtlasBootstrap):
-  import ../dist/sat/src/sat/[sat, satvars]
+  import ../dist/sat/src/sat/[sat]
 else:
-  import sat/[sat, satvars]
+  import sat/[sat]
 
 export sat
 
@@ -28,7 +28,7 @@ type
     pkg*: Package
     version*: PackageVersion
     release*: NimbleRelease
-    # index*: int
+    feature*: string
 
   Form* = object
     formula*: Formular
@@ -39,6 +39,153 @@ template withOpenBr(b, op, blk) =
   b.openOpr(op)
   `blk`
   b.closeOpr()
+
+proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
+  var anyReleaseSatisfied = false
+
+  proc checkDeps(graph: var DepGraph, ver: PackageVersion, reqs: seq[(PkgUrl, VersionInterval)]): bool =
+    var allDepsCompatible = true
+
+    # First check if all dependencies can be satisfied
+    for dep, query in items(reqs):
+      if dep notin graph.pkgs:
+        debug pkg.url.projectName, "checking dependency for ", $ver, "not found:", $dep
+        allDepsCompatible = false
+        continue
+      debug pkg.url.projectName, "checking dependency for ", $ver, ":", $dep.projectName, "query:", $query
+      let depNode = graph.pkgs[dep]
+
+      if depNode.state == LazyDeferred:
+        allDepsCompatible = true
+        warn pkg.url.projectName, "dependency:", $dep.projectName, "is lazily deferred and not loaded"
+        continue
+
+      var hasCompatible = false
+      for depVer, relVer in depNode.validVersions():
+        trace pkg.url.projectName, "checking dependnecy version:", $depVer, "query:", $query, "matches:", $query.matches(depVer)
+        if query.matches(depVer):
+          hasCompatible = true
+          trace pkg.url.projectName, "version matched requirements for the dependency version:", $depVer
+          break
+
+      if not hasCompatible:
+        allDepsCompatible = false
+        warn pkg.url.projectName, "no versions matched requirements for the dependency:", $dep.projectName
+        break
+      else:
+        debug pkg.url.projectName, "a compatible version matched requirements for the dependency version:", $depNode.url.projectName
+
+    return allDepsCompatible
+
+  for ver, rel in validVersions(pkg):
+    let allDepsCompatible = checkDeps(graph, ver, rel.requirements)
+
+    # If any dependency can't be satisfied, make this version unsatisfiable
+    if not allDepsCompatible:
+      warn pkg.url.projectName, "all requirements needed for nimble release:", $ver, "were not able to be satisfied:", $rel.requirements.mapIt(it[0].projectName & " " & $it[1]).join("; ")
+      b.addNegated(ver.vid)
+      continue
+
+    anyReleaseSatisfied = true
+
+    # Add implications for each dependency
+    for dep, query in items(rel.requirements):
+      if dep notin graph.pkgs:
+        info pkg.url.projectName, "requirement depdendency not found:", $dep.projectName, "query:", $query
+        continue
+      let depNode = graph.pkgs[dep]
+        
+      var flags: seq[string]
+      if dep in rel.reqsByFeatures:
+        flags = rel.reqsByFeatures[dep].toSeq()
+      
+      debug pkg.url.projectName, "version constraints for requirement depdendency", "dep:", $dep, "flags:", flags.mapIt($it).join(", "), "reqsByFeatures:", rel.reqsByFeatures.values().toSeq().mapIt($it).join(", ")
+
+      var compatibleVersions: seq[VarId]
+      var featureVersions: Table[VarId, seq[VarId]]
+      for depVer, nimbleRelease in depNode.validVersions():
+        trace pkg.url.projectName, "checking dependency:", depNode.url.projectName, "version:", $depVer, "query:", $query, "matches:", $query.matches(depVer)
+        if query.matches(depVer):
+          compatibleVersions.add(depVer.vid)
+        for feature in flags:
+          if feature in nimbleRelease.features:
+            let featureVarId = nimbleRelease.featureVars[feature]
+            featureVersions.mgetOrPut(depVer.vid, @[]).add(featureVarId)
+
+      # Add implication: if this version is selected, one of its compatible deps must be selected
+      withOpenBr(b, OrForm):
+        b.addNegated(ver.vid)  # not this version
+        withOpenBr(b, OrForm):
+          for compatVer in compatibleVersions:
+            if featureVersions.hasKey(compatVer):
+              withOpenBr(b, AndForm):
+                debug pkg.url.projectName, "adding compatVer requirement:", $compatVer, "featureVersions:", $featureVersions[compatVer].mapIt($it).join(", ")
+                b.add(compatVer)
+                for featureVer in featureVersions[compatVer]:
+                  b.add(featureVer)
+            else:
+              b.add(compatVer)
+
+    # Add implications for each feature requirement
+    for feature, reqs in rel.features:
+      let featureVarId = rel.featureVars[feature]
+      let allFeatDepsCompatible = checkDeps(graph, ver, reqs)
+
+      debug pkg.url.projectName, "checking feature dep:", $feature, "query:", $reqs, "compat versions:", $allFeatDepsCompatible
+      if not allFeatDepsCompatible:
+        warn pkg.url.projectName, "all requirements needed for feature:", feature, "were not able to be satisfied:", $reqs.mapIt(it[0].projectName & " " & $it[1]).join("; ")
+        b.addNegated(featureVarId)
+        break
+
+      for dep, query in items(reqs):
+        if dep notin graph.pkgs:
+          info pkg.url.projectName, "feature depdendency not found:", $dep.projectName, "query:", $query
+          continue
+        let depNode = graph.pkgs[dep]
+
+        var compatibleVersions: seq[VarId] = @[]
+        for depVer, relVer in depNode.validVersions():
+          if query.matches(depVer):
+            compatibleVersions.add(depVer.vid)
+          elif depVer == toVersionTag("*@head").toPkgVer:
+            compatibleVersions.add(depVer.vid)
+        debug pkg.url.projectName, "checking feature req:", $dep.projectName, "query:", $query, "compat versions:", $compatibleVersions.mapIt($it).join(", "), "from versions:", $depNode.validVersions().toSeq().mapIt(it[0].version()).join(", ")
+
+        withOpenBr(b, OrForm):
+          b.addNegated(featureVarId) # not this feature
+          withOpenBr(b, OrForm):
+            for compatVer in compatibleVersions:
+              b.add(compatVer)
+          debug pkg.url.projectName, "added compatVer feature dep variables:", $compatibleVersions.mapIt($it).join(", ")
+        
+        # Add implictations for globally set features
+        let pkgFeature = "feature" & "." & pkg.url.projectName & "." & feature
+        if (pkg.isRoot and feature in context().features) or (pkgFeature in context().features):
+          debug pkg.url.projectName, "checking global feature:", $feature, "in version:", $ver, "pkgFeature:", $pkgFeature, "context().features:", $context().features.toSeq().mapIt($it).join(", ")
+          var featureVersions: Table[VarId, seq[VarId]]
+          for depVer, nimbleRelease in depNode.validVersions():
+            trace pkg.url.projectName, "checking global feature dependency:", depNode.url.projectName, "version:", $depVer
+            if feature in nimbleRelease.features:
+              let featureVarId = nimbleRelease.featureVars[feature]
+              featureVersions.mgetOrPut(depVer.vid, @[]).add(featureVarId)
+
+          # Add implication: if this version is selected, one of its compatible deps must be selected
+          if true:
+            withOpenBr(b, OrForm):
+              b.addNegated(ver.vid)  # not this version
+              withOpenBr(b, OrForm):
+                for compatVer in compatibleVersions:
+                  if featureVersions.hasKey(compatVer):
+                    withOpenBr(b, AndForm):
+                      debug pkg.url.projectName, "adding compatVer requirement:", $compatVer, "featureVersions:", $featureVersions[compatVer].mapIt($it).join(", ")
+                      b.add(compatVer)
+                      for featureVer in featureVersions[compatVer]:
+                        b.add(featureVer)
+                  else:
+                    b.add(compatVer)
+
+  if not anyReleaseSatisfied:
+    warn pkg.url.projectName, "no versions satisfied for this package:", $pkg.url
 
 proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
   result = Form()
@@ -59,13 +206,21 @@ proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
       of SemVer, MaxVer: p.versions.sort(sortVersionsAsc)
 
       # Assign a unique SAT variable to each version of the package
-      var i = 0
       for ver, rel in p.validVersions():
         ver.vid = VarId(result.idgen)
         # Map the SAT variable to package information for result interpretation
-        result.mapping[ver.vid] = SatVarInfo( pkg: p, version: ver, release: rel)
+        result.mapping[ver.vid] = SatVarInfo(pkg: p, version: ver, release: rel)
         inc result.idgen
-        inc i
+      
+        # Add feature VarIds - these are not version variables, but are used to track feature selection
+        for feature in rel.features.keys():
+          if feature notin rel.featureVars:
+            let featureVarId = VarId(result.idgen)
+            rel.featureVars[feature] = featureVarId
+            # Map the SAT variable to package information for result interpretation
+            result.mapping[featureVarId] = SatVarInfo(pkg: p, version: ver, release: rel, feature: feature)
+            debug p.url.projectName, "adding feature var:", feature, "id:", $(featureVarId), " result: ", $result.mapping[featureVarId]
+            inc result.idgen
 
       doAssert p.state != NotInitialized, "package not initialized: " & $p.toJson(ToJsonOptions(enumMode: joptEnumString))
 
@@ -79,164 +234,18 @@ proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
         # If it's a root package, enforce that exactly one version must be selected
         withOpenBr(b, ExactlyOneOfForm):
           for ver, rel in p.validVersions():
+            debug p.url.projectName, "adding root package version:", $ver, "vid:", $ver.vid
             b.add ver.vid
       else:
         # For non-root packages, they can either have one version selected or none at all
         withOpenBr(b, ZeroOrOneOfForm):
           for ver, rel in p.validVersions():
             b.add ver.vid
-
+      
     # This simpler deps loop was copied from Nimble after it was first ported from Atlas :)
     # It appears to acheive the same results, but it's a lot simpler
-    var anyReleaseSatisfied = false
     for pkg in graph.pkgs.mvalues():
-      for ver, rel in validVersions(pkg):
-        var allDepsCompatible = true
-
-        # First check if all dependencies can be satisfied
-        for dep, query in items(rel.requirements):
-          if dep notin graph.pkgs:
-            debug pkg.url.projectName, "checking dependency for ", $ver, "not found:", $dep.projectName, "query:", $query
-            allDepsCompatible = false
-            continue
-          debug pkg.url.projectName, "checking dependency for ", $ver, ":", $dep.projectName, "query:", $query
-          let depNode = graph.pkgs[dep]
-
-          var hasCompatible = false
-          for depVer, relVer in depNode.validVersions():
-            trace pkg.url.projectName, "checking dependnecy version:", $depVer, "query:", $query, "matches:", $query.matches(depVer)
-            if query.matches(depVer):
-              hasCompatible = true
-              trace pkg.url.projectName, "version matched requirements for the dependency version:", $depVer
-              break
-
-          if not hasCompatible:
-            allDepsCompatible = false
-            warn pkg.url.projectName, "no versions matched requirements for the dependency:", $dep.projectName
-            break
-
-        # If any dependency can't be satisfied, make this version unsatisfiable
-        if not allDepsCompatible:
-          warn pkg.url.projectName, "all requirements needed for nimble release:", $ver, "were not able to be satisfied:", $rel.requirements.mapIt(it[0].projectName & " " & $it[1]).join("; ")
-          b.addNegated(ver.vid)
-          continue
-
-        anyReleaseSatisfied = true
-
-        # Add implications for each dependency
-        # for dep, q in items graph.reqs[ver.req].deps:
-        for dep, query in items(rel.requirements):
-          if dep notin graph.pkgs:
-            info pkg.url.projectName, "depdendency requirements not found:", $dep.projectName, "query:", $query
-            continue
-          let depNode = graph.pkgs[dep]
-
-          var compatibleVersions: seq[VarId] = @[]
-          for depVer, relVer in depNode.validVersions():
-            if query.matches(depVer):
-              compatibleVersions.add(depVer.vid)
-
-          # trace pkg.url.projectName, "adding implication for ", $ver, "compatible versions: ", $compatibleVersions
-          # Add implication: if this version is selected, one of its compatible deps must be selected
-          withOpenBr(b, OrForm):
-            b.addNegated(ver.vid)  # not A
-            withOpenBr(b, OrForm):
-              for compatVer in compatibleVersions:
-                b.add(compatVer)
-
-      if not anyReleaseSatisfied:
-        error pkg.url.projectName, "no versions satisfied for this package:", $pkg.url
-        # break
-
-    when false:
-      # Note this original ran, but seems to have problems now with minver...
-      #
-      # Original Atlas version ported to the new Package graph layout
-      # However the Nimble version appears to accomplish the same with less work
-      # Going to keep this here however, could be things we'll need to re-add later
-      # like handline the explicit commits, which were broken already anyways...
-      # 
-      # This loop sets up the dependency relationships in the SAT formula
-      # It creates constraints for each package's requirements
-      #
-      for pkg in graph.pkgs.mvalues():
-        for ver, rel in validVersions(pkg):
-          # Skip if this requirement has already been processed
-          if isValid(rel.rid): continue
-          # Assign a unique SAT variable to this requirement set
-          let eqVar = VarId(result.idgen)
-          rel.rid = eqVar
-          inc result.idgen
-          # Skip empty requirement sets
-          if rel.requirements.len == 0: continue
-          let beforeEq = b.getPatchPos()
-          # Create a constraint: if this requirement is true, then all its dependencies must be satisfied
-          b.openOpr(OrForm)
-          b.addNegated eqVar
-          if rel.requirements.len > 1:
-            b.openOpr(AndForm)
-          var elementCount = 0
-          # For each dependency in the requirement, create version matching constraints
-          for dep, query in items rel.requirements:
-            let queryVer = if algo == SemVer: toSemVer(query) else: query
-            let commit = extractSpecificCommit(queryVer)
-            let availVer = graph.pkgs[dep]
-            if availVer.versions.len == 0:
-              continue
-            let beforeExactlyOneOf = b.getPatchPos()
-            b.openOpr(ExactlyOneOfForm)
-            inc elementCount
-            var matchCount = 0
-            var availVers = availVer.versions.keys().toSeq()
-            notice pkg.url.projectName, "version keys:", $dep.projectName, "availVers:", $availVers
-            if not commit.isEmpty():
-              info pkg.url.projectName, "adding requirements selections by specific commit:", $dep.projectName, "commit:", $commit
-              # Match by specific commit if specified
-              for depVer in availVers:
-                if queryVer.matches(depVer.version()) or commit == depVer.commit():
-                  b.add depVer.vid
-                  inc matchCount
-                  break
-            elif algo == MinVer:
-              # For MinVer algorithm, try to find the minimum version that satisfies the requirement
-              info pkg.url.projectName, "adding requirements selections by MinVer:", $dep.projectName
-              for depVer in availVers:
-                if queryVer.matches(depVer.version()):
-                  b.add depVer.vid
-                  inc matchCount
-            else:
-              # For other algorithms (like SemVer), try to find the maximum version that satisfies
-              info pkg.url.projectName, "adding requirements selections by SemVer:", $dep.projectName, "vers:", $availVers
-              availVers.reverse()
-              for depVer in availVers:
-                if queryVer.matches(depVer.version()):
-                  info pkg.url.projectName, "matched requirement selections by SemVer:", $queryVer, "depVer:", $depVer
-                  b.add depVer.vid
-                  inc matchCount
-            b.closeOpr() # ExactlyOneOfForm
-            # If no matching version was found, add a false literal to make the formula unsatisfiable
-            if matchCount == 0:
-              b.resetToPatchPos beforeExactlyOneOf
-              b.add falseLit()
-          if rel.requirements.len > 1:
-            b.closeOpr() # AndForm
-          b.closeOpr() # EqForm
-          # If no dependencies were processed, reset the formula position
-          if elementCount == 0:
-            b.resetToPatchPos beforeEq
-
-      # This final loop links package versions to their requirements
-      # It enforces that if a version is selected, its requirements must be satisfied
-      for pkg in mvalues(graph.pkgs):
-        for ver, rel in validVersions(pkg):
-          if rel.requirements.len > 0:
-            debug pkg.url.projectName, "adding package requirements restraint:", $ver, "vid: ", $ver.vid.int, "rel:", $rel.rid.int
-            b.openOpr(OrForm)
-            b.addNegated ver.vid
-            b.add rel.rid
-            b.closeOpr() # OrForm
-          else:
-            debug pkg.url.projectName, "not adding pacakge requirements restraint:", $ver
+      b.addVersionConstraints(graph, pkg)
 
   result.formula = toForm(b)
 
@@ -250,7 +259,7 @@ proc debugFormular*(graph: var DepGraph; form: Form; solution: Solution) =
   keys.sort(proc (a, b: VarId): int = cmp(a.int, b.int))
   for key in keys:
     let value = form.mapping[key]
-    echo "\tv", key.int, ": ", value
+    echo "\tv", key.int, ": ", value.pkg.url.projectName, ", ", $value.version, ", f: ", value.feature
   let maxVar = maxVariable(form.formula)
   echo "solutions:"
   for varIdx in 0 ..< maxVar:
@@ -302,6 +311,7 @@ proc printVersionSelections(graph: DepGraph, solution: Solution, form: Form) =
   for pkg in values(graph.pkgs):
     if not pkg.isRoot and not pkg.active:
       inactives.add pkg.url.projectName
+
   if inactives.len > 0:
     notice "atlas:resolved", "inactive packages:", inactives.join(", ")
 
@@ -345,7 +355,7 @@ proc printVersionSelections(graph: DepGraph, solution: Solution, form: Form) =
     notice "atlas:resolved", str
   notice "atlas:resolved", "end of selection"
 
-proc solve*(graph: var DepGraph; form: Form) =
+proc solve*(graph: var DepGraph; form: Form, rerun: var bool) =
   for pkg in graph.pkgs.mvalues():
     pkg.activeVersion = nil
     pkg.active = false
@@ -366,7 +376,7 @@ proc solve*(graph: var DepGraph; form: Form) =
       let vid = VarId varIdx
       if vid in form.mapping:
         let mapInfo = form.mapping[vid]
-        trace mapInfo.pkg.projectName, "v" & $varIdx & " sat var: " & $solution.getVar(vid).toPretty()
+        debug mapInfo.pkg.projectName, "v" & $varIdx & " sat var: " & $solution.getVar(vid).toPretty()
 
       if solution.isTrue(VarId(varIdx)) and form.mapping.hasKey(VarId varIdx):
         let mapInfo = form.mapping[VarId varIdx]
@@ -375,9 +385,27 @@ proc solve*(graph: var DepGraph; form: Form) =
         assert not pkg.isNil, "too bad: " & $pkg.url
         assert not mapInfo.release.isNil, "too bad: " & $pkg.url
         pkg.activeVersion = mapInfo.version
-        debug pkg.url.projectName, "package satisfiable"
+        if mapInfo.feature.len > 0:
+          debug pkg.url.projectName, "package satisfiable", "feature: ", mapInfo.feature
+        else:
+          debug pkg.url.projectName, "package satisfiable"
 
     checkDuplicateModules(graph)
+
+    var lazyDefersNeeded: seq[Package]
+    for varId, mapping in form.mapping:
+      if mapping.pkg.state == LazyDeferred and solution.isTrue(varId):
+        lazyDefersNeeded.add mapping.pkg
+        debug mapping.pkg.url.projectName, "lazy deferred package found in SAT solution:", $(varId)
+
+    if lazyDefersNeeded.len > 0:
+      notice "atlas:resolved", "rerunning SAT; found lazy deferred packages:", lazyDefersNeeded.mapIt(it.url.projectName).join(", ")
+      for pkg in lazyDefersNeeded:
+        pkg.state = DoLoad
+        pkg.versions.clear()
+
+      rerun = true
+      return
 
     if ListVersions in context().flags and ListVersionsOff notin context().flags:
       printVersionSelections(graph, solution, form)
@@ -399,16 +427,30 @@ proc solve*(graph: var DepGraph; form: Form) =
         for (ver, rel) in validVersions(pkg):
           if solution.isTrue(ver.vid):
             error pkg.url.projectName, string(ver.version()) & " required"
+
   if DumpGraphs in context().flags:
     info "atlas:graph", "dumping graph after solving"
     dumpJson(graph, "graph-solved.json")
+
+proc solve*(graph: var DepGraph; form: Form) =
+  var rerun = false
+  solve(graph, form, rerun)
 
 proc loadWorkspace*(path: Path, nc: var NimbleContext, mode: TraversalMode, onClone: PackageAction, doSolve: bool): DepGraph =
   result = path.expandGraph(nc, mode, onClone)
 
   if doSolve:
     let form = result.toFormular(context().defaultAlgo)
-    solve(result, form)
+    var rerun = false
+    solve(result, form, rerun)
+
+    if rerun:
+      for pkg in result.pkgs.values():
+        for ver, rel in pkg.validVersions():
+          ver.vid = NoVar
+          rel.featureVars.clear()
+
+      result = loadWorkspace(path, nc, mode, onClone, doSolve)
 
 
 proc runBuildSteps*(graph: DepGraph) =

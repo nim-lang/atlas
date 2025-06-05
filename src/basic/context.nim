@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [os, uri, paths, files, tables]
+import std / [os, uri, paths, files, tables, sets]
 import versions, parse_requires, compiledpatterns, reporters
 
 export reporters
@@ -65,6 +65,7 @@ type
     overridesFile*: Path
     pluginsFile*: Path
     proxy*: Uri
+    features*: HashSet[string]
 
 var atlasContext = AtlasContext()
 
