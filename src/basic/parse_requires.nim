@@ -48,8 +48,6 @@ proc evalBasicDefines(sym: string): Option[bool] =
     when defined(netbsd): result = some(true)
   of "solaris":
     when defined(solaris): result = some(true)
-  of "posix":
-    when defined(posix): result = some(true)
   of "amd64":
     when defined(amd64): result = some(true)
   of "x86_64":
