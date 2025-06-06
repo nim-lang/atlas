@@ -184,7 +184,7 @@ jobs:
 
       - name: Install graffiti
         run: |
-          nimble install -y https://github.com/beef331/graffiti.git
+          nimble install -y https://github.com/beef331/graffiti.git@\#d5a16033b84d223ec65da2a68f88607ca9ab61e9
 
       - name: Run graffiti
         run: |
