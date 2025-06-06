@@ -153,3 +153,39 @@ jobs:
         run: |
           cd atlas
           nimble install -y
+
+  tag-version-bumps:
+    name: 'Run graffiti on atlas.nimble changes'
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/master' && (contains(github.event.head_commit.modified, 'atlas.nimble') || contains(github.event.head_commit.added, 'atlas.nimble'))
+    env:
+      NIM_BRANCH: devel
+      NIM_ARCH: amd64
+    steps:
+      - name: set `core.autocrlf` to false
+        run: |
+          git config --global core.autocrlf false
+          git config --global init.defaultBranch master
+          git config --global user.email "atlasbot@nimlang.com"
+          git config --global user.name "atlasbot"
+
+      - name: Checkout atlas
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Setup Nim
+        uses: alaviss/setup-nim@0.1.1
+        with:
+          path: 'nim'
+          version: ${{ env.NIM_BRANCH }}
+          architecture: ${{ env.NIM_ARCH }}
+
+      - name: Install graffiti
+        run: |
+          nimble install -y https://github.com/beef331/graffiti.git@\#d5a16033b84d223ec65da2a68f88607ca9ab61e9
+
+      - name: Run graffiti
+        run: |
+          graffiti atlas.nimble
