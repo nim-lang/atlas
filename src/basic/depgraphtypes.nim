@@ -7,11 +7,6 @@ type
   VisitState = enum
     NotVisited, InProgress, Visited
 
-when not compiles(newSeq[int]().addUnique(1)):
-  proc addUnique*[T](s: var seq[T]; item: T) =
-    if item notin s:
-      s.add(item)
-
 proc toposorted*(graph: DepGraph): seq[Package] =
   ## Returns a sequence of packages in topological order
   ## Packages that are depended upon come before packages that depend on them

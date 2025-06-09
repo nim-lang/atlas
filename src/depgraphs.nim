@@ -12,6 +12,11 @@ else:
 
 export sat
 
+when not compiles(newSeq[int]().addUnique(1)):
+  proc addUnique*[T](s: var seq[T]; item: T) =
+    if item notin s:
+      s.add(item)
+
 iterator directDependencies*(graph: DepGraph; pkg: Package): lent Package =
   if pkg.activeNimbleRelease != nil:
     for (durl, _) in pkg.activeNimbleRelease.requirements:
