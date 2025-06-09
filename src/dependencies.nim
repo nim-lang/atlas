@@ -72,7 +72,7 @@ proc processNimbleRelease(
         # debug pkg.url.projectName, "INTERVAL: ", $interval, "isSpecial:", $interval.isSpecial, "explicit:", $interval.extractSpecificCommit()
         if interval.isSpecial:
           let commit = interval.extractSpecificCommit()
-          nc.explicitVersions.mgetOrPut(pkgUrl).incl(VersionTag(v: Version($(interval)), c: commit))
+          nc.explicitVersions.mgetOrPut(pkgUrl, initHashSet[VersionTag]()).incl(VersionTag(v: Version($(interval)), c: commit))
 
         if pkgUrl notin nc.packageToDependency:
           debug pkg.url.projectName, "Found new pkg:", pkgUrl.projectName, "url:", $pkgUrl.url, "projectName:", $pkgUrl.projectName
@@ -88,7 +88,7 @@ proc processNimbleRelease(
         for pkgUrl, interval in items(rq):
           if interval.isSpecial:
             let commit = interval.extractSpecificCommit()
-            nc.explicitVersions.mgetOrPut(pkgUrl).incl(VersionTag(v: Version($(interval)), c: commit))
+            nc.explicitVersions.mgetOrPut(pkgUrl, initHashSet[VersionTag]()).incl(VersionTag(v: Version($(interval)), c: commit))
           if pkgUrl notin nc.packageToDependency:
             let state = if feature notin context().features: LazyDeferred else: NotInitialized
             debug pkg.url.projectName, "Found new feature pkg:", pkgUrl.projectName, "url:", $pkgUrl.url, "projectName:", $pkgUrl.projectName, "state:", $state
