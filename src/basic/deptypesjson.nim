@@ -1,5 +1,5 @@
 import std/[json, jsonutils, paths, strutils, tables, sequtils, sets]
-import sattypes, deptypes, depgraphtypes, nimblecontext, pkgurls, versions
+import sattypes, deptypes, depgraphtypes, nimblecontext, pkgurls, versions, reporters
 
 export json, jsonutils
 

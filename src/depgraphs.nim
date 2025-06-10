@@ -12,6 +12,11 @@ else:
 
 export sat
 
+when not compiles(newSeq[int]().addUnique(1)):
+  proc addUnique*[T](s: var seq[T]; item: T) =
+    if item notin s:
+      s.add(item)
+
 iterator directDependencies*(graph: DepGraph; pkg: Package): lent Package =
   if pkg.activeNimbleRelease != nil:
     for (durl, _) in pkg.activeNimbleRelease.requirements:
@@ -279,7 +284,7 @@ proc checkDuplicateModules(graph: var DepGraph) =
   var moduleNames: Table[string, HashSet[Package]]
   for pkg in values(graph.pkgs):
     if pkg.active:
-      moduleNames.mgetOrPut(pkg.url.shortName()).incl(pkg)
+      moduleNames.mgetOrPut(pkg.url.shortName(), initHashSet[Package]()).incl(pkg)
   moduleNames = moduleNames.pairs().toSeq().filterIt(it[1].len > 1).toTable()
 
   var unhandledDuplicates: seq[string]
