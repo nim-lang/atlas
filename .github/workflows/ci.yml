@@ -37,11 +37,11 @@ jobs:
               os: windows
             builder: windows-latest
 
-    name: '${{ matrix.target.os }}-${{ matrix.target.cpu }}-nim-${{ matrix.target.nim_branch }} (${{ matrix.branch }})'
+    name: '${{ matrix.target.os }}-${{ matrix.target.cpu }}-nim-${{ matrix.nim_branch }} (${{ matrix.branch }})'
     runs-on: ${{ matrix.builder }}
     env:
-      NIM_DIR: nim-${{ matrix.target.nim_branch }}-${{ matrix.target.cpu }}
-      NIM_BRANCH: ${{ matrix.target.nim_branch }}
+      NIM_DIR: nim-${{ matrix.nim_branch }}-${{ matrix.target.cpu }}
+      NIM_BRANCH: ${{ matrix.nim_branch }}
       NIM_ARCH: ${{ matrix.target.cpu }}
     steps:
       - name: set `core.autocrlf` to false
@@ -112,18 +112,18 @@ jobs:
       # - name: Restore Nim from cache
       #   if: >
       #     steps.nim-compiler-cache.outputs.cache-hit != 'true' &&
-      #     matrix.target.nim_branch != 'devel'
+      #     matrix.nim_branch != 'devel'
       #   id: nim-compiler-cache
       #   uses: actions/cache@v2
       #   with:
-      #     path: '${{ github.workspace }}/nim-${{ matrix.target.nim_branch }}-${{ matrix.target.cpu }}'
-      #     key: 'nim-${{ matrix.target.cpu }}-${{ matrix.target.nim_branch }}'
+      #     path: '${{ github.workspace }}/nim-${{ matrix.nim_branch }}-${{ matrix.target.cpu }}'
+      #     key: 'nim-${{ matrix.target.cpu }}-${{ matrix.nim_branch }}'
 
       - name: Setup Nim
         uses: alaviss/setup-nim@0.1.1
         with:
           path: 'nim'
-          version: ${{ matrix.target.nim_branch }}
+          version: ${{ matrix.nim_branch }}
           architecture: ${{ matrix.target.cpu }}
 
       - name: Setup Test Repos
