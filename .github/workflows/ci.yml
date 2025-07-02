@@ -12,22 +12,20 @@ jobs:
       max-parallel: 20
       matrix:
         branch: [master]
+        nim_branch: [version-2-0, version-2-2, devel]
         target:
           - os: linux
             cpu: amd64
-            nim_branch: devel
           # - os: linux
           #   cpu: i386
-          #   nim_branch: devel
           - os: macos
             cpu: amd64
-            nim_branch: devel
+          - os: macos
+            cpu: arm64
           - os: windows
             cpu: amd64
-            nim_branch: devel
           - os: windows
             cpu: i386
-            nim_branch: devel
         include:
           - target:
               os: linux
