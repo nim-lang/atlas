@@ -14,6 +14,8 @@ suite "autoinit":
   withDir "tests/ws_autoinit":
     if fileExists("atlas.config"):
       removeFile("atlas.config")
+    if dirExists("deps"):
+      removeDir("deps")
     test "detects project with nimble file":
       check autoProject(os.getCurrentDir().Path)
       check project() == os.getCurrentDir().Path
