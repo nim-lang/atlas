@@ -278,14 +278,16 @@ proc detectProject(customProject = Path ""): bool =
     if result:
       project(project().absolutePath)
 
-proc autoProject(currentDir: Path): bool =
+proc autoProject*(currentDir: Path): bool =
   ## auto detect the project directory
   ##
   ## this will walk the current directory and all of its parents to find a
-  ## directory that contains a git repository
+  ## directory that contains either a git repository or a Nimble file
   var cwd = currentDir
   while cwd.len > 0:
     if dirExists(cwd / Path ".git"):
+      break
+    if findNimbleFile(cwd, "").len > 0:
       break
     cwd = cwd.parentDir()
   project(cwd)

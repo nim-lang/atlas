@@ -16,6 +16,7 @@ task unitTests, "Runs unit tests":
   exec "nim c -d:debug -r tests/tnimbleparser.nim"
   exec "nim c -d:debug -r tests/testtraverse.nim"
   exec "nim c -d:debug -r tests/testsemverUnit.nim"
+  exec "nim c -d:debug -r tests/testautoinit.nim"
 
 task tester, "Runs integration tests":
   exec "nim c -d:debug -r tests/tester.nim"
