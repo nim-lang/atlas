@@ -82,7 +82,6 @@ proc singleGithubSearch(term: string, fullSearch = false): JsonNode =
 proc githubSearch(seen: var HashSet[string]; terms: seq[string]) =
   for term in terms:
     let gs = singleGithubSearch(term)
-    echo "GITHUB_SEARCH: ", $gs
     for j in items(gs):
       let p = PackageInfo(
         kind: pkPackage,
