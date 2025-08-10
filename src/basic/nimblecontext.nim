@@ -29,25 +29,52 @@ proc findNimbleFile*(dir: Path, projectName: string = ""): seq[Path] =
 
 proc findNimbleFile*(info: Package): seq[Path] =
   doAssert(info.ondisk.string != "", "Package ondisk must be set before findNimbleFile can be called! Package: " & $(info))
-  result = findNimbleFile(info.ondisk, info.projectName() & ".nimble")
+  # Prefer the repository's short name (e.g. 'figuro') and let the helper add '.nimble'.
+  # Using projectName (which may include host/user) leads to mismatches.
+  result = findNimbleFile(info.ondisk, info.url.shortName())
 
 proc cacheNimbleFilesFromGit*(pkg: Package, commit: CommitHash): seq[Path] =
+  proc cachedNimbleBase(p: Path): string =
+    let tail = $p.splitPath().tail
+    let dash = tail.find('-')
+    if dash >= 0 and dash+1 < tail.len: tail.substr(dash+1) else: tail
+
+  proc preferShortNameNimble(paths: seq[Path]; shortName: string): seq[Path] =
+    ## Disambiguate a list of cached nimble files by preferring the entry whose
+    ## base name matches `<shortName>.nimble`. If multiple such entries exist,
+    ## return the first; otherwise return the original list.
+    let want = shortName & ".nimble"
+    var prefer: seq[Path]
+    for p in paths:
+      if cachedNimbleBase(p) == want:
+        prefer.add p
+    if prefer.len == 1:
+      result = prefer
+    elif prefer.len > 1:
+      result = @[prefer[0]]
+    else:
+      result = paths
+
   # First check if we already have cached nimble files for this commit
   for file in walkFiles($nimbleCachesDirectory() / (commit.h & "-*.nimble")):
     let path = Path(file)
-    let nimbleFile = path.splitPath().tail
-    if nimbleFile == Path(commit.h & "-" & pkg.url.projectName & ".nimble"):
+    let base = cachedNimbleBase(path)
+    # If we find the exact matching short-name nimble, return it immediately
+    if base == pkg.url.shortName() & ".nimble":
       return @[path]
     result.add path
   
   if result.len > 0:
-    return result
+    # Disambiguate cached entries if possible
+    return preferShortNameNimble(result, pkg.url.shortName())
 
   let files = listFiles(pkg.ondisk, commit)
   var nimbleFiles: seq[Path]
   for file in files:
     if file.endsWith(".nimble"):
-      if file == pkg.url.projectName & ".nimble":
+      let tail = Path(file).splitPath().tail
+      # Prefer the nimble named after the repo's short name (e.g. 'figuro.nimble')
+      if tail == Path(pkg.url.shortName() & ".nimble"):
         nimbleFiles = @[Path(file)]
         break
       nimbleFiles.add Path(file)
@@ -59,6 +86,11 @@ proc cacheNimbleFilesFromGit*(pkg: Package, commit: CommitHash): seq[Path] =
       let contents = showFile(pkg.ondisk, commit, $nimbleFile)
       writeFile($cachePath, contents)
     result.add cachePath
+  
+  # If multiple nimble files were found, try to disambiguate by preferring the
+  # one that matches the repository short name (e.g. 'figuro.nimble').
+  if result.len > 1:
+    result = preferShortNameNimble(result, pkg.url.shortName())
 
 proc lookup*(nc: NimbleContext, name: string): PkgUrl =
   let lname = unicode.toLower(name)
