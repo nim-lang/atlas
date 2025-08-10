@@ -37,7 +37,9 @@ proc singleGithubSearch(term: string, fullSearch = false): JsonNode =
     echo "SEARCH: ", term
     let filename = "query_github_" & term & ".json"
     let path = findAtlasDir() / "tests" / "test_data" / filename
-    result = json.parseFile(path)
+    let node = json.parseFile(path)
+    # In tests, mimic the real API shape and return the items array.
+    result = node.getOrDefault("items")
   else:
     # For example:
     # https://api.github.com/search/repositories?q=weave+language:nim
@@ -79,7 +81,8 @@ proc singleGithubSearch(term: string, fullSearch = false): JsonNode =
 
 proc githubSearch(seen: var HashSet[string]; terms: seq[string]) =
   for term in terms:
-    for j in items(singleGithubSearch(term)):
+    let gs = singleGithubSearch(term)
+    for j in items(gs):
       let p = PackageInfo(
         kind: pkPackage,
         name: j.getOrDefault("name").getStr,
