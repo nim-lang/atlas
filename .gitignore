@@ -26,3 +26,4 @@ deps.png
 nim.cfg
 nimble.develop
 nimble.paths
+.nimcache/
