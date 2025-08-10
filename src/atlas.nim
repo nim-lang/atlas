@@ -11,8 +11,8 @@
 
 import std / [parseopt, files, dirs, strutils, os, osproc, tables, sets, json, uri, paths]
 import basic / [versions, context, osutils, configutils, reporters,
-                nimbleparser, gitops, pkgurls, nimblecontext, compiledpatterns]
-import depgraphs, nimenv, lockfiles, confighandler, dependencies
+                nimbleparser, gitops, pkgurls, nimblecontext, compiledpatterns, packageinfos]
+import depgraphs, nimenv, lockfiles, confighandler, dependencies, pkgsearch
 
 
 from std/terminal import isatty
@@ -278,14 +278,16 @@ proc detectProject(customProject = Path ""): bool =
     if result:
       project(project().absolutePath)
 
-proc autoProject(currentDir: Path): bool =
+proc autoProject*(currentDir: Path): bool =
   ## auto detect the project directory
   ##
   ## this will walk the current directory and all of its parents to find a
-  ## directory that contains a git repository
+  ## directory that contains either a git repository or a Nimble file
   var cwd = currentDir
   while cwd.len > 0:
     if dirExists(cwd / Path ".git"):
+      break
+    if findNimbleFile(cwd, "").len > 0:
       break
     cwd = cwd.parentDir()
   project(cwd)
@@ -475,7 +477,7 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
     readConfig()
   elif action notin ["init", "tag"]:
     notice "atlas:project", "Using project directory:", $project()
-    if autoinit:
+    if autoinit and action notin ["search", "list"]:
       if autoProject(paths.getCurrentDir()):
         createWorkspace()
       else:
@@ -483,7 +485,7 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
     elif action notin ["search", "list"]:
       fatal "No project found. Run `atlas init` if you want this current directory to be your project."
 
-  if action != "tag":
+  if action notin ["tag", "search", "list"]:
     createDir(depsDir())
 
 proc atlasRun*(params: seq[string]) =
@@ -505,7 +507,7 @@ proc atlasRun*(params: seq[string]) =
 
   parseAtlasOptions(params, action, args)
 
-  if action notin ["init", "tag"]:
+  if action notin ["init", "tag", "search", "list"]:
     doAssert project().string != "" and project().dirExists(), "project was not set"
 
   if action in ["install", "update", "use"]:
@@ -572,6 +574,12 @@ proc atlasRun*(params: seq[string]) =
       fatal "cannot continue"
 
     installDependencies(nc, nimbleFile)
+
+  of "search":
+    var pkgs: seq[PackageInfo] = @[]
+    if dirExists(packagesDirectory()):
+      pkgs = getPackageInfos()
+    pkgsearch.search(pkgs, args)
 
   of "link":
     singleArg()
