@@ -47,6 +47,11 @@ proc compileDefines(): Table[string, bool] =
   result["arm64"] = defined(arm64)
   result["mips"] = defined(mips)
   result["powerpc"] = defined(powerpc)
+  # Common additional switches used in nimble files
+  result["js"] = defined(js)
+  result["emscripten"] = defined(emscripten)
+  result["wasm32"] = defined(wasm32)
+  result["mingw"] = defined(mingw)
 
 var definedSymbols: Table[string, bool] = compileDefines()
 
@@ -181,19 +186,37 @@ proc extract(n: PNode; conf: ConfigRef; currFeature: string; result: var NimbleF
         handleError(conf, n[1].info, "assignments to 'version' must be string literals")
         # result.hasErrors = true
   of nkWhenStmt:
-    # handles arbitrary boolean conditions in when statements
-    if n[0].kind == nkElifBranch:
-      let cond = n[0][0]
-      let body = n[0][1]
-      
-      # Use the new recursive boolean evaluator
-      let condResult = evalBooleanCondition(cond, conf)
-      if condResult.isSome: 
-        if condResult.get:
-          extract(body, conf, currFeature, result)
+    # Handle full when/elif/else chains.
+    var taken = false
+    var hasElse = false
+
+    # Iterate all branches; choose the first with condition evaluating to true.
+    for i in 0 ..< n.len:
+      let br = n[i]
+      case br.kind
+      of nkElifBranch:
+        if br.len >= 2:
+          let cond = br[0]
+          let body = br[1]
+          let condResult = evalBooleanCondition(cond, conf)
+          if condResult.isSome:
+            if condResult.get and not taken:
+              extract(body, conf, currFeature, result)
+              taken = true
+          else:
+            handleError(conf, br.info, "when condition is not boolean or uses undefined symbols")
+            # Unknown condition -> treat as not taken; continue scanning.
+      of nkElse:
+        hasElse = true
+        # Process later only if no prior branch was taken.
       else:
-        handleError(conf, n.info, "when statement condition is not a boolean or uses undefined symbols")
-        # result.hasErrors = true
+        discard
+
+    # If no condition was satisfied and an else branch exists, process it.
+    if not taken and hasElse:
+      let elseBr = n[^1]
+      if elseBr.kind == nkElse and elseBr.len >= 1:
+        extract(elseBr[0], conf, currFeature, result)
   else:
     discard
 
