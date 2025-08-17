@@ -10,10 +10,9 @@
 ## a Nimble dependency and its dependencies recursively.
 
 import std / [parseopt, files, dirs, strutils, os, osproc, tables, sets, json, uri, paths, algorithm]
-import test_runner
 import basic / [versions, context, osutils, configutils, reporters,
                 nimbleparser, gitops, pkgurls, nimblecontext, compiledpatterns, packageinfos]
-import depgraphs, nimenv, lockfiles, confighandler, dependencies, pkgsearch
+import depgraphs, nimenv, lockfiles, confighandler, dependencies, pkgsearch, runtests
 
 
 from std/terminal import isatty
@@ -87,8 +86,6 @@ Options:
                         the default level is warning
   --help                show this help
 """
-
-var gTestParallel: int = 1
 
 proc writeHelp(code = 2) =
   stdout.write(Usage)
@@ -642,7 +639,7 @@ proc atlasRun*(params: seq[string]) =
     listOutdated()
   of "test":
     let runCode = NoExec notin context().flags
-    let code = runTests(project(), postDashParams, runCode, gTestParallel)
+    let code = runTests(project(), postDashParams, runCode, context().parallelCount)
     if code != 0:
       quit(code)
   else:

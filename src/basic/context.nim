@@ -67,7 +67,7 @@ type
     proxy*: Uri
     features*: HashSet[string]
     extraParams*: seq[string]
-    parallelCount*: int
+    parallelCount*: Natural
 
 var atlasContext = AtlasContext()
 
