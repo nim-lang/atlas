@@ -59,7 +59,7 @@ Command:
   rep [atlas.lock]      replay the state of the projects according to the lock file
   changed <atlas.lock>  list any packages that differ from the lock file
   outdated              list the packages that are outdated
-  test                  run tests matching `tests/t*.nim`; pass `<test1.nim> [<test2.nim> ...]` before `--` to run specific ones; supports `--parallel`
+  test [tests...]       run all tests `tests/t*.nim` or specified tests; supports `--parallel`
   env <nimversion>      setup a Nim virtual environment
     --keep              keep the c_code subdirectory
 
