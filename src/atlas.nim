@@ -59,7 +59,7 @@ Command:
   rep [atlas.lock]      replay the state of the projects according to the lock file
   changed <atlas.lock>  list any packages that differ from the lock file
   outdated              list the packages that are outdated
-  test [--parallel:N]   run each test matching `tests/t*.nim`
+  test                  run each test matching `tests/t*.nim`, supports `--parallel`
   env <nimversion>      setup a Nim virtual environment
     --keep              keep the c_code subdirectory
 
@@ -67,6 +67,8 @@ Options:
   --feature=<feature>   enables the given feature, pass multiple for multiple features
                         for project specific use: `feature.<project>.<feature>`
                         (note always be passed when you want to use features)
+  --parallel            enables parallel execution on some tasks using countProcessors()
+  --parallel:<N>        enables parallel execution using `N` processes
   --keepCommits         do not perform any `git checkouts`
   --noexec              do not perform any action that may run arbitrary code
   --autoenv             detect the minimal Nim $version and setup a
