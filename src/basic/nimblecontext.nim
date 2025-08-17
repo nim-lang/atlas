@@ -3,10 +3,10 @@ import context, packageinfos, reporters, pkgurls, gitops, compiledpatterns, dept
 
 type
   NimbleContext* = object
-    packageToDependency*: Table[PkgUrl, Package]
-    packageExtras*: Table[string, PkgUrl]
-    nameToUrl: Table[string, PkgUrl]
-    explicitVersions*: Table[PkgUrl, HashSet[VersionTag]]
+    packageToDependency*: OrderedTable[PkgUrl, Package]
+    packageExtras*: OrderedTable[string, PkgUrl]
+    nameToUrl: OrderedTable[string, PkgUrl]
+    explicitVersions*: OrderedTable[PkgUrl, HashSet[VersionTag]]
     nameOverrides*: Patterns
     urlOverrides*: Patterns
     hasPackageList*: bool
