@@ -49,8 +49,6 @@ Command:
   update <url|pkgname>  update a package and all of its dependencies
   search <keyA> [keyB ...]
                         search for package that contains the given keywords
-  extract <file.nimble> extract the requirements and custom commands from
-                        the given Nimble file
   updateDeps [filter]   update every dependency that has a remote
                         URL that matches `filter` if a filter is given
   tag [major|minor|patch]
@@ -62,7 +60,6 @@ Command:
   changed <atlas.lock>  list any packages that differ from the lock file
   outdated              list the packages that are outdated
   test                  run each test matching `tests/t*.nim`
-  task <taskname>       currently delegates to `nimble <taskname>`
   env <nimversion>      setup a Nim virtual environment
     --keep              keep the c_code subdirectory
 
@@ -201,17 +198,16 @@ proc afterGraphActions(g: DepGraph) =
   if NoExec notin context().flags:
     g.runBuildSteps()
 
-proc runAtlasTests() =
-  ## Run and compile and run each test found for tests/t*.nim
-  
+proc runAtlasTests(extraArgs: seq[string] = @[]) =
+  ## Emulates Nimble's test behavior: compile and run each tests/t*.nim
   let proj = project()
   if proj.len == 0 or not proj.dirExists():
-    fatal "atlas:test", "No project directory detected"
+    fatal "No project directory detected", "atlas:test"
     quit(1)
 
   let nimPath = findExe("nim")
   if nimPath.len == 0:
-    fatal "atlas:test", "Nim compiler not found in PATH"
+    fatal "Nim compiler not found in PATH", "atlas:test"
     quit(1)
 
   let oldCwd = paths.getCurrentDir()
@@ -229,15 +225,19 @@ proc runAtlasTests() =
     return
 
   let runCode = NoExec notin context().flags
+  var extraStr = ""
+  if extraArgs.len > 0:
+    for a in extraArgs:
+      extraStr.add " " & quoteShell(a)
   for tf in tests:
     info "atlas:test", "running:", tf
-    var cmd = quoteShell(nimPath) & " c -d:debug "
+    var cmd = quoteShell(nimPath) & " c -d:debug" & extraStr
     if runCode:
       cmd.add " -r"
     cmd.add " " & quoteShell(tf)
     let code = execShellCmd(cmd)
     if code != 0:
-      fatal "atlas:test", "Test failed: " & tf, code
+      fatal "Test failed: " & tf, "atlas:test", code
   notice "atlas:test", "All tests passed"
 
 proc installDependencies(nc: var NimbleContext; nimbleFile: Path) =
@@ -528,6 +528,19 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
     createDir(depsDir())
 
 proc atlasRun*(params: seq[string]) =
+  # Support forwarding args after "--" to subcommands like `test`.
+  var mainParams: seq[string] = @[]
+  var postDashParams: seq[string] = @[]
+  var seenDashDash = false
+  for p in params:
+    if not seenDashDash and p == "--":
+      seenDashDash = true
+      continue
+    if seenDashDash:
+      postDashParams.add p
+    else:
+      mainParams.add p
+
   var action = ""
   var args: seq[string] = @[]
   template singleArg() =
@@ -544,7 +557,7 @@ proc atlasRun*(params: seq[string]) =
     if args.len != 0:
       fatal action & " command takes no arguments"
 
-  parseAtlasOptions(params, action, args)
+  parseAtlasOptions(mainParams, action, args)
 
   if action notin ["init", "tag", "search", "list"]:
     doAssert project().string != "" and project().dirExists(), "project was not set"
@@ -656,7 +669,7 @@ proc atlasRun*(params: seq[string]) =
   of "outdated":
     listOutdated()
   of "test":
-    runAtlasTests()
+    runAtlasTests(postDashParams)
   else:
     fatal "Invalid action: " & action
 
