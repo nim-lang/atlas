@@ -6,7 +6,7 @@ import testerutils
 
 ensureGitHttpServer()
 
-if execShellCmd("nim c -o:$# -d:release src/atlas.nim" % [atlasExe]) != 0:
+if execShellCmd("nim c --nimcache:.nimcache -o:$# -d:release src/atlas.nim" % [atlasExe]) != 0:
   quit("FAILURE: compilation of atlas failed")
 
 proc integrationTest() =
