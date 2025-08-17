@@ -9,7 +9,7 @@
 ## Simple tool to automate frequent workflows: Can "clone"
 ## a Nimble dependency and its dependencies recursively.
 
-import std / [parseopt, files, dirs, strutils, os, osproc, tables, sets, json, uri, paths]
+import std / [parseopt, files, dirs, strutils, os, osproc, tables, sets, json, uri, paths, algorithm]
 import basic / [versions, context, osutils, configutils, reporters,
                 nimbleparser, gitops, pkgurls, nimblecontext, compiledpatterns, packageinfos]
 import depgraphs, nimenv, lockfiles, confighandler, dependencies, pkgsearch
@@ -61,7 +61,7 @@ Command:
   rep [atlas.lock]      replay the state of the projects according to the lock file
   changed <atlas.lock>  list any packages that differ from the lock file
   outdated              list the packages that are outdated
-  build|test|doc|tasks  currently delegates to `nimble build|test|doc`
+  test                  run each test matching `tests/t*.nim`
   task <taskname>       currently delegates to `nimble <taskname>`
   env <nimversion>      setup a Nim virtual environment
     --keep              keep the c_code subdirectory
@@ -200,6 +200,45 @@ proc afterGraphActions(g: DepGraph) =
 
   if NoExec notin context().flags:
     g.runBuildSteps()
+
+proc runAtlasTests() =
+  ## Run and compile and run each test found for tests/t*.nim
+  
+  let proj = project()
+  if proj.len == 0 or not proj.dirExists():
+    fatal "atlas:test", "No project directory detected"
+    quit(1)
+
+  let nimPath = findExe("nim")
+  if nimPath.len == 0:
+    fatal "atlas:test", "Nim compiler not found in PATH"
+    quit(1)
+
+  let oldCwd = paths.getCurrentDir()
+  defer:
+    setCurrentDir(oldCwd)
+  setCurrentDir(proj)
+
+  var tests: seq[string] = @[]
+  for f in walkFiles("tests/t*.nim"):
+    tests.add(f)
+  tests.sort(system.cmp[string])
+
+  if tests.len == 0:
+    warn "atlas:test", "No tests found matching 'tests/t*.nim'"
+    return
+
+  let runCode = NoExec notin context().flags
+  for tf in tests:
+    info "atlas:test", "running:", tf
+    var cmd = quoteShell(nimPath) & " c -d:debug "
+    if runCode:
+      cmd.add " -r"
+    cmd.add " " & quoteShell(tf)
+    let code = execShellCmd(cmd)
+    if code != 0:
+      fatal "atlas:test", "Test failed: " & tf, code
+  notice "atlas:test", "All tests passed"
 
 proc installDependencies(nc: var NimbleContext; nimbleFile: Path) =
   ## install the dependencies for the project
@@ -616,6 +655,8 @@ proc atlasRun*(params: seq[string]) =
     setupNimEnv args[0], KeepNimEnv in context().flags
   of "outdated":
     listOutdated()
+  of "test":
+    runAtlasTests()
   else:
     fatal "Invalid action: " & action
 
