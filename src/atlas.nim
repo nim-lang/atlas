@@ -10,6 +10,7 @@
 ## a Nimble dependency and its dependencies recursively.
 
 import std / [parseopt, files, dirs, strutils, os, osproc, tables, sets, json, uri, paths, algorithm]
+import test_runner
 import basic / [versions, context, osutils, configutils, reporters,
                 nimbleparser, gitops, pkgurls, nimblecontext, compiledpatterns, packageinfos]
 import depgraphs, nimenv, lockfiles, confighandler, dependencies, pkgsearch
@@ -59,7 +60,7 @@ Command:
   rep [atlas.lock]      replay the state of the projects according to the lock file
   changed <atlas.lock>  list any packages that differ from the lock file
   outdated              list the packages that are outdated
-  test                  run each test matching `tests/t*.nim`
+  test [--parallel:N]   run each test matching `tests/t*.nim`
   env <nimversion>      setup a Nim virtual environment
     --keep              keep the c_code subdirectory
 
@@ -86,6 +87,8 @@ Options:
                         the default level is warning
   --help                show this help
 """
+
+var gTestParallel: int = 1
 
 proc writeHelp(code = 2) =
   stdout.write(Usage)
@@ -197,48 +200,6 @@ proc afterGraphActions(g: DepGraph) =
 
   if NoExec notin context().flags:
     g.runBuildSteps()
-
-proc runAtlasTests(extraArgs: seq[string] = @[]) =
-  ## Emulates Nimble's test behavior: compile and run each tests/t*.nim
-  let proj = project()
-  if proj.len == 0 or not proj.dirExists():
-    fatal "No project directory detected", "atlas:test"
-    quit(1)
-
-  let nimPath = findExe("nim")
-  if nimPath.len == 0:
-    fatal "Nim compiler not found in PATH", "atlas:test"
-    quit(1)
-
-  let oldCwd = paths.getCurrentDir()
-  defer:
-    setCurrentDir(oldCwd)
-  setCurrentDir(proj)
-
-  var tests: seq[string] = @[]
-  for f in walkFiles("tests/t*.nim"):
-    tests.add(f)
-  tests.sort(system.cmp[string])
-
-  if tests.len == 0:
-    warn "atlas:test", "No tests found matching 'tests/t*.nim'"
-    return
-
-  let runCode = NoExec notin context().flags
-  var extraStr = ""
-  if extraArgs.len > 0:
-    for a in extraArgs:
-      extraStr.add " " & quoteShell(a)
-  for tf in tests:
-    info "atlas:test", "running:", tf
-    var cmd = quoteShell(nimPath) & " c -d:debug" & extraStr
-    if runCode:
-      cmd.add " -r"
-    cmd.add " " & quoteShell(tf)
-    let code = execShellCmd(cmd)
-    if code != 0:
-      fatal "Test failed: " & tf, "atlas:test", code
-  notice "atlas:test", "All tests passed"
 
 proc installDependencies(nc: var NimbleContext; nimbleFile: Path) =
   ## install the dependencies for the project
@@ -498,6 +459,15 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
         of "maxver": context().defaultAlgo = MaxVer
         of "semver": context().defaultAlgo = SemVer
         else: writeHelp()
+      of "parallel":
+        # number of parallel test commands to run
+        if val != "":
+          try:
+            context().parallelCount = parseInt(val)
+          except CatchableError:
+            fatal "Invalid value for --parallel: '" & val & "'"
+        else:
+            context().parallelCount = countProcessors()
       of "verbosity":
         case val.normalize
         of "normal": setAtlasVerbosity(Info)
@@ -540,6 +510,8 @@ proc atlasRun*(params: seq[string]) =
       postDashParams.add p
     else:
       mainParams.add p
+
+  context().extraParams = postDashParams
 
   var action = ""
   var args: seq[string] = @[]
@@ -669,7 +641,10 @@ proc atlasRun*(params: seq[string]) =
   of "outdated":
     listOutdated()
   of "test":
-    runAtlasTests(postDashParams)
+    let runCode = NoExec notin context().flags
+    let code = runTests(project(), postDashParams, runCode, gTestParallel)
+    if code != 0:
+      quit(code)
   else:
     fatal "Invalid action: " & action
 
