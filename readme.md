@@ -8,8 +8,14 @@ Upcoming Nim version 2.0 will ship with `atlas`. Building from source:
 ```sh
 git clone https://github.com/nim-lang/atlas.git
 cd atlas
-nim c src/atlas.nim
-# copy src/atlas[.exe] somewhere in your PATH
+nim build
+# copy bin/atlas[.exe] somewhere in your PATH
+```
+
+Or with Nimble:
+
+```sh
+nimble install https://github.com/nim-lang/atlas@\#head
 ```
 
 # Documentation
@@ -22,8 +28,7 @@ Create a new project. A project contains everything we need and can safely be de
 this tutorial:
 
 ```sh
-mkdir project
-cd project
+mkdir project && cd project
 atlas init
 ```
 
@@ -47,12 +52,13 @@ echo "import malebolgia" >myproject.nim
 nim c myproject.nim
 ```
 
-The project structure looks like this:
+### Project Structure
 
-```
+```sh
   $project / project.nimble
-  $project / nim.cfg
+  $project / nim.cfg                          # Atlas generated file 
   $project / other main project files...
+  $project / deps /                           # Folder where deps are stored
   $project / deps / atlas.config
   $project / deps / dependency-A
   $project / deps / dependency-B

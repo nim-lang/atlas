@@ -9,10 +9,10 @@
 ## Simple tool to automate frequent workflows: Can "clone"
 ## a Nimble dependency and its dependencies recursively.
 
-import std / [parseopt, files, dirs, strutils, os, osproc, tables, sets, json, uri, paths]
+import std / [parseopt, files, dirs, strutils, os, osproc, tables, sets, json, uri, paths, algorithm]
 import basic / [versions, context, osutils, configutils, reporters,
                 nimbleparser, gitops, pkgurls, nimblecontext, compiledpatterns, packageinfos]
-import depgraphs, nimenv, lockfiles, confighandler, dependencies, pkgsearch
+import depgraphs, nimenv, lockfiles, confighandler, dependencies, pkgsearch, runtests
 
 
 from std/terminal import isatty
@@ -49,8 +49,6 @@ Command:
   update <url|pkgname>  update a package and all of its dependencies
   search <keyA> [keyB ...]
                         search for package that contains the given keywords
-  extract <file.nimble> extract the requirements and custom commands from
-                        the given Nimble file
   updateDeps [filter]   update every dependency that has a remote
                         URL that matches `filter` if a filter is given
   tag [major|minor|patch]
@@ -61,8 +59,7 @@ Command:
   rep [atlas.lock]      replay the state of the projects according to the lock file
   changed <atlas.lock>  list any packages that differ from the lock file
   outdated              list the packages that are outdated
-  build|test|doc|tasks  currently delegates to `nimble build|test|doc`
-  task <taskname>       currently delegates to `nimble <taskname>`
+  test [tests...]       run all tests `tests/t*.nim` or specified tests; supports `--parallel`
   env <nimversion>      setup a Nim virtual environment
     --keep              keep the c_code subdirectory
 
@@ -70,6 +67,8 @@ Options:
   --feature=<feature>   enables the given feature, pass multiple for multiple features
                         for project specific use: `feature.<project>.<feature>`
                         (note always be passed when you want to use features)
+  --parallel            enables parallel execution on some tasks using countProcessors()
+  --parallel:<N>        enables parallel execution using `N` processes
   --keepCommits         do not perform any `git checkouts`
   --noexec              do not perform any action that may run arbitrary code
   --autoenv             detect the minimal Nim $version and setup a
@@ -459,6 +458,15 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
         of "maxver": context().defaultAlgo = MaxVer
         of "semver": context().defaultAlgo = SemVer
         else: writeHelp()
+      of "parallel":
+        # number of parallel test commands to run
+        if val != "":
+          try:
+            context().parallelCount = parseInt(val)
+          except CatchableError:
+            fatal "Invalid value for --parallel: '" & val & "'"
+        else:
+            context().parallelCount = countProcessors()
       of "verbosity":
         case val.normalize
         of "normal": setAtlasVerbosity(Info)
@@ -489,6 +497,21 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
     createDir(depsDir())
 
 proc atlasRun*(params: seq[string]) =
+  # Support forwarding args after "--" to subcommands like `test`.
+  var mainParams: seq[string] = @[]
+  var postDashParams: seq[string] = @[]
+  var seenDashDash = false
+  for p in params:
+    if not seenDashDash and p == "--":
+      seenDashDash = true
+      continue
+    if seenDashDash:
+      postDashParams.add p
+    else:
+      mainParams.add p
+
+  context().extraParams = postDashParams
+
   var action = ""
   var args: seq[string] = @[]
   template singleArg() =
@@ -505,7 +528,7 @@ proc atlasRun*(params: seq[string]) =
     if args.len != 0:
       fatal action & " command takes no arguments"
 
-  parseAtlasOptions(params, action, args)
+  parseAtlasOptions(mainParams, action, args)
 
   if action notin ["init", "tag", "search", "list"]:
     doAssert project().string != "" and project().dirExists(), "project was not set"
@@ -616,6 +639,15 @@ proc atlasRun*(params: seq[string]) =
     setupNimEnv args[0], KeepNimEnv in context().flags
   of "outdated":
     listOutdated()
+  of "test":
+    let runCode = NoExec notin context().flags
+    var testsToRun: seq[string] = @[]
+    for a in args:
+      if not a.startsWith("-") and a.endsWith(".nim"):
+        testsToRun.add a
+    let code = runTests(project(), postDashParams, runCode, context().parallelCount, testsToRun)
+    if code != 0:
+      quit(code)
   else:
     fatal "Invalid action: " & action
 

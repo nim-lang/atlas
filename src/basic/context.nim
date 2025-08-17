@@ -66,6 +66,8 @@ type
     pluginsFile*: Path
     proxy*: Uri
     features*: HashSet[string]
+    extraParams*: seq[string]
+    parallelCount*: Natural
 
 var atlasContext = AtlasContext()
 
