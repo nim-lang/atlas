@@ -54,7 +54,7 @@ proc discoverTests*(projectDir: Path): seq[string] =
     result.add f
   result.sort(system.cmp[string])
 
-proc runTestsSerial*(projectDir: Path; extraArgs: seq[string] = @[]; runCode = true): int =
+proc runTestsSerial*(projectDir: Path; extraArgs: seq[string] = @[]; runCode = true; onlyTests: seq[string] = @[]): int =
   ## Sequentially compile and (optionally) run each discovered test.
   if projectDir.len == 0 or not dirExists($projectDir):
     fatal "No project directory detected", "atlas:test"
@@ -66,7 +66,9 @@ proc runTestsSerial*(projectDir: Path; extraArgs: seq[string] = @[]; runCode = t
   let old = os.getCurrentDir()
   defer: os.setCurrentDir(old)
   os.setCurrentDir($projectDir)
-  let tests = discoverTests(projectDir)
+  var tests =
+    if onlyTests.len > 0: onlyTests
+    else: discoverTests(projectDir)
   if tests.len == 0:
     warn "atlas:test", "No tests found matching 'tests/t*.nim'"
     return 0
@@ -80,7 +82,7 @@ proc runTestsSerial*(projectDir: Path; extraArgs: seq[string] = @[]; runCode = t
   notice "atlas:test", "All tests passed"
   return 0
 
-proc runTests*(projectDir: Path; extraArgs: seq[string] = @[]; runCode = true; parallel: int): int =
+proc runTests*(projectDir: Path; extraArgs: seq[string] = @[]; runCode = true; parallel: int; onlyTests: seq[string] = @[]): int =
   ## Run tests either serially or in parallel (parallel<=0 uses CPU count).
   if projectDir.len == 0 or not dirExists($projectDir):
     fatal "No project directory detected", "atlas:test"
@@ -89,7 +91,9 @@ proc runTests*(projectDir: Path; extraArgs: seq[string] = @[]; runCode = true; p
   if nimPath.len == 0:
     fatal "Nim compiler not found in PATH", "atlas:test"
     return 1
-  let tests = discoverTests(projectDir)
+  let tests =
+    if onlyTests.len > 0: onlyTests
+    else: discoverTests(projectDir)
   if tests.len == 0:
     warn "atlas:test", "No tests found matching 'tests/t*.nim'"
     return 0
@@ -101,7 +105,7 @@ proc runTests*(projectDir: Path; extraArgs: seq[string] = @[]; runCode = true; p
       notice "atlas:test", "All tests passed"
     return code
   else:
-    return runTestsSerial(projectDir, extraArgs, runCode)
+    return runTestsSerial(projectDir, extraArgs, runCode, tests)
 
 when isMainModule:
   # Example usage: run all tests matching tests/t*.nim in parallel.

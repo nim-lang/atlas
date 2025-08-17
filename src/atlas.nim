@@ -59,7 +59,7 @@ Command:
   rep [atlas.lock]      replay the state of the projects according to the lock file
   changed <atlas.lock>  list any packages that differ from the lock file
   outdated              list the packages that are outdated
-  test                  run each test matching `tests/t*.nim`, supports `--parallel`
+  test                  run tests matching `tests/t*.nim`; pass `<test1.nim> [<test2.nim> ...]` before `--` to run specific ones; supports `--parallel`
   env <nimversion>      setup a Nim virtual environment
     --keep              keep the c_code subdirectory
 
@@ -641,7 +641,11 @@ proc atlasRun*(params: seq[string]) =
     listOutdated()
   of "test":
     let runCode = NoExec notin context().flags
-    let code = runTests(project(), postDashParams, runCode, context().parallelCount)
+    var testsToRun: seq[string] = @[]
+    for a in args:
+      if not a.startsWith("-") and a.endsWith(".nim"):
+        testsToRun.add a
+    let code = runTests(project(), postDashParams, runCode, context().parallelCount, testsToRun)
     if code != 0:
       quit(code)
   else:
