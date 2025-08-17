@@ -108,7 +108,7 @@ For example:
 
 Use `atlas test` to run all tests in `tests/*.nim`. Pass Nim files to run specific tests: `atlas test tests/mytest.nim`.
 
-Tests can be run in parallel: `atlas test --parallel`. Note that the test output is *not* syncrhonized.
+Tests can be run in parallel: `atlas test --parallel`. Note that the test output is *not* synchronized.
 
 ### Link <path>
 
