@@ -12,7 +12,7 @@ jobs:
       max-parallel: 20
       matrix:
         branch: [master]
-        nim_branch: [version-2-2, devel]
+        nim_branch: [version-2-2, version-2-0, devel]
         target:
           - os: linux
             cpu: amd64
