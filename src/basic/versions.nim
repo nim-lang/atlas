@@ -265,7 +265,11 @@ proc parseSuffix(s: string; start: int; result: var VersionInterval; err: var bo
 
 proc parseVersionInterval*(s: string; start: int; err: var bool): VersionInterval =
   var i = start
+  # Skip whitespace and an optional '@' marker before the version spec
   while i < s.len and s[i] in Whitespace: inc i
+  if i < s.len and s[i] == '@':
+    inc i
+    while i < s.len and s[i] in Whitespace: inc i
   result = VersionInterval(a: VersionReq(r: verAny, v: Version""))
   if i < s.len:
     case s[i]
@@ -351,7 +355,9 @@ proc matches*(pattern: VersionInterval; v: Version): bool =
     result = matches(pattern.a, v)
 
 proc extractRequirementName*(req: string): (string, seq[string], int) =
-  const verChars = {'#', '<', '=', '>', '['}
+  # Determine the package name portion of a Nimble requires clause.
+  # Include '@' as a delimiter so names like "mcu_utils@ ..." don't include '@'.
+  const verChars = {'#', '<', '=', '>', '[', '@'}
   var i = 0
   while i < req.len and req[i] notin verChars + Whitespace:
     inc i
