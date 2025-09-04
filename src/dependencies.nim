@@ -126,23 +126,27 @@ proc addRelease(
     nc: var NimbleContext;
     pkg: Package,
     vtag: VersionTag
-): PackageVersion =
+): bool =
   var pkgver = vtag.toPkgVer()
   trace pkg.url.projectName, "Adding Nimble version:", $vtag
-  let release = nc.processNimbleRelease(pkg, vtag)
+  try:
+    let release = nc.processNimbleRelease(pkg, vtag)
 
-  if vtag.v.string == "":
-    pkgver.vtag.v = release.version
-    trace pkg.url.projectName, "updating release tag information:", $pkgver.vtag
-  elif release.version.string == "":
-    warn pkg.url.projectName, "nimble file missing version information:", $pkgver.vtag
-    release.version = vtag.version
-  elif vtag.v != release.version and not pkg.isRoot:
-    info pkg.url.projectName, "version mismatch between version tag:", $vtag.v, "and nimble version:", $release.version
-  
-  versions.add((pkgver, release))
+    if vtag.v.string == "":
+      pkgver.vtag.v = release.version
+      trace pkg.url.projectName, "updating release tag information:", $pkgver.vtag
+    elif release.version.string == "":
+      warn pkg.url.projectName, "nimble file missing version information:", $pkgver.vtag
+      release.version = vtag.version
+    elif vtag.v != release.version and not pkg.isRoot:
+      info pkg.url.projectName, "version mismatch between version tag:", $vtag.v, "and nimble version:", $release.version
+    
+    versions.add((pkgver, release))
 
-  result = pkgver
+    result = true
+  except CatchableError as e:
+    error pkg.url.projectName, "addRelease error processing nimble release:", $vtag, "error:", $e.msg
+    return false
 
 proc traverseDependency*(
     nc: var NimbleContext;
@@ -238,8 +242,8 @@ proc traverseDependency*(
           if not uniqueCommits.containsOrIncl(tag.c):
             # trace pkg.url.projectName, "traverseDependency adding nimble commit:", $tag
             var vers: seq[(PackageVersion, NimbleRelease)]
-            let pver = vers.addRelease(nc, pkg, tag)
-            if not nimbleVersions.containsOrIncl(pver.vtag.v):
+            let added = vers.addRelease(nc, pkg, tag)
+            if added and not nimbleVersions.containsOrIncl(vers[0][0].vtag.v):
               versions.add(vers)
           else:
             error pkg.url.projectName, "traverseDependency skipping nimble commit:", $tag, "uniqueCommits:", $(tag.c in uniqueCommits), "nimbleVersions:", $(tag.v in nimbleVersions)

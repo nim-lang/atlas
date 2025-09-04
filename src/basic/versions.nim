@@ -267,9 +267,8 @@ proc parseVersionInterval*(s: string; start: int; err: var bool): VersionInterva
   var i = start
   # Skip whitespace and an optional '@' marker before the version spec
   while i < s.len and s[i] in Whitespace: inc i
-  if i < s.len and s[i] == '@':
-    inc i
-    while i < s.len and s[i] in Whitespace: inc i
+  if "@" in s:
+    raise newException(ValueError, "@ is not allowed in version intervals, got: " & s)
   result = VersionInterval(a: VersionReq(r: verAny, v: Version""))
   if i < s.len:
     case s[i]
@@ -355,9 +354,9 @@ proc matches*(pattern: VersionInterval; v: Version): bool =
     result = matches(pattern.a, v)
 
 proc extractRequirementName*(req: string): (string, seq[string], int) =
-  # Determine the package name portion of a Nimble requires clause.
-  # Include '@' as a delimiter so names like "mcu_utils@ ..." don't include '@'.
-  const verChars = {'#', '<', '=', '>', '[', '@'}
+  if "@" in req:
+    raise newException(ValueError, "@ is not allowed in version intervals, got: " & req)
+  const verChars = {'#', '<', '=', '>', '['}
   var i = 0
   while i < req.len and req[i] notin verChars + Whitespace:
     inc i
