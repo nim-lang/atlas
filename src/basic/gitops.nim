@@ -377,7 +377,7 @@ proc getRemoteUrl*(path: Path): string =
   else:
     return cc.strip()
 
-proc hasOutdatedTags*(path: Path): Option[tuple[outdated: bool, newTags: int]] =
+proc hasNewTags*(path: Path): Option[tuple[outdated: bool, newTags: int]] =
   ## determine if the given git repo `f` is updateable
   ## returns an option tuple with the outdated flag and the number of new tags
   ## the option is none if the repo doesn't have remote url or remote tags
