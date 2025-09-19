@@ -29,7 +29,7 @@ type
     GitLsFiles = "git -C $DIR ls-files"
     GitLog = "git -C $DIR log --format=%H origin/HEAD"
     GitLogLocal = "git -C $DIR log --format=%H HEAD"
-    GitCurrentBranch = "git rev-parse --abbrev-ref HEAD"
+    GitCurrentBranch = "git -C $DIR rev-parse --abbrev-ref HEAD"
     GitLsRemote = "git -C $DIR ls-remote --quiet --tags"
     GitShowFiles = "git -C $DIR show"
     GitListFiles = "git -C $DIR ls-tree --name-only -r"
@@ -368,13 +368,6 @@ proc incrementLastTag*(path: Path, field: Natural): string =
 proc isShortCommitHash*(commit: string): bool {.inline.} =
   commit.len >= 4 and commit.len < 40
 
-proc updateRepo*(path: Path) =
-  let (outp, status) = exec(GitFetch, path, ["--tags"])
-  if status != RES_OK:
-    error(path, "could not update repo: " & outp)
-  else:
-    info(path, "successfully updated repo")
-
 proc getRemoteUrl*(path: Path): string =
   let (cc, status) = exec(GitRemoteUrl, path, [])
   if status != RES_OK:
@@ -405,8 +398,24 @@ proc isOutdated*(path: Path): bool =
   if remoteTags > localTags:
     warn path, "got new versions:", $(remoteTags - localTags)
     return true
+  elif localTags.len() == 0:
+    info path, "no local tags found, checking for new commits"
+    return true # assuming the repo doesn't use tag versioning
 
   return false
+
+proc updateRepo*(path: Path) =
+  let url = getRemoteUrl(path)
+  if url.len == 0:
+    info path, "no remote URL found; cannot update"
+    return
+
+  # TODO: maybe use `git fetch origin refs/heads/*:refs/heads/*` instead?
+  let (outp, status) = exec(GitFetch, path, ["--tags", "origin"])
+  if status != RES_OK:
+    error(path, "could not update repo: " & outp)
+  else:
+    info(path, "successfully updated repo")
 
 proc updateDir*(path: Path, filter: string) =
   let (remote, _) = osproc.execCmdEx("git remote -v")
