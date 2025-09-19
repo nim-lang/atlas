@@ -15,6 +15,7 @@ type
     GitRemoteUrl = "git -C $DIR config --get remote.origin.url",
     GitDiff = "git -C $DIR diff",
     GitFetch = "git -C $DIR fetch",
+    GitFetchAll = "git -C $DIR fetch origin refs/heads/*:refs/heads/*",
     GitTag = "git -C $DIR tag",
     GitTags = "git -C $DIR show-ref --tags",
     GitLastTaggedRef = "git -C $DIR rev-list --tags --max-count=1",
@@ -193,9 +194,9 @@ proc shortToCommit*(path: Path, short: CommitHash): CommitHash =
     if vtags.len() == 1:
       result = vtags[0].c
 
-proc expandSpecial*(path: Path, vtag: VersionTag, errorReportLevel: MsgKind = Warning, isLocalOnly = false): VersionTag =
+proc expandSpecial*(path: Path, vtag: VersionTag, errorReportLevel: MsgKind = Warning): VersionTag =
   if vtag.version.isHead():
-    return findOriginTip(path, errorReportLevel, isLocalOnly)
+    return findOriginTip(path, errorReportLevel, false)
 
   let (cc, status) = exec(GitRevParse, path, [vtag.version.string.substr(1)], errorReportLevel)
 
@@ -376,7 +377,7 @@ proc getRemoteUrl*(path: Path): string =
   else:
     return cc.strip()
 
-proc isOutdated*(path: Path): bool =
+proc isOutdated*(path: Path): (bool, int) =
   ## determine if the given git repo `f` is updateable
   ##
 
@@ -387,31 +388,32 @@ proc isOutdated*(path: Path): bool =
 
   let url = getRemoteUrl(path)
   if url.len == 0:
-    return false
+    return (false, -1)
   let (remoteTagsList, lsStatus) = listRemoteTags(path, url)
   let remoteTags = remoteTagsList.toHashSet()
 
   if not lsStatus:
     warn path, "git list remote tags failed, skipping"
-    return false
+    return (false, -1)
 
   if remoteTags > localTags:
     warn path, "got new versions:", $(remoteTags - localTags)
-    return true
-  elif localTags.len() == 0:
+    return (true, remoteTags.len() - localTags.len())
+  elif remoteTags.len() == 0:
     info path, "no local tags found, checking for new commits"
-    return true # assuming the repo doesn't use tag versioning
+    return (true, -1) # assuming the repo doesn't use tag versioning
 
-  return false
+  return (false, 0)
 
-proc updateRepo*(path: Path) =
+proc updateRepo*(path: Path, onlyOrigin = false) =
   let url = getRemoteUrl(path)
   if url.len == 0:
     info path, "no remote URL found; cannot update"
     return
 
   # TODO: maybe use `git fetch origin refs/heads/*:refs/heads/*` instead?
-  let (outp, status) = exec(GitFetch, path, ["--tags", "origin"])
+  let cmd = if onlyOrigin: GitFetch else: GitFetchAll
+  let (outp, status) = exec(cmd, path, ["--tags", "origin"])
   if status != RES_OK:
     error(path, "could not update repo: " & outp)
   else:

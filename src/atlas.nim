@@ -332,12 +332,15 @@ proc update(filter: string) =
       continue
     
     let url = gitops.getRemoteUrl(pkg.ondisk)
+    if url.len == 0:
+      warn pkg.url.projectName, "no remote URL found; skipping..."
+      continue
     if url.len == 0 or filter notin url or filter notin pkg.url.projectName:
       warn pkg.url.projectName, "filter not matched; skipping..."
       continue
 
     if gitops.isOutdated(pkg.ondisk):
-      warn pkg.url.projectName, "is outdated, updating..."
+      warn pkg.url.projectName, "outdated or no local tags found, updating..."
       gitops.updateRepo(pkg.ondisk)
       needsUpdate = true
     else:
