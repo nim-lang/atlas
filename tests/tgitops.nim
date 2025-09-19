@@ -123,7 +123,7 @@ suite "Git Operations Tests":
       discard execCmd("git commit -m \"initial commit\"")
       check(incrementLastTag(Path ".", 0) == "v0.0.1")
 
-  test "isOutdated detection":
+  test "hasOutdatedTags detection":
     withDir testDir:
       discard execCmd("git init")
       # Create initial commit and tag
@@ -138,7 +138,7 @@ suite "Git Operations Tests":
       discard execCmd("git commit -m \"update commit\"")
 
       # Test if repo is outdated
-      let outdated = isOutdated(Path ".")
+      let outdated = hasOutdatedTags(Path ".")
       # Note: This might fail in isolated test environments
       # We're mainly testing the function structure
       check(outdated.isNone)  # Expected to be false in test environment

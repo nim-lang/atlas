@@ -305,7 +305,7 @@ proc listOutdated() =
   for pkg in allNodes(graph):
     if pkg.isRoot:
       continue
-    let res = gitops.isOutdated(pkg.ondisk)
+    let res = gitops.hasOutdatedTags(pkg.ondisk)
     if res.isNone:
       warn pkg.url.projectName, "no remote version tags found, updating origin instead"
       gitops.updateRepo(pkg.ondisk, onlyOrigin = false)
@@ -346,7 +346,7 @@ proc update(filter: string) =
       warn pkg.url.projectName, "filter not matched; skipping..."
       continue
 
-    let res = gitops.isOutdated(pkg.ondisk)
+    let res = gitops.hasOutdatedTags(pkg.ondisk)
     if res.isNone:
       warn pkg.url.projectName, "no remote version tags found, updating origin instead"
       gitops.updateRepo(pkg.ondisk, onlyOrigin = false)
