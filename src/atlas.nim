@@ -343,11 +343,11 @@ proc update(filter: string) =
     let (outdated, cnt) = gitops.isOutdated(pkg.ondisk)
     if outdated and cnt > 0:
       warn pkg.url.projectName, "outdated, updating... " & $cnt & " new tags available"
-      gitops.updateRepo(pkg.ondisk)
+      gitops.updateRepo(pkg.ondisk, onlyOrigin = false)
       needsUpdate = true
     elif cnt == -1:
       warn pkg.url.projectName, "no local tags found, updating..."
-      gitops.updateRepo(pkg.ondisk)
+      gitops.updateRepo(pkg.ondisk, onlyOrigin = false)
       needsUpdate = true
     else:
       notice pkg.url.projectName, "up to date"
