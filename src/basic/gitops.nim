@@ -420,20 +420,3 @@ proc updateRepo*(path: Path, onlyOrigin = false) =
     error(path, "could not update repo: " & outp)
   else:
     notice(path, "successfully updated repo")
-
-proc updateDir*(path: Path, filter: string) =
-  let (remote, _) = osproc.execCmdEx("git remote -v")
-  if filter.len == 0 or filter in remote:
-    let diff = checkGitDiffStatus(path)
-    if diff.len > 0:
-      warn($path, "has uncommitted changes; skipped")
-    else:
-      let (branch, _) = exec(GitCurrentBranch, path, [])
-      if branch.strip.len > 0:
-        let (output, exitCode) = osproc.execCmdEx("git pull origin " & branch.strip)
-        if exitCode != 0:
-          error $path, output
-        else:
-          info($path, "successfully updated")
-      else:
-        error $path, "could not fetch current branch name"
