@@ -15,7 +15,7 @@ type
     GitRemoteUrl = "git -C $DIR config --get remote.origin.url",
     GitDiff = "git -C $DIR diff",
     GitFetch = "git -C $DIR fetch",
-    GitFetchAll = "git -C $DIR fetch origin refs/heads/*:refs/heads/*",
+    GitFetchAll = "git -C $DIR fetch origin 'refs/heads/*:refs/heads/*'",
     GitTag = "git -C $DIR tag",
     GitTags = "git -C $DIR show-ref --tags",
     GitLastTaggedRef = "git -C $DIR rev-list --tags --max-count=1",
@@ -411,13 +411,15 @@ proc updateRepo*(path: Path, onlyOrigin = false) =
     info path, "no remote URL found; cannot update"
     return
 
-  # TODO: maybe use `git fetch origin refs/heads/*:refs/heads/*` instead?
-  let cmd = if onlyOrigin: GitFetch else: GitFetchAll
-  let (outp, status) = exec(cmd, path, ["--tags", "origin"])
+  let (outp, status) =
+    if onlyOrigin:
+      exec(GitFetch, path, ["--tags", "origin"])
+    else:
+      exec(GitFetchAll, path, [])
   if status != RES_OK:
     error(path, "could not update repo: " & outp)
   else:
-    info(path, "successfully updated repo")
+    notice(path, "successfully updated repo")
 
 proc updateDir*(path: Path, filter: string) =
   let (remote, _) = osproc.execCmdEx("git remote -v")

@@ -305,8 +305,9 @@ proc listOutdated() =
   for pkg in allNodes(graph):
     if pkg.isRoot:
       continue
-    if gitops.isOutdated(pkg.ondisk):
-      warn pkg.url.projectName, "is outdated"
+    let (outdated, cnt) = gitops.isOutdated(pkg.ondisk)
+    if outdated:
+      warn pkg.url.projectName, "is outdated; " & $cnt & " new tags available"
       inc updateable
     else:
       notice pkg.url.projectName, "is up to date"
@@ -339,12 +340,17 @@ proc update(filter: string) =
       warn pkg.url.projectName, "filter not matched; skipping..."
       continue
 
-    if gitops.isOutdated(pkg.ondisk):
-      warn pkg.url.projectName, "outdated or no local tags found, updating..."
+    let (outdated, cnt) = gitops.isOutdated(pkg.ondisk)
+    if outdated and cnt > 0:
+      warn pkg.url.projectName, "outdated, updating... " & $cnt & " new tags available"
+      gitops.updateRepo(pkg.ondisk)
+      needsUpdate = true
+    elif cnt == -1:
+      warn pkg.url.projectName, "no local tags found, updating..."
       gitops.updateRepo(pkg.ondisk)
       needsUpdate = true
     else:
-      notice pkg.url.projectName, "is up to date"
+      notice pkg.url.projectName, "up to date"
   
   if needsUpdate:
     notice project(), "new dep versions available, run `atlas install` to update"
