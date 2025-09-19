@@ -9,7 +9,7 @@
 ## Simple tool to automate frequent workflows: Can "clone"
 ## a Nimble dependency and its dependencies recursively.
 
-import std / [parseopt, files, dirs, strutils, os, osproc, tables, sets, json, uri, paths]
+import std / [parseopt, files, dirs, strutils, os, options, osproc, tables, sets, json, uri, paths]
 import basic / [versions, context, osutils, configutils, reporters,
                 nimbleparser, gitops, pkgurls, nimblecontext, compiledpatterns, packageinfos]
 import depgraphs, nimenv, lockfiles, confighandler, dependencies, pkgsearch
@@ -305,12 +305,18 @@ proc listOutdated() =
   for pkg in allNodes(graph):
     if pkg.isRoot:
       continue
-    let (outdated, cnt) = gitops.isOutdated(pkg.ondisk)
-    if outdated:
-      warn pkg.url.projectName, "is outdated; " & $cnt & " new tags available"
+    let res = gitops.isOutdated(pkg.ondisk)
+    if res.isNone:
+      warn pkg.url.projectName, "no remote version tags found, updating origin instead"
+      gitops.updateRepo(pkg.ondisk, onlyOrigin = false)
       inc updateable
     else:
-      notice pkg.url.projectName, "is up to date"
+      let (outdated, cnt) = res.get()
+      if outdated:
+        warn pkg.url.projectName, "is outdated; " & $cnt & " new tags available"
+        inc updateable
+      else:
+        notice pkg.url.projectName, "is up to date"
 
   if updateable == 0:
     info project(), "all packages are up to date"
@@ -340,13 +346,13 @@ proc update(filter: string) =
       warn pkg.url.projectName, "filter not matched; skipping..."
       continue
 
-    let outdated = gitops.isOutdated(pkg.ondisk)
-    if outdated.isNone:
+    let res = gitops.isOutdated(pkg.ondisk)
+    if res.isNone:
       warn pkg.url.projectName, "no remote version tags found, updating origin instead"
       gitops.updateRepo(pkg.ondisk, onlyOrigin = false)
       needsUpdate = true
     else:
-      let (outdated, cnt) = outdated.get()
+      let (outdated, cnt) = res.get()
       if outdated and cnt > 0:
         warn pkg.url.projectName, "outdated, updating... " & $cnt & " new tags available"
         gitops.updateRepo(pkg.ondisk, onlyOrigin = true)
