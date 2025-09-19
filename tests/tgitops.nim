@@ -1,5 +1,5 @@
 import unittest
-import std/[os, files, dirs, paths, osproc, strutils, uri]
+import std/[os, files, dirs, paths, osproc, strutils, uri, options]
 import basic/[reporters, osutils, versions, context]
 
 import basic/gitops
@@ -138,11 +138,10 @@ suite "Git Operations Tests":
       discard execCmd("git commit -m \"update commit\"")
 
       # Test if repo is outdated
-      let (outdated, cnt) = isOutdated(Path ".")
+      let outdated = isOutdated(Path ".")
       # Note: This might fail in isolated test environments
       # We're mainly testing the function structure
-      check(not outdated)  # Expected to be false in test environment
-      check(cnt == -1)  # Expected to be false in test environment
+      check(outdated.isNone)  # Expected to be false in test environment
 
   test "getRemoteUrl functionality":
     withDir testDir:

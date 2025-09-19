@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std/[os, files, dirs, paths, osproc, sequtils, strutils, uri, sets]
+import std/[os, files, dirs, paths, osproc, options, sequtils, strutils, uri, sets]
 import reporters, osutils, versions, context
 
 type
@@ -377,9 +377,10 @@ proc getRemoteUrl*(path: Path): string =
   else:
     return cc.strip()
 
-proc isOutdated*(path: Path): (bool, int) =
+proc isOutdated*(path: Path): Option[tuple[outdated: bool, newTags: int]] =
   ## determine if the given git repo `f` is updateable
-  ##
+  ## returns an option tuple with the outdated flag and the number of new tags
+  ## the option is none if the repo doesn't have remote url or remote tags
 
   info path, "checking is package is up to date..."
 
@@ -388,22 +389,22 @@ proc isOutdated*(path: Path): (bool, int) =
 
   let url = getRemoteUrl(path)
   if url.len == 0:
-    return (false, -1)
+    return none(tuple[outdated: bool, newTags: int])
   let (remoteTagsList, lsStatus) = listRemoteTags(path, url)
   let remoteTags = remoteTagsList.toHashSet()
 
   if not lsStatus:
     warn path, "git list remote tags failed, skipping"
-    return (false, -1)
+    return none(tuple[outdated: bool, newTags: int])
 
   if remoteTags > localTags:
     warn path, "got new versions:", $(remoteTags - localTags)
-    return (true, remoteTags.len() - localTags.len())
+    return some((true, remoteTags.len() - localTags.len()))
   elif remoteTags.len() == 0:
     info path, "no local tags found, checking for new commits"
-    return (true, -1) # assuming the repo doesn't use tag versioning
+    return none(tuple[outdated: bool, newTags: int])
 
-  return (false, 0)
+  return some((false, 0))
 
 proc updateRepo*(path: Path, onlyOrigin = false) =
   ## updates the repo by 

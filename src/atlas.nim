@@ -340,17 +340,19 @@ proc update(filter: string) =
       warn pkg.url.projectName, "filter not matched; skipping..."
       continue
 
-    let (outdated, cnt) = gitops.isOutdated(pkg.ondisk)
-    if outdated and cnt > 0:
-      warn pkg.url.projectName, "outdated, updating... " & $cnt & " new tags available"
-      gitops.updateRepo(pkg.ondisk, onlyOrigin = false)
-      needsUpdate = true
-    elif cnt == -1:
-      warn pkg.url.projectName, "no local tags found, updating..."
+    let outdated = gitops.isOutdated(pkg.ondisk)
+    if outdated.isNone:
+      warn pkg.url.projectName, "no remote version tags found, updating origin instead"
       gitops.updateRepo(pkg.ondisk, onlyOrigin = false)
       needsUpdate = true
     else:
-      notice pkg.url.projectName, "up to date"
+      let (outdated, cnt) = outdated.get()
+      if outdated and cnt > 0:
+        warn pkg.url.projectName, "outdated, updating... " & $cnt & " new tags available"
+        gitops.updateRepo(pkg.ondisk, onlyOrigin = true)
+        needsUpdate = true
+      else:
+        notice pkg.url.projectName, "up to date"
   
   if needsUpdate:
     notice project(), "new dep versions available, run `atlas install` to update"
