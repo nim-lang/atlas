@@ -414,7 +414,7 @@ proc updateRepo*(path: Path, onlyTags = false) =
     return
 
   let (outp, status) =
-    if onlyOrigin:
+    if onlyTags:
       exec(GitFetch, path, ["--tags", "origin"])
     else:
       exec(GitFetchAll, path, [])

@@ -307,8 +307,7 @@ proc listOutdated() =
       continue
     let res = gitops.hasOutdatedTags(pkg.ondisk)
     if res.isNone:
-      warn pkg.url.projectName, "no remote version tags found, updating origin instead"
-      gitops.updateRepo(pkg.ondisk, onlyOrigin = false)
+      warn pkg.url.projectName, "no remote version tags found"
       inc updateable
     else:
       let (outdated, cnt) = res.get()
