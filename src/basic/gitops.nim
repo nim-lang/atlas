@@ -406,7 +406,7 @@ proc hasOutdatedTags*(path: Path): Option[tuple[outdated: bool, newTags: int]] =
 
   return some((false, 0))
 
-proc updateRepo*(path: Path, onlyOrigin = false) =
+proc updateRepo*(path: Path, onlyTags = false) =
   ## updates the repo by 
   let url = getRemoteUrl(path)
   if url.len == 0:
