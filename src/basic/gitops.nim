@@ -15,7 +15,7 @@ type
     GitRemoteUrl = "git -C $DIR config --get remote.origin.url",
     GitDiff = "git -C $DIR diff",
     GitFetch = "git -C $DIR fetch",
-    GitFetchAll = "git -C $DIR fetch origin 'refs/heads/*:refs/heads/*'",
+    GitFetchAll = "git -C $DIR fetch origin \"refs/heads/*:refs/heads/*\"",
     GitTag = "git -C $DIR tag",
     GitTags = "git -C $DIR show-ref --tags",
     GitLastTaggedRef = "git -C $DIR rev-list --tags --max-count=1",
