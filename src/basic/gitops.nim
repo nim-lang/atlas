@@ -15,7 +15,7 @@ type
     GitRemoteUrl = "git -C $DIR config --get remote.origin.url",
     GitDiff = "git -C $DIR diff",
     GitFetch = "git -C $DIR fetch",
-    GitFetchAll = "git -C $DIR fetch origin \"refs/heads/*:refs/heads/*\"",
+    GitFetchAll = "git -C $DIR fetch origin " & quoteShell("refs/heads/*:refs/heads/*") & " " & quoteShell("refs/tags/*:refs/tags/*"),
     GitTag = "git -C $DIR tag",
     GitTags = "git -C $DIR show-ref --tags",
     GitLastTaggedRef = "git -C $DIR rev-list --tags --max-count=1",
@@ -406,6 +406,7 @@ proc isOutdated*(path: Path): (bool, int) =
   return (false, 0)
 
 proc updateRepo*(path: Path, onlyOrigin = false) =
+  ## updates the repo by 
   let url = getRemoteUrl(path)
   if url.len == 0:
     info path, "no remote URL found; cannot update"
