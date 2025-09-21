@@ -9,7 +9,7 @@
 ## Simple tool to automate frequent workflows: Can "clone"
 ## a Nimble dependency and its dependencies recursively.
 
-import std / [parseopt, files, dirs, strutils, os, osproc, tables, sets, json, uri, paths]
+import std / [parseopt, files, dirs, strutils, os, options, osproc, tables, sets, json, uri, paths]
 import basic / [versions, context, osutils, configutils, reporters,
                 nimbleparser, gitops, pkgurls, nimblecontext, compiledpatterns, packageinfos]
 import depgraphs, nimenv, lockfiles, confighandler, dependencies, pkgsearch
@@ -46,13 +46,13 @@ Command:
   install               use the nimble file to setup the project's dependencies
   link <path>           link an existing project into the current project
                         to share its dependencies
-  update <url|pkgname>  update a package and all of its dependencies
+  update [filter]       update every dependency that matches the filter
+                        whether by name or URL. All dependencies are updated
+                        if no filter is given.
   search <keyA> [keyB ...]
                         search for package that contains the given keywords
   extract <file.nimble> extract the requirements and custom commands from
                         the given Nimble file
-  updateDeps [filter]   update every dependency that has a remote
-                        URL that matches `filter` if a filter is given
   tag [major|minor|patch]
                         add and push a new tag, input must be one of:
                         ['major'|'minor'|'patch'] or a SemVer tag like ['1.0.3']
@@ -305,17 +305,23 @@ proc listOutdated() =
   for pkg in allNodes(graph):
     if pkg.isRoot:
       continue
-    if gitops.isOutdated(pkg.ondisk):
-      warn pkg.url.projectName, "is outdated"
+    let res = gitops.hasNewTags(pkg.ondisk)
+    if res.isNone:
+      warn pkg.url.projectName, "no remote version tags found"
       inc updateable
     else:
-      notice pkg.url.projectName, "is up to date"
+      let (outdated, cnt) = res.get()
+      if outdated:
+        warn pkg.url.projectName, "is outdated; " & $cnt & " new tags available"
+        inc updateable
+      else:
+        notice pkg.url.projectName, "is up to date"
 
   if updateable == 0:
     info project(), "all packages are up to date"
 
-proc updateWorkspace(filter: string) =
-  ## update the workspace
+proc update(filter: string) =
+  ## update the dependencies
   ##
   ## this will update the workspace by checking for outdated packages and
   ## updating them if they are outdated
@@ -332,16 +338,26 @@ proc updateWorkspace(filter: string) =
       continue
     
     let url = gitops.getRemoteUrl(pkg.ondisk)
+    if url.len == 0:
+      warn pkg.url.projectName, "no remote URL found; skipping..."
+      continue
     if url.len == 0 or filter notin url or filter notin pkg.url.projectName:
-      warn pkg.url.projectName, "not checking for updates"
+      warn pkg.url.projectName, "filter not matched; skipping..."
       continue
 
-    if gitops.isOutdated(pkg.ondisk):
-      warn pkg.url.projectName, "is outdated, updating..."
-      gitops.updateRepo(pkg.ondisk)
+    let res = gitops.hasNewTags(pkg.ondisk)
+    if res.isNone:
+      warn pkg.url.projectName, "no remote version tags found, updating origin instead"
+      gitops.updateRepo(pkg.ondisk, onlyTags = false)
       needsUpdate = true
     else:
-      notice pkg.url.projectName, "is up to date"
+      let (outdated, cnt) = res.get()
+      if outdated and cnt > 0:
+        warn pkg.url.projectName, "outdated, updating... " & $cnt & " new tags available"
+        gitops.updateRepo(pkg.ondisk, onlyTags = true)
+        needsUpdate = true
+      else:
+        notice pkg.url.projectName, "up to date"
   
   if needsUpdate:
     notice project(), "new dep versions available, run `atlas install` to update"
@@ -556,7 +572,7 @@ proc atlasRun*(params: seq[string]) =
     installDependencies(nc, nimbleFile)
 
   of "update":
-    updateWorkspace(if args.len == 0: "" else: args[0])
+    update(if args.len == 0: "" else: args[0])
 
   of "use":
     singleArg()

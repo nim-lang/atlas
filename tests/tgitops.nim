@@ -1,5 +1,5 @@
 import unittest
-import std/[os, files, dirs, paths, osproc, strutils, uri]
+import std/[os, files, dirs, paths, osproc, strutils, uri, options]
 import basic/[reporters, osutils, versions, context]
 
 import basic/gitops
@@ -123,7 +123,7 @@ suite "Git Operations Tests":
       discard execCmd("git commit -m \"initial commit\"")
       check(incrementLastTag(Path ".", 0) == "v0.0.1")
 
-  test "isOutdated detection":
+  test "hasNewTags detection":
     withDir testDir:
       discard execCmd("git init")
       # Create initial commit and tag
@@ -138,10 +138,10 @@ suite "Git Operations Tests":
       discard execCmd("git commit -m \"update commit\"")
 
       # Test if repo is outdated
-      let outdated = isOutdated(Path ".")
+      let outdated = hasNewTags(Path ".")
       # Note: This might fail in isolated test environments
       # We're mainly testing the function structure
-      check(not outdated)  # Expected to be false in test environment
+      check(outdated.isNone)  # Expected to be false in test environment
 
   test "getRemoteUrl functionality":
     withDir testDir:
