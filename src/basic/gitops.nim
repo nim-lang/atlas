@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std/[os, files, dirs, paths, osproc, sequtils, strutils, uri, sets]
+import std/[os, files, dirs, paths, osproc, options, sequtils, strutils, uri, sets]
 import reporters, osutils, versions, context
 
 type
@@ -15,6 +15,7 @@ type
     GitRemoteUrl = "git -C $DIR config --get remote.origin.url",
     GitDiff = "git -C $DIR diff",
     GitFetch = "git -C $DIR fetch",
+    GitFetchAll = "git -C $DIR fetch origin " & quoteShell("refs/heads/*:refs/heads/*") & " " & quoteShell("refs/tags/*:refs/tags/*"),
     GitTag = "git -C $DIR tag",
     GitTags = "git -C $DIR show-ref --tags",
     GitLastTaggedRef = "git -C $DIR rev-list --tags --max-count=1",
@@ -29,7 +30,7 @@ type
     GitLsFiles = "git -C $DIR ls-files"
     GitLog = "git -C $DIR log --format=%H origin/HEAD"
     GitLogLocal = "git -C $DIR log --format=%H HEAD"
-    GitCurrentBranch = "git rev-parse --abbrev-ref HEAD"
+    GitCurrentBranch = "git -C $DIR rev-parse --abbrev-ref HEAD"
     GitLsRemote = "git -C $DIR ls-remote --quiet --tags"
     GitShowFiles = "git -C $DIR show"
     GitListFiles = "git -C $DIR ls-tree --name-only -r"
@@ -193,9 +194,9 @@ proc shortToCommit*(path: Path, short: CommitHash): CommitHash =
     if vtags.len() == 1:
       result = vtags[0].c
 
-proc expandSpecial*(path: Path, vtag: VersionTag, errorReportLevel: MsgKind = Warning, isLocalOnly = false): VersionTag =
+proc expandSpecial*(path: Path, vtag: VersionTag, errorReportLevel: MsgKind = Warning): VersionTag =
   if vtag.version.isHead():
-    return findOriginTip(path, errorReportLevel, isLocalOnly)
+    return findOriginTip(path, errorReportLevel, false)
 
   let (cc, status) = exec(GitRevParse, path, [vtag.version.string.substr(1)], errorReportLevel)
 
@@ -368,13 +369,6 @@ proc incrementLastTag*(path: Path, field: Natural): string =
 proc isShortCommitHash*(commit: string): bool {.inline.} =
   commit.len >= 4 and commit.len < 40
 
-proc updateRepo*(path: Path) =
-  let (outp, status) = exec(GitFetch, path, ["--tags"])
-  if status != RES_OK:
-    error(path, "could not update repo: " & outp)
-  else:
-    info(path, "successfully updated repo")
-
 proc getRemoteUrl*(path: Path): string =
   let (cc, status) = exec(GitRemoteUrl, path, [])
   if status != RES_OK:
@@ -383,9 +377,10 @@ proc getRemoteUrl*(path: Path): string =
   else:
     return cc.strip()
 
-proc isOutdated*(path: Path): bool =
+proc hasNewTags*(path: Path): Option[tuple[outdated: bool, newTags: int]] =
   ## determine if the given git repo `f` is updateable
-  ##
+  ## returns an option tuple with the outdated flag and the number of new tags
+  ## the option is none if the repo doesn't have remote url or remote tags
 
   info path, "checking is package is up to date..."
 
@@ -394,33 +389,36 @@ proc isOutdated*(path: Path): bool =
 
   let url = getRemoteUrl(path)
   if url.len == 0:
-    return false
+    return none(tuple[outdated: bool, newTags: int])
   let (remoteTagsList, lsStatus) = listRemoteTags(path, url)
   let remoteTags = remoteTagsList.toHashSet()
 
   if not lsStatus:
     warn path, "git list remote tags failed, skipping"
-    return false
+    return none(tuple[outdated: bool, newTags: int])
 
   if remoteTags > localTags:
     warn path, "got new versions:", $(remoteTags - localTags)
-    return true
+    return some((true, remoteTags.len() - localTags.len()))
+  elif remoteTags.len() == 0:
+    info path, "no local tags found, checking for new commits"
+    return none(tuple[outdated: bool, newTags: int])
 
-  return false
+  return some((false, 0))
 
-proc updateDir*(path: Path, filter: string) =
-  let (remote, _) = osproc.execCmdEx("git remote -v")
-  if filter.len == 0 or filter in remote:
-    let diff = checkGitDiffStatus(path)
-    if diff.len > 0:
-      warn($path, "has uncommitted changes; skipped")
+proc updateRepo*(path: Path, onlyTags = false) =
+  ## updates the repo by 
+  let url = getRemoteUrl(path)
+  if url.len == 0:
+    info path, "no remote URL found; cannot update"
+    return
+
+  let (outp, status) =
+    if onlyTags:
+      exec(GitFetch, path, ["--tags", "origin"])
     else:
-      let (branch, _) = exec(GitCurrentBranch, path, [])
-      if branch.strip.len > 0:
-        let (output, exitCode) = osproc.execCmdEx("git pull origin " & branch.strip)
-        if exitCode != 0:
-          error $path, output
-        else:
-          info($path, "successfully updated")
-      else:
-        error $path, "could not fetch current branch name"
+      exec(GitFetchAll, path, [])
+  if status != RES_OK:
+    error(path, "could not update repo: " & outp)
+  else:
+    notice(path, "successfully updated repo")
