@@ -67,7 +67,7 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
 
       var hasCompatible = false
       for depVer, relVer in depNode.validVersions():
-        trace pkg.url.projectName, "checking dependnecy version:", $depVer, "query:", $query, "matches:", $query.matches(depVer)
+        trace pkg.url.projectName, "checking dependency version:", $depVer, "query:", $query, "matches:", $query.matches(depVer)
         if query.matches(depVer):
           hasCompatible = true
           trace pkg.url.projectName, "version matched requirements for the dependency version:", $depVer
