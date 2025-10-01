@@ -265,7 +265,10 @@ proc parseSuffix(s: string; start: int; result: var VersionInterval; err: var bo
 
 proc parseVersionInterval*(s: string; start: int; err: var bool): VersionInterval =
   var i = start
+  # Skip whitespace and an optional '@' marker before the version spec
   while i < s.len and s[i] in Whitespace: inc i
+  if "@" in s:
+    raise newException(ValueError, "@ is not allowed in version intervals, got: " & s)
   result = VersionInterval(a: VersionReq(r: verAny, v: Version""))
   if i < s.len:
     case s[i]
@@ -351,6 +354,8 @@ proc matches*(pattern: VersionInterval; v: Version): bool =
     result = matches(pattern.a, v)
 
 proc extractRequirementName*(req: string): (string, seq[string], int) =
+  if "@" in req:
+    raise newException(ValueError, "@ is not allowed in version intervals, got: " & req)
   const verChars = {'#', '<', '=', '>', '['}
   var i = 0
   while i < req.len and req[i] notin verChars + Whitespace:
