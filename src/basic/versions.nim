@@ -388,6 +388,10 @@ proc matches*(pattern: VersionInterval; x: VersionTag): bool =
   if pattern.isInterval:
     return matches(pattern.a, x.v) and matches(pattern.b, x.v)
 
+  # Special-case: query "#head" should match the repository tip.
+  if pattern.a.r == verEq and pattern.a.v.isHead:
+    return x.isTip
+
   if not result and pattern.a.r == verEq and pattern.a.v.isSpecial and pattern.a.v.string.len >= MinCommitLen:
     result = x.c.h.startsWith(pattern.a.v.string.substr(1))
   
