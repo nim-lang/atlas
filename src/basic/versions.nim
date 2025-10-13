@@ -276,7 +276,6 @@ proc parseVersionInterval*(s: string; start: int; err: var bool): VersionInterva
 
   result = VersionInterval(a: VersionReq(r: verAny, v: Version""))
   if i < s.len:
-    echo "CASE: ", s[i]
     case s[i]
     of '*': result = VersionInterval(a: VersionReq(r: verAny, v: Version""))
     of '#', '0'..'9':
