@@ -374,9 +374,9 @@ proc extractRequirementName*(req: string): (string, seq[string], int) =
     raise newException(ValueError, "Invalid requirements name: " & req)
 
   if i < req.len and req[i] == '@':
-    # sometimes this pattern gets used: 'https://github.com/seaqt/nim-seaqt.git@#qt-6.4'
-    # this is wrong but is a mashup of the command line Nimble usage
-    # so it occurs and breaks things
+    # sometimes this pattern gets add `requires "xyx@#branch"`
+    # which is a mixup of using `nimble install xyx@#branch` from the CLI
+    # so it occurs rarely and breaks things for atlas
     raise newException(ValueError, "Invalid requirements name: " & req)
 
   if i < req.len and req[i] == '[':
