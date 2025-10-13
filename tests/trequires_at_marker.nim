@@ -32,22 +32,8 @@ suite "requires @ parsing":
     expect ValueError:
       let (name, feats, idx) = extractRequirementName(req)
 
-    # check name == "mcu_utils"
-    # check feats.len == 0
-    # var err = false
-    # let iv = parseVersionInterval(req, idx, err)
-    # check not err
-    # check $iv == "#head"
-
   test "url without trailing @ in name":
     let req = "https://github.com/EmbeddedNim/mcu_utils@ >= 0.2.0"
     expect ValueError:
       let (name, feats, idx) = extractRequirementName(req)
-
-    # check name == "https://github.com/EmbeddedNim/mcu_utils"
-    # check feats.len == 0
-    # var err = false
-    # let iv = parseVersionInterval(req, idx, err)
-    # check not err
-    # check $iv == ">= 0.2.0"
 
