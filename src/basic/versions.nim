@@ -226,6 +226,8 @@ proc parseVer(s: string; start: var int): Version =
     result = Version""
   elif s[start..^1].strip() == "": # we got whitespace at end
     result = Version""
+  elif s[start..^1].strip() == "*": # we got whitespace at end
+    result = Version""
   else:
     raise newException(ValueError, "Invalid or incomplete version: " & s[start..^1])
 
