@@ -222,8 +222,12 @@ proc parseVer(s: string; start: var int): Version =
     while i < s.len and s[i] in Digits+{'.'}: inc i
     result = Version s.substr(start, i-1)
     start = i
-  else:
+  elif start == s.len(): # we're at the end
     result = Version""
+  elif s[start..^1].strip() == "": # we got whitespace at end
+    result = Version""
+  else:
+    raise newException(ValueError, "Invalid or incomplete version: " & s[start..^1])
 
 proc parseVersion*(s: string; start: int): Version =
   var i = start
@@ -268,12 +272,11 @@ proc parseVersionInterval*(s: string; start: int; err: var bool): VersionInterva
   # Skip whitespace before the version spec
   while i < s.len and s[i] in Whitespace: inc i
 
-  let invalidChars = PunctuationChars - {'*', '#', '0'..'9', '=', '<', '>'}
-  if invalidChars in s[i..^1]:
-    raise newException(ValueError, "Invalid requirements name: " & s[i..^1])
+  # let invalidChars = PunctuationChars - {'*', '#', ',', '.', '&', '=', '<', '>'} - IdentChars
 
   result = VersionInterval(a: VersionReq(r: verAny, v: Version""))
   if i < s.len:
+    echo "CASE: ", s[i]
     case s[i]
     of '*': result = VersionInterval(a: VersionReq(r: verAny, v: Version""))
     of '#', '0'..'9':
@@ -303,7 +306,10 @@ proc parseVersionInterval*(s: string; start: int; err: var bool): VersionInterva
         inc i
       while i < s.len and s[i] in Whitespace: inc i
       result = VersionInterval(a: VersionReq(r: r, v: parseVer(s, i)))
+      echo "S: ", s[i..^1]
+      echo "RES: ", result.repr
       parseSuffix(s, i, result, err)
+      echo "RES': ", result.repr
     else:
       err = true
   else:
