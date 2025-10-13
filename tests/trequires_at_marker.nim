@@ -17,6 +17,16 @@ suite "requires @ parsing":
     expect ValueError:
       let iv = parseVersionInterval(req, idx, err)
 
+  test "branch with odd chars":
+    let req = "mcu_utils#0.1.0@new"
+    let (name, feats, idx) = extractRequirementName(req)
+    check name == "mcu_utils"
+    check feats.len == 0
+    var err = false
+    let iv = parseVersionInterval(req, idx, err)
+    check not err
+    check $iv == "#0.1.0@new"
+
   test "name without reqs":
     let req = "mcu_utils"
     let (name, feats, idx) = extractRequirementName(req)
