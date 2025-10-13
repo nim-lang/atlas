@@ -305,10 +305,7 @@ proc parseVersionInterval*(s: string; start: int; err: var bool): VersionInterva
         inc i
       while i < s.len and s[i] in Whitespace: inc i
       result = VersionInterval(a: VersionReq(r: r, v: parseVer(s, i)))
-      echo "S: ", s[i..^1]
-      echo "RES: ", result.repr
       parseSuffix(s, i, result, err)
-      echo "RES': ", result.repr
     else:
       err = true
   else:
