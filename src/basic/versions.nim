@@ -370,13 +370,11 @@ proc extractRequirementName*(req: string): (string, seq[string], int) =
   let name = req.substr(0, i-1)
 
   let url = parseUri(name)
-  if not validIdentifier(name) and (url.scheme == "" or url.path.endsWith('@')):
-    raise newException(ValueError, "Invalid requirements name: " & req)
-
-  if i < req.len and req[i] == '@':
-    # sometimes this pattern gets add `requires "xyx@#branch"`
-    # which is a mixup of using `nimble install xyx@#branch` from the CLI
-    # so it occurs rarely and breaks things for atlas
+  if not validIdentifier(name) and
+      (url.scheme == "" or url.path.endsWith('@')):
+    # note: somtimes this gets added: `requires "xyx@#branch"`
+    #       which is a mixup of using `nimble install xyx@#branch` from the CLI
+    #       so it occurs rarely but breaks things for atlas
     raise newException(ValueError, "Invalid requirements name: " & req)
 
   if i < req.len and req[i] == '[':
