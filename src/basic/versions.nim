@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [strutils, parseutils, algorithm, jsonutils, hashes]
+import std / [strutils, uri, parseutils, algorithm, jsonutils, hashes]
 import std / json
 
 type
@@ -369,7 +369,14 @@ proc extractRequirementName*(req: string): (string, seq[string], int) =
     inc i
   let name = req.substr(0, i-1)
 
-  if not validIdentifier(name):
+  let url = parseUri(name)
+  if not validIdentifier(name) and (url.scheme == "" or url.path.endsWith('@')):
+    raise newException(ValueError, "Invalid requirements name: " & req)
+
+  if i < req.len and req[i] == '@':
+    # sometimes this pattern gets used: 'https://github.com/seaqt/nim-seaqt.git@#qt-6.4'
+    # this is wrong but is a mashup of the command line Nimble usage
+    # so it occurs and breaks things
     raise newException(ValueError, "Invalid requirements name: " & req)
 
   if i < req.len and req[i] == '[':
