@@ -43,6 +43,7 @@ type
     ListVersions
     ListVersionsOff
     GlobalWorkspace
+    ManualProjectArg
     ShallowClones
     IgnoreGitRemoteUrls
     IgnoreErrors

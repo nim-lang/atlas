@@ -593,6 +593,8 @@ suite "version interval matches":
     checkpoint "v1: " & v1.repr
     check not v1.matches(v"#abcdef")
 
+    echo "V1: ", v1.repr
+
     let v2 = parseVersionInterval("proj_a#some-branch", 6, err)
     checkpoint "v2: " & v2.repr
     check v2.matches(v"#some-branch")

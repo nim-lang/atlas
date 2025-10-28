@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [strutils, parseutils, algorithm, jsonutils, hashes]
+import std / [strutils, uri, parseutils, algorithm, jsonutils, hashes]
 import std / json
 
 type
@@ -222,8 +222,14 @@ proc parseVer(s: string; start: var int): Version =
     while i < s.len and s[i] in Digits+{'.'}: inc i
     result = Version s.substr(start, i-1)
     start = i
-  else:
+  elif start == s.len(): # we're at the end
     result = Version""
+  elif s[start..^1].strip() == "": # we got whitespace at end
+    result = Version""
+  elif s[start..^1].strip() == "*": # we got whitespace at end
+    result = Version""
+  else:
+    raise newException(ValueError, "Invalid or incomplete version: " & s[start..^1])
 
 proc parseVersion*(s: string; start: int): Version =
   var i = start
@@ -265,7 +271,11 @@ proc parseSuffix(s: string; start: int; result: var VersionInterval; err: var bo
 
 proc parseVersionInterval*(s: string; start: int; err: var bool): VersionInterval =
   var i = start
+  # Skip whitespace before the version spec
   while i < s.len and s[i] in Whitespace: inc i
+
+  # let invalidChars = PunctuationChars - {'*', '#', ',', '.', '&', '=', '<', '>'} - IdentChars
+
   result = VersionInterval(a: VersionReq(r: verAny, v: Version""))
   if i < s.len:
     case s[i]
@@ -356,6 +366,15 @@ proc extractRequirementName*(req: string): (string, seq[string], int) =
   while i < req.len and req[i] notin verChars + Whitespace:
     inc i
   let name = req.substr(0, i-1)
+
+  let url = parseUri(name)
+  if not validIdentifier(name) and
+      (url.scheme == "" or url.path.endsWith('@')):
+    # note: somtimes this gets added: `requires "xyx@#branch"`
+    #       which is a mixup of using `nimble install xyx@#branch` from the CLI
+    #       so it occurs rarely but breaks things for atlas
+    raise newException(ValueError, "Invalid requirements name: " & req)
+
   if i < req.len and req[i] == '[':
     inc i
     var features: seq[string]

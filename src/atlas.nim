@@ -252,15 +252,13 @@ proc linkPackage(linkDir, linkedNimble: Path) =
 
   installDependencies(nc, nimbleFile)
 
-
-proc detectProject(customProject = Path ""): bool =
+proc detectProject(): bool =
   ## find project by checking `currentDir` and its parents.
-  if customProject.string.len() > 0:
-    warn "atlas", "using custom project:", $customProject
-    project(customProject)
-  elif GlobalWorkspace in context().flags:
+  if GlobalWorkspace in context().flags:
     project(Path(getHomeDir() / ".atlas"))
     warn "atlas", "using global project:", $project()
+  elif ManualProjectArg in context().flags:
+    warn "atlas", "using manual project:", $project()
   else:
     var cwd = paths.getCurrentDir().absolutePath
     debug "atlas", "finding project from current dir:", $cwd
@@ -271,7 +269,7 @@ proc detectProject(customProject = Path ""): bool =
         break
       cwd = cwd.parentDir()
     project(cwd)
-  
+
   if project().len() > 0:
     debug "atlas", "project found:", $project()
     result = getProjectConfig().fileExists()
@@ -422,6 +420,7 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
       of "version", "v": writeVersion()
       of "keepcommits": context().flags.incl KeepCommits
       of "project":
+        context().flags.incl(ManualProjectArg)
         if val == ".":
           project(paths.getCurrentDir())
           createWorkspace()
@@ -488,6 +487,7 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
       else: writeHelp()
     of cmdEnd: assert false, "cannot happen"
 
+  notice "atlas:project", "Using project directory:", $project()
   if detectProject():
     notice "atlas:project", "Using project directory:", $project()
     readConfig()

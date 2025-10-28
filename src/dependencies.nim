@@ -126,23 +126,27 @@ proc addRelease(
     nc: var NimbleContext;
     pkg: Package,
     vtag: VersionTag
-): PackageVersion =
+): bool =
   var pkgver = vtag.toPkgVer()
   trace pkg.url.projectName, "Adding Nimble version:", $vtag
-  let release = nc.processNimbleRelease(pkg, vtag)
+  try:
+    let release = nc.processNimbleRelease(pkg, vtag)
 
-  if vtag.v.string == "":
-    pkgver.vtag.v = release.version
-    trace pkg.url.projectName, "updating release tag information:", $pkgver.vtag
-  elif release.version.string == "":
-    warn pkg.url.projectName, "nimble file missing version information:", $pkgver.vtag
-    release.version = vtag.version
-  elif vtag.v != release.version and not pkg.isRoot:
-    info pkg.url.projectName, "version mismatch between version tag:", $vtag.v, "and nimble version:", $release.version
-  
-  versions.add((pkgver, release))
+    if vtag.v.string == "":
+      pkgver.vtag.v = release.version
+      trace pkg.url.projectName, "updating release tag information:", $pkgver.vtag
+    elif release.version.string == "":
+      warn pkg.url.projectName, "nimble file missing version information:", $pkgver.vtag
+      release.version = vtag.version
+    elif vtag.v != release.version and not pkg.isRoot:
+      info pkg.url.projectName, "version mismatch between version tag:", $vtag.v, "and nimble version:", $release.version
+    
+    versions.add((pkgver, release))
 
-  result = pkgver
+    result = true
+  except CatchableError as e:
+    error pkg.url.projectName, "addRelease error processing nimble release:", $vtag, "error:", $e.msg
+    return false
 
 proc traverseDependency*(
     nc: var NimbleContext;
@@ -238,8 +242,8 @@ proc traverseDependency*(
           if not uniqueCommits.containsOrIncl(tag.c):
             # trace pkg.url.projectName, "traverseDependency adding nimble commit:", $tag
             var vers: seq[(PackageVersion, NimbleRelease)]
-            let pver = vers.addRelease(nc, pkg, tag)
-            if not nimbleVersions.containsOrIncl(pver.vtag.v):
+            let added = vers.addRelease(nc, pkg, tag)
+            if added and not nimbleVersions.containsOrIncl(vers[0][0].vtag.v):
               versions.add(vers)
           else:
             error pkg.url.projectName, "traverseDependency skipping nimble commit:", $tag, "uniqueCommits:", $(tag.c in uniqueCommits), "nimbleVersions:", $(tag.v in nimbleVersions)
@@ -356,6 +360,7 @@ proc expandGraph*(path: Path, nc: var NimbleContext; mode: TraversalMode, onClon
       notice root.projectName, "Processing packages:", processingPkgs.join(", ")
 
     # process packages
+    debug "atlas:expandGraph", "Processing package count: ", $pkgUrls.len()
     for pkgUrl in pkgUrls:
       var pkg = nc.packageToDependency[pkgUrl]
       case pkg.state:
@@ -384,13 +389,13 @@ proc expandGraph*(path: Path, nc: var NimbleContext; mode: TraversalMode, onClon
           result.pkgs[pkgUrl] = pkg
       of Processed:
         discard
-        # if pkgUrl notin result.pkgs:
-        #   result.pkgs[pkgUrl] = pkg
       else:
         discard
         info pkg.projectName, "Skipping package:", $pkg.url, "state:", $pkg.state
 
-  for pkgUrl, versions in nc.explicitVersions:
+  debug "atlas:expandGraph", "Processing explicit versions count: ", $nc.explicitVersions.len()
+  for pkgUrl in nc.explicitVersions.keys().toSeq():
+    let versions = nc.explicitVersions[pkgUrl]
     info pkgUrl.projectName, "explicit versions: ", versions.toSeq().mapIt($it).join(", ")
     var pkg = nc.packageToDependency[pkgUrl]
     if pkg.state == Processed:
