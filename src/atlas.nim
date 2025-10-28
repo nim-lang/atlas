@@ -257,17 +257,18 @@ proc detectProject(): bool =
   if GlobalWorkspace in context().flags:
     project(Path(getHomeDir() / ".atlas"))
     warn "atlas", "using global project:", $project()
-    return
+  elif ManualProjectArg in context().flags:
+    warn "atlas", "using manual project:", $project()
+  else:
+    var cwd = paths.getCurrentDir().absolutePath
+    debug "atlas", "finding project from current dir:", $cwd
 
-  var cwd = paths.getCurrentDir().absolutePath
-  debug "atlas", "finding project from current dir:", $cwd
-
-  while cwd.string.len() > 0:
-    debug "atlas", "checking project config:", $(cwd.getProjectConfig())
-    if cwd.getProjectConfig().fileExists():
-      break
-    cwd = cwd.parentDir()
-  project(cwd)
+    while cwd.string.len() > 0:
+      debug "atlas", "checking project config:", $(cwd.getProjectConfig())
+      if cwd.getProjectConfig().fileExists():
+        break
+      cwd = cwd.parentDir()
+    project(cwd)
 
   if project().len() > 0:
     debug "atlas", "project found:", $project()
@@ -419,6 +420,7 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
       of "version", "v": writeVersion()
       of "keepcommits": context().flags.incl KeepCommits
       of "project":
+        context().flags.incl(ManualProjectArg)
         if val == ".":
           project(paths.getCurrentDir())
           createWorkspace()
