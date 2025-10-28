@@ -360,6 +360,7 @@ proc expandGraph*(path: Path, nc: var NimbleContext; mode: TraversalMode, onClon
       notice root.projectName, "Processing packages:", processingPkgs.join(", ")
 
     # process packages
+    debug "atlas:expandGraph", "Processing package count: ", $pkgUrls.len()
     for pkgUrl in pkgUrls:
       var pkg = nc.packageToDependency[pkgUrl]
       case pkg.state:
@@ -388,13 +389,13 @@ proc expandGraph*(path: Path, nc: var NimbleContext; mode: TraversalMode, onClon
           result.pkgs[pkgUrl] = pkg
       of Processed:
         discard
-        # if pkgUrl notin result.pkgs:
-        #   result.pkgs[pkgUrl] = pkg
       else:
         discard
         info pkg.projectName, "Skipping package:", $pkg.url, "state:", $pkg.state
 
-  for pkgUrl, versions in nc.explicitVersions:
+  debug "atlas:expandGraph", "Processing explicit versions count: ", $nc.explicitVersions.len()
+  for pkgUrl in nc.explicitVersions.keys().toSeq():
+    let versions = nc.explicitVersions[pkgUrl]
     info pkgUrl.projectName, "explicit versions: ", versions.toSeq().mapIt($it).join(", ")
     var pkg = nc.packageToDependency[pkgUrl]
     if pkg.state == Processed:

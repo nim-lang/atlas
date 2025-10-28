@@ -471,7 +471,7 @@ proc runBuildSteps*(graph: DepGraph) =
           tryWithDir pkg.ondisk:
             let nimbleFiles = findNimbleFile(pkg)
             if nimbleFiles.len() == 1:
-              info pkg.url.projectName, "Running installHook"
+              notice pkg.url.projectName, "Running installHook"
               runNimScriptInstallHook nimbleFiles[0], pkg.projectName
         # check for nim script bs
         for pattern in mitems context().plugins.builderPatterns:
@@ -481,6 +481,7 @@ proc runBuildSteps*(graph: DepGraph) =
               runNimScriptBuilder pattern, pkg.projectName
 
 proc activateGraph*(graph: DepGraph): seq[CfgPath] =
+  notice "atlas:graph", "Activating project deps for resolved dependency graph"
   for pkg in allActiveNodes(graph):
     if pkg.isRoot: continue
     if not pkg.activeVersion.commit().isEmpty():

@@ -79,9 +79,9 @@ proc runNimScript*(scriptContent: string; name: string) =
     removeFile buildNims
 
 proc runNimScriptInstallHook*(nimbleFile: Path, name: string) =
-  infoNow name, "running install hooks"
+  notice name, "running install hooks"
   runNimScript InstallHookTemplate % [escape($(nimbleFile))], name
 
 proc runNimScriptBuilder*(p: (string, string); name: string) =
-  infoNow name, "running nimble build scripts"
+  notice name, "running nimble build scripts"
   runNimScript BuilderScriptTemplate % [p[0].escape, p[1].escape], name
