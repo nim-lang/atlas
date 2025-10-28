@@ -22,7 +22,7 @@ type
     GitDescribe = "git -C $DIR describe",
     GitRevParse = "git -C $DIR rev-parse",
     GitCheckout = "git -C $DIR checkout",
-    GitSubModUpdate = "git submodule update --init",
+    GitSubModUpdate = "git -C $DIR submodule update --init",
     GitPush = "git -C $DIR push origin",
     GitPull = "git -C $DIR pull",
     GitCurrentCommit = "git -C $DIR log -n1 --format=%H"
@@ -301,12 +301,14 @@ proc checkoutGitCommitFull*(path: Path; commit: CommitHash,
   else:
     trace $path, "updated package to:", $commit
 
-  let (_, subModStatus) = exec(GitSubModUpdate, path, smExtraArgs)
-  if subModstatus != RES_OK:
-    message(errorReportLevel, $path, "could not update submodules")
-    result = false
-  else:
-    info($path, "updated submodules ")
+  if fileExists(path / Path".gitmodules"):
+    notice relativeToWorkspace(path), "Found submodules; Updating..."
+    let (_, subModStatus) = exec(GitSubModUpdate, path, smExtraArgs)
+    if subModstatus != RES_OK:
+      message(errorReportLevel, $path, "could not update submodules")
+      result = false
+    else:
+      debug($path, "updated submodules")
 
 proc gitPull*(path: Path) =
   let (outp, status) = exec(GitPull, path, [])
