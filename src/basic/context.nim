@@ -57,6 +57,7 @@ type
   AtlasContext* = object
     projectDir*: Path = Path"."
     depsDir*: Path = Path"deps"
+    confDirOverride*: Path = Path""
     flags*: set[Flag] = {}
     nameOverrides*: Patterns
     urlOverrides*: Patterns
@@ -108,11 +109,13 @@ proc getProjectConfig*(dir = project()): Path =
   ## prefer project atlas.config if found
   ## otherwise default to one in deps/
   ## the deps path will be the default for auto-created ones
+  if context().confDirOverride.len() > 0:
+    return context().confDirOverride / AtlasProjectConfig
   result = dir / AtlasProjectConfig
   if fileExists(result): return
   result = depsDir() / AtlasProjectConfig
 
-proc isProject*(dir: Path): bool =
+proc isMainProject*(dir: Path): bool =
   fileExists(getProjectConfig(dir))
 
 proc `==`*(a, b: CfgPath): bool {.borrow.}
