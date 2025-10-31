@@ -1,15 +1,24 @@
-# atlas
+# Atlas
+
 The Atlas Package cloner. It manages project dependencies in an isolated `deps/` directory.
 
 # Installation
 
-Upcoming Nim version 2.0 will ship with `atlas`. Building from source:
+Nim version 2.0 ships with `atlas`. Note that this version may be slightly outdated.
+
+Building from source:
 
 ```sh
 git clone https://github.com/nim-lang/atlas.git
 cd atlas/
 nim c src/atlas.nim
 # copy src/atlas[.exe] somewhere in your PATH
+```
+
+If you're using Nimble you can install the latest Atlas with:
+
+```sh
+nimble install https://github.com/nim-lang/atlas@\#head
 ```
 
 # Documentation
@@ -82,7 +91,7 @@ To setup a folder `ws/` as a workspace simply clone a project into the `ws/` fol
 
 ```sh
 mkdir ws/ && cd ws/
-git clone git clone https://github.com/nim-lang/choosenim
+git clone https://github.com/nim-lang/choosenim
 cd choosenim/
 atlas --deps:../ --confdir:. init
 atlas install
