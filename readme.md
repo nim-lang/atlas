@@ -72,7 +72,7 @@ Use URLs:
 atlas use https://github.com/zedeus/nitter
 ```
 
-Link to another project and it's deps:
+Link to another project and its deps:
 ```sh
 atlas link ../../existingDepdency/
 ```
@@ -97,7 +97,7 @@ atlas --deps:../ --confdir:. init
 atlas install
 ```
 
-Now `ws/` will contains all the dependencies for `choosenim` such as `zippy`, `checksums`, etc.
+Now `ws/` contains all the dependencies for `choosenim` such as `zippy`, `checksums`, etc.
 
 **Note**: The `deps` config setting can be relative or absolute. So you could do a global workspace like `atlas --deps:~/ws/ --confdir:. init`.
 
