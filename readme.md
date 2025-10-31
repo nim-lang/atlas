@@ -67,7 +67,7 @@ The project structure will default to something similar to this:
 
 ### Atlas Config
 
-The `atlas.config` file is where various settings can be set by editing the JSON. Atlas defaults to finding it at `./deps/atlas.config`. A default config is automatically created there if one is not found.
+The `atlas.config` file is where Atlas project settings can be changed. Atlas defaults to finding it at `./deps/atlas.config` and is a simple JSON file. A default config is automatically created there if one is not found.
 
 Additionally Atlas checks the current project folder for an `./atlas.config` file. This setup lets you override the `deps` folder location where dependencies are stored. See [Workspace Style Setup](#workspace-style-setup) below.
 
