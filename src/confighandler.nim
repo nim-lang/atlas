@@ -59,7 +59,7 @@ proc readAtlasContext*(ctx: var AtlasContext, projectDir: Path) =
   ctx.projectDir = projectDir
 
   if m.deps.len > 0:
-    ctx.depsDir = m.deps.Path
+    ctx.depsDir = m.deps.Path.expandTilde()
   
   # Handle package name overrides
   for key, val in m.nameOverrides:

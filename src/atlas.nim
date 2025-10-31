@@ -44,13 +44,13 @@ Command:
   use <url|pkgname>     add package and its dependencies to the project
                         and patch the project's Nimble file
   install               use the nimble file to setup the project's dependencies
-  link <path>           link an existing project into the current project
-                        to share its dependencies
   update [filter]       update every dependency that matches the filter
                         whether by name or URL. All dependencies are updated
                         if no filter is given.
   search <keyA> [keyB ...]
                         search for package that contains the given keywords
+  link <path>           link an existing project into the current project
+                        to share its dependencies
   extract <file.nimble> extract the requirements and custom commands from
                         the given Nimble file
   tag [major|minor|patch]
@@ -71,6 +71,8 @@ Options:
                         for project specific use: `feature.<project>.<feature>`
                         (note always be passed when you want to use features)
   --keepCommits         do not perform any `git checkouts`
+  --project=path        use the project at the given path
+  --confdir=path        use the atlas.config at the given path
   --noexec              do not perform any action that may run arbitrary code
   --autoenv             detect the minimal Nim $version and setup a
                         corresponding Nim virtual environment
@@ -155,7 +157,7 @@ proc createWorkspace() =
   createDir(depsDir())
   if not fileExists(getProjectConfig()):
     writeDefaultConfigFile()
-    info project(), "created atlas.config"
+    info project(), "created atlas.config at:", $getProjectConfig()
   if depsDir() != Path "":
     if not dirExists(absoluteDepsDir(project(), depsDir())):
       info depsDir(), "creating deps directory"
@@ -264,12 +266,13 @@ proc detectProject(): bool =
     debug "atlas", "finding project from current dir:", $cwd
 
     while cwd.string.len() > 0:
-      debug "atlas", "checking project config:", $(cwd.getProjectConfig())
+      trace "atlas", "checking project config:", $(cwd.getProjectConfig()), "at:", $cwd
       if cwd.getProjectConfig().fileExists():
         break
       cwd = cwd.parentDir()
     project(cwd)
 
+  debug "atlas", "using project:", $project()
   if project().len() > 0:
     debug "atlas", "project found:", $project()
     result = getProjectConfig().fileExists()
@@ -419,15 +422,13 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
       of "help", "h": writeHelp(0)
       of "version", "v": writeVersion()
       of "keepcommits": context().flags.incl KeepCommits
-      of "project":
+      of "project", "p":
         context().flags.incl(ManualProjectArg)
         if val == ".":
           project(paths.getCurrentDir())
           createWorkspace()
         elif val.len > 0:
-          project(Path val)
-          # createDir(val)
-          # createWorkspace()
+          project(val.Path.expandTilde())
         else:
           writeHelp()
       of "deps":
@@ -445,6 +446,8 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
       of "keepworkspace": context().flags.incl KeepWorkspace
       of "autoenv": context().flags.incl AutoEnv
       of "noexec": context().flags.incl NoExec
+      of "confdir":
+        context().confDirOverride = Path val
       of "feature":
         context().features.incl val.normalize
       of "list":
@@ -487,7 +490,6 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
       else: writeHelp()
     of cmdEnd: assert false, "cannot happen"
 
-  notice "atlas:project", "Using project directory:", $project()
   if detectProject():
     notice "atlas:project", "Using project directory:", $project()
     readConfig()

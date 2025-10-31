@@ -172,7 +172,7 @@ proc createUrlFromPath*(nc: var NimbleContext, orig: Path, isLinkPath = false): 
   let absPath = absolutePath(orig)
   # Check if this is an Atlas project or if it's the current project
   let prefix = if isLinkPath: "link://" else: "atlas://"
-  if isProject(absPath) or absPath == absolutePath(project()):
+  if isMainProject(absPath) or absPath == absolutePath(project()):
     if isLinkPath:
       let url = parseUri(prefix & $absPath)
       result = toPkgUriRaw(url)
