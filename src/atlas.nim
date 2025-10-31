@@ -428,7 +428,7 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
           project(paths.getCurrentDir())
           createWorkspace()
         elif val.len > 0:
-          project(Path val)
+          project(val.Path.expandTilde())
           # createDir(val)
           # createWorkspace()
         else:
