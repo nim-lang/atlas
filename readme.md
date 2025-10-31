@@ -71,7 +71,19 @@ The `atlas.config` file is where various settings can be set by editing the JSON
 
 Additionally Atlas checks the current project folder for an `./atlas.config` file. This setup lets you override the `deps` folder location where dependencies are stored. See [Workspace Style Setup](#workspace-style-setup) below.
 
-You can also add or override URLs, package names, etc there as well.
+You can also add or override URLs, package names, etc there as well. The current supported options are: 
+
+```json
+{
+  "deps": "../",
+  "nameOverrides": {},
+  "urlOverrides": {},
+  "pkgOverrides": {},
+  "plugins": "",
+  "resolver": "SemVer"
+}```
+
+See [full documentation](./doc/atlas.md) a for more details on `nameOverrides`.
 
 ## Using URLs and local folders
 
