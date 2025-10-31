@@ -81,7 +81,8 @@ You can also add or override URLs, package names, etc there as well. The current
   "pkgOverrides": {},
   "plugins": "",
   "resolver": "SemVer"
-}```
+}
+```
 
 See [full documentation](./doc/atlas.md) a for more details on `nameOverrides` and others.
 
