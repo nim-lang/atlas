@@ -65,6 +65,27 @@ The project structure will default to something similar to this:
   $project / deps / dependency-C.nimble-link (for linked projects)
 ```
 
+### Atlas Config
+
+The `atlas.config` file is where Atlas project settings can be changed. Atlas defaults to finding it at `./deps/atlas.config` and is a simple JSON file. A default config is automatically created there if one is not found.
+
+Additionally Atlas checks the current project folder for an `./atlas.config` file. This setup lets you override the `deps` folder location where dependencies are stored. See [Workspace Style Setup](#workspace-style-setup) below.
+
+You can also add or override URLs, package names, etc there as well. The current supported options are: 
+
+```json
+{
+  "deps": "../",
+  "nameOverrides": {},
+  "urlOverrides": {},
+  "pkgOverrides": {},
+  "plugins": "",
+  "resolver": "SemVer"
+}
+```
+
+See [full documentation](./doc/atlas.md) a for more details on `nameOverrides` and others.
+
 ## Using URLs and local folders
 
 Use URLs:
@@ -85,7 +106,7 @@ All dependencies are full git repos. You can manually go into `deps/` and change
 
 Multiple projects can share a single deps folder.
 
-In this configuration Atlas works in a *workspace* style.
+In this configuration Atlas works in a *workspace* style. All you need to do is setup an `atlas.config` in each project.
 
 To setup a folder `ws/` as a workspace simply clone a project into the `ws/` folder like:
 
