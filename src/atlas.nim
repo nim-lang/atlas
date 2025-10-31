@@ -40,7 +40,7 @@ const
 Usage:
   atlas [options] [command] [arguments]
 Command:
-  init [dir]            initializes the current project as an Atlas project
+  init                  initializes the current project as an Atlas project
   use <url|pkgname>     add package and its dependencies to the project
                         and patch the project's Nimble file
   install               use the nimble file to setup the project's dependencies
