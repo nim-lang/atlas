@@ -145,7 +145,7 @@ proc addRelease(
 
     result = true
   except CatchableError as e:
-    error pkg.url.projectName, "addRelease error processing nimble release:", $vtag, "error:", $e.msg
+    info pkg.url.projectName, "error processing nimble release:", $vtag, "error:", $e.msg
     return false
 
 proc traverseDependency*(
