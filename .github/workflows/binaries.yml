@@ -69,7 +69,7 @@ jobs:
           tar -c -z -v -f atlas-${{ matrix.target.name }}.tar.gz `ls atlas{,.exe} 2>/dev/null || true`
 
       - name: Upload the Nim Language Server Binaries
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: atlas-${{ matrix.target.name }}.tar.gz
           path: atlas-${{ matrix.target.name }}.tar.gz
