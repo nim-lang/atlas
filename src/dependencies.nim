@@ -38,8 +38,9 @@ proc copyFromDisk*(pkg: Package, dest: Path): (CloneStatus, string) =
 
 proc syncGitRemotes(nc: NimbleContext; pkg: Package) =
   ## Keep forked repositories in the same directory by reshuffling git remotes.
-  ## The requested URL becomes `origin`; the canonical package URL (if known)
-  ## is stored as `upstream` and previous origins are preserved as `fork`.
+  ## Official packages keep `origin` pointing at the canonical URL. When forks
+  ## are present, add extra remotes named after the fully-qualified project
+  ## (e.g. repo.user.host) so multiple forks can coexist predictably.
   if pkg.url.isFileProtocol() or pkg.url.url.scheme in ["atlas", "link"]:
     return
   if not pkg.ondisk.dirExists() or not gitops.isGitDir(pkg.ondisk):
@@ -49,31 +50,32 @@ proc syncGitRemotes(nc: NimbleContext; pkg: Package) =
   let canonicalPkg = nc.lookup(pkg.url.shortName())
   let canonicalUrl = if canonicalPkg.isEmpty(): "" else: $canonicalPkg.url
   let hasCanonical = canonicalUrl.len > 0
-  let desiredIsCanonical = hasCanonical and canonicalUrl == desiredOrigin
 
   let remotes = listRemotes(pkg.ondisk)
-  let currentOrigin = remotes.getOrDefault("origin", "")
-  var hasDesired = false
-  for _, url in remotes:
-    if url == desiredOrigin:
-      hasDesired = true
-      break
+  var updatedRemotes = remotes
 
-  if not hasDesired:
-    if currentOrigin.len > 0 and currentOrigin != desiredOrigin:
-      let upstreamUrl =
-        if hasCanonical: canonicalUrl
-        else: currentOrigin
-      if upstreamUrl.len > 0 and not remoteExists(pkg.ondisk, "upstream"):
-        discard setRemoteUrl(pkg.ondisk, "upstream", upstreamUrl)
-    discard setRemoteUrl(pkg.ondisk, "origin", desiredOrigin)
-  elif currentOrigin != desiredOrigin:
-    discard setRemoteUrl(pkg.ondisk, "origin", desiredOrigin)
+  proc ensureRemote(name, url: string) =
+    if url.len == 0: return
+    if updatedRemotes.getOrDefault(name, "") != url:
+      if setRemoteUrl(pkg.ondisk, name, url):
+        updatedRemotes[name] = url
 
-  if hasCanonical and canonicalUrl != desiredOrigin and not remoteExists(pkg.ondisk, "upstream"):
-    discard setRemoteUrl(pkg.ondisk, "upstream", canonicalUrl)
+  if hasCanonical:
+    # Official package: keep origin at the canonical URL.
+    ensureRemote("origin", canonicalUrl)
+    # Add fork/alternate remotes with deterministic names.
+    if desiredOrigin != canonicalUrl:
+      ensureRemote(pkg.url.projectName(), desiredOrigin)
+  else:
+    # No official URL known.
+    let currentOrigin = updatedRemotes.getOrDefault("origin", "")
+    if currentOrigin.len == 0 or currentOrigin == desiredOrigin:
+      ensureRemote("origin", desiredOrigin)
+    else:
+      # Multiple unofficial URLs: keep existing origin, add deterministic remote.
+      ensureRemote(pkg.url.projectName(), desiredOrigin)
 
-  pkg.remotes = listRemotes(pkg.ondisk)
+  pkg.remotes = updatedRemotes
 
 proc processNimbleRelease(
     nc: var NimbleContext;

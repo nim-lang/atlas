@@ -131,10 +131,9 @@ suite "urls and naming":
     nc2.loadDependency(pkg)
 
     check pkg.ondisk == depDir.absolutePath()
-    check getRemoteUrl(depDir) == "https://github.com/elcritch/npeg"
-    check getRemoteUrl(depDir, "upstream") == "https://github.com/zevv/npeg"
-    check pkg.remotes["origin"] == "https://github.com/elcritch/npeg"
-    check pkg.remotes["upstream"] == "https://github.com/zevv/npeg"
+    check getRemoteUrl(depDir) == "https://github.com/zevv/npeg"
+    check pkg.remotes["origin"] == "https://github.com/zevv/npeg"
+    check pkg.remotes["npeg.elcritch.github.com"] == "https://github.com/elcritch/npeg"
 
   test "sync url":
     let upkg = nc.createUrl("https://github.com/planetis-m/sync")
