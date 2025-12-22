@@ -256,7 +256,9 @@ proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
 
 
 proc toString(info: SatVarInfo): string =
-  "(" & info.pkg.url.projectName & ", " & $info.version & ")"
+  result = "(" & info.pkg.url.projectName & ", " & $info.version & ")"
+  if info.pkg.remoteName.len > 0 and info.pkg.remoteName != "origin":
+    result &= " [" & info.pkg.remoteName & "]"
 
 proc debugFormular*(graph: var DepGraph; form: Form; solution: Solution) =
   echo "FORM:\n\t", form.formula
@@ -347,15 +349,10 @@ proc printVersionSelections(graph: DepGraph, solution: Solution, form: Form) =
         if ver.vid in form.mapping:
           let item = form.mapping[ver.vid]
           doAssert pkg.url == item.pkg.url
-          let remoteInfo =
-            if item.pkg.remoteName.len > 0 and item.pkg.remoteName != "origin":
-              " [" & item.pkg.remoteName & "]"
-            else:
-              ""
           if solution.isTrue(ver.vid):
-            selections.add((item.pkg.url.projectName, "[x] " & toString(item) & remoteInfo))
+            selections.add((item.pkg.url.projectName, "[x] " & toString(item)))
           else:
-            selections.add((item.pkg.url.projectName, "[ ] " & toString(item) & remoteInfo))
+            selections.add((item.pkg.url.projectName, "[ ] " & toString(item)))
         else:
           selections.add((pkg.url.projectName, "[!] " & "(" & $rel.status & "; pkg: " & pkg.url.projectName & ", " & $ver & ")"))
   var longestPkgName = 0
