@@ -36,6 +36,45 @@ proc copyFromDisk*(pkg: Package, dest: Path): (CloneStatus, string) =
     error pkg, "copyFromDisk not found:", $source
     result = (NotFound, $dest)
 
+proc syncGitRemotes(nc: NimbleContext; pkg: Package) =
+  ## Keep forked repositories in the same directory by reshuffling git remotes.
+  ## The requested URL becomes `origin`; the canonical package URL (if known)
+  ## is stored as `upstream` and previous origins are preserved as `fork`.
+  if pkg.url.isFileProtocol() or pkg.url.url.scheme in ["atlas", "link"]:
+    return
+  if not pkg.ondisk.dirExists() or not gitops.isGitDir(pkg.ondisk):
+    return
+
+  let desiredOrigin = $pkg.url
+  let canonicalPkg = nc.lookup(pkg.url.shortName())
+  let canonicalUrl = if canonicalPkg.isEmpty(): "" else: $canonicalPkg.url
+  let hasCanonical = canonicalUrl.len > 0
+  let desiredIsCanonical = hasCanonical and canonicalUrl == desiredOrigin
+
+  let remotes = listRemotes(pkg.ondisk)
+  let currentOrigin = remotes.getOrDefault("origin", "")
+  var hasDesired = false
+  for _, url in remotes:
+    if url == desiredOrigin:
+      hasDesired = true
+      break
+
+  if not hasDesired:
+    if currentOrigin.len > 0 and currentOrigin != desiredOrigin:
+      let upstreamUrl =
+        if hasCanonical: canonicalUrl
+        else: currentOrigin
+      if upstreamUrl.len > 0 and not remoteExists(pkg.ondisk, "upstream"):
+        discard setRemoteUrl(pkg.ondisk, "upstream", upstreamUrl)
+    discard setRemoteUrl(pkg.ondisk, "origin", desiredOrigin)
+  elif currentOrigin != desiredOrigin:
+    discard setRemoteUrl(pkg.ondisk, "origin", desiredOrigin)
+
+  if hasCanonical and canonicalUrl != desiredOrigin and not remoteExists(pkg.ondisk, "upstream"):
+    discard setRemoteUrl(pkg.ondisk, "upstream", canonicalUrl)
+
+  pkg.remotes = listRemotes(pkg.ondisk)
+
 proc processNimbleRelease(
     nc: var NimbleContext;
     pkg: Package,
@@ -319,9 +358,12 @@ proc loadDependency*(
       if UpdateRepos in context().flags:
         gitops.updateRepo(pkg.ondisk)
         
-    else:
-      pkg.state = Error
-      pkg.errors.add "ondisk location missing"
+  else:
+    pkg.state = Error
+    pkg.errors.add "ondisk location missing"
+
+  if pkg.state == Found:
+    syncGitRemotes(nc, pkg)
 
 proc expandGraph*(path: Path, nc: var NimbleContext; mode: TraversalMode, onClone: PackageAction, isLinkPath = false): DepGraph =
   ## Expand the graph by adding all dependencies.

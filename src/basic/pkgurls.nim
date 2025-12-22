@@ -39,6 +39,11 @@ proc projectName*(u: PkgUrl): string =
   else:
     u.qualifiedName.name & "." & u.qualifiedName.user & "." & u.qualifiedName.host
 
+proc dirName*(u: PkgUrl): string =
+  ## Directory name used on disk for dependencies. Always uses the short name so
+  ## forks and unlisted packages share the same workspace path.
+  u.shortName()
+
 proc requiresName*(u: PkgUrl): string =
   if u.hasShortName:
     u.qualifiedName.name
@@ -86,29 +91,40 @@ proc linkPath*(path: Path): Path =
 proc toDirectoryPath(pkgUrl: PkgUrl, isLinkFile: bool): Path =
   trace pkgUrl, "directory path from:", $pkgUrl.url
 
-  if pkgUrl.url.scheme == "atlas":
+  case pkgUrl.url.scheme
+  of "atlas":
     result = project()
-  elif pkgUrl.url.scheme == "link":
+  of "link":
     result = pkgUrl.toOriginalPath().parentDir()
-  elif pkgUrl.url.scheme == "file":
-    # file:// urls are used for local source paths, not dependency paths
-    result = depsDir() / Path(pkgUrl.projectName())
   else:
-    result = depsDir() / Path(pkgUrl.projectName())
-  
-  if not isLinkFile and not dirExists(result) and fileExists(result.linkPath()):
-    # prefer the directory path if it exists (?)
-    let linkPath = result.linkPath()
-    let link = readFile($linkPath)
-    let lines = link.split("\n")
-    if lines.len != 2:
-      warn pkgUrl.projectName(), "invalid link file:", $linkPath
-    else:
-      let nimble = Path(lines[0])
-      result = nimble.splitFile().dir
-      if not result.isAbsolute():
-        result = linkPath.parentDir() / result
-      debug pkgUrl.projectName(), "link file to:", $result
+    # Default case: clone into a short-name directory so forks reuse the same
+    # workspace location. Keep the legacy long-name directory as a fallback.
+    let shortDir = depsDir() / Path(pkgUrl.dirName())
+    let legacyDir = depsDir() / Path(pkgUrl.projectName())
+    var candidates = @[shortDir]
+    if legacyDir != shortDir:
+      candidates.add legacyDir
+
+    for base in candidates:
+      var candidate = base
+      if not isLinkFile and not dirExists(candidate) and fileExists(candidate.linkPath()):
+        let linkPath = candidate.linkPath()
+        let link = readFile($linkPath)
+        let lines = link.split("\n")
+        if lines.len != 2:
+          warn pkgUrl.projectName(), "invalid link file:", $linkPath
+        else:
+          let nimble = Path(lines[0])
+          candidate = nimble.splitFile().dir
+          if not candidate.isAbsolute():
+            candidate = linkPath.parentDir() / candidate
+          debug pkgUrl.projectName(), "link file to:", $candidate
+      if dirExists(candidate) or fileExists(candidate.linkPath()):
+        result = candidate
+        break
+
+    if result.len() == 0:
+      result = shortDir
 
   result = result.absolutePath
   trace pkgUrl, "found directory path:", $result
@@ -121,7 +137,7 @@ proc toLinkPath*(pkgUrl: PkgUrl): Path =
   if pkgUrl.url.scheme == "atlas":
     result = Path("")
   elif pkgUrl.url.scheme == "link":
-    result = depsDir() / Path(pkgUrl.projectName() & ".nimble-link")
+    result = depsDir() / Path(pkgUrl.dirName() & ".nimble-link")
   else:
     result = Path(toDirectoryPath(pkgUrl, true).string & ".nimble-link")
 

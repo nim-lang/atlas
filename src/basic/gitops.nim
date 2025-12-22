@@ -6,13 +6,16 @@
 #    distribution, for details about the copyright.
 #
 
-import std/[os, files, dirs, paths, osproc, options, sequtils, strutils, uri, sets]
+import std/[os, files, dirs, paths, osproc, options, sequtils, strutils, uri, sets, tables]
 import reporters, osutils, versions, context
 
 type
   Command* = enum
     GitClone = "git clone",
     GitRemoteUrl = "git -C $DIR config --get remote.origin.url",
+    GitRemoteList = "git -C $DIR remote -v",
+    GitRemoteSetUrl = "git -C $DIR remote set-url",
+    GitRemoteAdd = "git -C $DIR remote add",
     GitDiff = "git -C $DIR diff",
     GitFetch = "git -C $DIR fetch",
     GitFetchAll = "git -C $DIR fetch origin " & quoteShell("refs/heads/*:refs/heads/*") & " " & quoteShell("refs/tags/*:refs/tags/*"),
@@ -371,13 +374,43 @@ proc incrementLastTag*(path: Path, field: Natural): string =
 proc isShortCommitHash*(commit: string): bool {.inline.} =
   commit.len >= 4 and commit.len < 40
 
-proc getRemoteUrl*(path: Path): string =
-  let (cc, status) = exec(GitRemoteUrl, path, [])
+proc getRemoteUrl*(path: Path; remote = "origin"; errorReportLevel: MsgKind = Error): string =
+  let cmd = "git -C $DIR config --get remote.$REMOTE.url" % ["DIR", $path, "REMOTE", remote]
+  let (cc, status) = silentExec(cmd, [])
   if status != RES_OK:
-    error(path, "could not get remote url: " & $status & " " & $path)
+    message(errorReportLevel, path, "could not get remote url:", $status, "remote:", remote)
     return ""
   else:
     return cc.strip()
+
+proc remoteExists*(path: Path; remote = "origin"): bool =
+  getRemoteUrl(path, remote, Debug).len > 0
+
+proc listRemotes*(path: Path): OrderedTable[string, string] =
+  let (outp, status) = exec(GitRemoteList, path, [], Warning)
+  if status != RES_OK:
+    return
+
+  for line in outp.splitLines():
+    let parts = line.splitWhitespace()
+    if parts.len < 2: continue
+    let name = parts[0]
+    let url = parts[1]
+    # Prefer fetch entries when both fetch/push exist.
+    if "(fetch)" in line or name notin result:
+      result[name] = url
+
+proc setRemoteUrl*(path: Path; remote, url: string): bool =
+  let hasRemote = remoteExists(path, remote)
+  let cmd = if hasRemote: GitRemoteSetUrl else: GitRemoteAdd
+  let (outp, status) = exec(cmd, path, [remote, url], Warning)
+  result = status == RES_OK
+  if not result:
+    warn path, "failed to set remote:", remote, "url:", url, "output:", outp
+
+proc renameRemote*(path: Path; oldName, newName: string): bool =
+  warn path, "renameRemote is deprecated; prefer adding remotes instead"
+  false
 
 proc hasNewTags*(path: Path): Option[tuple[outdated: bool, newTags: int]] =
   ## determine if the given git repo `f` is updateable

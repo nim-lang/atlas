@@ -1,5 +1,6 @@
 import std/[unittest, os, algorithm, dirs, files, strutils, importutils, terminal, json, jsonutils]
-import basic/[context, pkgurls, deptypes, nimblecontext, compiledpatterns, osutils, versions, depgraphtypes]
+import basic/[context, pkgurls, deptypes, nimblecontext, compiledpatterns, osutils, versions, depgraphtypes, gitops]
+import dependencies
 
 suite "urls and naming":
   var 
@@ -22,8 +23,8 @@ suite "urls and naming":
     check upkg.url.hostname == "github.com"
     check $upkg.url == "https://github.com/disruptek/balls"
     check $upkg.projectName == "balls.disruptek.github.com"
-    check upkg.toDirectoryPath() == ws / Path"deps" / Path("balls.disruptek.github.com")
-    check upkg.toLinkPath() == ws / Path"deps" / Path("balls.disruptek.github.com.nimble-link")
+    check upkg.toDirectoryPath() == ws / Path"deps" / Path("balls")
+    check upkg.toLinkPath() == ws / Path"deps" / Path("balls.nimble-link")
     expect ValueError:
       discard nc.createUrl("balls")
     check not upkg.isLinkPath()
@@ -46,32 +47,32 @@ suite "urls and naming":
     check upkg.url.hostname == "github.com"
     check $upkg.url == "https://github.com/disruptek/balls"
     check $upkg.projectName == "balls.disruptek.github.com"
-    check upkg.toDirectoryPath() == ws / Path"deps" / Path("balls.disruptek.github.com")
-    check upkg.toLinkPath() == ws / Path"deps" / Path("balls.disruptek.github.com.nimble-link")
+    check upkg.toDirectoryPath() == ws / Path"deps" / Path("balls")
+    check upkg.toLinkPath() == ws / Path"deps" / Path("balls.nimble-link")
 
   test "git url with colon":
     let upkg = nc.createUrl("git://github.com:disruptek/cutelog")
     check upkg.url.hostname == "github.com"
     check $upkg.url == "ssh://github.com/disruptek/cutelog"
     check $upkg.projectName == "cutelog.disruptek.github.com"
-    check upkg.toDirectoryPath() == ws / Path"deps" / Path("cutelog.disruptek.github.com")
-    check upkg.toLinkPath() == ws / Path"deps" / Path("cutelog.disruptek.github.com.nimble-link")
+    check upkg.toDirectoryPath() == ws / Path"deps" / Path("cutelog")
+    check upkg.toLinkPath() == ws / Path"deps" / Path("cutelog.nimble-link")
 
   test "git url with colon and port":
     let upkg = nc.createUrl("git://github.com:1234/disruptek/cutelog")
     check upkg.url.hostname == "github.com"
     check $upkg.url == "ssh://github.com:1234/disruptek/cutelog"
     check $upkg.projectName == "cutelog.disruptek.github.com"
-    check upkg.toDirectoryPath() == ws / Path"deps" / Path("cutelog.disruptek.github.com")
-    check upkg.toLinkPath() == ws / Path"deps" / Path("cutelog.disruptek.github.com.nimble-link")
+    check upkg.toDirectoryPath() == ws / Path"deps" / Path("cutelog")
+    check upkg.toLinkPath() == ws / Path"deps" / Path("cutelog.nimble-link")
 
   test "git url no colon":
     let upkg = nc.createUrl("git://github.com/disruptek/cutelog")
     check upkg.url.hostname == "github.com"
     check $upkg.url == "ssh://github.com/disruptek/cutelog"
     check $upkg.projectName == "cutelog.disruptek.github.com"
-    check upkg.toDirectoryPath() == ws / Path"deps" / Path("cutelog.disruptek.github.com")
-    check upkg.toLinkPath() == ws / Path"deps" / Path("cutelog.disruptek.github.com.nimble-link")
+    check upkg.toDirectoryPath() == ws / Path"deps" / Path("cutelog")
+    check upkg.toLinkPath() == ws / Path"deps" / Path("cutelog.nimble-link")
 
   test "npeg url":
     # setAtlasVerbosity(Trace)
@@ -90,11 +91,50 @@ suite "urls and naming":
     check upkg.url.hostname == "github.com"
     check $upkg.url == "https://github.com/elcritch/npeg"
     check $upkg.projectName == "npeg.elcritch.github.com"
-    check upkg.toDirectoryPath() == ws / Path"deps" / Path("npeg.elcritch.github.com")
-    check upkg.toLinkPath() == ws / Path"deps" / Path("npeg.elcritch.github.com.nimble-link")
+    check upkg.toDirectoryPath() == ws / Path"deps" / Path("npeg")
+    check upkg.toLinkPath() == ws / Path"deps" / Path("npeg.nimble-link")
     let npkg = nc.createUrl("npeg")
     check npkg.url.hostname == "github.com"
     check $npkg.url == "https://github.com/zevv/npeg"
+
+  test "fork remotes reuse short dir":
+    let tmp = Path("tests/ws_remote_test").absolutePath()
+    if dirExists(tmp):
+      removeDir(tmp)
+    createDir(tmp)
+    defer: removeDir(tmp)
+    let oldProject = project()
+    let oldDepsDir = context().depsDir
+    defer:
+      project(oldProject)
+      context().depsDir = oldDepsDir
+
+    project(tmp)
+    context().depsDir = Path"deps"
+    createDir(tmp / Path"deps")
+
+    let depDir = tmp / Path"deps" / Path("npeg")
+    createDir(depDir)
+    withDir depDir:
+      discard execShellCmd("git init")
+      discard execShellCmd("git config user.email \"tester@example.com\"")
+      discard execShellCmd("git config user.name \"atlas tester\"")
+      writeFile("README.md", "npeg")
+      discard execShellCmd("git add README.md")
+      discard execShellCmd("git commit -m \"init\"")
+      discard execShellCmd("git remote add origin https://github.com/zevv/npeg")
+
+    var nc2 = createUnfilledNimbleContext()
+    nc2.put("npeg", toPkgUriRaw(parseUri "https://github.com/zevv/npeg", true))
+
+    var pkg = Package(url: createUrlSkipPatterns("https://github.com/elcritch/npeg.git"), state: NotInitialized)
+    nc2.loadDependency(pkg)
+
+    check pkg.ondisk == depDir.absolutePath()
+    check getRemoteUrl(depDir) == "https://github.com/elcritch/npeg"
+    check getRemoteUrl(depDir, "upstream") == "https://github.com/zevv/npeg"
+    check pkg.remotes["origin"] == "https://github.com/elcritch/npeg"
+    check pkg.remotes["upstream"] == "https://github.com/zevv/npeg"
 
   test "sync url":
     let upkg = nc.createUrl("https://github.com/planetis-m/sync")
@@ -112,8 +152,8 @@ suite "urls and naming":
     check upkg.url.hostname == "github.com"
     check $upkg.url == "https://github.com/juancarlospaco/nim-bytes2human"
     check $upkg.projectName == "nim-bytes2human.juancarlospaco.github.com"
-    check upkg.toDirectoryPath() == ws / Path"deps" / Path("nim-bytes2human.juancarlospaco.github.com")
-    check upkg.toLinkPath() == ws / Path"deps" / Path("nim-bytes2human.juancarlospaco.github.com.nimble-link")
+    check upkg.toDirectoryPath() == ws / Path"deps" / Path("nim-bytes2human")
+    check upkg.toLinkPath() == ws / Path"deps" / Path("nim-bytes2human.nimble-link")
     expect ValueError:
       discard nc.createUrl("bytes2human")
 
@@ -122,8 +162,8 @@ suite "urls and naming":
     check upkg.url.hostname == "github.com"
     check $upkg.url == "ssh://git@github.com/elcritch/atlas"
     check $upkg.projectName == "atlas.elcritch.github.com"
-    check upkg.toDirectoryPath() == ws / Path"deps" / Path("atlas.elcritch.github.com")
-    check upkg.toLinkPath() == ws / Path"deps" / Path("atlas.elcritch.github.com.nimble-link")
+    check upkg.toDirectoryPath() == ws / Path"deps" / Path("atlas")
+    check upkg.toLinkPath() == ws / Path"deps" / Path("atlas.nimble-link")
     expect ValueError:
       discard nc.createUrl("atlas")
 
