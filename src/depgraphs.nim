@@ -352,8 +352,10 @@ proc printVersionSelections(graph: DepGraph, solution: Solution, form: Form) =
               " [" & item.pkg.remoteName & "]"
             else:
               ""
-          let prefix = if solution.isTrue(ver.vid): "[x] " else: "[ ] "
-          selections.add((item.pkg.url.projectName, prefix & $item & remoteInfo))
+          if solution.isTrue(ver.vid):
+            selections.add((item.pkg.url.projectName, "[x] " & toString(item) & remoteInfo))
+          else:
+            selections.add((item.pkg.url.projectName, "[ ] " & toString(item) & remoteInfo))
         else:
           selections.add((pkg.url.projectName, "[!] " & "(" & $rel.status & "; pkg: " & pkg.url.projectName & ", " & $ver & ")"))
   var longestPkgName = 0

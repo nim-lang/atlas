@@ -65,7 +65,7 @@ proc syncGitRemotes(nc: NimbleContext; pkg: Package) =
     ensureRemote("origin", canonicalUrl)
     # Add fork/alternate remotes with deterministic names.
     if desiredOrigin != canonicalUrl:
-      warn pkg, "adding extra remote: ", desiredOrigin, " cannonical: ", canonicalUrl
+      warn pkg, "adding extra remote:", desiredOrigin, "cannonical:", canonicalUrl
       ensureRemote(pkg.url.projectName(), desiredOrigin)
   else:
     ensureRemote(pkg.url.projectName(), desiredOrigin)
