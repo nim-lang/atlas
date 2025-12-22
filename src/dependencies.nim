@@ -17,7 +17,7 @@ proc collectNimbleVersions*(nc: NimbleContext; pkg: Package): seq[VersionTag] =
   doAssert(pkg.ondisk.string != "", "Package ondisk must be set before collectNimbleVersions can be called! Package: " & $(pkg))
   result = @[]
   if nimbleFiles.len() == 1:
-    result = collectFileCommits(dir, nimbleFiles[0], isLocalOnly = pkg.isLocalOnly)
+    result = collectFileCommits(dir, nimbleFiles[0], isLocalOnly = pkg.isLocalOnly, remote = if pkg.remoteName.len > 0: pkg.remoteName else: "origin")
     result.reverse()
     trace pkg, "collectNimbleVersions commits:", mapIt(result, it.c.short()).join(", "), "nimble:", $nimbleFiles[0]
 
@@ -76,6 +76,17 @@ proc syncGitRemotes(nc: NimbleContext; pkg: Package) =
       ensureRemote(pkg.url.projectName(), desiredOrigin)
 
   pkg.remotes = updatedRemotes
+
+proc targetRemoteName(nc: NimbleContext; pkg: Package): string =
+  ## Decide which remote to use for fetching/tag selection.
+  let canonicalPkg = nc.lookup(pkg.url.shortName())
+  let canonicalUrl = if canonicalPkg.isEmpty(): "" else: $canonicalPkg.url
+  if canonicalUrl.len > 0 and canonicalUrl == $pkg.url:
+    result = "origin"
+  elif canonicalUrl.len > 0:
+    result = pkg.url.projectName()
+  else:
+    result = "origin"
 
 proc processNimbleRelease(
     nc: var NimbleContext;
@@ -198,9 +209,11 @@ proc traverseDependency*(
   doAssert pkg.ondisk.dirExists() and pkg.state != NotInitialized, "Package should've been found or cloned at this point. Package: " & $pkg.url & " on disk: " & $pkg.ondisk
 
   var versions: seq[(PackageVersion, NimbleRelease)]
+  let remoteName = (if pkg.remoteName.len > 0: pkg.remoteName else: targetRemoteName(nc, pkg))
+  pkg.remoteName = remoteName
 
   let currentCommit = currentGitCommit(pkg.ondisk, Warning)
-  pkg.originHead = gitops.findOriginTip(pkg.ondisk, Warning, isLocalOnly = pkg.isLocalOnly).commit()
+  pkg.originHead = gitops.findOriginTip(pkg.ondisk, Warning, isLocalOnly = pkg.isLocalOnly, remote = remoteName).commit()
 
   if mode == CurrentCommit and currentCommit.isEmpty():
     # let vtag = VersionTag(v: Version"#head", c: initCommitHash("", FromHead))
@@ -264,7 +277,7 @@ proc traverseDependency*(
             discard versions.addRelease(nc, pkg, vtag)
 
       ## Note: always prefer tagged versions
-      let tags = collectTaggedVersions(pkg.ondisk, isLocalOnly = pkg.isLocalOnly)
+      let tags = collectTaggedVersions(pkg.ondisk, isLocalOnly = pkg.isLocalOnly, remote = remoteName)
       debug pkg.url.projectName, "nimble tags:", $tags
       for tag in tags:
         if not uniqueCommits.containsOrIncl(tag.c):
@@ -359,13 +372,17 @@ proc loadDependency*(
       pkg.state = Found
       if UpdateRepos in context().flags:
         gitops.updateRepo(pkg.ondisk)
-        
-  else:
-    pkg.state = Error
-    pkg.errors.add "ondisk location missing"
+    else:
+      pkg.state = Error
+      pkg.errors.add "ondisk location missing"
 
   if pkg.state == Found:
     syncGitRemotes(nc, pkg)
+    pkg.remoteName = targetRemoteName(nc, pkg)
+    if gitops.remoteExists(pkg.ondisk, pkg.remoteName):
+      discard gitops.fetchRemote(pkg.ondisk, pkg.remoteName)
+    if gitops.isGitDir(pkg.ondisk):
+      pkg.remotes = listRemotes(pkg.ondisk)
 
 proc expandGraph*(path: Path, nc: var NimbleContext; mode: TraversalMode, onClone: PackageAction, isLinkPath = false): DepGraph =
   ## Expand the graph by adding all dependencies.

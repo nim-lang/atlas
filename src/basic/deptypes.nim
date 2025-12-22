@@ -22,6 +22,7 @@ type
     versions*: OrderedTable[PackageVersion, NimbleRelease]
     activeVersion*: PackageVersion
     remotes*: OrderedTable[string, string]
+    remoteName*: string
     module*: string
     ondisk*: Path
     nimbleFile*: Path

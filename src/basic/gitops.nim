@@ -18,7 +18,6 @@ type
     GitRemoteAdd = "git -C $DIR remote add",
     GitDiff = "git -C $DIR diff",
     GitFetch = "git -C $DIR fetch",
-    GitFetchAll = "git -C $DIR fetch origin " & quoteShell("refs/heads/*:refs/heads/*") & " " & quoteShell("refs/tags/*:refs/tags/*"),
     GitTag = "git -C $DIR tag",
     GitTags = "git -C $DIR show-ref --tags",
     GitLastTaggedRef = "git -C $DIR rev-list --tags --max-count=1",
@@ -31,8 +30,8 @@ type
     GitCurrentCommit = "git -C $DIR log -n1 --format=%H"
     GitMergeBase = "git -C $DIR merge-base"
     GitLsFiles = "git -C $DIR ls-files"
-    GitLog = "git -C $DIR log --format=%H origin/HEAD"
-    GitLogLocal = "git -C $DIR log --format=%H HEAD"
+    GitLog = "git -C $DIR log --format=%H"
+    GitLogLocal = "git -C $DIR log --format=%H"
     GitCurrentBranch = "git -C $DIR rev-parse --abbrev-ref HEAD"
     GitLsRemote = "git -C $DIR ls-remote --quiet --tags"
     GitShowFiles = "git -C $DIR show"
@@ -141,9 +140,10 @@ proc gitDescribeRefTag*(path: Path, commit: string): string =
   let (lt, status) = exec(GitDescribe, path, ["--tags", commit])
   result = if status == RES_OK: strutils.strip(lt) else: ""
 
-proc findOriginTip*(path: Path, errorReportLevel: MsgKind = Warning, isLocalOnly = false): VersionTag =
+proc findOriginTip*(path: Path, errorReportLevel: MsgKind = Warning, isLocalOnly = false, remote = "origin"): VersionTag =
+  let targetRef = if isLocalOnly: "HEAD" else: remote & "/HEAD"
   let cmd = if isLocalOnly: GitLogLocal else: GitLog
-  let (outp1, status1) = exec(cmd, path, ["-n1"], Warning)
+  let (outp1, status1) = exec(cmd, path, ["-n1", targetRef], Warning)
   var allVersions: seq[VersionTag]
   if status1 == RES_OK:
     allVersions = parseTaggedVersions(outp1, requireVersions = false)
@@ -153,10 +153,14 @@ proc findOriginTip*(path: Path, errorReportLevel: MsgKind = Warning, isLocalOnly
   else:
     message(errorReportLevel, path, "could not find origin head at:", $path)
 
-proc collectTaggedVersions*(path: Path, errorReportLevel: MsgKind = Debug, isLocalOnly = false): seq[VersionTag] =
-  let tip = findOriginTip(path, errorReportLevel, isLocalOnly)
+proc collectTaggedVersions*(path: Path, errorReportLevel: MsgKind = Debug, isLocalOnly = false, remote = ""): seq[VersionTag] =
+  let tip = findOriginTip(path, errorReportLevel, isLocalOnly, if remote.len == 0: "origin" else: remote)
 
-  let (outp, status) = exec(GitTags, path, [], errorReportLevel)
+  var args: seq[string] = @[]
+  if remote.len > 0:
+    args.add "refs/tags/" & remote & "/*"
+
+  let (outp, status) = exec(GitTags, path, args, errorReportLevel)
   if status == RES_OK:
     result = parseTaggedVersions(outp)
     if result.len > 0 and tip.isTip:
@@ -165,11 +169,12 @@ proc collectTaggedVersions*(path: Path, errorReportLevel: MsgKind = Debug, isLoc
   else:
     message(errorReportLevel, path, "could not collect tagged commits at:", $path)
 
-proc collectFileCommits*(path, file: Path, errorReportLevel: MsgKind = Warning, isLocalOnly = false): seq[VersionTag] =
-  let tip = findOriginTip(path, errorReportLevel, isLocalOnly)
+proc collectFileCommits*(path, file: Path, errorReportLevel: MsgKind = Warning, isLocalOnly = false, remote = "origin"): seq[VersionTag] =
+  let tip = findOriginTip(path, errorReportLevel, isLocalOnly, remote)
 
   let cmd = if isLocalOnly: GitLogLocal else: GitLog
-  let (outp, status) = exec(cmd, path, ["--", $file], Warning)
+  let targetRef = if isLocalOnly: "HEAD" else: remote & "/HEAD"
+  let (outp, status) = exec(cmd, path, [targetRef, "--", $file], Warning)
   if status == RES_OK:
     result = parseTaggedVersions(outp, requireVersions = false)
     if result.len > 0 and tip.isTip:
@@ -257,6 +262,20 @@ proc currentGitCommit*(path: Path, errorReportLevel: MsgKind = Info): CommitHash
     return initCommitHash(currentCommit.strip(), FromGitTag)
   else:
     return initCommitHash("", FromNone)
+
+proc fetchRemote*(path: Path; remote: string; onlyTags = false): bool =
+  ## Fetch refs and tags for the given remote using namespaced tag refs to avoid conflicts.
+  let tagSpec = "refs/tags/*:refs/tags/" & remote & "/*"
+  var args = @[remote]
+  if onlyTags:
+    args.add tagSpec
+  else:
+    args.add "refs/heads/*:refs/remotes/" & remote & "/*"
+    args.add tagSpec
+  let (outp, status) = exec(GitFetch, path, args, Warning)
+  result = status == RES_OK
+  if not result:
+    warn path, "could not fetch remote:", remote, "output:", outp
 
 proc checkoutGitCommit*(path: Path, commit: CommitHash, errorReportLevel: MsgKind = Warning): bool =
   let currentCommit = currentGitCommit(path)
@@ -442,18 +461,14 @@ proc hasNewTags*(path: Path): Option[tuple[outdated: bool, newTags: int]] =
   return some((false, 0))
 
 proc updateRepo*(path: Path, onlyTags = false) =
-  ## updates the repo by 
-  let url = getRemoteUrl(path)
-  if url.len == 0:
+  ## updates all remotes and namespaces tags per remote
+  let remotes = listRemotes(path)
+  if remotes.len == 0:
     info path, "no remote URL found; cannot update"
     return
 
-  let (outp, status) =
-    if onlyTags:
-      exec(GitFetch, path, ["--tags", "origin"])
+  for remote, _ in remotes:
+    if fetchRemote(path, remote, onlyTags):
+      notice(path, "successfully updated remote:", remote)
     else:
-      exec(GitFetchAll, path, [])
-  if status != RES_OK:
-    error(path, "could not update repo: " & outp)
-  else:
-    notice(path, "successfully updated repo")
+      error(path, "could not update remote:", remote)
