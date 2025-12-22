@@ -67,13 +67,7 @@ proc syncGitRemotes(nc: NimbleContext; pkg: Package) =
     if desiredOrigin != canonicalUrl:
       ensureRemote(pkg.url.projectName(), desiredOrigin)
   else:
-    # No official URL known.
-    let currentOrigin = updatedRemotes.getOrDefault("origin", "")
-    if currentOrigin.len == 0 or currentOrigin == desiredOrigin:
-      ensureRemote("origin", desiredOrigin)
-    else:
-      # Multiple unofficial URLs: keep existing origin, add deterministic remote.
-      ensureRemote(pkg.url.projectName(), desiredOrigin)
+    ensureRemote(pkg.url.projectName(), desiredOrigin)
 
   pkg.remotes = updatedRemotes
 
