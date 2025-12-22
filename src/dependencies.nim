@@ -379,7 +379,7 @@ proc loadDependency*(
   if pkg.state == Found:
     syncGitRemotes(nc, pkg)
     pkg.remoteName = targetRemoteName(nc, pkg)
-    if gitops.remoteExists(pkg.ondisk, pkg.remoteName):
+    if UpdateRepos in context().flags and gitops.remoteExists(pkg.ondisk, pkg.remoteName):
       discard gitops.fetchRemote(pkg.ondisk, pkg.remoteName)
     if gitops.isGitDir(pkg.ondisk):
       pkg.remotes = listRemotes(pkg.ondisk)
