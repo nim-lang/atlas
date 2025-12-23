@@ -20,14 +20,14 @@ suite "nimbleparser":
     else:
       check doesContain(res, "httpbeast")
 
-  test "parse nimble file when defined(windows)":
+  test "parse nimble file when defined(linux or macosx)":
     let nimbleFile = Path("tests" / "test_data" / "jester_inverted.nimble")
     var res = extractRequiresInfo(nimbleFile)
     echo "Nimble release: ", repr res
-    when defined(windows):
-      check not doesContain(res, "httpbeast")
-    else:
+    when defined(linux) or defined(macosx):
       check doesContain(res, "httpbeast")
+    else:
+      check not doesContain(res, "httpbeast")
 
   test "parse nimble file when macos or linux":
     let nimbleFile = Path("tests" / "test_data" / "jester_combined.nimble")
@@ -135,4 +135,3 @@ suite "nimbleparser":
     echo "Expected httpbeast count: ", expectedHttpbeastCount
     echo "Actual httpbeast count: ", actualHttpbeastCount
     check actualHttpbeastCount == expectedHttpbeastCount
-
