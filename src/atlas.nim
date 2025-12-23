@@ -103,14 +103,13 @@ proc writeVersion() =
   quit(0)
 
 proc tag(tag: string) =
-  let remote = gitops.guessRemoteName(project())
-  if remote.len == 0:
-    error "atlas:tag", "No git remote found"
+  if gitops.getCanonicalUrl(project()).len == 0:
+    error "atlas:tag", "Missing canonical remote 'origin'"
     quit(1)
   if tag.len == 1 and tag[0] in {'a'..'z'}:
     # Handle single letter tags
     gitTag(project(), tag)
-    pushTag(project(), remote, tag)
+    pushTag(project(), tag = tag)
   elif tag in ["major", "minor", "patch"]:
     # Handle semantic version increments
     let field = case tag
@@ -123,11 +122,11 @@ proc tag(tag: string) =
     let newTag = incrementLastTag(project(), field)
     if atlasErrors() == oldErrors:
       gitTag(project(), newTag)
-      pushTag(project(), remote, newTag)
+      pushTag(project(), tag = newTag)
   elif tag.count('.') >= 2:  # Looks like a semver tag
     # Direct version tag like '1.0.3'
     gitTag(project(), tag)
-    pushTag(project(), remote, tag)
+    pushTag(project(), tag = tag)
   else:
     error "atlas:tag", "Invalid tag format. Must be one of: ['major'|'minor'|'patch'] or a SemVer tag like ['1.0.3'] or a letter ['a'..'z']"
     quit(1)
@@ -310,7 +309,7 @@ proc listOutdated() =
   for pkg in allNodes(graph):
     if pkg.isRoot:
       continue
-    let res = gitops.hasNewTags(pkg.ondisk, pkg.remoteName)
+    let res = gitops.hasNewTags(pkg.ondisk)
     if res.isNone:
       warn pkg.url.projectName, "no remote version tags found"
       inc updateable
@@ -342,7 +341,7 @@ proc update(filter: string) =
     if pkg.state != Processed:
       continue
     
-    let url = gitops.getRemoteUrl(pkg.ondisk, pkg.remoteName)
+    let url = gitops.getRemoteUrl(pkg.ondisk)
     if url.len == 0:
       warn pkg.url.projectName, "no remote URL found; skipping..."
       continue
@@ -350,16 +349,16 @@ proc update(filter: string) =
       warn pkg.url.projectName, "filter not matched; skipping..."
       continue
 
-    let res = gitops.hasNewTags(pkg.ondisk, pkg.remoteName)
+    let res = gitops.hasNewTags(pkg.ondisk)
     if res.isNone:
       warn pkg.url.projectName, "no remote version tags found, doing full update"
-      gitops.updateRepo(pkg.ondisk, pkg.remoteName, onlyTags = false)
+      gitops.updateRepo(pkg.ondisk, onlyTags = false)
       needsUpdate = true
     else:
       let (outdated, cnt) = res.get()
       if outdated and cnt > 0:
         warn pkg.url.projectName, "outdated, updating... " & $cnt & " new tags available"
-        gitops.updateRepo(pkg.ondisk, pkg.remoteName, onlyTags = true)
+        gitops.updateRepo(pkg.ondisk, onlyTags = true)
         needsUpdate = true
       else:
         notice pkg.url.projectName, "up to date"
@@ -564,7 +563,7 @@ proc atlasRun*(params: seq[string]) =
       quit(1)
 
     project(paths.getCurrentDir() / Path purl.projectName)
-    let (status, msg) = gitops.clone(purl.toUri, project(), purl.projectName)
+    let (status, msg) = gitops.clone(purl.toUri, project())
     if status != Ok:
       error "atlas", "error cloning project:", dir, "message:", msg
       quit(1)

@@ -62,12 +62,12 @@ suite "Git Operations Tests":
       discard execCmd("git tag v1.0.0")
       
       var err = false
-      let commit = versionToCommit(Path ".", "origin", MinVer, parseVersionInterval("1.0.0", 0, err))
+      let commit = versionToCommit(Path ".", algo = MinVer, query = parseVersionInterval("1.0.0", 0, err))
       check(not commit.isEmpty)
 
   test "Git clone functionality":
     let testUrl = parseUri "http://localhost:4242/buildGraph/proj_a.git"
-    let res = clone(testUrl, testDir, "proj_a.buildGraph.localhost")
+    let res = clone(testUrl, testDir)
     # Note: This will fail if gitHttpServer isn't running
     check(res[0] == Ok)  # Expected to fail since URL is fake
 
@@ -139,7 +139,7 @@ suite "Git Operations Tests":
       discard execCmd("git commit -m \"update commit\"")
 
       # Test if repo is outdated
-      let outdated = hasNewTags(Path ".", "origin")
+      let outdated = hasNewTags(Path ".")
       # Note: This might fail in isolated test environments
       # We're mainly testing the function structure
       check(outdated.isNone)  # Expected to be false in test environment
@@ -148,11 +148,10 @@ suite "Git Operations Tests":
     withDir testDir:
       discard execCmd("git init")
       let testUrl = "https://github.com/test/repo.git"
-      let remote = "repo.test.github.com"
-      discard execCmd("git remote add " & remote & " " & testUrl)
+      discard execCmd("git remote add origin " & testUrl)
       
       # Test getting remote URL
-      let url = getRemoteUrl(Path ".", remote)
+      let url = getRemoteUrl(Path ".")
       check(url == testUrl)
       
       # Test getting remote URL from specific directory
@@ -225,7 +224,7 @@ suite "Git Operations Tests":
       discard execCmd("git tag v2.0.0")
       
       # Test collecting all tagged versions
-      let versions = collectTaggedVersions(Path ".", "origin")
+      let versions = collectTaggedVersions(Path ".")
       check(versions.len == 3)
       check($versions[0].v == "2.0.0")
       check($versions[1].v == "1.1.0")

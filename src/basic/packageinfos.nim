@@ -106,7 +106,6 @@ proc updatePackages*(pkgsDir = packagesDirectory()) =
     gitPull(pkgsDir)
   else:
     let pkgsUrl = parseUri "https://github.com/nim-lang/packages"
-    let remote = createUrlSkipPatterns($pkgsUrl).projectName()
-    let res = clone(pkgsUrl, pkgsDir, remote)
+    let res = clone(pkgsUrl, pkgsDir)
     if res[0] != Ok:
       error DefaultPackagesSubDir, "cannot clone packages repo: " & res[1]

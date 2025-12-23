@@ -8,7 +8,7 @@
 
 ## Implementation of the "Nim virtual environment" (`atlas env`) feature.
 import std/[files, dirs, strscans, os, strutils, uri]
-import basic/[context, osutils, versions, gitops, pkgurls]
+import basic/[context, osutils, versions, gitops]
 
 when defined(windows):
   const
@@ -70,13 +70,12 @@ proc setupNimEnv*(nimVersion: string; keepCsources: bool) =
         "csources_v1"
 
     proc cloneOrReturn(url: string; dest: Path; fetchTags = false): bool =
-      let remote = createUrlSkipPatterns(url).projectName()
-      let (status, msg) = gitops.clone(url.parseUri(), dest, remote)
+      let (status, msg) = gitops.clone(url.parseUri(), dest)
       if status != Ok:
         error dest, "failed to clone: " & url & " (" & $status & "): " & msg
         return false
       if fetchTags:
-        discard gitops.fetchRemoteTags(dest, remote)
+        discard gitops.fetchRemoteTags(dest)
       true
 
     withDir $depsDir():
@@ -101,8 +100,7 @@ proc setupNimEnv*(nimVersion: string; keepCsources: bool) =
       copyFileWithPermissions nimExe0, nimExe
       let query = createQueryEq(if nimVersion.isDevel: Version"#head" else: Version(nimVersion))
       if not nimVersion.isDevel:
-        let nimRemote = createUrlSkipPatterns("https://github.com/nim-lang/nim").projectName()
-        let commit = versionToCommit(dir, nimRemote, SemVer, query)
+        let commit = versionToCommit(dir, algo = SemVer, query = query)
         if commit.isEmpty():
           error nimDest, "cannot resolve version to a commit"
           return
