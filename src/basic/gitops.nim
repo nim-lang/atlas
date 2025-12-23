@@ -37,7 +37,6 @@ type
     GitForEachRef = "git -C $DIR for-each-ref"
 
 proc fetchRemoteTags*(path: Path; remote = "origin"; errorReportLevel: MsgKind = Warning): bool
-
 proc isGitDir*(path: Path): bool =
   let gitPath = path / Path(".git")
   dirExists(gitPath) or fileExists(gitPath)
@@ -157,8 +156,6 @@ proc collectTaggedVersions*(path: Path, errorReportLevel: MsgKind = Debug, isLoc
   let tip = findOriginTip(path, errorReportLevel, isLocalOnly)
 
   let remote = "origin"
-  if not isLocalOnly:
-    discard fetchRemoteTags(path, remote, errorReportLevel)
   let localTags = "refs/tags"
   let remoteTags = "refs/remotes/" & remote & "/tags"
   let (outp, status) = exec(

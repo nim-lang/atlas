@@ -69,18 +69,20 @@ proc setupNimEnv*(nimVersion: string; keepCsources: bool) =
       else:
         "csources_v1"
 
-    proc cloneOrReturn(url: string; dest: Path): bool =
+    proc cloneOrReturn(url: string; dest: Path; fetchTags = false): bool =
       let (status, msg) = gitops.clone(url.parseUri(), dest)
       if status != Ok:
         error dest, "failed to clone: " & url & " (" & $status & "): " & msg
         return false
+      if fetchTags:
+        discard gitops.fetchRemoteTags(dest)
       true
 
     withDir $depsDir():
       if not dirExists(csourcesVersion):
         if not cloneOrReturn("https://github.com/nim-lang/" & csourcesVersion, Path(csourcesVersion)):
           return
-      if not cloneOrReturn("https://github.com/nim-lang/nim", nimDest):
+      if not cloneOrReturn("https://github.com/nim-lang/nim", nimDest, fetchTags = true):
         return
     withDir $depsDir() / csourcesVersion:
       when defined(windows):

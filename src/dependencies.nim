@@ -309,6 +309,8 @@ proc loadDependency*(
         else:
           gitops.clone(pkg.url.toUri, pkg.ondisk)
       if status == Ok:
+        if not pkg.isLocalOnly:
+          discard gitops.fetchRemoteTags(pkg.ondisk)
         pkg.state = Found
       else:
         pkg.state = Error
@@ -318,6 +320,8 @@ proc loadDependency*(
       pkg.state = Found
       if UpdateRepos in context().flags:
         gitops.updateRepo(pkg.ondisk)
+        if not pkg.isLocalOnly:
+          discard gitops.fetchRemoteTags(pkg.ondisk)
         
     else:
       pkg.state = Error
