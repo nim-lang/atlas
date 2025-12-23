@@ -7,7 +7,7 @@
 #
 
 import std / [json, os, sets, strutils, paths, dirs, httpclient, uri]
-import context, reporters, gitops
+import context, reporters, gitops, pkgurls
 
 const
   UnitTests = defined(atlasUnitTests)
@@ -105,6 +105,8 @@ proc updatePackages*(pkgsDir = packagesDirectory()) =
   if dirExists(pkgsDir):
     gitPull(pkgsDir)
   else:
-    let res = clone(parseUri "https://github.com/nim-lang/packages", pkgsDir)
+    let pkgsUrl = parseUri "https://github.com/nim-lang/packages"
+    let remote = createUrlSkipPatterns($pkgsUrl).projectName()
+    let res = clone(pkgsUrl, pkgsDir, remote)
     if res[0] != Ok:
       error DefaultPackagesSubDir, "cannot clone packages repo: " & res[1]

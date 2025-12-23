@@ -17,7 +17,7 @@ proc collectNimbleVersions*(nc: NimbleContext; pkg: Package): seq[VersionTag] =
   doAssert(pkg.ondisk.string != "", "Package ondisk must be set before collectNimbleVersions can be called! Package: " & $(pkg))
   result = @[]
   if nimbleFiles.len() == 1:
-    result = collectFileCommits(dir, nimbleFiles[0], isLocalOnly = pkg.isLocalOnly)
+    result = collectFileCommits(dir, nimbleFiles[0], pkg.remoteName, isLocalOnly = pkg.isLocalOnly)
     result.reverse()
     trace pkg, "collectNimbleVersions commits:", mapIt(result, it.c.short()).join(", "), "nimble:", $nimbleFiles[0]
 
@@ -159,7 +159,7 @@ proc traverseDependency*(
   var versions: seq[(PackageVersion, NimbleRelease)]
 
   let currentCommit = currentGitCommit(pkg.ondisk, Warning)
-  pkg.originHead = gitops.findOriginTip(pkg.ondisk, Warning, isLocalOnly = pkg.isLocalOnly).commit()
+  pkg.originHead = gitops.findOriginTip(pkg.ondisk, pkg.remoteName, Warning, isLocalOnly = pkg.isLocalOnly).commit()
 
   if mode == CurrentCommit and currentCommit.isEmpty():
     # let vtag = VersionTag(v: Version"#head", c: initCommitHash("", FromHead))
@@ -195,7 +195,7 @@ proc traverseDependency*(
     # TODO: handle shallow clones here?
     var explicitVersions = explicitVersions
     for version in mitems(explicitVersions):
-      let vtag = gitops.expandSpecial(pkg.ondisk, version)
+      let vtag = gitops.expandSpecial(pkg.ondisk, pkg.remoteName, version)
       version = vtag
       debug pkg.url.projectName, "explicit version:", $version, "vtag:", repr vtag
 
@@ -223,7 +223,7 @@ proc traverseDependency*(
             discard versions.addRelease(nc, pkg, vtag)
 
       ## Note: always prefer tagged versions
-      let tags = collectTaggedVersions(pkg.ondisk, isLocalOnly = pkg.isLocalOnly)
+      let tags = collectTaggedVersions(pkg.ondisk, pkg.remoteName, isLocalOnly = pkg.isLocalOnly)
       debug pkg.url.projectName, "nimble tags:", $tags
       for tag in tags:
         if not uniqueCommits.containsOrIncl(tag.c):
@@ -307,10 +307,10 @@ proc loadDependency*(
           pkg.isLocalOnly = true
           copyFromDisk(pkg, pkg.ondisk)
         else:
-          gitops.clone(pkg.url.toUri, pkg.ondisk)
+          gitops.clone(pkg.url.toUri, pkg.ondisk, pkg.remoteName)
       if status == Ok:
         if not pkg.isLocalOnly:
-          discard gitops.fetchRemoteTags(pkg.ondisk)
+          discard gitops.fetchRemoteTags(pkg.ondisk, pkg.remoteName)
         pkg.state = Found
       else:
         pkg.state = Error
@@ -319,9 +319,9 @@ proc loadDependency*(
     if pkg.ondisk.dirExists():
       pkg.state = Found
       if UpdateRepos in context().flags:
-        gitops.updateRepo(pkg.ondisk)
+        gitops.updateRepo(pkg.ondisk, pkg.remoteName)
         if not pkg.isLocalOnly:
-          discard gitops.fetchRemoteTags(pkg.ondisk)
+          discard gitops.fetchRemoteTags(pkg.ondisk, pkg.remoteName)
         
     else:
       pkg.state = Error

@@ -62,12 +62,12 @@ suite "Git Operations Tests":
       discard execCmd("git tag v1.0.0")
       
       var err = false
-      let commit = versionToCommit(Path ".", MinVer, parseVersionInterval("1.0.0", 0, err))
+      let commit = versionToCommit(Path ".", "origin", MinVer, parseVersionInterval("1.0.0", 0, err))
       check(not commit.isEmpty)
 
   test "Git clone functionality":
     let testUrl = parseUri "http://localhost:4242/buildGraph/proj_a.git"
-    let res = clone(testUrl, testDir)
+    let res = clone(testUrl, testDir, "proj_a.buildGraph.localhost")
     # Note: This will fail if gitHttpServer isn't running
     check(res[0] == Ok)  # Expected to fail since URL is fake
 
@@ -139,7 +139,7 @@ suite "Git Operations Tests":
       discard execCmd("git commit -m \"update commit\"")
 
       # Test if repo is outdated
-      let outdated = hasNewTags(Path ".")
+      let outdated = hasNewTags(Path ".", "origin")
       # Note: This might fail in isolated test environments
       # We're mainly testing the function structure
       check(outdated.isNone)  # Expected to be false in test environment
@@ -148,10 +148,11 @@ suite "Git Operations Tests":
     withDir testDir:
       discard execCmd("git init")
       let testUrl = "https://github.com/test/repo.git"
-      discard execCmd("git remote add origin " & testUrl)
+      let remote = "repo.test.github.com"
+      discard execCmd("git remote add " & remote & " " & testUrl)
       
       # Test getting remote URL
-      let url = getRemoteUrl(Path ".")
+      let url = getRemoteUrl(Path ".", remote)
       check(url == testUrl)
       
       # Test getting remote URL from specific directory
@@ -224,7 +225,7 @@ suite "Git Operations Tests":
       discard execCmd("git tag v2.0.0")
       
       # Test collecting all tagged versions
-      let versions = collectTaggedVersions(Path ".")
+      let versions = collectTaggedVersions(Path ".", "origin")
       check(versions.len == 3)
       check($versions[0].v == "2.0.0")
       check($versions[1].v == "1.1.0")

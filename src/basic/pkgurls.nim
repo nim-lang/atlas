@@ -182,7 +182,7 @@ proc createUrlSkipPatterns*(raw: string, skipDirTest = false, forceWindows: bool
     if dirExists(raw) or skipDirTest:
       var raw: string = raw
       if isGitDir(raw):
-        raw = getRemoteUrl(Path(raw))
+        raw = getRemoteUrlGuess(Path(raw))
       else:
         if not forceWindows:
           raw = raw.absolutePath()

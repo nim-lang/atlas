@@ -12,10 +12,10 @@ import reporters, osutils, versions, context
 type
   Command* = enum
     GitClone = "git clone",
-    GitRemoteUrl = "git -C $DIR config --get remote.origin.url",
+    GitRemoteUrl = "git -C $DIR config --get remote.$REMOTE.url",
     GitDiff = "git -C $DIR diff",
     GitFetch = "git -C $DIR fetch",
-    GitFetchAll = "git -C $DIR fetch --no-tags origin " & quoteShell("refs/heads/*:refs/heads/*"),
+    GitFetchAll = "git -C $DIR fetch --no-tags $REMOTE " & quoteShell("refs/heads/*:refs/heads/*"),
     GitTag = "git -C $DIR tag",
     GitTags = "git -C $DIR show-ref --tags",
     GitLastTaggedRef = "git -C $DIR rev-list --tags --max-count=1",
@@ -23,12 +23,12 @@ type
     GitRevParse = "git -C $DIR rev-parse",
     GitCheckout = "git -C $DIR checkout",
     GitSubModUpdate = "git -C $DIR submodule update --init",
-    GitPush = "git -C $DIR push origin",
+    GitPush = "git -C $DIR push $REMOTE",
     GitPull = "git -C $DIR pull",
     GitCurrentCommit = "git -C $DIR log -n1 --format=%H"
     GitMergeBase = "git -C $DIR merge-base"
     GitLsFiles = "git -C $DIR ls-files"
-    GitLog = "git -C $DIR log --format=%H origin/HEAD"
+    GitLog = "git -C $DIR log --format=%H $REMOTE/HEAD"
     GitLogLocal = "git -C $DIR log --format=%H HEAD"
     GitCurrentBranch = "git -C $DIR rev-parse --abbrev-ref HEAD"
     GitLsRemote = "git -C $DIR ls-remote --quiet --tags"
@@ -36,7 +36,8 @@ type
     GitListFiles = "git -C $DIR ls-tree --name-only -r"
     GitForEachRef = "git -C $DIR for-each-ref"
 
-proc fetchRemoteTags*(path: Path; remote = "origin"; errorReportLevel: MsgKind = Warning): bool
+proc fetchRemoteTags*(path: Path; remote: string; errorReportLevel: MsgKind = Warning): bool
+proc ensureRemote*(path: Path; remote: string; errorReportLevel: MsgKind = Warning): bool
 proc isGitDir*(path: Path): bool =
   let gitPath = path / Path(".git")
   dirExists(gitPath) or fileExists(gitPath)
@@ -66,8 +67,12 @@ proc exec*(gitCmd: Command;
            path: Path;
            args: openArray[string],
            errorReportLevel: MsgKind = Error,
+           subs: openArray[string] = [],
            ): (string, ResultCode) =
-  let cmd = $gitCmd % ["DIR", $path]
+  var repl: seq[string] = @["DIR", $path]
+  for s in subs:
+    repl.add s
+  let cmd = $gitCmd % repl
   if isGitDir(path):
     result = silentExec(cmd, args)
   else:
@@ -102,7 +107,7 @@ proc maybeUrlProxy*(url: Uri): Uri =
     result.path = result.path.strip(leading=false, trailing=true, {'/'})
 
 
-proc clone*(url: Uri, dest: Path; retries = 5): (CloneStatus, string) =
+proc clone*(url: Uri, dest: Path; remote: string; retries = 5): (CloneStatus, string) =
   ## clone git repo.
   ##
   ## note clones don't use `--recursive` but rely in the `checkoutCommit`
@@ -119,14 +124,14 @@ proc clone*(url: Uri, dest: Path; retries = 5): (CloneStatus, string) =
 
   # Try first clone with git output directly to the terminal
   # primarily to give the user feedback for clones that take a while
-  let cmd = $GitClone & " " & join([extraArgs, "--no-tags", quoteShell($url), quoteShell($dest)], " ")
+  let cmd = $GitClone & " " & join([extraArgs, "--origin", quoteShell(remote), "--no-tags", quoteShell($url), quoteShell($dest)], " ")
   if execShellCmd(cmd) == 0:
     return (Ok, "")
 
   const Pauses = [0, 1000, 2000, 3000, 4000, 6000]
   for i in 1..retries:
     os.sleep(Pauses[min(i, Pauses.len()-1)])
-    let (outp, status) = silentExec($GitClone, [extraArgs, "--no-tags", $url, $dest])
+    let (outp, status) = silentExec($GitClone, [extraArgs, "--origin", remote, "--no-tags", $url, $dest])
     if status == RES_OK:
       return (Ok, "")
     elif "not found" in outp or "Not a git repo" in outp:
@@ -140,9 +145,11 @@ proc gitDescribeRefTag*(path: Path, commit: string): string =
   let (lt, status) = exec(GitDescribe, path, ["--tags", commit])
   result = if status == RES_OK: strutils.strip(lt) else: ""
 
-proc findOriginTip*(path: Path, errorReportLevel: MsgKind = Warning, isLocalOnly = false): VersionTag =
+proc findOriginTip*(path: Path; remote: string; errorReportLevel: MsgKind = Warning, isLocalOnly = false): VersionTag =
+  if not isLocalOnly:
+    discard ensureRemote(path, remote, errorReportLevel)
   let cmd = if isLocalOnly: GitLogLocal else: GitLog
-  let (outp1, status1) = exec(cmd, path, ["-n1"], Warning)
+  let (outp1, status1) = exec(cmd, path, ["-n1"], Warning, subs = ["REMOTE", remote])
   var allVersions: seq[VersionTag]
   if status1 == RES_OK:
     allVersions = parseTaggedVersions(outp1, requireVersions = false)
@@ -150,12 +157,13 @@ proc findOriginTip*(path: Path, errorReportLevel: MsgKind = Warning, isLocalOnly
       result = allVersions[0]
       result.isTip = true
   else:
-    message(errorReportLevel, path, "could not find origin head at:", $path)
+    message(errorReportLevel, path, "could not find remote head for '" & remote & "' at:", $path)
 
-proc collectTaggedVersions*(path: Path, errorReportLevel: MsgKind = Debug, isLocalOnly = false): seq[VersionTag] =
-  let tip = findOriginTip(path, errorReportLevel, isLocalOnly)
+proc collectTaggedVersions*(path: Path; remote: string; errorReportLevel: MsgKind = Debug, isLocalOnly = false): seq[VersionTag] =
+  if not isLocalOnly:
+    discard ensureRemote(path, remote, errorReportLevel)
+  let tip = findOriginTip(path, remote, errorReportLevel, isLocalOnly)
 
-  let remote = "origin"
   let localTags = "refs/tags"
   let remoteTags = "refs/remotes/" & remote & "/tags"
   let (outp, status) = exec(
@@ -172,11 +180,13 @@ proc collectTaggedVersions*(path: Path, errorReportLevel: MsgKind = Debug, isLoc
   else:
     message(errorReportLevel, path, "could not collect tagged commits at:", $path)
 
-proc collectFileCommits*(path, file: Path, errorReportLevel: MsgKind = Warning, isLocalOnly = false): seq[VersionTag] =
-  let tip = findOriginTip(path, errorReportLevel, isLocalOnly)
+proc collectFileCommits*(path, file: Path; remote: string; errorReportLevel: MsgKind = Warning, isLocalOnly = false): seq[VersionTag] =
+  if not isLocalOnly:
+    discard ensureRemote(path, remote, errorReportLevel)
+  let tip = findOriginTip(path, remote, errorReportLevel, isLocalOnly)
 
   let cmd = if isLocalOnly: GitLogLocal else: GitLog
-  let (outp, status) = exec(cmd, path, ["--", $file], Warning)
+  let (outp, status) = exec(cmd, path, ["--", $file], Warning, subs = ["REMOTE", remote])
   if status == RES_OK:
     result = parseTaggedVersions(outp, requireVersions = false)
     if result.len > 0 and tip.isTip:
@@ -185,8 +195,8 @@ proc collectFileCommits*(path, file: Path, errorReportLevel: MsgKind = Warning, 
   else:
     message(errorReportLevel, file, "could not collect file commits at:", $file)
 
-proc versionToCommit*(path: Path, algo: ResolutionAlgorithm; query: VersionInterval): CommitHash =
-  let allVersions = collectTaggedVersions(path)
+proc versionToCommit*(path: Path; remote: string; algo: ResolutionAlgorithm; query: VersionInterval): CommitHash =
+  let allVersions = collectTaggedVersions(path, remote)
   case algo
   of MinVer:
     result = selectBestCommitMinVer(allVersions, query)
@@ -204,10 +214,11 @@ proc shortToCommit*(path: Path, short: CommitHash): CommitHash =
     if vtags.len() == 1:
       result = vtags[0].c
 
-proc expandSpecial*(path: Path, vtag: VersionTag, errorReportLevel: MsgKind = Warning): VersionTag =
+proc expandSpecial*(path: Path; remote: string; vtag: VersionTag, errorReportLevel: MsgKind = Warning): VersionTag =
   if vtag.version.isHead():
-    return findOriginTip(path, errorReportLevel, false)
+    return findOriginTip(path, remote, errorReportLevel, false)
 
+  discard ensureRemote(path, remote, errorReportLevel)
   let (cc, status) = exec(GitRevParse, path, [vtag.version.string.substr(1)], errorReportLevel)
 
   template processSpecial(cc: string) =
@@ -222,7 +233,7 @@ proc expandSpecial*(path: Path, vtag: VersionTag, errorReportLevel: MsgKind = Wa
   if status == RES_OK:
     processSpecial(cc)
   else:
-    let (cc, status) = exec(GitRevParse, path, ["origin/" & vtag.version.string.substr(1)], errorReportLevel)
+    let (cc, status) = exec(GitRevParse, path, [remote & "/" & vtag.version.string.substr(1)], errorReportLevel)
     if status == RES_OK:
       processSpecial(cc)
     else:
@@ -278,7 +289,7 @@ proc checkoutGitCommit*(path: Path, commit: CommitHash, errorReportLevel: MsgKin
     trace path, "updated package to ", $commit
     result = true
 
-proc checkoutGitCommitFull*(path: Path; commit: CommitHash,
+proc checkoutGitCommitFull*(path: Path; commit: CommitHash; remote: string;
                             errorReportLevel: MsgKind = Warning): bool =
   var smExtraArgs: seq[string] = @[]
   result = true
@@ -289,7 +300,7 @@ proc checkoutGitCommitFull*(path: Path; commit: CommitHash,
       if DumbProxy in context().flags: ""
       elif ShallowClones notin context().flags: "--update-shallow"
       else: ""
-    let (_, status) = exec(GitFetch, path, [extraArgs, "--no-tags", "origin", commit.h], errorReportLevel)
+    let (_, status) = exec(GitFetch, path, [extraArgs, "--no-tags", remote, commit.h], errorReportLevel)
     if status != RES_OK:
       message(errorReportLevel, $path, "could not fetch commit " & $commit)
       result = false
@@ -331,10 +342,10 @@ proc gitTag*(path: Path, tag: string) =
   if status != RES_OK:
     error(path, "could not 'git tag " & tag & "'")
 
-proc pushTag*(path: Path, tag: string) =
-  let (outp, status) = exec(GitPush, path, [tag])
+proc pushTag*(path: Path; remote: string; tag: string) =
+  let (outp, status) = exec(GitPush, path, [tag], subs = ["REMOTE", remote])
   if status != RES_OK:
-    error(path, "could not 'git push " & tag & "'")
+    error(path, "could not 'git push " & remote & " " & tag & "'")
   elif outp.strip() == "Everything up-to-date":
     info(path, "is up-to-date")
   else:
@@ -381,15 +392,56 @@ proc incrementLastTag*(path: Path, field: Natural): string =
 proc isShortCommitHash*(commit: string): bool {.inline.} =
   commit.len >= 4 and commit.len < 40
 
-proc getRemoteUrl*(path: Path): string =
-  let (cc, status) = exec(GitRemoteUrl, path, [])
-  if status != RES_OK:
-    error(path, "could not get remote url: " & $status & " " & $path)
-    return ""
-  else:
-    return cc.strip()
+proc ensureRemote*(path: Path; remote: string; errorReportLevel: MsgKind = Warning): bool =
+  ## Ensures `remote` exists; migrates from `origin` when needed.
+  if remote.len == 0 or not isGitDir(path):
+    return false
 
-proc hasNewTags*(path: Path): Option[tuple[outdated: bool, newTags: int]] =
+  let (outp, status) = silentExec("git", ["-C", $path, "remote"])
+  if status != RES_OK:
+    return false
+
+  let remotes = outp.splitLines().mapIt(it.strip()).filterIt(it.len > 0)
+  if remote in remotes:
+    return true
+  if "origin" notin remotes:
+    return false
+
+  let (_, renameStatus) = silentExec("git", ["-C", $path, "remote", "rename", "origin", remote])
+  if renameStatus == RES_OK:
+    return true
+
+  message(errorReportLevel, path, "could not rename remote 'origin' to '" & remote & "'")
+  false
+
+proc getRemoteUrl*(path: Path; remote: string): string =
+  discard ensureRemote(path, remote)
+  let (cc, status) = exec(GitRemoteUrl, path, [], subs = ["REMOTE", remote])
+  if status != RES_OK:
+    return ""
+  cc.strip()
+
+proc guessRemoteName*(path: Path): string =
+  let (outp, status) = silentExec("git", ["-C", $path, "remote"])
+  if status != RES_OK:
+    return ""
+  let remotes = outp.splitLines().mapIt(it.strip()).filterIt(it.len > 0)
+  if remotes.len == 0:
+    return ""
+  if remotes.len == 1:
+    return remotes[0]
+  if "origin" in remotes:
+    return "origin"
+  remotes[0]
+
+proc getRemoteUrlGuess*(path: Path): string =
+  ## Best-effort remote URL lookup for repos where Atlas doesn't know the remote name.
+  let remote = guessRemoteName(path)
+  if remote.len == 0:
+    return ""
+  getRemoteUrl(path, remote)
+
+proc hasNewTags*(path: Path; remote: string): Option[tuple[outdated: bool, newTags: int]] =
   ## determine if the given git repo `f` is updateable
   ## returns an option tuple with the outdated flag and the number of new tags
   ## the option is none if the repo doesn't have remote url or remote tags
@@ -397,9 +449,9 @@ proc hasNewTags*(path: Path): Option[tuple[outdated: bool, newTags: int]] =
   info path, "checking is package is up to date..."
 
   # TODO: does --update-shallow fetch tags on a shallow repo?
-  let localTags = collectTaggedVersions(path, isLocalOnly = true).toHashSet()
+  let localTags = collectTaggedVersions(path, remote, isLocalOnly = true).toHashSet()
 
-  let url = getRemoteUrl(path)
+  let url = getRemoteUrl(path, remote)
   if url.len == 0:
     return none(tuple[outdated: bool, newTags: int])
   let (remoteTagsList, lsStatus) = listRemoteTags(path, url)
@@ -418,29 +470,30 @@ proc hasNewTags*(path: Path): Option[tuple[outdated: bool, newTags: int]] =
 
   return some((false, 0))
 
-proc updateRepo*(path: Path, onlyTags = false) =
+proc updateRepo*(path: Path; remote: string; onlyTags = false) =
   ## updates the repo by 
-  let url = getRemoteUrl(path)
+  let url = getRemoteUrl(path, remote)
   if url.len == 0:
     info path, "no remote URL found; cannot update"
     return
 
   if onlyTags:
-    if not fetchRemoteTags(path):
+    if not fetchRemoteTags(path, remote):
       error(path, "could not update repo tags")
     else:
       notice(path, "successfully updated repo tags")
   else:
-    let (outp, status) = exec(GitFetchAll, path, [])
+    let (outp, status) = exec(GitFetchAll, path, [], subs = ["REMOTE", remote])
     if status != RES_OK:
       error(path, "could not update repo: " & outp)
-    elif not fetchRemoteTags(path):
+    elif not fetchRemoteTags(path, remote):
       error(path, "could not update repo tags")
     else:
       notice(path, "successfully updated repo")
 
-proc fetchRemoteTags*(path: Path; remote = "origin"; errorReportLevel: MsgKind = Warning): bool =
+proc fetchRemoteTags*(path: Path; remote: string; errorReportLevel: MsgKind = Warning): bool =
   ## Fetch tags into refs/remotes/<remote>/tags/ instead of refs/tags/.
+  discard ensureRemote(path, remote, errorReportLevel)
   var args: seq[string] = @[]
   if ShallowClones in context().flags:
     args.add "--depth=1"

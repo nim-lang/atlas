@@ -88,6 +88,9 @@ proc `$`*(d: Package): string =
 proc projectName*(d: Package): string =
   d.url.projectName()
 
+proc remoteName*(d: Package): string =
+  d.url.projectName()
+
 proc hash*(r: Package): Hash =
   ## use pkg name and url for identification and lookups
   var h: Hash = 0
