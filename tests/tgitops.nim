@@ -19,6 +19,7 @@ suite "Git Operations Tests":
     createDir(testDir)
     c = AtlasContext(flags: {DumbProxy})
     reporter = Reporter()
+    setAtlasVerbosity(Trace)
     
   teardown:
     # Clean up test directory

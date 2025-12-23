@@ -7,7 +7,7 @@
 #
 
 ## Implementation of the "Nim virtual environment" (`atlas env`) feature.
-import std/[files, dirs, strscans, os, strutils]
+import std/[files, dirs, strscans, os, strutils, uri]
 import basic/[context, osutils, versions, gitops]
 
 when defined(windows):
@@ -68,10 +68,20 @@ proc setupNimEnv*(nimVersion: string; keepCsources: bool) =
         "csources" # has some chance of working
       else:
         "csources_v1"
+
+    proc cloneOrReturn(url: string; dest: Path): bool =
+      let (status, msg) = gitops.clone(url.parseUri(), dest)
+      if status != Ok:
+        error dest, "failed to clone: " & url & " (" & $status & "): " & msg
+        return false
+      true
+
     withDir $depsDir():
       if not dirExists(csourcesVersion):
-        exec "git clone https://github.com/nim-lang/" & csourcesVersion
-      exec "git clone https://github.com/nim-lang/nim " & $nimDest
+        if not cloneOrReturn("https://github.com/nim-lang/" & csourcesVersion, Path(csourcesVersion)):
+          return
+      if not cloneOrReturn("https://github.com/nim-lang/nim", nimDest):
+        return
     withDir $depsDir() / csourcesVersion:
       when defined(windows):
         exec "build.bat"

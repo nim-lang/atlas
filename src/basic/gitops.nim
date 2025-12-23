@@ -15,7 +15,7 @@ type
     GitRemoteUrl = "git -C $DIR config --get remote.origin.url",
     GitDiff = "git -C $DIR diff",
     GitFetch = "git -C $DIR fetch",
-    GitFetchAll = "git -C $DIR fetch origin " & quoteShell("refs/heads/*:refs/heads/*") & " " & quoteShell("refs/tags/*:refs/tags/*"),
+    GitFetchAll = "git -C $DIR fetch --no-tags origin " & quoteShell("refs/heads/*:refs/heads/*"),
     GitTag = "git -C $DIR tag",
     GitTags = "git -C $DIR show-ref --tags",
     GitLastTaggedRef = "git -C $DIR rev-list --tags --max-count=1",
@@ -34,6 +34,9 @@ type
     GitLsRemote = "git -C $DIR ls-remote --quiet --tags"
     GitShowFiles = "git -C $DIR show"
     GitListFiles = "git -C $DIR ls-tree --name-only -r"
+    GitForEachRef = "git -C $DIR for-each-ref"
+
+proc fetchRemoteTags*(path: Path; remote = "origin"; errorReportLevel: MsgKind = Warning): bool
 
 proc isGitDir*(path: Path): bool =
   let gitPath = path / Path(".git")
@@ -117,14 +120,14 @@ proc clone*(url: Uri, dest: Path; retries = 5): (CloneStatus, string) =
 
   # Try first clone with git output directly to the terminal
   # primarily to give the user feedback for clones that take a while
-  let cmd = $GitClone & " " & join([extraArgs, quoteShell($url), quoteShell($dest)], " ")
+  let cmd = $GitClone & " " & join([extraArgs, "--no-tags", quoteShell($url), quoteShell($dest)], " ")
   if execShellCmd(cmd) == 0:
     return (Ok, "")
 
   const Pauses = [0, 1000, 2000, 3000, 4000, 6000]
   for i in 1..retries:
     os.sleep(Pauses[min(i, Pauses.len()-1)])
-    let (outp, status) = exec(GitClone, dest, [extraArgs, $url, $dest], Warning)
+    let (outp, status) = silentExec($GitClone, [extraArgs, "--no-tags", $url, $dest])
     if status == RES_OK:
       return (Ok, "")
     elif "not found" in outp or "Not a git repo" in outp:
@@ -153,7 +156,17 @@ proc findOriginTip*(path: Path, errorReportLevel: MsgKind = Warning, isLocalOnly
 proc collectTaggedVersions*(path: Path, errorReportLevel: MsgKind = Debug, isLocalOnly = false): seq[VersionTag] =
   let tip = findOriginTip(path, errorReportLevel, isLocalOnly)
 
-  let (outp, status) = exec(GitTags, path, [], errorReportLevel)
+  let remote = "origin"
+  if not isLocalOnly:
+    discard fetchRemoteTags(path, remote, errorReportLevel)
+  let localTags = "refs/tags"
+  let remoteTags = "refs/remotes/" & remote & "/tags"
+  let (outp, status) = exec(
+    GitForEachRef,
+    path,
+    ["--format=%(objectname) %(refname)", localTags, remoteTags],
+    errorReportLevel
+  )
   if status == RES_OK:
     result = parseTaggedVersions(outp)
     if result.len > 0 and tip.isTip:
@@ -279,7 +292,7 @@ proc checkoutGitCommitFull*(path: Path; commit: CommitHash,
       if DumbProxy in context().flags: ""
       elif ShallowClones notin context().flags: "--update-shallow"
       else: ""
-    let (_, status) = exec(GitFetch, path, [extraArgs, "--tags", "origin", commit.h], errorReportLevel)
+    let (_, status) = exec(GitFetch, path, [extraArgs, "--no-tags", "origin", commit.h], errorReportLevel)
     if status != RES_OK:
       message(errorReportLevel, $path, "could not fetch commit " & $commit)
       result = false
@@ -287,7 +300,7 @@ proc checkoutGitCommitFull*(path: Path; commit: CommitHash,
       trace($path, "fetched package commit " & $commit)
   elif commit.isShort():
     info($path, "found short commit id; doing full fetch to resolve " & $commit)
-    let (outp, status) = exec(GitFetch, path, ["--unshallow"])
+    let (outp, status) = exec(GitFetch, path, ["--unshallow", "--no-tags"])
     if status != RES_OK:
       message(errorReportLevel, $path, "could not fetch: " & outp)
       result = false
@@ -415,12 +428,28 @@ proc updateRepo*(path: Path, onlyTags = false) =
     info path, "no remote URL found; cannot update"
     return
 
-  let (outp, status) =
-    if onlyTags:
-      exec(GitFetch, path, ["--tags", "origin"])
+  if onlyTags:
+    if not fetchRemoteTags(path):
+      error(path, "could not update repo tags")
     else:
-      exec(GitFetchAll, path, [])
-  if status != RES_OK:
-    error(path, "could not update repo: " & outp)
+      notice(path, "successfully updated repo tags")
   else:
-    notice(path, "successfully updated repo")
+    let (outp, status) = exec(GitFetchAll, path, [])
+    if status != RES_OK:
+      error(path, "could not update repo: " & outp)
+    elif not fetchRemoteTags(path):
+      error(path, "could not update repo tags")
+    else:
+      notice(path, "successfully updated repo")
+
+proc fetchRemoteTags*(path: Path; remote = "origin"; errorReportLevel: MsgKind = Warning): bool =
+  ## Fetch tags into refs/remotes/<remote>/tags/ instead of refs/tags/.
+  var args: seq[string] = @[]
+  if ShallowClones in context().flags:
+    args.add "--depth=1"
+  args.add remote
+  args.add "refs/tags/*:refs/remotes/" & remote & "/tags/*"
+  let (outp, status) = exec(GitFetch, path, args, errorReportLevel)
+  if status != RES_OK:
+    message(errorReportLevel, path, "could not fetch remote tags:", outp)
+  result = status == RES_OK
