@@ -97,12 +97,14 @@ suite "urls and naming":
     check npkg.url.hostname == "github.com"
     check $npkg.url == "https://github.com/zevv/npeg"
 
-  test "fork remotes reuse short dir":
+  test "fork remotes isolate by default":
     let tmp = Path("tests/ws_remote_test").absolutePath()
     if dirExists(tmp):
       removeDir(tmp)
     createDir(tmp)
-    defer: removeDir(tmp)
+    defer:
+      if dirExists(tmp):
+        removeDir(tmp)
     let oldProject = project()
     let oldDepsDir = context().depsDir
     defer:
@@ -123,6 +125,52 @@ suite "urls and naming":
       discard execShellCmd("git add README.md")
       discard execShellCmd("git commit -m \"init\"")
       discard execShellCmd("git remote add origin https://github.com/zevv/npeg")
+    let legacyDir = tmp / Path"deps" / Path("npeg.elcritch.github.com")
+    discard execShellCmd("git clone " & $depDir & " " & $legacyDir)
+
+    var nc2 = createUnfilledNimbleContext()
+    nc2.put("npeg", toPkgUriRaw(parseUri "https://github.com/zevv/npeg", true))
+
+    var pkg = Package(url: createUrlSkipPatterns("https://github.com/elcritch/npeg.git"), state: NotInitialized)
+    nc2.loadDependency(pkg)
+
+    check pkg.ondisk == legacyDir.absolutePath()
+    check pkg.remotes["origin"] == "https://github.com/zevv/npeg"
+    check pkg.remotes["npeg.elcritch.github.com"] == "https://github.com/elcritch/npeg"
+
+  test "fork remotes reuse short dir":
+    let tmp = Path("tests/ws_remote_test").absolutePath()
+    if dirExists(tmp):
+      removeDir(tmp)
+    createDir(tmp)
+    defer:
+      if dirExists(tmp):
+        removeDir(tmp)
+    let oldProject = project()
+    let oldDepsDir = context().depsDir
+    defer:
+      project(oldProject)
+      context().depsDir = oldDepsDir
+
+    project(tmp)
+    context().depsDir = Path"deps"
+    createDir(tmp / Path"deps")
+
+    let depDir = tmp / Path"deps" / Path("npeg")
+    createDir(depDir)
+    withDir depDir:
+      discard execShellCmd("git init")
+      discard execShellCmd("git config user.email \"tester@example.com\"")
+      discard execShellCmd("git config user.name \"atlas tester\"")
+      writeFile("README.md", "npeg")
+      discard execShellCmd("git add README.md")
+      discard execShellCmd("git commit -m \"init\"")
+      discard execShellCmd("git remote add origin https://github.com/zevv/npeg")
+
+    let prevFlags = context().flags
+    context().flags.incl IgnoreGitRemoteUrls
+    defer:
+      context().flags = prevFlags
 
     var nc2 = createUnfilledNimbleContext()
     nc2.put("npeg", toPkgUriRaw(parseUri "https://github.com/zevv/npeg", true))

@@ -145,8 +145,16 @@ proc findOriginTip*(path: Path, errorReportLevel: MsgKind = Warning, isLocalOnly
   let cmd = if isLocalOnly: GitLogLocal else: GitLog
   let (outp1, status1) = exec(cmd, path, ["-n1", targetRef], Warning)
   var allVersions: seq[VersionTag]
-  if status1 == RES_OK:
-    allVersions = parseTaggedVersions(outp1, requireVersions = false)
+  var ok = status1 == RES_OK
+  if not ok and not isLocalOnly:
+    # Fallback to local HEAD if the requested remote tracking ref is missing.
+    let (outpFallback, statusFallback) = exec(cmd, path, ["-n1", "HEAD"], Debug)
+    ok = statusFallback == RES_OK
+    if ok:
+      allVersions = parseTaggedVersions(outpFallback, requireVersions = false)
+  if ok:
+    if allVersions.len == 0:
+      allVersions = parseTaggedVersions(outp1, requireVersions = false)
     if allVersions.len > 0:
       result = allVersions[0]
       result.isTip = true
@@ -154,18 +162,25 @@ proc findOriginTip*(path: Path, errorReportLevel: MsgKind = Warning, isLocalOnly
     message(errorReportLevel, path, "could not find origin head at:", $path)
 
 proc collectTaggedVersions*(path: Path, errorReportLevel: MsgKind = Debug, isLocalOnly = false, remote = ""): seq[VersionTag] =
-  let tip = findOriginTip(path, errorReportLevel, isLocalOnly, if remote.len == 0: "origin" else: remote)
+  let remoteName = (if isLocalOnly: "" else: (if remote.len == 0: "origin" else: remote))
+  let tip = findOriginTip(path, errorReportLevel, isLocalOnly, if remoteName.len == 0: "origin" else: remoteName)
 
-  var args: seq[string] = @[]
-  if remote.len > 0:
-    args.add "refs/tags/" & remote & "/*"
+  # Prefer tags from the requested remote so forks/overrides stay isolated.
+  if remoteName.len > 0 and not isLocalOnly:
+    let (outpRemote, statusRemote) = exec(GitLsRemote, path, [remoteName], errorReportLevel)
+    if statusRemote == RES_OK:
+      discard exec(GitFetch, path, [remoteName, "--tags"], Debug)
+      result = parseTaggedVersions(outpRemote)
+      if result.len > 0 and tip.isTip and result[0].c == tip.c:
+        result[0].isTip = true
+      return
 
-  let (outp, status) = exec(GitTags, path, args, errorReportLevel)
+  # Fallback to local tags when remote tags are unavailable.
+  let (outp, status) = exec(GitTags, path, [], errorReportLevel)
   if status == RES_OK:
     result = parseTaggedVersions(outp)
-    if result.len > 0 and tip.isTip:
-      if result[0].c == tip.c:
-        result[0].isTip = true
+    if result.len > 0 and tip.isTip and result[0].c == tip.c:
+      result[0].isTip = true
   else:
     message(errorReportLevel, path, "could not collect tagged commits at:", $path)
 
@@ -175,11 +190,17 @@ proc collectFileCommits*(path, file: Path, errorReportLevel: MsgKind = Warning, 
   let cmd = if isLocalOnly: GitLogLocal else: GitLog
   let targetRef = if isLocalOnly: "HEAD" else: remote & "/HEAD"
   let (outp, status) = exec(cmd, path, [targetRef, "--", $file], Warning)
-  if status == RES_OK:
-    result = parseTaggedVersions(outp, requireVersions = false)
-    if result.len > 0 and tip.isTip:
-      if result[0].c == tip.c:
-        result[0].isTip = true
+  var ok = status == RES_OK
+  var output = outp
+  if not ok and not isLocalOnly:
+    # Try the local HEAD if the remote tracking ref is missing.
+    let (outpFallback, statusFallback) = exec(cmd, path, ["HEAD", "--", $file], Debug)
+    ok = statusFallback == RES_OK
+    output = outpFallback
+  if ok:
+    result = parseTaggedVersions(output, requireVersions = false)
+    if result.len > 0 and tip.isTip and result[0].c == tip.c:
+      result[0].isTip = true
   else:
     message(errorReportLevel, file, "could not collect file commits at:", $file)
 

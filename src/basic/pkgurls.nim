@@ -40,8 +40,8 @@ proc projectName*(u: PkgUrl): string =
     u.qualifiedName.name & "." & u.qualifiedName.user & "." & u.qualifiedName.host
 
 proc dirName*(u: PkgUrl): string =
-  ## Directory name used on disk for dependencies. Always uses the short name so
-  ## forks and unlisted packages share the same workspace path.
+  ## Directory name used on disk for dependencies.
+  ## Prefer the short name; fork isolation is handled when resolving the path.
   u.shortName()
 
 proc requiresName*(u: PkgUrl): string =
@@ -88,6 +88,12 @@ proc toOriginalPath*(pkgUrl: PkgUrl, isWindowsTest: bool = false): Path =
 proc linkPath*(path: Path): Path =
   result = Path(path.string & ".nimble-link")
 
+proc normalizeGitUrl(url: string): string =
+  result = url.strip(leading=false, trailing=true)
+  if result.endsWith(GitSuffix):
+    result.setLen(result.len - GitSuffix.len)
+  result = result.strip(leading=false, trailing=true, chars={'/'})
+
 proc toDirectoryPath(pkgUrl: PkgUrl, isLinkFile: bool): Path =
   trace pkgUrl, "directory path from:", $pkgUrl.url
 
@@ -101,13 +107,27 @@ proc toDirectoryPath(pkgUrl: PkgUrl, isLinkFile: bool): Path =
     # workspace location. Keep the legacy long-name directory as a fallback.
     let shortDir = depsDir() / Path(pkgUrl.dirName())
     let legacyDir = depsDir() / Path(pkgUrl.projectName())
-    var candidates = @[shortDir]
+    let shortLink = fileExists(shortDir.linkPath())
+    let targetRemote = normalizeGitUrl($pkgUrl.url)
+    var hasRemoteConflict = false
+    if not shortLink and dirExists(shortDir) and isGitDir(shortDir):
+      let remote = normalizeGitUrl(getRemoteUrl(shortDir, errorReportLevel = Debug))
+      hasRemoteConflict = remote.len > 0 and targetRemote.len > 0 and remote != targetRemote
+
+    let preferShort = shortLink or not hasRemoteConflict or IgnoreGitRemoteUrls in context().flags
+
+    var candidates =
+      if preferShort: @[shortDir]
+      else: @[legacyDir]
+
     if legacyDir != shortDir:
-      candidates.add legacyDir
+      if preferShort:
+        candidates.add legacyDir
 
     for base in candidates:
       var candidate = base
-      if not isLinkFile and not dirExists(candidate) and fileExists(candidate.linkPath()):
+      var usedLink = false
+      if not isLinkFile and fileExists(candidate.linkPath()):
         let linkPath = candidate.linkPath()
         let link = readFile($linkPath)
         let lines = link.split("\n")
@@ -118,13 +138,14 @@ proc toDirectoryPath(pkgUrl: PkgUrl, isLinkFile: bool): Path =
           candidate = nimble.splitFile().dir
           if not candidate.isAbsolute():
             candidate = linkPath.parentDir() / candidate
+          usedLink = true
           debug pkgUrl.projectName(), "link file to:", $candidate
-      if dirExists(candidate) or fileExists(candidate.linkPath()):
+      if dirExists(candidate) or fileExists(candidate.linkPath()) or usedLink:
         result = candidate
         break
 
     if result.len() == 0:
-      result = shortDir
+      result = candidates[0]
 
   result = result.absolutePath
   trace pkgUrl, "found directory path:", $result
@@ -152,6 +173,10 @@ proc createNimbleLink*(pkgUrl: PkgUrl, nimblePath: Path, cfgPath: CfgPath) =
   trace "nimble:link", "creating link at:", $nimbleLink, "from:", $nimblePath
   if nimbleLink.fileExists():
     return
+
+  let parentDir = nimbleLink.parentDir()
+  if not parentDir.dirExists():
+    createDir parentDir
 
   let nimblePath = nimblePath.absolutePath()
   let cfgPath = cfgPath.Path.absolutePath()
