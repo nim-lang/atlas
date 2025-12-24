@@ -158,6 +158,22 @@ suite "Git Operations Tests":
       # let dirUrl = getRemoteUrl(c, testDir)
       # check(dirUrl == testUrl)
 
+  test "resolveRemoteTipRef prefers HEAD then main then master":
+    withDir testDir:
+      discard execCmd("git init")
+      writeFile("test.txt", "initial content")
+      discard execCmd("git add test.txt")
+      discard execCmd("git commit -m \"initial commit\"")
+      let commit = execProcess("git rev-parse HEAD").strip()
+      discard execCmd("git update-ref refs/remotes/origin/HEAD " & commit)
+      discard execCmd("git update-ref refs/remotes/upstream/main " & commit)
+      discard execCmd("git update-ref refs/remotes/legacy/master " & commit)
+
+      check(resolveRemoteTipRef(Path ".", "origin") == "origin/HEAD")
+      check(resolveRemoteTipRef(Path ".", "upstream") == "upstream/main")
+      check(resolveRemoteTipRef(Path ".", "legacy") == "legacy/master")
+      check(resolveRemoteTipRef(Path ".", "missing") == "")
+
   test "checkGitDiffStatus behavior":
     withDir testDir:
       discard execCmd("git init")

@@ -18,6 +18,7 @@ type
     GitFetchAll = "git -C $DIR fetch --no-tags $REMOTE " & quoteShell("refs/heads/*:refs/heads/*"),
     GitTag = "git -C $DIR tag",
     GitTags = "git -C $DIR show-ref --tags",
+    GitShowRef = "git -C $DIR show-ref",
     GitShowRefVerify = "git -C $DIR show-ref --verify --quiet",
     GitLastTaggedRef = "git -C $DIR rev-list --tags --max-count=1",
     GitDescribe = "git -C $DIR describe",
@@ -55,22 +56,38 @@ proc execQuiet(gitCmd: Command;
   else:
     result = ("Not a git repo", ResultCode(1))
 
-proc hasRef(path: Path; refName: string): bool =
-  if refName.len == 0 or not isGitDir(path):
-    return false
-  let (_, status) = execQuiet(GitShowRefVerify, path, [refName])
-  status == RES_OK
-
-proc resolveRemoteTipRef(path: Path; remote: string): string =
+proc resolveRemoteTipRef*(path: Path; remote: string): string =
   ## Returns a local ref to the remote's tip without querying the network.
   if remote.len == 0:
     return ""
   let base = "refs/remotes/" & remote & "/"
-  if hasRef(path, base & "HEAD"):
+  let (outp, status) = execQuiet(GitShowRef, path, [])
+  if status != RES_OK:
+    return ""
+  var hasHead = false
+  var hasMain = false
+  var hasMaster = false
+  for line in outp.splitLines():
+    let parts = line.splitWhitespace()
+    if parts.len < 2:
+      continue
+    let refName = parts[^1]
+    if not refName.startsWith(base):
+      continue
+    case refName.substr(base.len)
+    of "HEAD":
+      hasHead = true
+    of "main":
+      hasMain = true
+    of "master":
+      hasMaster = true
+    else:
+      discard
+  if hasHead:
     remote & "/HEAD"
-  elif hasRef(path, base & "main"):
+  elif hasMain:
     remote & "/main"
-  elif hasRef(path, base & "master"):
+  elif hasMaster:
     remote & "/master"
   else:
     ""
