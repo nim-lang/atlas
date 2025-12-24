@@ -487,6 +487,9 @@ proc activateGraph*(graph: DepGraph): seq[CfgPath] =
       if pkg.ondisk.string.len == 0:
         error pkg.url.projectName, "Missing ondisk location for:", $(pkg.url)
       else:
+        let pkgUri = pkg.url.toUri
+        if pkgUri.scheme notin ["file", "link", "atlas"]:
+          discard gitops.ensureCanonicalOrigin(pkg.ondisk, pkgUri)
         notice pkg.url.projectName, "Checked out to:", $pkg.activeVersion.commit().short(), "at:", pkg.ondisk.relativeToWorkspace()
         discard checkoutGitCommitFull(pkg.ondisk, pkg.activeVersion.commit())
 
