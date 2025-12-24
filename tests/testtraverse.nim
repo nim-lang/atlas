@@ -595,14 +595,20 @@ suite "test forked dep selection":
       nc.put("asynctools", toPkgUriRaw(parseUri "https://example.com/cheatfate/asynctools", true))
 
       let dir = paths.getCurrentDir().absolutePath
-      let graph = dir.loadWorkspace(nc, AllReleases, onClone=DoClone, doSolve=true)
+      var sawDuplicateError = false
+      var errorMsg = ""
+      try:
+        discard dir.loadWorkspace(nc, AllReleases, onClone=DoClone, doSolve=true)
+        checkpoint "expected duplicate module error when solving forked packages"
+        check false
+      except AtlasFatalError as e:
+        errorMsg = e.msg
+        sawDuplicateError = "duplicate module name" in e.msg
+        checkpoint "duplicate module error message: " & errorMsg
 
-      var activeAsynctools: seq[string] = @[]
-      for pkg in allActiveNodes(graph):
-        if pkg.url.shortName == "asynctools":
-          activeAsynctools.add $pkg.url
-
-      check activeAsynctools.len == 1
+      if not sawDuplicateError:
+        checkpoint "unexpected assertion error while testing forked dep selection: " & errorMsg
+      check sawDuplicateError
 
 infoNow "tester", "All tests run successfully"
 

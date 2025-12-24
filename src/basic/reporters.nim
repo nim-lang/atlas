@@ -28,6 +28,8 @@ type
     errors*: int
     messages: seq[(MsgKind, string, seq[string])] # delayed output
 
+  AtlasFatalError* = object of CatchableError
+
 var atlasReporter* = Reporter(verbosity: Notice)
 
 proc setAtlasVerbosity*(verbosity: MsgKind) =
@@ -148,7 +150,11 @@ proc debug*[T](p: T, args: varargs[string]) =
 
 template fatal*(msg: string | Path, prefix = "fatal", code = 1) =
   mixin toReporterName
-  doFatal(atlasReporter, toReporterName(msg), prefix, code)
+  when defined(atlasUnitTests):
+    message(atlasReporter, Error, prefix, @[toReporterName(msg)])
+    raise newException(AtlasFatalError, prefix & ": " & toReporterName(msg))
+  else:
+    doFatal(atlasReporter, toReporterName(msg), prefix, code)
 
 proc infoNow*[T](p: T, args: varargs[string]) =
   mixin toReporterName
