@@ -36,6 +36,15 @@ proc copyFromDisk*(pkg: Package, dest: Path): (CloneStatus, string) =
     error pkg, "copyFromDisk not found:", $source
     result = (NotFound, $dest)
 
+proc isForkUrl(nc: NimbleContext; url: PkgUrl): bool =
+  let officialUrl = nc.lookup(url.shortName())
+  let isGitUrl = url.url.scheme notin ["file", "link", "atlas"]
+  result =
+    isGitUrl and
+    not officialUrl.isEmpty() and
+    officialUrl.url.scheme notin ["file", "link", "atlas"] and
+    officialUrl.url != url.url
+
 proc processNimbleRelease(
     nc: var NimbleContext;
     pkg: Package,
@@ -77,7 +86,7 @@ proc processNimbleRelease(
         if pkgUrl notin nc.packageToDependency:
           debug pkg.url.projectName, "Found new pkg:", pkgUrl.projectName, "url:", $pkgUrl.url, "projectName:", $pkgUrl.projectName
           # debug pkg.url.projectName, "Found new pkg:", pkgUrl.projectName, "repr:", $pkgUrl.repr
-          let pkgDep = Package(url: pkgUrl, state: NotInitialized)
+          let pkgDep = Package(url: pkgUrl, state: NotInitialized, isFork: isForkUrl(nc, pkgUrl))
           nc.packageToDependency[pkgUrl] = pkgDep
         else:
           if nc.packageToDependency[pkgUrl].state == LazyDeferred:
@@ -92,7 +101,7 @@ proc processNimbleRelease(
           if pkgUrl notin nc.packageToDependency:
             let state = if feature notin context().features: LazyDeferred else: NotInitialized
             debug pkg.url.projectName, "Found new feature pkg:", pkgUrl.projectName, "url:", $pkgUrl.url, "projectName:", $pkgUrl.projectName, "state:", $state
-            let pkgDep = Package(url: pkgUrl, state: state)
+            let pkgDep = Package(url: pkgUrl, state: state, isFork: isForkUrl(nc, pkgUrl))
             nc.packageToDependency[pkgUrl] = pkgDep
 
 proc addFeatureDependencies(pkg: Package) =
@@ -290,7 +299,23 @@ proc loadDependency*(
     onClone: PackageAction = DoClone,
 ) = 
   doAssert pkg.ondisk.string == ""
-  pkg.ondisk = pkg.url.toDirectoryPath()
+
+  let officialUrl = nc.lookup(pkg.url.shortName())
+  let isFork = pkg.isFork
+
+  if isFork:
+    let canonicalDir = officialUrl.toDirectoryPath()
+    let forkDir = pkg.url.toDirectoryPath()
+    if dirExists(forkDir) and not dirExists(canonicalDir) and
+        forkDir.isRelativeTo(depsDir()) and canonicalDir.isRelativeTo(depsDir()):
+      try:
+        moveDir(forkDir.string, canonicalDir.string)
+      except OSError:
+        discard
+    pkg.ondisk = canonicalDir
+  else:
+    pkg.ondisk = pkg.url.toDirectoryPath()
+
   pkg.isAtlasProject = pkg.url.isAtlasProject()
   var todo = if dirExists(pkg.ondisk): DoNothing else: DoClone
 
@@ -312,6 +337,10 @@ proc loadDependency*(
           gitops.clone(pkg.url.toUri, pkg.ondisk)
       if status == Ok:
         if not pkg.isLocalOnly:
+          discard gitops.ensureCanonicalOrigin(pkg.ondisk, pkg.url.toUri)
+          discard gitops.resolveRemoteName(pkg.ondisk)
+          if isFork:
+            discard gitops.ensureRemoteForUrl(pkg.ondisk, officialUrl.toUri)
           discard gitops.fetchRemoteTags(pkg.ondisk)
         pkg.state = Found
       else:
@@ -322,6 +351,9 @@ proc loadDependency*(
       pkg.state = Found
       if not pkg.isLocalOnly:
         discard gitops.ensureCanonicalOrigin(pkg.ondisk, pkg.url.toUri)
+        discard gitops.resolveRemoteName(pkg.ondisk)
+        if isFork:
+          discard gitops.ensureRemoteForUrl(pkg.ondisk, officialUrl.toUri)
       if UpdateRepos in context().flags:
         gitops.updateRepo(pkg.ondisk)
         if not pkg.isLocalOnly:
@@ -337,7 +369,7 @@ proc expandGraph*(path: Path, nc: var NimbleContext; mode: TraversalMode, onClon
   doAssert path.string != "."
   let url = nc.createUrlFromPath(path, isLinkPath)
   notice url.projectName, "expanding root package at:", $path, "url:", $url
-  var root = Package(url: url, isRoot: true)
+  var root = Package(url: url, isRoot: true, isFork: isForkUrl(nc, url))
   # nc.loadDependency(pkg)
 
   result = DepGraph(root: root, mode: mode)

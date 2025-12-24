@@ -26,6 +26,7 @@ type
     nimbleFile*: Path
     active*: bool
     isAtlasProject*: bool # true if the package is an atlas project
+    isFork*: bool
     isRoot*, isLocalOnly*: bool
     errors*: seq[string]
     originHead*: CommitHash

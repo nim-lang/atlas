@@ -18,6 +18,7 @@ type
     GitFetchAll = "git -C $DIR fetch --no-tags $REMOTE " & quoteShell("refs/heads/*:refs/heads/*"),
     GitTag = "git -C $DIR tag",
     GitTags = "git -C $DIR show-ref --tags",
+    GitShowRefVerify = "git -C $DIR show-ref --verify --quiet",
     GitLastTaggedRef = "git -C $DIR rev-list --tags --max-count=1",
     GitDescribe = "git -C $DIR describe",
     GitRevParse = "git -C $DIR rev-parse",
@@ -28,7 +29,7 @@ type
     GitCurrentCommit = "git -C $DIR log -n1 --format=%H"
     GitMergeBase = "git -C $DIR merge-base"
     GitLsFiles = "git -C $DIR ls-files"
-    GitLog = "git -C $DIR log --format=%H $REMOTE/HEAD"
+    GitLog = "git -C $DIR log --format=%H $REMOTE"
     GitLogLocal = "git -C $DIR log --format=%H HEAD"
     GitCurrentBranch = "git -C $DIR rev-parse --abbrev-ref HEAD"
     GitLsRemote = "git -C $DIR ls-remote --quiet --tags"
@@ -37,6 +38,42 @@ type
     GitForEachRef = "git -C $DIR for-each-ref"
 
 proc fetchRemoteTags*(path: Path; origin = "origin"; errorReportLevel: MsgKind = Warning): bool
+proc resolveRemoteName*(path: Path; origin = "origin"; errorReportLevel: MsgKind = Warning): string
+proc maybeUrlProxy*(url: Uri): Uri
+
+proc execQuiet(gitCmd: Command;
+               path: Path;
+               args: openArray[string],
+               subs: openArray[string] = [],
+               ): (string, ResultCode) =
+  var repl: seq[string] = @["DIR", $path]
+  for s in subs:
+    repl.add s
+  let cmd = $gitCmd % repl
+  if isGitDir(path):
+    result = silentExec(cmd, args)
+  else:
+    result = ("Not a git repo", ResultCode(1))
+
+proc hasRef(path: Path; refName: string): bool =
+  if refName.len == 0 or not isGitDir(path):
+    return false
+  let (_, status) = execQuiet(GitShowRefVerify, path, [refName])
+  status == RES_OK
+
+proc resolveRemoteTipRef(path: Path; remote: string): string =
+  ## Returns a local ref to the remote's tip without querying the network.
+  if remote.len == 0:
+    return ""
+  let base = "refs/remotes/" & remote & "/"
+  if hasRef(path, base & "HEAD"):
+    remote & "/HEAD"
+  elif hasRef(path, base & "main"):
+    remote & "/main"
+  elif hasRef(path, base & "master"):
+    remote & "/master"
+  else:
+    ""
 
 proc sameVersionAs*(tag, ver: string): bool =
   const VersionChars = {'0'..'9', '.'}
@@ -156,6 +193,34 @@ proc ensureCanonicalOrigin*(path: Path; url: Uri; origin = "origin"; errorReport
   ## Ensures `origin` exists and points to the canonical URL.
   ensureRemoteUrl(path, origin, $url, errorReportLevel)
 
+proc ensureRemoteForUrl*(path: Path; url: Uri; errorReportLevel: MsgKind = Warning): string =
+  ## Ensures a named remote exists for `url` (derived from `repo.user.host`).
+  result = remoteNameFromGitUrl($url)
+  if result.len == 0:
+    return ""
+  let fetchUrl =
+    if $context().proxy != "":
+      maybeUrlProxy(url)
+    else:
+      url
+  discard ensureRemoteUrl(path, result, $fetchUrl, errorReportLevel)
+
+proc fetchRemoteHeads*(path: Path; origin = "origin"; errorReportLevel: MsgKind = Warning): bool =
+  ## Fetch heads into refs/remotes/<remote>/ so branch names can be resolved.
+  let remote = resolveRemoteName(path, origin, errorReportLevel)
+  if remote.len == 0:
+    return false
+
+  var args: seq[string] = @[]
+  if ShallowClones in context().flags:
+    args.add "--depth=1"
+  args.add remote
+  args.add "refs/heads/*:refs/remotes/" & remote & "/*"
+  let (outp, status) = exec(GitFetch, path, args, errorReportLevel)
+  if status != RES_OK:
+    message(errorReportLevel, path, "could not fetch remote heads:", outp)
+  status == RES_OK
+
 proc resolveRemoteName*(path: Path; origin = "origin"; errorReportLevel: MsgKind = Warning): string =
   ## Resolves the operational remote name from the canonical URL stored in `origin`.
   ## Ensures that remote exists (adding it from `origin` if needed).
@@ -179,6 +244,12 @@ proc resolveRemoteName*(path: Path; origin = "origin"; errorReportLevel: MsgKind
       discard ensureRemoteUrl(path, origin, canonicalUrl, errorReportLevel)
     else:
       discard ensureRemoteUrl(path, result, canonicalUrl, errorReportLevel)
+
+  if $context().proxy != "":
+    try:
+      discard ensureRemoteUrl(path, result, $maybeUrlProxy(canonicalUrl.parseUri()), errorReportLevel)
+    except CatchableError:
+      discard
 
 proc maybeUrlProxy*(url: Uri): Uri =
   result = url
@@ -259,23 +330,32 @@ proc gitDescribeRefTag*(path: Path, commit: string): string =
   result = if status == RES_OK: strutils.strip(lt) else: ""
 
 proc findOriginTip*(path: Path; origin = "origin"; errorReportLevel: MsgKind = Warning, isLocalOnly = false): VersionTag =
-  let remote =
+  let remoteName =
     if isLocalOnly: ""
     else: resolveRemoteName(path, origin, errorReportLevel)
-  if not isLocalOnly and remote.len == 0:
-    return
+  let remoteRef =
+    if isLocalOnly: ""
+    else: resolveRemoteTipRef(path, remoteName)
   let cmd = if isLocalOnly: GitLogLocal else: GitLog
-  let subs = if isLocalOnly: @[] else: @["REMOTE", remote]
-  let (outp1, status1) = exec(cmd, path, ["-n1"], Warning, subs = subs)
+  let subs =
+    if isLocalOnly or remoteRef.len == 0:
+      @[]
+    else:
+      @["REMOTE", remoteRef]
+  let cmd2 =
+    if isLocalOnly or remoteRef.len == 0:
+      GitLogLocal
+    else:
+      cmd
+  if not isLocalOnly and remoteRef.len == 0:
+    message(errorReportLevel, path, "could not find remote head for '" & remoteName & "'; using local HEAD at:", $path)
+  let (outp1, status1) = exec(cmd2, path, ["-n1"], Warning, subs = subs)
   var allVersions: seq[VersionTag]
   if status1 == RES_OK:
     allVersions = parseTaggedVersions(outp1, requireVersions = false)
     if allVersions.len > 0:
       result = allVersions[0]
       result.isTip = true
-  else:
-    if not isLocalOnly and remote.len > 0:
-      message(errorReportLevel, path, "could not find remote head for '" & remote & "' at:", $path)
 
 proc collectTaggedVersions*(path: Path; origin = "origin"; errorReportLevel: MsgKind = Debug, isLocalOnly = false): seq[VersionTag] =
   let remote =
@@ -304,8 +384,19 @@ proc collectFileCommits*(path, file: Path; origin = "origin"; errorReportLevel: 
 
   if not isLocalOnly and remote.len == 0:
     return @[]
-  let cmd = if isLocalOnly: GitLogLocal else: GitLog
-  let subs = if isLocalOnly: @[] else: @["REMOTE", remote]
+  let remoteRef =
+    if isLocalOnly: ""
+    else: resolveRemoteTipRef(path, remote)
+  let cmd =
+    if isLocalOnly or remoteRef.len == 0:
+      GitLogLocal
+    else:
+      GitLog
+  let subs =
+    if isLocalOnly or remoteRef.len == 0:
+      @[]
+    else:
+      @["REMOTE", remoteRef]
   let (outp, status) = exec(cmd, path, ["--", $file], Warning, subs = subs)
   if status == RES_OK:
     result = parseTaggedVersions(outp, requireVersions = false)
