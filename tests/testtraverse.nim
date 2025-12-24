@@ -218,6 +218,7 @@ suite "test expand with git tags":
         check $pkgA == "https://example.com/buildGraph/proj_a"
 
         # let deps = setupGraph()
+
         let dir = paths.getCurrentDir().absolutePath
 
         let graph = dir.expandGraph(nc, AllReleases, onClone=DoClone)
@@ -570,6 +571,38 @@ suite "test expand with no git tags and nimble commits max":
           (toWindowsFileUrl("file://$1/buildGraphNoGitTags/does_not_exist" % [$dir]), ">= 1.2.0"),
           ("", ""),
         ], true)
+
+suite "test forked dep selection":
+  setup:
+    setAtlasVerbosity(Error)
+    context().nameOverrides = Patterns()
+    context().urlOverrides = Patterns()
+    context().proxy = parseUri "http://localhost:4242"
+    context().flags = {DumbProxy, KeepWorkspace}
+    context().depsDir = Path "deps"
+    setAtlasErrorsColor(fgMagenta)
+
+  test "does not activate official and fork together":
+    ## This test is expected to fail: Atlas currently treats fork and official
+    ## URLs as distinct packages, so it can mark both active even though they
+    ## map to the same shortName folder and should be switchable via git remotes.
+    withDir "tests/ws_fork_dupe":
+      removeDir("deps")
+      project(paths.getCurrentDir())
+      context().defaultAlgo = SemVer
+
+      var nc = createNimbleContext()
+      nc.put("asynctools", toPkgUriRaw(parseUri "https://example.com/cheatfate/asynctools", true))
+
+      let dir = paths.getCurrentDir().absolutePath
+      let graph = dir.loadWorkspace(nc, AllReleases, onClone=DoClone, doSolve=true)
+
+      var activeAsynctools: seq[string] = @[]
+      for pkg in allActiveNodes(graph):
+        if pkg.url.shortName == "asynctools":
+          activeAsynctools.add $pkg.url
+
+      check activeAsynctools.len == 1
 
 infoNow "tester", "All tests run successfully"
 
