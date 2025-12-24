@@ -298,6 +298,14 @@ proc loadDependency*(
     pkg: var Package,
     onClone: PackageAction = DoClone,
 ) = 
+  if pkg.isRoot:
+    pkg.ondisk = project()
+    pkg.isAtlasProject = true
+    pkg.isLocalOnly = true
+    if pkg.state != Found:
+      pkg.state = Found
+    return
+
   doAssert pkg.ondisk.string == ""
 
   let officialUrl = nc.lookup(pkg.url.shortName())
