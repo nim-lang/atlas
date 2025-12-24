@@ -94,7 +94,9 @@ proc toDirectoryPath(pkgUrl: PkgUrl, isLinkFile: bool): Path =
     # file:// urls are used for local source paths, not dependency paths
     result = depsDir() / Path(pkgUrl.projectName())
   else:
-    result = depsDir() / Path(pkgUrl.projectName())
+    # Always clone git deps into shortName-based folders so switching remotes
+    # doesn't affect the on-disk location.
+    result = depsDir() / Path(pkgUrl.shortName())
   
   if not isLinkFile and not dirExists(result) and fileExists(result.linkPath()):
     # prefer the directory path if it exists (?)
