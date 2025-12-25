@@ -57,15 +57,12 @@ proc execQuiet(gitCmd: Command;
 
 proc resolveRemoteTipRef*(path: Path; remote: string): string =
   ## Returns a local ref to the remote's tip without querying the network.
-  if remote.len == 0:
-    return ""
+  if remote.len == 0: return ""
   let base = "refs/remotes/" & remote & "/"
   let (outp, status) = execQuiet(GitShowRef, path, [])
-  if status != RES_OK:
-    return ""
-  var hasHead = false
-  var hasMain = false
-  var hasMaster = false
+  if status != RES_OK: return ""
+
+  var hasHead, hasMain, hasMaster = false
   for line in outp.splitLines():
     let parts = line.splitWhitespace()
     if parts.len < 2:
@@ -74,22 +71,14 @@ proc resolveRemoteTipRef*(path: Path; remote: string): string =
     if not refName.startsWith(base):
       continue
     case refName.substr(base.len)
-    of "HEAD":
-      hasHead = true
-    of "main":
-      hasMain = true
-    of "master":
-      hasMaster = true
-    else:
-      discard
-  if hasHead:
-    remote & "/HEAD"
-  elif hasMain:
-    remote & "/main"
-  elif hasMaster:
-    remote & "/master"
-  else:
-    ""
+    of "HEAD": hasHead = true
+    of "main": hasMain = true
+    of "master": hasMaster = true
+    else: discard
+  if hasHead: remote & "/HEAD"
+  elif hasMain: remote & "/main"
+  elif hasMaster: remote & "/master"
+  else: ""
 
 proc sameVersionAs*(tag, ver: string): bool =
   const VersionChars = {'0'..'9', '.'}
