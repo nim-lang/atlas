@@ -346,9 +346,13 @@ proc findOriginTip*(path: Path; origin = "origin"; errorReportLevel: MsgKind = W
   let remoteName =
     if isLocalOnly: ""
     else: resolveRemoteName(path, origin, errorReportLevel)
-  let remoteRef =
+  var remoteRef =
     if isLocalOnly: ""
     else: resolveRemoteTipRef(path, remoteName)
+  if not isLocalOnly and remoteRef.len == 0:
+    # Ensure we have remote heads available for branch resolution.
+    if fetchRemoteHeads(path, origin, errorReportLevel):
+      remoteRef = resolveRemoteTipRef(path, remoteName)
   let cmd = if isLocalOnly: GitLogLocal else: GitLog
   let subs =
     if isLocalOnly or remoteRef.len == 0:
@@ -460,9 +464,12 @@ proc expandSpecial*(path: Path; origin = "origin"; vtag: VersionTag, errorReport
     if remote.len == 0:
       message(errorReportLevel, path, "could not resolve remote from canonical '" & origin & "'")
       return
-    let (cc, status) = exec(GitRevParse, path, [remote & "/" & vtag.version.string.substr(1)], errorReportLevel)
-    if status == RES_OK:
-      processSpecial(cc)
+    let remoteRef = remote & "/" & vtag.version.string.substr(1)
+    var (ccRemote, statusRemote) = exec(GitRevParse, path, [remoteRef], errorReportLevel)
+    if statusRemote != RES_OK and fetchRemoteHeads(path, origin, errorReportLevel):
+      (ccRemote, statusRemote) = exec(GitRevParse, path, [remoteRef], errorReportLevel)
+    if statusRemote == RES_OK:
+      processSpecial(ccRemote)
     else:
       message(errorReportLevel, path, "could not expand special version:", $vtag)
 
