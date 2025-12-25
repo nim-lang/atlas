@@ -203,6 +203,34 @@ suite "Git Operations Tests":
       check(renamedStatus == RES_OK)
       check(renamedUrl.strip() == updatedUrl)
 
+  test "expandSpecial fetches remote heads when missing":
+    let testUrl = parseUri "http://localhost:4242/buildGraph/proj_a.git"
+    let res = clone(testUrl, testDir)
+    check(res[0] == Ok)
+
+    withDir testDir:
+      let remoteName = remoteNameFromGitUrl($testUrl)
+      check(remoteName.len > 0)
+
+      # Remove any cached remote refs to simulate a repo cloned from a different remote.
+      let (refsOut, refsStatus) = exec(GitForEachRef, Path ".", ["--format=%(refname)", "refs/remotes/" & remoteName], Debug)
+      check(refsStatus == RES_OK)
+      for line in refsOut.splitLines():
+        let refName = line.strip()
+        if refName.len > 0:
+          discard execCmd("git update-ref -d " & refName)
+
+      check(resolveRemoteTipRef(Path ".", remoteName) == "")
+
+      # Ensure the branch is only available via the remote.
+      discard execCmd("git checkout --detach")
+      discard execCmd("git branch -D master")
+
+      let vtag = VersionTag(v: Version"#master", c: initCommitHash("", FromHead))
+      let expanded = expandSpecial(Path ".", vtag = vtag)
+      check(not expanded.commit.isEmpty)
+      check(resolveRemoteTipRef(Path ".", remoteName).len > 0)
+
   test "resolveRemoteTipRef prefers HEAD then main then master":
     withDir testDir:
       discard execCmd("git init")
