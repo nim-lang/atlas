@@ -19,7 +19,6 @@ type
     GitTag = "git -C $DIR tag",
     GitTags = "git -C $DIR show-ref --tags",
     GitShowRef = "git -C $DIR show-ref",
-    GitShowRefVerify = "git -C $DIR show-ref --verify --quiet",
     GitLastTaggedRef = "git -C $DIR rev-list --tags --max-count=1",
     GitDescribe = "git -C $DIR describe",
     GitRevParse = "git -C $DIR rev-parse",
