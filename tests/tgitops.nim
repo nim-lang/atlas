@@ -158,6 +158,51 @@ suite "Git Operations Tests":
       # let dirUrl = getRemoteUrl(c, testDir)
       # check(dirUrl == testUrl)
 
+  test "remote command enum coverage":
+    withDir testDir:
+      discard execCmd("git init")
+      let firstUrl = "https://github.com/test/repo.git"
+      let (_, addStatus) = exec(GitRemoteAdd, Path ".", ["origin", firstUrl])
+      check(addStatus == RES_OK)
+
+      let (listOut, listStatus) = exec(GitRemotesShow, Path ".", [])
+      check(listStatus == RES_OK)
+      var hasOrigin = false
+      for line in listOut.splitLines():
+        if line.strip() == "origin":
+          hasOrigin = true
+          break
+      check(hasOrigin)
+
+      let (urlOut, urlStatus) = exec(GitRemoteUrl, Path ".", [], subs = ["REMOTE", "origin"])
+      check(urlStatus == RES_OK)
+      check(urlOut.strip() == firstUrl)
+
+      let updatedUrl = "https://github.com/test/renamed.git"
+      let (_, setStatus) = exec(GitRemoteSetUrl, Path ".", ["origin", updatedUrl])
+      check(setStatus == RES_OK)
+      let (urlOut2, urlStatus2) = exec(GitRemoteUrl, Path ".", [], subs = ["REMOTE", "origin"])
+      check(urlStatus2 == RES_OK)
+      check(urlOut2.strip() == updatedUrl)
+
+      let (_, renameStatus) = exec(GitRemoteRename, Path ".", ["origin", "renamed"])
+      check(renameStatus == RES_OK)
+      let (listOut2, listStatus2) = exec(GitRemotesShow, Path ".", [])
+      check(listStatus2 == RES_OK)
+      var hasRenamed = false
+      var hasOriginAfter = false
+      for line in listOut2.splitLines():
+        let name = line.strip()
+        if name == "renamed":
+          hasRenamed = true
+        if name == "origin":
+          hasOriginAfter = true
+      check(hasRenamed)
+      check(not hasOriginAfter)
+      let (renamedUrl, renamedStatus) = exec(GitRemoteUrl, Path ".", [], subs = ["REMOTE", "renamed"])
+      check(renamedStatus == RES_OK)
+      check(renamedUrl.strip() == updatedUrl)
+
   test "resolveRemoteTipRef prefers HEAD then main then master":
     withDir testDir:
       discard execCmd("git init")
