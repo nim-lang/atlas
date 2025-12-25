@@ -5,6 +5,7 @@ when defined(nimPreviewSlimSystem):
 
 --path:"$nim"
 --path:"../sat/src/"
+--nimcache:".nimcache"
 
 task build, "Build local atlas":
   exec "nim c -d:debug -o:bin/atlas src/atlas.nim"

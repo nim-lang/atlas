@@ -13,6 +13,10 @@ type
   Command* = enum
     GitClone = "git clone",
     GitRemoteUrl = "git -C $DIR config --get remote.$REMOTE.url",
+    GitRemotesShow = "git -C $DIR remote",
+    GitRemoteAdd = "git -C $DIR remote add",
+    GitRemoteSetUrl = "git -C $DIR remote set-url",
+    GitRemoteRename = "git -C $DIR remote rename",
     GitDiff = "git -C $DIR diff",
     GitFetch = "git -C $DIR fetch",
     GitFetchAll = "git -C $DIR fetch --no-tags $REMOTE " & quoteShell("refs/heads/*:refs/heads/*"),
@@ -40,20 +44,21 @@ type
 proc fetchRemoteTags*(path: Path; origin = "origin"; errorReportLevel: MsgKind = Warning): bool
 proc resolveRemoteName*(path: Path; origin = "origin"; errorReportLevel: MsgKind = Warning): string
 proc maybeUrlProxy*(url: Uri): Uri
+proc exec*(gitCmd: Command;
+           path: Path;
+           args: openArray[string],
+           errorReportLevel: MsgKind = Error,
+           subs: openArray[string] = [],
+           requireRepo: bool = true,
+           streamOutput: bool = false,
+           ): (string, ResultCode)
 
 proc execQuiet(gitCmd: Command;
                path: Path;
                args: openArray[string],
                subs: openArray[string] = [],
                ): (string, ResultCode) =
-  var repl: seq[string] = @["DIR", $path]
-  for s in subs:
-    repl.add s
-  let cmd = $gitCmd % repl
-  if isGitDir(path):
-    result = silentExec(cmd, args)
-  else:
-    result = ("Not a git repo", ResultCode(1))
+  result = exec(gitCmd, path, args, Debug, subs = subs)
 
 proc resolveRemoteTipRef*(path: Path; remote: string): string =
   ## Returns a local ref to the remote's tip without querying the network.
@@ -104,15 +109,24 @@ proc exec*(gitCmd: Command;
            args: openArray[string],
            errorReportLevel: MsgKind = Error,
            subs: openArray[string] = [],
+           requireRepo: bool = true,
+           streamOutput: bool = false,
            ): (string, ResultCode) =
   var repl: seq[string] = @["DIR", $path]
   for s in subs:
     repl.add s
   let cmd = $gitCmd % repl
-  if isGitDir(path):
-    result = silentExec(cmd, args)
-  else:
+  if requireRepo and not isGitDir(path):
     result = ("Not a git repo", ResultCode(1))
+  elif streamOutput:
+    var cmdLine = cmd
+    for i in 0..<args.len:
+      cmdLine.add ' '
+      if args[i].len > 0:
+        cmdLine.add quoteShell(args[i])
+    result = ("", ResultCode(execShellCmd(cmdLine)))
+  else:
+    result = silentExec(cmd, args)
   if result[1] != RES_OK:
     message errorReportLevel, "gitops", "Running Git failed:", $(int(result[1])), "command:", "`$1 $2`" % [cmd, join(args, " ")]
 
@@ -126,7 +140,7 @@ proc checkGitDiffStatus*(path: Path): string =
     ""
 
 proc listRemotes(path: Path): seq[string] =
-  let (outp, status) = silentExec("git", ["-C", $path, "remote"])
+  let (outp, status) = exec(GitRemotesShow, path, [], Debug)
   if status == RES_OK:
     outp.splitLines().mapIt(it.strip()).filterIt(it.len > 0)
   else:
@@ -164,9 +178,12 @@ proc remoteNameFromGitUrl*(rawUrl: string): string =
     repo & "." & user & "." & u.hostname
 
 proc getRemoteUrlFor(path: Path; remote: string): string =
-  let (outp, status) = silentExec(
-    "git",
-    ["-C", $path, "config", "--get", "remote." & remote & ".url"]
+  let (outp, status) = exec(
+    GitRemoteUrl,
+    path,
+    [],
+    Debug,
+    subs = ["REMOTE", remote]
   )
   if status != RES_OK:
     return ""
@@ -182,13 +199,13 @@ proc ensureRemoteUrl(path: Path; remote, url: string; errorReportLevel: MsgKind 
 
   let remotes = listRemotes(path)
   if remote notin remotes:
-    let (_, status) = silentExec("git", ["-C", $path, "remote", "add", remote, url])
+    let (_, status) = exec(GitRemoteAdd, path, [remote, url], Debug)
     if status == RES_OK:
       return true
     message(errorReportLevel, path, "could not add remote '" & remote & "'")
     return false
 
-  let (_, status) = silentExec("git", ["-C", $path, "remote", "set-url", remote, url])
+  let (_, status) = exec(GitRemoteSetUrl, path, [remote, url], Debug)
   if status == RES_OK:
     return true
   message(errorReportLevel, path, "could not set URL for remote '" & remote & "'")
@@ -242,7 +259,7 @@ proc resolveRemoteName*(path: Path; origin = "origin"; errorReportLevel: MsgKind
   let remotes = listRemotes(path)
   if result notin remotes:
     if origin in remotes:
-      let (_, status) = silentExec("git", ["-C", $path, "remote", "rename", origin, result])
+      let (_, status) = exec(GitRemoteRename, path, [origin, result], Debug)
       if status != RES_OK:
         message(errorReportLevel, path, "could not rename remote '" & origin & "' to '" & result & "'")
         return ""
@@ -293,33 +310,24 @@ proc clone*(url: Uri, dest: Path; retries = 5): (CloneStatus, string) =
 
   # Try first clone with git output directly to the terminal
   # primarily to give the user feedback for clones that take a while
-  var cmdParts: seq[string] = @[]
+  var args: seq[string] = @[]
   if extraArgs.len > 0:
-    cmdParts.add extraArgs
+    args.add extraArgs
   if remote.len > 0:
-    cmdParts.add "--origin"
-    cmdParts.add quoteShell(remote)
-  cmdParts.add "--no-tags"
-  cmdParts.add quoteShell($url)
-  cmdParts.add quoteShell($dest)
-  let cmd = $GitClone & " " & join(cmdParts, " ")
-  if execShellCmd(cmd) == 0:
+    args.add "--origin"
+    args.add remote
+  args.add "--no-tags"
+  args.add $url
+  args.add $dest
+  let (_, status) = exec(GitClone, dest, args, Debug, requireRepo = false, streamOutput = true)
+  if status == RES_OK:
     discard ensureCanonicalOrigin(dest, canonicalUrl)
     return (Ok, "")
 
   const Pauses = [0, 1000, 2000, 3000, 4000, 6000]
   for i in 1..retries:
     os.sleep(Pauses[min(i, Pauses.len()-1)])
-    var args: seq[string] = @[]
-    if extraArgs.len > 0:
-      args.add extraArgs
-    if remote.len > 0:
-      args.add "--origin"
-      args.add remote
-    args.add "--no-tags"
-    args.add $url
-    args.add $dest
-    let (outp, status) = silentExec($GitClone, args)
+    let (outp, status) = exec(GitClone, dest, args, Debug, requireRepo = false)
     if status == RES_OK:
       discard ensureCanonicalOrigin(dest, canonicalUrl)
       return (Ok, "")
