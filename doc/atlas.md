@@ -193,6 +193,8 @@ Sometimes two URLs can conflict for the same dependency shortname. For example, 
   },
 ```
 
+When a fork is involved, Atlas treats the URL in the dependency graph as canonical and ensures a corresponding git remote exists. It uses `origin` to store the canonical URL and also adds a named remote derived from the repo/author/host (e.g. `repo.user.host`) so it can resolve branch tips and special versions (like `#branch`) against the correct fork while still allowing an “official” remote to coexist for the upstream project.
+
 ## Overrides
 
 You can override how Atlas resolves a package name or a URL. The overrides use
