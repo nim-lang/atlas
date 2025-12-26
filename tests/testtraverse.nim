@@ -218,6 +218,7 @@ suite "test expand with git tags":
         check $pkgA == "https://example.com/buildGraph/proj_a"
 
         # let deps = setupGraph()
+
         let dir = paths.getCurrentDir().absolutePath
 
         let graph = dir.expandGraph(nc, AllReleases, onClone=DoClone)
@@ -570,6 +571,44 @@ suite "test expand with no git tags and nimble commits max":
           (toWindowsFileUrl("file://$1/buildGraphNoGitTags/does_not_exist" % [$dir]), ">= 1.2.0"),
           ("", ""),
         ], true)
+
+suite "test forked dep selection":
+  setup:
+    setAtlasVerbosity(Error)
+    context().nameOverrides = Patterns()
+    context().urlOverrides = Patterns()
+    context().proxy = parseUri "http://localhost:4242"
+    context().flags = {DumbProxy, KeepWorkspace}
+    context().depsDir = Path "deps"
+    setAtlasErrorsColor(fgMagenta)
+
+  test "does not activate official and fork together":
+    ## This test is expected to fail: Atlas currently treats fork and official
+    ## URLs as distinct packages, so it can mark both active even though they
+    ## map to the same shortName folder and should be switchable via git remotes.
+    withDir "tests/ws_fork_dupe":
+      removeDir("deps")
+      project(paths.getCurrentDir())
+      context().defaultAlgo = SemVer
+
+      var nc = createNimbleContext()
+      nc.put("asynctools", toPkgUriRaw(parseUri "https://example.com/cheatfate/asynctools", true))
+
+      let dir = paths.getCurrentDir().absolutePath
+      var sawDuplicateError = false
+      var errorMsg = ""
+      try:
+        discard dir.loadWorkspace(nc, AllReleases, onClone=DoClone, doSolve=true)
+        checkpoint "expected duplicate module error when solving forked packages"
+        check false
+      except AtlasFatalError as e:
+        errorMsg = e.msg
+        sawDuplicateError = "duplicate module name" in e.msg
+        checkpoint "duplicate module error message: " & errorMsg
+
+      if not sawDuplicateError:
+        checkpoint "unexpected assertion error while testing forked dep selection: " & errorMsg
+      check sawDuplicateError
 
 infoNow "tester", "All tests run successfully"
 

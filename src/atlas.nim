@@ -103,10 +103,13 @@ proc writeVersion() =
   quit(0)
 
 proc tag(tag: string) =
+  if gitops.getCanonicalUrl(project()).len == 0:
+    error "atlas:tag", "Missing canonical remote 'origin'"
+    quit(1)
   if tag.len == 1 and tag[0] in {'a'..'z'}:
     # Handle single letter tags
     gitTag(project(), tag)
-    pushTag(project(), tag)
+    pushTag(project(), tag = tag)
   elif tag in ["major", "minor", "patch"]:
     # Handle semantic version increments
     let field = case tag
@@ -119,11 +122,11 @@ proc tag(tag: string) =
     let newTag = incrementLastTag(project(), field)
     if atlasErrors() == oldErrors:
       gitTag(project(), newTag)
-      pushTag(project(), newTag)
+      pushTag(project(), tag = newTag)
   elif tag.count('.') >= 2:  # Looks like a semver tag
     # Direct version tag like '1.0.3'
     gitTag(project(), tag)
-    pushTag(project(), tag)
+    pushTag(project(), tag = tag)
   else:
     error "atlas:tag", "Invalid tag format. Must be one of: ['major'|'minor'|'patch'] or a SemVer tag like ['1.0.3'] or a letter ['a'..'z']"
     quit(1)
@@ -348,7 +351,7 @@ proc update(filter: string) =
 
     let res = gitops.hasNewTags(pkg.ondisk)
     if res.isNone:
-      warn pkg.url.projectName, "no remote version tags found, updating origin instead"
+      warn pkg.url.projectName, "no remote version tags found, doing full update"
       gitops.updateRepo(pkg.ondisk, onlyTags = false)
       needsUpdate = true
     else:

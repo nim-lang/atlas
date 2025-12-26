@@ -295,9 +295,7 @@ proc checkDuplicateModules(graph: var DepGraph) =
       for pkg in dupePkgs:
         notice "...", "   \"$1\": \"$2\", " % [$pkg.url.shortName(), $pkg.url]
     
-      if moduleNames.len > 1:
-        unhandledDuplicates.add name
-        error "Invalid solution requiring duplicate module names found: " & moduleNames.keys().toSeq().join(", ")
+      unhandledDuplicates.add name
     else:
       let pkgUrl = context().pkgOverrides[name].toPkgUriRaw()
       notice "atlas:resolved", "overriding package:", name, "with:", $pkgUrl
@@ -309,6 +307,7 @@ proc checkDuplicateModules(graph: var DepGraph) =
           notice "atlas:resolved", "activating duplicate package:", pkg.url.projectName
   
   if unhandledDuplicates.len > 0:
+    error "Invalid solution requiring duplicate module names found: " & unhandledDuplicates.join(", ")
     fatal "unhandled duplicate module names found: " & unhandledDuplicates.join(", ")
 
 proc printVersionSelections(graph: DepGraph, solution: Solution, form: Form) =
@@ -488,6 +487,9 @@ proc activateGraph*(graph: DepGraph): seq[CfgPath] =
       if pkg.ondisk.string.len == 0:
         error pkg.url.projectName, "Missing ondisk location for:", $(pkg.url)
       else:
+        let pkgUri = pkg.url.toUri
+        if pkgUri.scheme notin ["file", "link", "atlas"]:
+          discard gitops.ensureCanonicalOrigin(pkg.ondisk, pkgUri)
         notice pkg.url.projectName, "Checked out to:", $pkg.activeVersion.commit().short(), "at:", pkg.ondisk.relativeToWorkspace()
         discard checkoutGitCommitFull(pkg.ondisk, pkg.activeVersion.commit())
 

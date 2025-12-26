@@ -208,7 +208,7 @@ proc listChanged*(lockFile: Path) =
       warn dir, "repo missing!"
       continue
     withDir dir:
-      let url = $getRemoteUrl(dir)
+      let url = getCanonicalUrl(dir)
       if v.url != url:
         warn v.dir, "remote URL has been changed;" &
                        " found: " & url &
@@ -258,13 +258,15 @@ proc replay*(lockFile: Path) =
   for _, v in pairs(lf.items):
     let dir = fromPrefixedPath(v.dir)
     notice "atlas:replay", "Setting up repo:", $dir.relativePath(project()), "to commit:", $v.commit
+    let pkgUrl = nc.createUrl(v.url)
     if not dirExists(dir):
-      let (status, err) = gitops.clone(nc.createUrl(v.url).toUri, dir)
+      let (status, err) = gitops.clone(pkgUrl.toUri, dir)
       if status != Ok:
         error lockFile, err
         continue
+    discard gitops.ensureCanonicalOrigin(dir, pkgUrl.toUri)
     
-    let url = $getRemoteUrl(dir)
+    let url = getCanonicalUrl(dir)
     if $url.createUrlSkipPatterns() != url:
       let lvl = if IgnoreGitRemoteUrls in context().flags: Info else: Error
       message lvl, v.dir, "remote URL differs from expected: got: " &

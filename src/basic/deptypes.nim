@@ -26,6 +26,7 @@ type
     nimbleFile*: Path
     active*: bool
     isAtlasProject*: bool # true if the package is an atlas project
+    isFork*: bool
     isRoot*, isLocalOnly*: bool
     errors*: seq[string]
     originHead*: CommitHash
@@ -86,6 +87,9 @@ proc `$`*(d: Package): string =
   d.url.projectName()
 
 proc projectName*(d: Package): string =
+  d.url.projectName()
+
+proc remoteName*(d: Package): string =
   d.url.projectName()
 
 proc hash*(r: Package): Hash =

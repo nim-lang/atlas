@@ -129,3 +129,10 @@ proc displayName(c: AtlasContext; p: string): string =
     p.relativePath($c.projectDir)
   else:
     p
+
+proc isGitDir*(path: string): bool =
+  let gitPath = path / ".git"
+  dirExists(gitPath) or fileExists(gitPath)
+
+proc isGitDir*(path: Path): bool =
+  isGitDir($(path))

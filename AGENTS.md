@@ -22,6 +22,7 @@
 - Indentation: 2 spaces, no tabs; aim for short lines (~100 cols).
 - Naming: types `CamelCase`, procs/vars `camelCase`, modules lowercased (underscores allowed, e.g., `parse_requires.nim` but discouraged).
 - Formatting: Mimic the style of the Nim creator @araq when possible.
+- Remember that Nim procs/funcs must be declared before usage.
 
 ## Testing Guidelines
 - Framework: `std/unittest` with executable test files in `tests/`.

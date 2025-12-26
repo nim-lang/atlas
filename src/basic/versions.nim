@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [strutils, uri, parseutils, algorithm, jsonutils, hashes]
+import std / [strutils, uri, parseutils, algorithm, jsonutils, hashes, tables, sets]
 import std / json
 
 type
@@ -315,17 +315,48 @@ proc parseVersionInterval*(s: string; start: int; err: var bool): VersionInterva
 
 proc parseTaggedVersions*(outp: string, requireVersions = true): seq[VersionTag] =
   result = @[]
+  var tagsByRef: OrderedTable[string, VersionTag]
+  var peeledRefs: HashSet[string]
+
   for line in splitLines(outp):
-    if not line.endsWith("^{}"):
-      var i = 0
-      while i < line.len and line[i] notin Whitespace: inc i
-      let commitEnd = i
-      while i < line.len and line[i] in Whitespace: inc i
-      while i < line.len and line[i] notin Digits: inc i
-      let v = parseVersion(line, i)
+    var i = 0
+    while i < line.len and line[i] notin Whitespace: inc i
+    let commitEnd = i
+    while i < line.len and line[i] in Whitespace: inc i
+    let refStart = i
+
+    # fast path for `git log --format=%H` / `rev-parse` style output:
+    if refStart >= line.len:
+      var j = refStart
+      while j < line.len and line[j] notin Digits: inc j
+      let v = parseVersion(line, j)
       let c = initCommitHash(line.substr(0, commitEnd-1), FromGitTag)
       if not c.isEmpty() and (v != Version("") or not requireVersions):
         result.add VersionTag(c: c, v: v)
+      continue
+
+    var refName = line.substr(refStart).strip()
+    var peeled = false
+    if refName.endsWith("^{}"):
+      peeled = true
+      refName = refName[0..^4]
+
+    var j = 0
+    while j < refName.len and refName[j] notin Digits: inc j
+    let v = parseVersion(refName, j)
+    let c = initCommitHash(line.substr(0, commitEnd-1), FromGitTag)
+    if c.isEmpty() or (v == Version("") and requireVersions):
+      continue
+
+    if peeled:
+      peeledRefs.incl(refName)
+      tagsByRef[refName] = VersionTag(c: c, v: v)
+    elif refName notin peeledRefs and refName notin tagsByRef:
+      tagsByRef[refName] = VersionTag(c: c, v: v)
+
+  for t in tagsByRef.values:
+    result.add t
+
   result.sort proc (a, b: VersionTag): int =
     (if a.v < b.v: 1
     elif a.v == b.v: 0

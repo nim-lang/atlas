@@ -19,6 +19,7 @@ suite "Git Operations Tests":
     createDir(testDir)
     c = AtlasContext(flags: {DumbProxy})
     reporter = Reporter()
+    setAtlasVerbosity(Trace)
     
   teardown:
     # Clean up test directory
@@ -61,7 +62,7 @@ suite "Git Operations Tests":
       discard execCmd("git tag v1.0.0")
       
       var err = false
-      let commit = versionToCommit(Path ".", MinVer, parseVersionInterval("1.0.0", 0, err))
+      let commit = versionToCommit(Path ".", algo = MinVer, query = parseVersionInterval("1.0.0", 0, err))
       check(not commit.isEmpty)
 
   test "Git clone functionality":
@@ -156,6 +157,95 @@ suite "Git Operations Tests":
       # Test getting remote URL from specific directory
       # let dirUrl = getRemoteUrl(c, testDir)
       # check(dirUrl == testUrl)
+
+  test "remote command enum coverage":
+    withDir testDir:
+      discard execCmd("git init")
+      let firstUrl = "https://github.com/test/repo.git"
+      let (_, addStatus) = exec(GitRemoteAdd, Path ".", ["origin", firstUrl])
+      check(addStatus == RES_OK)
+
+      let (listOut, listStatus) = exec(GitRemotesShow, Path ".", [])
+      check(listStatus == RES_OK)
+      var hasOrigin = false
+      for line in listOut.splitLines():
+        if line.strip() == "origin":
+          hasOrigin = true
+          break
+      check(hasOrigin)
+
+      let (urlOut, urlStatus) = exec(GitRemoteUrl, Path ".", [], subs = ["REMOTE", "origin"])
+      check(urlStatus == RES_OK)
+      check(urlOut.strip() == firstUrl)
+
+      let updatedUrl = "https://github.com/test/renamed.git"
+      let (_, setStatus) = exec(GitRemoteSetUrl, Path ".", ["origin", updatedUrl])
+      check(setStatus == RES_OK)
+      let (urlOut2, urlStatus2) = exec(GitRemoteUrl, Path ".", [], subs = ["REMOTE", "origin"])
+      check(urlStatus2 == RES_OK)
+      check(urlOut2.strip() == updatedUrl)
+
+      let (_, renameStatus) = exec(GitRemoteRename, Path ".", ["origin", "renamed"])
+      check(renameStatus == RES_OK)
+      let (listOut2, listStatus2) = exec(GitRemotesShow, Path ".", [])
+      check(listStatus2 == RES_OK)
+      var hasRenamed = false
+      var hasOriginAfter = false
+      for line in listOut2.splitLines():
+        let name = line.strip()
+        if name == "renamed":
+          hasRenamed = true
+        if name == "origin":
+          hasOriginAfter = true
+      check(hasRenamed)
+      check(not hasOriginAfter)
+      let (renamedUrl, renamedStatus) = exec(GitRemoteUrl, Path ".", [], subs = ["REMOTE", "renamed"])
+      check(renamedStatus == RES_OK)
+      check(renamedUrl.strip() == updatedUrl)
+
+  test "expandSpecial fetches remote heads when missing":
+    let testUrl = parseUri "http://localhost:4242/buildGraph/proj_a.git"
+    let res = clone(testUrl, testDir)
+    check(res[0] == Ok)
+
+    withDir testDir:
+      let remoteName = remoteNameFromGitUrl($testUrl)
+      check(remoteName.len > 0)
+
+      # Remove any cached remote refs to simulate a repo cloned from a different remote.
+      let (refsOut, refsStatus) = exec(GitForEachRef, Path ".", ["--format=%(refname)", "refs/remotes/" & remoteName], Debug)
+      check(refsStatus == RES_OK)
+      for line in refsOut.splitLines():
+        let refName = line.strip()
+        if refName.len > 0:
+          discard execCmd("git update-ref -d " & refName)
+
+      check(resolveRemoteTipRef(Path ".", remoteName) == "")
+
+      # Ensure the branch is only available via the remote.
+      discard execCmd("git checkout --detach")
+      discard execCmd("git branch -D master")
+
+      let vtag = VersionTag(v: Version"#master", c: initCommitHash("", FromHead))
+      let expanded = expandSpecial(Path ".", vtag = vtag)
+      check(not expanded.commit.isEmpty)
+      check(resolveRemoteTipRef(Path ".", remoteName).len > 0)
+
+  test "resolveRemoteTipRef prefers HEAD then main then master":
+    withDir testDir:
+      discard execCmd("git init")
+      writeFile("test.txt", "initial content")
+      discard execCmd("git add test.txt")
+      discard execCmd("git commit -m \"initial commit\"")
+      let commit = execProcess("git rev-parse HEAD").strip()
+      discard execCmd("git update-ref refs/remotes/origin/HEAD " & commit)
+      discard execCmd("git update-ref refs/remotes/upstream/main " & commit)
+      discard execCmd("git update-ref refs/remotes/legacy/master " & commit)
+
+      check(resolveRemoteTipRef(Path ".", "origin") == "origin/HEAD")
+      check(resolveRemoteTipRef(Path ".", "upstream") == "upstream/main")
+      check(resolveRemoteTipRef(Path ".", "legacy") == "legacy/master")
+      check(resolveRemoteTipRef(Path ".", "missing") == "")
 
   test "checkGitDiffStatus behavior":
     withDir testDir:
