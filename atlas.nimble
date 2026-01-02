@@ -5,6 +5,7 @@ description = "Atlas is a simple package cloner tool. It manages an isolated pro
 license = "MIT"
 srcDir = "src"
 skipDirs = @["doc"]
+binDir = "bin"
 bin = @["atlas"]
 
 # Dependencies
