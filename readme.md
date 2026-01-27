@@ -135,10 +135,22 @@ atlas env 2.0.0
 source deps/nim-2.0.0/activate.sh
 ```
 
-After executing these commands, the specific nim version you just chose will 
-be available in your current shell.
+You can do the same on a windows cmd shell:
 
-To get back to the original setup you can then run:
+```cmd
+.\deps\nim-2.0.0\activate.bat
+```
+
+And in powershell:
+
+```powershell
+. .\deps\nim-2.0.0\activate.ps1
+```
+
+After executing these commands, the specific nim version you chose will be 
+available in your current shell.
+
+To get back to the original setup you can run:
 
 ```sh
 deactivate

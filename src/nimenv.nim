@@ -20,6 +20,31 @@ set "PATH=$1;%PATH%"
 set "PROMPT=(nim $2) %PROMPT%"
 doskey deactivate=if defined _OLD_NIM_PATH (set "PATH=%%_OLD_NIM_PATH%%" ^& set "PROMPT=%%_OLD_NIM_PROMPT%%" ^& set "_OLD_NIM_PATH=" ^& set "_OLD_NIM_PROMPT=") else (echo Not in an activated Nim environment)
 """
+    PowerShellFile = """
+# Save original PATH and prompt if not already in a nim env
+if (-not $$env:_OLD_NIM_PATH) {
+    $$env:_OLD_NIM_PATH = $$env:PATH
+    $$global:_OLD_NIM_PROMPT = (Get-Item Function:\prompt).ScriptBlock
+}
+
+$$env:PATH = "$1;$$env:PATH"
+
+function global:prompt {
+    "(nim $2) " + (& $$global:_OLD_NIM_PROMPT)
+}
+
+function global:deactivate {
+    if ($$env:_OLD_NIM_PATH) {
+        $$env:PATH = $$env:_OLD_NIM_PATH
+        Remove-Item Env:\_OLD_NIM_PATH
+        Set-Item Function:\prompt $$global:_OLD_NIM_PROMPT
+        Remove-Variable -Name _OLD_NIM_PROMPT -Scope Global
+        Remove-Item Function:\deactivate
+    } else {
+        Write-Host "Not in an activated Nim environment"
+    }
+}
+"""
 else:
   const
     ShellFile* = """
@@ -59,7 +84,7 @@ template withDir*(dir: string; body: untyped) =
 
 proc infoAboutActivation(nimDest: Path, nimVersion: string) =
   when defined(windows):
-    info nimDest, "RUN\nnim-" & nimVersion & "\\activate.bat"
+    info nimDest, "RUN (cmd)\nnim-" & nimVersion & "\\activate.bat\nRUN (PowerShell)\n. nim-" & nimVersion & "\\activate.ps1"
   else:
     info nimDest, "RUN\nsource nim-" & nimVersion & "/activate.sh"
 
@@ -143,7 +168,9 @@ proc setupNimEnv*(nimVersion: string; keepCsources: bool) =
         removeDir $depsDir() / csourcesVersion / "c_code"
       let pathEntry = depsDir() / nimDest / "bin".Path
       when defined(windows):
-        writeFile "activate.bat", BatchFile % [replace($pathEntry, '/', '\\'), nimVersion]
+        let winPath = replace($pathEntry, '/', '\\')
+        writeFile "activate.bat", BatchFile % [winPath, nimVersion]
+        writeFile "activate.ps1", PowerShellFile % [winPath, nimVersion]
       else:
         writeFile "activate.sh", ShellFile % [$pathEntry, nimVersion]
       infoAboutActivation nimDest, nimVersion
