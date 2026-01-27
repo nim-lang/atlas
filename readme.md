@@ -128,9 +128,20 @@ Sometimes it's helpful to understand what Atlas is doing. You can run commands w
 
 ## Installing Nim with Atlas
 
+You can use atlas to set up a nim virtual environment:
+
 ```sh
 atlas env 2.0.0
 source deps/nim-2.0.0/activate.sh
+```
+
+After executing these commands, the specific nim version you just chose will 
+be available in your current shell.
+
+To get back to the original setup you can then run:
+
+```sh
+deactivate
 ```
 
 ## Dependencies

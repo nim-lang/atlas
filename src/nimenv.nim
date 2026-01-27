@@ -14,11 +14,30 @@ when defined(windows):
   const
     BatchFile = """
 @echo off
-set PATH="$1";%PATH%
+if not defined _OLD_NIM_PATH set "_OLD_NIM_PATH=%PATH%"
+set "PATH=$1;%PATH%"
+doskey deactivate=if defined _OLD_NIM_PATH (set "PATH=%%_OLD_NIM_PATH%%" ^& set "_OLD_NIM_PATH=") else (echo Not in an activated Nim environment)
 """
 else:
   const
-    ShellFile* = "export PATH=$1:$$PATH\n"
+    ShellFile* = """
+# Save original PATH if not already in a nim env
+if [ -z "$${_OLD_NIM_PATH+x}" ]; then
+    export _OLD_NIM_PATH="$$PATH"
+fi
+
+export PATH=$1:$$PATH
+
+deactivate() {
+    if [ -n "$${_OLD_NIM_PATH+x}" ]; then
+        export PATH="$$_OLD_NIM_PATH"
+        unset _OLD_NIM_PATH
+        unset -f deactivate
+    else
+        echo "Not in an activated Nim environment"
+    fi
+}
+"""
 
 const
   ActivationFile* = when defined(windows): Path "activate.bat" else: Path "activate.sh"
