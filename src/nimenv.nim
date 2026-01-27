@@ -15,23 +15,29 @@ when defined(windows):
     BatchFile = """
 @echo off
 if not defined _OLD_NIM_PATH set "_OLD_NIM_PATH=%PATH%"
+if not defined _OLD_NIM_PROMPT set "_OLD_NIM_PROMPT=%PROMPT%"
 set "PATH=$1;%PATH%"
-doskey deactivate=if defined _OLD_NIM_PATH (set "PATH=%%_OLD_NIM_PATH%%" ^& set "_OLD_NIM_PATH=") else (echo Not in an activated Nim environment)
+set "PROMPT=(nim $2) %PROMPT%"
+doskey deactivate=if defined _OLD_NIM_PATH (set "PATH=%%_OLD_NIM_PATH%%" ^& set "PROMPT=%%_OLD_NIM_PROMPT%%" ^& set "_OLD_NIM_PATH=" ^& set "_OLD_NIM_PROMPT=") else (echo Not in an activated Nim environment)
 """
 else:
   const
     ShellFile* = """
-# Save original PATH if not already in a nim env
+# Save original PATH and PS1 if not already in a nim env
 if [ -z "$${_OLD_NIM_PATH+x}" ]; then
     export _OLD_NIM_PATH="$$PATH"
+    export _OLD_NIM_PS1="$${PS1:-}"
 fi
 
 export PATH=$1:$$PATH
+export PS1="(nim $2) $${PS1:-}"
 
 deactivate() {
     if [ -n "$${_OLD_NIM_PATH+x}" ]; then
         export PATH="$$_OLD_NIM_PATH"
+        export PS1="$$_OLD_NIM_PS1"
         unset _OLD_NIM_PATH
+        unset _OLD_NIM_PS1
         unset -f deactivate
     else
         echo "Not in an activated Nim environment"
@@ -137,7 +143,7 @@ proc setupNimEnv*(nimVersion: string; keepCsources: bool) =
         removeDir $depsDir() / csourcesVersion / "c_code"
       let pathEntry = depsDir() / nimDest / "bin".Path
       when defined(windows):
-        writeFile "activate.bat", BatchFile % replace($pathEntry, '/', '\\')
+        writeFile "activate.bat", BatchFile % [replace($pathEntry, '/', '\\'), nimVersion]
       else:
-        writeFile "activate.sh", ShellFile % $pathEntry
+        writeFile "activate.sh", ShellFile % [$pathEntry, nimVersion]
       infoAboutActivation nimDest, nimVersion
