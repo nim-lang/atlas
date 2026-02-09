@@ -5,11 +5,6 @@ import dependencies, runners
 
 export depgraphtypes, deptypesjson
 
-when defined(nimAtlasBootstrap):
-  import ../dist/sat/src/sat/[sat]
-else:
-  import sat/[sat]
-
 export sat
 
 when not compiles(newSeq[int]().addUnique(1)):

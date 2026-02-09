@@ -11,16 +11,13 @@
 
 import std / [parseopt, files, dirs, strutils, os, options, osproc, tables, sets, json, uri, paths]
 import basic / [versions, context, osutils, configutils, reporters,
-                nimbleparser, gitops, pkgurls, nimblecontext, compiledpatterns, packageinfos]
+                nimbleparser, gitops, pkgurls, nimblecontext,
+                compiledpatterns, packageinfos, sattypes]
 import depgraphs, nimenv, lockfiles, confighandler, dependencies, pkgsearch
 
 
 from std/terminal import isatty
 
-when defined(nimAtlasBootstrap):
-  import ../dist/sat/src/sat/sat
-else:
-  import sat/sat
 
 const
   AtlasVersion =
