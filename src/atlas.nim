@@ -11,16 +11,13 @@
 
 import std / [parseopt, files, dirs, strutils, os, options, osproc, tables, sets, json, uri, paths]
 import basic / [versions, context, osutils, configutils, reporters,
-                nimbleparser, gitops, pkgurls, nimblecontext, compiledpatterns, packageinfos]
+                nimbleparser, gitops, pkgurls, nimblecontext,
+                compiledpatterns, packageinfos, sattypes]
 import depgraphs, nimenv, lockfiles, confighandler, dependencies, pkgsearch
 
 
 from std/terminal import isatty
 
-when defined(nimAtlasBootstrap):
-  import ../dist/sat/src/sat/sat
-else:
-  import sat/sat
 
 const
   AtlasVersion =
@@ -217,9 +214,9 @@ proc installDependencies(nc: var NimbleContext; nimbleFile: Path) =
     dir = Path(".").absolutePath
   info pkgname, "installing dependencies"
   let graph = dir.loadWorkspace(nc, AllReleases, onClone=DoClone, doSolve=true)
-  let paths = graph.activateGraph()
+  let (paths, features) = graph.activateGraph()
   let cfgPath = CfgPath project()
-  patchNimCfg(paths, cfgPath)
+  patchNimCfg(paths, cfgPath, features)
   afterGraphActions graph
 
 proc linkPackage(linkDir, linkedNimble: Path) =
@@ -524,10 +521,6 @@ proc atlasRun*(params: seq[string]) =
       args.add default
     elif args.len != 1:
       fatal action & " command takes a single package name"
-
-  template noArgs() =
-    if args.len != 0:
-      fatal action & " command takes no arguments"
 
   parseAtlasOptions(params, action, args)
 

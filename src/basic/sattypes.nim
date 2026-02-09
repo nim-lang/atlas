@@ -1,10 +1,7 @@
 
-when defined(nimAtlasBootstrap):
-  import ../../dist/sat/src/sat/satvars
-else:
-  import sat/satvars
+import sat/[sat, satvars]
 
 proc `$`*(v: VarId): string =
   "v" & $v.int
 
-export satvars
+export sat, satvars

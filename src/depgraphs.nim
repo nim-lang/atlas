@@ -5,11 +5,6 @@ import dependencies, runners
 
 export depgraphtypes, deptypesjson
 
-when defined(nimAtlasBootstrap):
-  import ../dist/sat/src/sat/[sat]
-else:
-  import sat/[sat]
-
 export sat
 
 when not compiles(newSeq[int]().addUnique(1)):
@@ -367,6 +362,7 @@ proc printVersionSelections(graph: DepGraph, solution: Solution, form: Form) =
 proc solve*(graph: var DepGraph; form: Form, rerun: var bool) =
   for pkg in graph.pkgs.mvalues():
     pkg.activeVersion = nil
+    pkg.activeFeatures = @[]
     pkg.active = false
 
   let maxVar = form.idgen
@@ -395,6 +391,7 @@ proc solve*(graph: var DepGraph; form: Form, rerun: var bool) =
         assert not mapInfo.release.isNil, "too bad: " & $pkg.url
         pkg.activeVersion = mapInfo.version
         if mapInfo.feature.len > 0:
+          pkg.activeFeatures.add(mapInfo.feature)
           debug pkg.url.projectName, "package satisfiable", "feature: ", mapInfo.feature
         else:
           debug pkg.url.projectName, "package satisfiable"
@@ -507,7 +504,7 @@ proc runBuildSteps*(graph: DepGraph) =
             tryWithDir pkg.ondisk:
               runNimScriptBuilder pattern, pkg.projectName
 
-proc activateGraph*(graph: DepGraph): seq[CfgPath] =
+proc activateGraph*(graph: DepGraph): tuple[paths: seq[CfgPath], features: seq[string]] =
   notice "atlas:graph", "Activating project deps for resolved dependency graph"
   for pkg in allActiveNodes(graph):
     if pkg.isRoot: continue
@@ -528,7 +525,33 @@ proc activateGraph*(graph: DepGraph): seq[CfgPath] =
     runBuildSteps(graph)
 
   notice "atlas:graph", "Wrote nim.cfg!"
+
+  # Add feature defines for --feature:FOO flags (root project features without prefix)
+  for feature in context().features:
+    if feature.startsWith("feature."):
+      # Already in full format: feature.$PKG.$FEATURE
+      result.features.addUnique feature
+    else:
+      # Short format: FOO -> feature.$ROOT.FOO
+      result.features.addUnique "feature." & graph.root.url.projectName & "." & feature
+
+  # Apply global feature flags to activeFeatures for introspection/tests.
+  for feature in context().features:
+    if feature.startsWith("feature."):
+      let parts = feature.split(".")
+      if parts.len >= 3:
+        let pkgName = parts[1]
+        let featName = parts[2 .. ^1].join(".")
+        for pkg in graph.pkgs.values():
+          if pkg.active and pkg.url.projectName == pkgName:
+            pkg.activeFeatures.addUnique(featName)
+    else:
+      if not graph.root.isNil and graph.root.active:
+        graph.root.activeFeatures.addUnique(feature)
+
   for pkg in allActiveNodes(graph):
     if pkg.isRoot: continue
     trace pkg.url.projectName, "adding CfgPath:", $relativeToWorkspace(toDestDir(graph, pkg) / getCfgPath(graph, pkg).Path)
-    result.add CfgPath(toDestDir(graph, pkg) / getCfgPath(graph, pkg).Path)
+    result.paths.add CfgPath(toDestDir(graph, pkg) / getCfgPath(graph, pkg).Path)
+    for feature in pkg.activeFeatures:
+      result.features.addUnique "feature." & pkg.url.projectName & "." & feature

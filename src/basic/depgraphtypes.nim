@@ -1,6 +1,6 @@
-import std / [paths, tables, streams, json, jsonutils, sequtils]
+import std / [paths, tables]
 
-import sattypes, context, deptypes, reporters, nimblecontext, pkgurls, versions
+import context, deptypes, pkgurls, versions
 
 
 type 

@@ -3,15 +3,27 @@ import std/[os, strformat, strutils]
 when defined(nimPreviewSlimSystem):
   import std/syncio
 
+when defined(nimAtlasBootstrap):
+  --path:"../dist/sat/src"
+elif dirExists("../sat/src"):
+  --path:"../sat/src"
+else:
+  --path:"deps/sat"
+
 --path:"$nim"
---path:"../sat/src/"
 --nimcache:".nimcache"
 --d:ssl
 
+task installSat, "install sat if needed":
+  if not dirExists("../sat/src"):
+    exec "git clone https://github.com/nim-lang/sat deps/sat"
+
 task build, "Build local atlas":
+  installSatTask()
   exec "nim c -d:debug -o:bin/atlas src/atlas.nim"
 
 task unitTests, "Runs unit tests":
+  installSatTask()
   for kind, path in walkDir("tests/"):
     if kind == pcFile and path.endsWith(".nim"):
       let name = splitFile(path).name
@@ -20,10 +32,11 @@ task unitTests, "Runs unit tests":
       exec fmt"nim c -r {path}"
 
 task tester, "Runs integration tests":
+  installSatTask()
   exec "nim c -d:debug -r tests/run_tester.nim"
 
 task buildRelease, "Build release":
-  exec "nimble install -y sat"
+  installSatTask()
   when defined(macosx):
     let x86Args = "\"-target x86_64-apple-macos11 -arch x86_64 -DARCH=x86_64\""
     exec "nim c -d:release --passC:" & x86args & " --passL:" & x86args & " -o:./atlas_x86_64 src/atlas.nim"

@@ -6,8 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [strutils, uri, parseutils, algorithm, jsonutils, hashes, tables, sets]
-import std / json
+import std / [strutils, uri, parseutils, algorithm, hashes, tables, sets]
 
 type
   Version* = distinct string

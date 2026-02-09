@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std/[os, files, dirs, paths, osproc, options, sequtils, strutils, uri, sets]
+import std/[os, files, paths, osproc, options, sequtils, strutils, uri, sets]
 import reporters, osutils, versions, context
 
 type

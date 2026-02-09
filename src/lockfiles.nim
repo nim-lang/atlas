@@ -119,7 +119,6 @@ proc pinGraph*(graph: DepGraph; lockFile: Path; exportNimble = false) =
     if pkg.isRoot:
       continue
 
-    let dir = pkg.ondisk
     if not exportNimble:
       # generate atlas native lockfile entries
       genLockEntry lf, pkg
@@ -198,8 +197,6 @@ proc listChanged*(lockFile: Path) =
               convertNimbleLock(lockFile)
            else:
               readLockFile(lockFile)
-
-  let base = splitPath(lockFile).head
 
   # update the the dependencies
   for _, v in pairs(lf.items):

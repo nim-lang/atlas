@@ -1,4 +1,4 @@
-import std/[paths, tables, json, jsonutils, hashes, sets]
+import std/[paths, tables, hashes, sets]
 import sattypes, pkgurls, versions, context
 
 export tables
@@ -21,6 +21,7 @@ type
     state*: PackageState
     versions*: OrderedTable[PackageVersion, NimbleRelease]
     activeVersion*: PackageVersion
+    activeFeatures*: seq[string]
     module*: string
     ondisk*: Path
     nimbleFile*: Path

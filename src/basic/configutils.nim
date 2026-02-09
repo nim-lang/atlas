@@ -21,12 +21,14 @@ proc findCfgDir*(dir: Path): CfgPath =
     return CfgPath dir / nimbleInfo.srcDir
   return CfgPath dir
 
-proc patchNimCfg*(deps: seq[CfgPath]; cfgPath: CfgPath) =
+proc patchNimCfg*(deps: seq[CfgPath]; cfgPath: CfgPath; features: seq[string] = @[]) =
   var paths = "--noNimblePath\n"
   for d in deps:
     let x = relativePath(d.string, cfgPath.string, '/')
     if x.len > 0 and x != ".":
       paths.add "--path:\"" & x & "\"\n"
+  for feature in features:
+    paths.add "--define:\"" & feature & "\"\n"
   var cfgContent = configPatternBegin & paths & configPatternEnd
 
   let cfg = Path(cfgPath.string / "nim.cfg")

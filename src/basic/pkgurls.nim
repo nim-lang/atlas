@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [hashes, uri, os, strutils, files, dirs, sequtils, pegs, json, jsonutils]
+import std / [hashes, uri, os, strutils, files, dirs, sequtils, pegs]
 import gitops, reporters, context
 
 export uri

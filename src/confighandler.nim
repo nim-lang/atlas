@@ -9,7 +9,7 @@
 ## Configuration handling.
 
 import std / [strutils, os, streams, json, tables, jsonutils, uri, sequtils]
-import basic/[versions, depgraphtypes, nimblecontext, deptypesjson, context, reporters, compiledpatterns, parse_requires, deptypes]
+import basic/[versions, nimblecontext, deptypesjson, context, reporters, compiledpatterns, parse_requires, deptypes]
 
 proc readPluginsDir(dir: Path) =
   for k, f in walkDir($(project() / dir)):

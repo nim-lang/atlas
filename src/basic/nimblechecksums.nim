@@ -6,7 +6,9 @@
 #    distribution, for details about the copyright.
 #
 
+{.push warning[Deprecated]: off.}
 import std / [strutils, os, sha1, algorithm]
+{.pop.}
 import context, osutils
 import gitops
 

@@ -124,16 +124,6 @@ proc isMainProject*(dir: Path): bool =
 
 proc `==`*(a, b: CfgPath): bool {.borrow.}
 
-proc displayName(c: AtlasContext; p: string): string =
-  if p == c.projectDir.string:
-    p.absolutePath
-  elif $c.depsDir != "" and p.isRelativeTo($c.depsDir):
-    p.relativePath($c.depsDir)
-  elif p.isRelativeTo($c.projectDir):
-    p.relativePath($c.projectDir)
-  else:
-    p
-
 proc isGitDir*(path: string): bool =
   let gitPath = path / ".git"
   dirExists(gitPath) or fileExists(gitPath)
