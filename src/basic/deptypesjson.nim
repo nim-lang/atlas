@@ -1,4 +1,4 @@
-import std/[json, jsonutils, paths, tables, sets]
+import std/[json, jsonutils, paths, tables, sets, strutils]
 import sattypes, deptypes, pkgurls, versions, nimblecontext
 
 export json, jsonutils
