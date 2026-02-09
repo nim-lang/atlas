@@ -52,6 +52,7 @@ type
     DumpGraphs
     DumbProxy
     ForceGitToHttps
+    NoLazyDeps
     IncludeTagsAndNimbleCommits # include nimble commits and tags in the solver
     NimbleCommitsMax # takes the newest commit for each version
 

@@ -76,6 +76,8 @@ Options:
   --noautoinit          do not auto initialize an atlas project
   --resolver=minver|semver|maxver
                         which resolution algorithm to use, default is semver
+  --no-lazy-deps        disable lazy dependency loading and use eager loading
+                        for all transitive dependencies during SAT solving
   --proxy=url           use the given proxy URL for all git operations
   --dumbProxy           use a dumb proxy without smart git protocol
   --packagesRepo        use the nim-lang/packages git repo (legacy behavior)
@@ -480,6 +482,8 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
         of "maxver": context().defaultAlgo = MaxVer
         of "semver": context().defaultAlgo = SemVer
         else: writeHelp()
+      of "nolazydeps", "no-lazy-deps":
+        context().flags.incl NoLazyDeps
       of "verbosity":
         case val.normalize
         of "normal": setAtlasVerbosity(Info)

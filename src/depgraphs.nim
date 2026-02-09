@@ -525,7 +525,7 @@ proc solve*(graph: var DepGraph; form: Form) =
   solve(graph, form, rerun)
 
 proc loadWorkspace*(path: Path, nc: var NimbleContext, mode: TraversalMode, onClone: PackageAction, doSolve: bool): DepGraph =
-  let deferChildDeps = doSolve and mode == AllReleases
+  let deferChildDeps = doSolve and mode == AllReleases and NoLazyDeps notin context().flags
   result = path.expandGraph(nc, mode, onClone, deferChildDeps=deferChildDeps)
 
   if doSolve:
