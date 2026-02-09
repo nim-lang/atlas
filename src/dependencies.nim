@@ -170,11 +170,15 @@ proc addRelease(
     return false
 
 proc commitPrefixMatches(a, b: CommitHash): bool =
+  ## Returns true when two commit hashes refer to the same commit prefix.
+  ## This allows explicit short hashes and full hashes to match each other.
   if a.isEmpty() or b.isEmpty():
     return false
   result = a.h.startsWith(b.h) or b.h.startsWith(a.h)
 
 proc explicitVersionMatches(explicit, candidate: VersionTag): bool =
+  ## Checks whether a candidate version tag matches an explicit SAT-selected
+  ## version request, supporting #head, commit-based, and semver equality cases.
   if explicit.version.isHead():
     return candidate.isTip
 
@@ -192,6 +196,9 @@ proc explicitVersionMatches(explicit, candidate: VersionTag): bool =
   return false
 
 proc filterToExplicitVersions(pkg: var Package, explicitVersions: seq[VersionTag]) =
+  ## Narrows pkg.versions to only versions that match explicit SAT-selected
+  ## versions. Used in lazy deferred resolution to avoid unrelated historical
+  ## versions after explicit pin expansion.
   if explicitVersions.len == 0:
     return
 
