@@ -61,7 +61,6 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
       let depNode = graph.pkgs[dep]
 
       if depNode.state == LazyDeferred:
-        allDepsCompatible = true
         warn pkg.url.projectName, "dependency:", $dep.projectName, "is lazily deferred and not loaded"
         continue
 
@@ -99,6 +98,9 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
         info pkg.url.projectName, "requirement depdendency not found:", $dep.projectName, "query:", $query
         continue
       let depNode = graph.pkgs[dep]
+      if depNode.state == LazyDeferred:
+        debug pkg.url.projectName, "skipping deferred dependency implication:", $dep.projectName
+        continue
         
       var flags: seq[string]
       if dep in rel.reqsByFeatures:
@@ -147,6 +149,9 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
           info pkg.url.projectName, "feature depdendency not found:", $dep.projectName, "query:", $query
           continue
         let depNode = graph.pkgs[dep]
+        if depNode.state == LazyDeferred:
+          debug pkg.url.projectName, "skipping deferred feature dependency implication:", $dep.projectName, "feature:", $feature
+          continue
 
         var compatibleVersions: seq[VarId] = @[]
         for depVer, relVer in depNode.validVersions():
@@ -397,10 +402,32 @@ proc solve*(graph: var DepGraph; form: Form, rerun: var bool) =
     checkDuplicateModules(graph)
 
     var lazyDefersNeeded: seq[Package]
-    for varId, mapping in form.mapping:
-      if mapping.pkg.state == LazyDeferred and solution.isTrue(varId):
-        lazyDefersNeeded.add mapping.pkg
-        debug mapping.pkg.url.projectName, "lazy deferred package found in SAT solution:", $(varId)
+    var lazyDeferUrls: HashSet[PkgUrl]
+
+    template includeLazyDeps(reqs: untyped, reason: string) =
+      for req in reqs:
+        let depUrl = req[0]
+        if depUrl in graph.pkgs and graph.pkgs[depUrl].state == LazyDeferred:
+          if not lazyDeferUrls.containsOrIncl(depUrl):
+            lazyDefersNeeded.add graph.pkgs[depUrl]
+            debug graph.pkgs[depUrl].url.projectName, "lazy deferred package selected for load:", reason
+
+    for pkg in graph.pkgs.values():
+      if not pkg.active or pkg.activeVersion.isNil or pkg.activeVersion notin pkg.versions:
+        continue
+      let rel = pkg.versions[pkg.activeVersion]
+      includeLazyDeps(rel.requirements, $pkg.url.projectName & ":" & $pkg.activeVersion)
+
+      for feature, reqs in rel.features:
+        var isFeatureEnabled = false
+        let pkgFeature = "feature" & "." & pkg.url.projectName & "." & feature
+        if (pkg.isRoot and feature in context().features) or (pkgFeature in context().features):
+          isFeatureEnabled = true
+        elif feature in rel.featureVars and solution.isTrue(rel.featureVars[feature]):
+          isFeatureEnabled = true
+
+        if isFeatureEnabled:
+          includeLazyDeps(reqs, $pkg.url.projectName & ":" & feature)
 
     if lazyDefersNeeded.len > 0:
       notice "atlas:resolved", "rerunning SAT; found lazy deferred packages:", lazyDefersNeeded.mapIt(it.url.projectName).join(", ")
@@ -441,7 +468,8 @@ proc solve*(graph: var DepGraph; form: Form) =
   solve(graph, form, rerun)
 
 proc loadWorkspace*(path: Path, nc: var NimbleContext, mode: TraversalMode, onClone: PackageAction, doSolve: bool): DepGraph =
-  result = path.expandGraph(nc, mode, onClone)
+  let deferChildDeps = doSolve and mode == AllReleases
+  result = path.expandGraph(nc, mode, onClone, deferChildDeps=deferChildDeps)
 
   if doSolve:
     let form = result.toFormular(context().defaultAlgo)

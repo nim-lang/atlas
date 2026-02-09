@@ -16,7 +16,13 @@ proc fromJsonHook*(a: var Version; b: JsonNode; opt = Joptions()) =
   a = toVersion(b.getStr())
 
 proc fromJsonHook*(a: var VersionTag; b: JsonNode; opt = Joptions()) =
-  a = toVersionTag(b.getStr())
+  var raw = b.getStr()
+  var isTip = false
+  if raw.endsWith("^"):
+    isTip = true
+    raw = raw[0..^2]
+  a = toVersionTag(raw)
+  a.isTip = isTip
 proc toJsonHook*(v: PkgUrl): JsonNode = %($(v))
 
 proc fromJsonHook*(a: var PkgUrl; b: JsonNode; opt = Joptions()) =

@@ -1,0 +1,5609 @@
+{
+  "mode": "AllReleases",
+  "root": {
+    "url": "atlas:///Volumes/projects/nims/atlas/tests/ws_integration/ws_integration.nimble",
+    "state": "Processed",
+    "versions": [
+      [
+        {
+          "vtag": "#head@-",
+          "vid": 12
+        },
+        {
+          "version": "#head",
+          "nimVersion": "~",
+          "status": "Normal",
+          "requirements": [
+            {
+              "url": "https://github.com/zedeus/nitter",
+              "version": "#92cd6abcf6d9935bc0d7f013acbfbfd8ddd896ba"
+            }
+          ],
+          "reqsByFeatures": {},
+          "hasInstallHooks": false,
+          "srcDir": "",
+          "err": "",
+          "features": {},
+          "featureVars": {}
+        }
+      ]
+    ],
+    "activeVersion": null,
+    "module": "",
+    "ondisk": "/Volumes/projects/nims/atlas/tests/ws_integration",
+    "nimbleFile": "",
+    "active": false,
+    "isAtlasProject": true,
+    "isFork": false,
+    "isRoot": true,
+    "isLocalOnly": true,
+    "errors": [],
+    "originHead": {
+      "h": "",
+      "orig": "FromNone"
+    }
+  },
+  "pkgs": {
+    "https://github.com/zedeus/nitter": {
+      "url": "https://github.com/zedeus/nitter",
+      "state": "Processed",
+      "versions": [
+        [
+          {
+            "vtag": "#92cd6abcf6d9935bc0d7f013acbfbfd8ddd896ba@92cd6abcf6d9935bc0d7f013acbfbfd8ddd896ba",
+            "vid": 0
+          },
+          {
+            "version": "0.1.0",
+            "nimVersion": "1.6.10",
+            "status": "Normal",
+            "requirements": [
+              {
+                "url": "https://github.com/dom96/jester",
+                "version": "#baca3f"
+              },
+              {
+                "url": "https://github.com/karaxnim/karax",
+                "version": "#5cf360c"
+              },
+              {
+                "url": "https://github.com/dom96/sass",
+                "version": "#7dfdd03"
+              },
+              {
+                "url": "https://github.com/cheatfate/nimcrypto",
+                "version": "#a079df9"
+              },
+              {
+                "url": "https://github.com/soasme/nim-markdown",
+                "version": "#158efe3"
+              },
+              {
+                "url": "https://github.com/Araq/packedjson",
+                "version": "#9e6fbb6"
+              },
+              {
+                "url": "https://github.com/guzba/supersnappy",
+                "version": "#6c94198"
+              },
+              {
+                "url": "https://github.com/zedeus/redpool",
+                "version": "#8b7c1db"
+              },
+              {
+                "url": "https://github.com/zedeus/redis",
+                "version": "#d0a0e6f"
+              },
+              {
+                "url": "https://github.com/guzba/zippy",
+                "version": "#ca5989a"
+              },
+              {
+                "url": "https://github.com/treeform/flatty",
+                "version": "#e668085"
+              },
+              {
+                "url": "https://github.com/treeform/jsony",
+                "version": "#1de1f08"
+              },
+              {
+                "url": "https://github.com/CORDEA/oauth",
+                "version": "#b8c163b"
+              }
+            ],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.1.0@cea5cc0523171bc3eb0967ae83ddbb92f74da94b",
+            "vid": 1
+          },
+          {
+            "version": "0.1.0",
+            "nimVersion": "0.19.9",
+            "status": "Normal",
+            "requirements": [
+              {
+                "url": "https://github.com/nitely/nim-regex",
+                "version": "*"
+              },
+              {
+                "url": "https://github.com/GULPF/nimquery",
+                "version": "*"
+              },
+              {
+                "url": "https://github.com/cheatfate/nimcrypto",
+                "version": "*"
+              },
+              {
+                "url": "https://github.com/moigagoo/norm",
+                "version": "*"
+              },
+              {
+                "url": "https://github.com/dom96/jester",
+                "version": "*"
+              }
+            ],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ]
+      ],
+      "activeVersion": null,
+      "module": "",
+      "ondisk": "/Volumes/projects/nims/atlas/tests/ws_integration/deps/nitter",
+      "nimbleFile": "",
+      "active": false,
+      "isAtlasProject": false,
+      "isFork": false,
+      "isRoot": false,
+      "isLocalOnly": false,
+      "errors": [],
+      "originHead": {
+        "h": "41fa47bfbf3917e9b3ac4f7b49c89a75a7a2bd44",
+        "orig": "FromGitTag"
+      }
+    },
+    "https://github.com/nitely/nim-regex": {
+      "url": "https://github.com/nitely/nim-regex",
+      "state": "LazyDeferred",
+      "versions": [
+        [
+          {
+            "vtag": "*@-",
+            "vid": 2
+          },
+          {
+            "version": "#head",
+            "nimVersion": "~",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ]
+      ],
+      "activeVersion": null,
+      "module": "",
+      "ondisk": "",
+      "nimbleFile": "",
+      "active": false,
+      "isAtlasProject": false,
+      "isFork": false,
+      "isRoot": false,
+      "isLocalOnly": false,
+      "errors": [],
+      "originHead": {
+        "h": "",
+        "orig": "FromNone"
+      }
+    },
+    "https://github.com/GULPF/nimquery": {
+      "url": "https://github.com/GULPF/nimquery",
+      "state": "LazyDeferred",
+      "versions": [
+        [
+          {
+            "vtag": "*@-",
+            "vid": 3
+          },
+          {
+            "version": "#head",
+            "nimVersion": "~",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ]
+      ],
+      "activeVersion": null,
+      "module": "",
+      "ondisk": "",
+      "nimbleFile": "",
+      "active": false,
+      "isAtlasProject": false,
+      "isFork": false,
+      "isRoot": false,
+      "isLocalOnly": false,
+      "errors": [],
+      "originHead": {
+        "h": "",
+        "orig": "FromNone"
+      }
+    },
+    "https://github.com/moigagoo/norm": {
+      "url": "https://github.com/moigagoo/norm",
+      "state": "LazyDeferred",
+      "versions": [
+        [
+          {
+            "vtag": "*@-",
+            "vid": 4
+          },
+          {
+            "version": "#head",
+            "nimVersion": "~",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ]
+      ],
+      "activeVersion": null,
+      "module": "",
+      "ondisk": "",
+      "nimbleFile": "",
+      "active": false,
+      "isAtlasProject": false,
+      "isFork": false,
+      "isRoot": false,
+      "isLocalOnly": false,
+      "errors": [],
+      "originHead": {
+        "h": "",
+        "orig": "FromNone"
+      }
+    },
+    "https://github.com/OpenSystemsLab/q.nim": {
+      "url": "https://github.com/OpenSystemsLab/q.nim",
+      "state": "LazyDeferred",
+      "versions": [
+        [
+          {
+            "vtag": "*@-",
+            "vid": 5
+          },
+          {
+            "version": "#head",
+            "nimVersion": "~",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ]
+      ],
+      "activeVersion": null,
+      "module": "",
+      "ondisk": "",
+      "nimbleFile": "",
+      "active": false,
+      "isAtlasProject": false,
+      "isFork": false,
+      "isRoot": false,
+      "isLocalOnly": false,
+      "errors": [],
+      "originHead": {
+        "h": "",
+        "orig": "FromNone"
+      }
+    },
+    "https://github.com/zedeus/httpbeast": {
+      "url": "https://github.com/zedeus/httpbeast",
+      "state": "LazyDeferred",
+      "versions": [
+        [
+          {
+            "vtag": "*@-",
+            "vid": 6
+          },
+          {
+            "version": "#head",
+            "nimVersion": "~",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ]
+      ],
+      "activeVersion": null,
+      "module": "",
+      "ondisk": "",
+      "nimbleFile": "",
+      "active": false,
+      "isAtlasProject": false,
+      "isFork": true,
+      "isRoot": false,
+      "isLocalOnly": false,
+      "errors": [],
+      "originHead": {
+        "h": "",
+        "orig": "FromNone"
+      }
+    },
+    "https://github.com/dom96/httpbeast": {
+      "url": "https://github.com/dom96/httpbeast",
+      "state": "LazyDeferred",
+      "versions": [
+        [
+          {
+            "vtag": "*@-",
+            "vid": 7
+          },
+          {
+            "version": "#head",
+            "nimVersion": "~",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ]
+      ],
+      "activeVersion": null,
+      "module": "",
+      "ondisk": "",
+      "nimbleFile": "",
+      "active": false,
+      "isAtlasProject": false,
+      "isFork": false,
+      "isRoot": false,
+      "isLocalOnly": false,
+      "errors": [],
+      "originHead": {
+        "h": "",
+        "orig": "FromNone"
+      }
+    },
+    "https://github.com/zedeus/jester": {
+      "url": "https://github.com/zedeus/jester",
+      "state": "LazyDeferred",
+      "versions": [
+        [
+          {
+            "vtag": "*@-",
+            "vid": 8
+          },
+          {
+            "version": "#head",
+            "nimVersion": "~",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ]
+      ],
+      "activeVersion": null,
+      "module": "",
+      "ondisk": "",
+      "nimbleFile": "",
+      "active": false,
+      "isAtlasProject": false,
+      "isFork": true,
+      "isRoot": false,
+      "isLocalOnly": false,
+      "errors": [],
+      "originHead": {
+        "h": "",
+        "orig": "FromNone"
+      }
+    },
+    "https://github.com/jangko/msgpack4nim": {
+      "url": "https://github.com/jangko/msgpack4nim",
+      "state": "LazyDeferred",
+      "versions": [
+        [
+          {
+            "vtag": "*@-",
+            "vid": 9
+          },
+          {
+            "version": "#head",
+            "nimVersion": "~",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ]
+      ],
+      "activeVersion": null,
+      "module": "",
+      "ondisk": "",
+      "nimbleFile": "",
+      "active": false,
+      "isAtlasProject": false,
+      "isFork": false,
+      "isRoot": false,
+      "isLocalOnly": false,
+      "errors": [],
+      "originHead": {
+        "h": "",
+        "orig": "FromNone"
+      }
+    },
+    "https://github.com/status-im/nim-snappy": {
+      "url": "https://github.com/status-im/nim-snappy",
+      "state": "LazyDeferred",
+      "versions": [
+        [
+          {
+            "vtag": "*@-",
+            "vid": 10
+          },
+          {
+            "version": "#head",
+            "nimVersion": "~",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ]
+      ],
+      "activeVersion": null,
+      "module": "",
+      "ondisk": "",
+      "nimbleFile": "",
+      "active": false,
+      "isAtlasProject": false,
+      "isFork": false,
+      "isRoot": false,
+      "isLocalOnly": false,
+      "errors": [],
+      "originHead": {
+        "h": "",
+        "orig": "FromNone"
+      }
+    },
+    "https://github.com/disruptek/frosty": {
+      "url": "https://github.com/disruptek/frosty",
+      "state": "LazyDeferred",
+      "versions": [
+        [
+          {
+            "vtag": "*@-",
+            "vid": 11
+          },
+          {
+            "version": "#head",
+            "nimVersion": "~",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ]
+      ],
+      "activeVersion": null,
+      "module": "",
+      "ondisk": "",
+      "nimbleFile": "",
+      "active": false,
+      "isAtlasProject": false,
+      "isFork": false,
+      "isRoot": false,
+      "isLocalOnly": false,
+      "errors": [],
+      "originHead": {
+        "h": "",
+        "orig": "FromNone"
+      }
+    },
+    "atlas:///Volumes/projects/nims/atlas/tests/ws_integration/ws_integration.nimble": {
+      "url": "atlas:///Volumes/projects/nims/atlas/tests/ws_integration/ws_integration.nimble",
+      "state": "Processed",
+      "versions": [
+        [
+          {
+            "vtag": "#head@-",
+            "vid": 12
+          },
+          {
+            "version": "#head",
+            "nimVersion": "~",
+            "status": "Normal",
+            "requirements": [
+              {
+                "url": "https://github.com/zedeus/nitter",
+                "version": "#92cd6abcf6d9935bc0d7f013acbfbfd8ddd896ba"
+              }
+            ],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ]
+      ],
+      "activeVersion": null,
+      "module": "",
+      "ondisk": "/Volumes/projects/nims/atlas/tests/ws_integration",
+      "nimbleFile": "",
+      "active": false,
+      "isAtlasProject": true,
+      "isFork": false,
+      "isRoot": true,
+      "isLocalOnly": true,
+      "errors": [],
+      "originHead": {
+        "h": "",
+        "orig": "FromNone"
+      }
+    },
+    "https://github.com/cheatfate/nimcrypto": {
+      "url": "https://github.com/cheatfate/nimcrypto",
+      "state": "Processed",
+      "versions": [
+        [
+          {
+            "vtag": "#4014ef939b51e02053c2e16dd3481d47bc9267dd@4014ef939b51e02053c2e16dd3481d47bc9267dd",
+            "vid": 13
+          },
+          {
+            "version": "0.5.4",
+            "nimVersion": "0.18.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "#a079df92424968d46a6ac258299ce9380aa153f2@a079df92424968d46a6ac258299ce9380aa153f2",
+            "vid": 14
+          },
+          {
+            "version": "0.6.0",
+            "nimVersion": "1.6",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "#a5742a9a214ac33f91615f3862c7b099aec43b00@a5742a9a214ac33f91615f3862c7b099aec43b00",
+            "vid": 15
+          },
+          {
+            "version": "0.5.4",
+            "nimVersion": "0.18.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "#b41129f955ddba5b72e30fba198fc75b8c7e1174@b41129f955ddba5b72e30fba198fc75b8c7e1174",
+            "vid": 16
+          },
+          {
+            "version": "0.5.4",
+            "nimVersion": "0.18.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.6.0@b591f34dc4146012846d3e824ce96a07119a1260",
+            "vid": 17
+          },
+          {
+            "version": "0.6.0",
+            "nimVersion": "1.6",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.6.1@54c8a416fabca5c9d71fcdfb973dbbd03003b21f",
+            "vid": 18
+          },
+          {
+            "version": "0.6.1",
+            "nimVersion": "1.6",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.6.2@11e4d0514ba27366c10f50b35063a5f17c813ec8",
+            "vid": 19
+          },
+          {
+            "version": "0.6.2",
+            "nimVersion": "1.6",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ]
+      ],
+      "activeVersion": null,
+      "module": "",
+      "ondisk": "/Volumes/projects/nims/atlas/tests/ws_integration/deps/nimcrypto",
+      "nimbleFile": "",
+      "active": false,
+      "isAtlasProject": false,
+      "isFork": false,
+      "isRoot": false,
+      "isLocalOnly": false,
+      "errors": [],
+      "originHead": {
+        "h": "69eec0375dd146aede41f920c702c531bfe89c6b",
+        "orig": "FromGitTag"
+      }
+    },
+    "https://github.com/dom96/jester": {
+      "url": "https://github.com/dom96/jester",
+      "state": "Processed",
+      "versions": [
+        [
+          {
+            "vtag": "#3e128fe6b7936206da08b21a6e5248b5f086d59a@3e128fe6b7936206da08b21a6e5248b5f086d59a",
+            "vid": 20
+          },
+          {
+            "version": "0.5.0",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [
+              {
+                "url": "https://github.com/dom96/httpbeast",
+                "version": ">= 0.4.0"
+              }
+            ],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "#7e8df6543a57c3ef31d1e5ae33f88a707486ec11@7e8df6543a57c3ef31d1e5ae33f88a707486ec11",
+            "vid": 21
+          },
+          {
+            "version": "0.4.3",
+            "nimVersion": "0.18.1",
+            "status": "Normal",
+            "requirements": [
+              {
+                "url": "https://github.com/dom96/httpbeast",
+                "version": ">= 0.2.2"
+              },
+              {
+                "url": "https://github.com/timotheecour/asynctools",
+                "version": "#pr_fix_compilation"
+              }
+            ],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "#baca3fe328b2020b3fda3038eb626a440a7d265c@baca3fe328b2020b3fda3038eb626a440a7d265c",
+            "vid": 22
+          },
+          {
+            "version": "0.5.0",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [
+              {
+                "url": "https://github.com/dom96/httpbeast",
+                "version": ">= 0.3.0"
+              },
+              {
+                "url": "https://github.com/timotheecour/asynctools",
+                "version": "#pr_fix_compilation"
+              }
+            ],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.6.0@ac9b8541dce64feff9b53b700cab8496c1816651^",
+            "vid": 23
+          },
+          {
+            "version": "0.6.0",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [
+              {
+                "url": "https://github.com/dom96/httpbeast",
+                "version": ">= 0.4.0"
+              }
+            ],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "96.@b73f4e656509bef826c8df01aafcaa251ab0e038",
+            "vid": 24
+          },
+          {
+            "version": "0.1.0",
+            "nimVersion": "~",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "96.@6c9bfa3607fd982958c09c92ed57913371d551a4",
+            "vid": 25
+          },
+          {
+            "version": "0.1.1",
+            "nimVersion": "~",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "96.@11d50760df71b389563e1ddad2675c6fbfbab0b0",
+            "vid": 26
+          },
+          {
+            "version": "0.2.0",
+            "nimVersion": "0.16.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "96.@c5d58e9557cdb0c77639387844d3b0e637b6624e",
+            "vid": 27
+          },
+          {
+            "version": "0.2.1",
+            "nimVersion": "0.16.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "96.@f957ad4042ec196f5bfb467e5293c2cfcd1f77f4",
+            "vid": 28
+          },
+          {
+            "version": "0.3.0",
+            "nimVersion": "0.18.0",
+            "status": "Normal",
+            "requirements": [
+              {
+                "url": "https://github.com/dom96/httpbeast",
+                "version": "*"
+              },
+              {
+                "url": "https://github.com/cheatfate/asynctools",
+                "version": "*"
+              }
+            ],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "96.@aa4b17be412df716be637a039d2ef578d0605abf",
+            "vid": 29
+          },
+          {
+            "version": "0.4.0",
+            "nimVersion": "0.18.1",
+            "status": "Normal",
+            "requirements": [
+              {
+                "url": "https://github.com/dom96/httpbeast",
+                "version": ">= 0.2.0"
+              },
+              {
+                "url": "https://github.com/cheatfate/asynctools",
+                "version": "*"
+              }
+            ],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "96.@542603c2b0bd13846478d630138ce0a627d8a30a",
+            "vid": 30
+          },
+          {
+            "version": "0.4.1",
+            "nimVersion": "0.18.1",
+            "status": "Normal",
+            "requirements": [
+              {
+                "url": "https://github.com/dom96/httpbeast",
+                "version": ">= 0.2.0"
+              },
+              {
+                "url": "https://github.com/cheatfate/asynctools",
+                "version": "*"
+              }
+            ],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "96.@9ffb309bd4dceb348efe854ae49eb3c883ac52fd",
+            "vid": 31
+          },
+          {
+            "version": "0.4.1",
+            "nimVersion": "0.18.1",
+            "status": "Normal",
+            "requirements": [
+              {
+                "url": "https://github.com/dom96/httpbeast",
+                "version": ">= 0.2.2"
+              },
+              {
+                "url": "https://github.com/timotheecour/asynctools",
+                "version": "#pr_fix_compilation"
+              }
+            ],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "96.@6f3b10fb7cb5381f13bd24554849f0c3831e2008",
+            "vid": 32
+          },
+          {
+            "version": "0.4.3",
+            "nimVersion": "0.18.1",
+            "status": "Normal",
+            "requirements": [
+              {
+                "url": "https://github.com/dom96/httpbeast",
+                "version": ">= 0.2.2"
+              },
+              {
+                "url": "https://github.com/timotheecour/asynctools",
+                "version": "#pr_fix_compilation"
+              }
+            ],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "96.@0cd2a3421ae09eabcd0acd400362bb7266a8310d",
+            "vid": 33
+          },
+          {
+            "version": "0.5.0",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [
+              {
+                "url": "https://github.com/dom96/httpbeast",
+                "version": ">= 0.2.2"
+              },
+              {
+                "url": "https://github.com/timotheecour/asynctools",
+                "version": "#pr_fix_compilation"
+              }
+            ],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "96.@2dfac077170c62cd6ffc73e3dcfa29d29c641dcf",
+            "vid": 34
+          },
+          {
+            "version": "0.6.0",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [
+              {
+                "url": "https://github.com/dom96/httpbeast",
+                "version": ">= 0.4.0"
+              }
+            ],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ]
+      ],
+      "activeVersion": null,
+      "module": "",
+      "ondisk": "/Volumes/projects/nims/atlas/tests/ws_integration/deps/jester",
+      "nimbleFile": "",
+      "active": false,
+      "isAtlasProject": false,
+      "isFork": false,
+      "isRoot": false,
+      "isLocalOnly": false,
+      "errors": [],
+      "originHead": {
+        "h": "ac9b8541dce64feff9b53b700cab8496c1816651",
+        "orig": "FromGitTag"
+      }
+    },
+    "https://github.com/karaxnim/karax": {
+      "url": "https://github.com/karaxnim/karax",
+      "state": "Processed",
+      "versions": [
+        [
+          {
+            "vtag": "#0af2c85227314c4e5417614067a7d4fdc231a760@0af2c85227314c4e5417614067a7d4fdc231a760",
+            "vid": 35
+          },
+          {
+            "version": "1.2.3",
+            "nimVersion": "0.18.0",
+            "status": "Normal",
+            "requirements": [
+              {
+                "url": "https://github.com/treeform/ws",
+                "version": "*"
+              },
+              {
+                "url": "https://github.com/euantorano/dotenv.nim",
+                "version": ">= 2.0.0"
+              }
+            ],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "#5498909fc565f6e32b26c3af7e3f5ad8f60b6e65@5498909fc565f6e32b26c3af7e3f5ad8f60b6e65",
+            "vid": 36
+          },
+          {
+            "version": "1.2.1",
+            "nimVersion": "0.18.0",
+            "status": "Normal",
+            "requirements": [
+              {
+                "url": "https://github.com/treeform/ws",
+                "version": "*"
+              },
+              {
+                "url": "https://github.com/euantorano/dotenv.nim",
+                "version": ">= 2.0.0"
+              }
+            ],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "#5cf360c1fd85af8a4cb71a39f626648cfa5695a3@5cf360c1fd85af8a4cb71a39f626648cfa5695a3",
+            "vid": 37
+          },
+          {
+            "version": "1.3.0",
+            "nimVersion": "0.18.0",
+            "status": "Normal",
+            "requirements": [
+              {
+                "url": "https://github.com/treeform/ws",
+                "version": "*"
+              },
+              {
+                "url": "https://github.com/euantorano/dotenv.nim",
+                "version": ">= 2.0.0"
+              }
+            ],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "#6abcb77e2180a1bbc34525b1e0ac07fc67d5ff2e@6abcb77e2180a1bbc34525b1e0ac07fc67d5ff2e",
+            "vid": 38
+          },
+          {
+            "version": "1.2.2",
+            "nimVersion": "0.18.0",
+            "status": "Normal",
+            "requirements": [
+              {
+                "url": "https://github.com/treeform/ws",
+                "version": "*"
+              },
+              {
+                "url": "https://github.com/euantorano/dotenv.nim",
+                "version": ">= 2.0.0"
+              }
+            ],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "#9ee695b35afe673e88f277243198dcf66f14d6be@9ee695b35afe673e88f277243198dcf66f14d6be",
+            "vid": 39
+          },
+          {
+            "version": "1.2.3",
+            "nimVersion": "0.18.0",
+            "status": "Normal",
+            "requirements": [
+              {
+                "url": "https://github.com/treeform/ws",
+                "version": "*"
+              },
+              {
+                "url": "https://github.com/euantorano/dotenv.nim",
+                "version": ">= 2.0.0"
+              }
+            ],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "#b99a5430f0cd8abcf086cb774c728da498ee6ebe@b99a5430f0cd8abcf086cb774c728da498ee6ebe",
+            "vid": 40
+          },
+          {
+            "version": "1.1.0",
+            "nimVersion": "0.16.1",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "#c71bc927494418c3f52f9de8cce009af06faccaa@c71bc927494418c3f52f9de8cce009af06faccaa",
+            "vid": 41
+          },
+          {
+            "version": "1.2.1",
+            "nimVersion": "0.18.0",
+            "status": "Normal",
+            "requirements": [
+              {
+                "url": "https://github.com/treeform/ws",
+                "version": "*"
+              },
+              {
+                "url": "https://github.com/euantorano/dotenv.nim",
+                "version": "*"
+              }
+            ],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "#f6bda9ae892ec93e728e56c260f6628d4f404a28@f6bda9ae892ec93e728e56c260f6628d4f404a28",
+            "vid": 42
+          },
+          {
+            "version": "1.1.0",
+            "nimVersion": "0.16.1",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "#fa4a2dc35e403d19baae480fd65938c87eca3bc3@fa4a2dc35e403d19baae480fd65938c87eca3bc3",
+            "vid": 43
+          },
+          {
+            "version": "1.2.1",
+            "nimVersion": "0.18.0",
+            "status": "Normal",
+            "requirements": [
+              {
+                "url": "https://github.com/treeform/ws",
+                "version": "*"
+              },
+              {
+                "url": "https://github.com/euantorano/dotenv.nim",
+                "version": ">= 2.0.0"
+              }
+            ],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.1.0@9904ec10cca1192aaec81c439c37dce6cae314ad",
+            "vid": 44
+          },
+          {
+            "version": "0.1.0",
+            "nimVersion": "0.16.1",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.2.0@20c404fe5644ed0d85014039a7d7d6ef3d5d5647",
+            "vid": 45
+          },
+          {
+            "version": "0.2.0",
+            "nimVersion": "0.16.1",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "1.0.0@effec2af1405e6feaa8530fdba0a9ecdaca4c71e",
+            "vid": 46
+          },
+          {
+            "version": "1.0.0",
+            "nimVersion": "0.16.1",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "1.1.0@9bbc84c6edba10f164ee359511d83b5302068f69",
+            "vid": 47
+          },
+          {
+            "version": "1.1.0",
+            "nimVersion": "0.16.1",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "1.1.1@d9b0bb90e80c68da30383a750a07a9fac8a6ac00",
+            "vid": 48
+          },
+          {
+            "version": "1.1.1",
+            "nimVersion": "0.16.1",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "1.1.2@8117e42f0fd216bcf71d513ae5bddd15b8c483b8",
+            "vid": 49
+          },
+          {
+            "version": "1.1.2",
+            "nimVersion": "0.16.1",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "1.1.3@0d9b81702c625bb8767fa61ddc0965df5b17eec2",
+            "vid": 50
+          },
+          {
+            "version": "1.1.3",
+            "nimVersion": "0.18.0",
+            "status": "Normal",
+            "requirements": [
+              {
+                "url": "https://github.com/treeform/ws",
+                "version": "*"
+              },
+              {
+                "url": "https://github.com/euantorano/dotenv.nim",
+                "version": "*"
+              }
+            ],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "1.2.1@cbe7b896e78d00a36a7757f3937788b9afbc215c",
+            "vid": 51
+          },
+          {
+            "version": "1.2.1",
+            "nimVersion": "0.18.0",
+            "status": "Normal",
+            "requirements": [
+              {
+                "url": "https://github.com/treeform/ws",
+                "version": "*"
+              },
+              {
+                "url": "https://github.com/euantorano/dotenv.nim",
+                "version": "*"
+              }
+            ],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "1.2.2@559dde99c7615282ad5e40a4ebc9b615306a6b95",
+            "vid": 52
+          },
+          {
+            "version": "1.2.2",
+            "nimVersion": "0.18.0",
+            "status": "Normal",
+            "requirements": [
+              {
+                "url": "https://github.com/treeform/ws",
+                "version": "*"
+              },
+              {
+                "url": "https://github.com/euantorano/dotenv.nim",
+                "version": ">= 2.0.0"
+              }
+            ],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "1.2.3@5418c93c56ae6e56a5058b0be7e88cdc818f9fbf",
+            "vid": 53
+          },
+          {
+            "version": "1.2.3",
+            "nimVersion": "0.18.0",
+            "status": "Normal",
+            "requirements": [
+              {
+                "url": "https://github.com/treeform/ws",
+                "version": "*"
+              },
+              {
+                "url": "https://github.com/euantorano/dotenv.nim",
+                "version": ">= 2.0.0"
+              }
+            ],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "1.3.0@5c1d5c52d20dab552488d1f11226c68c3ad393fe",
+            "vid": 54
+          },
+          {
+            "version": "1.3.0",
+            "nimVersion": "0.18.0",
+            "status": "Normal",
+            "requirements": [
+              {
+                "url": "https://github.com/treeform/ws",
+                "version": "*"
+              },
+              {
+                "url": "https://github.com/euantorano/dotenv.nim",
+                "version": ">= 2.0.0"
+              }
+            ],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "1.3.1@8e3720035cf38871d7bcdbd057e72f9e6b75f029",
+            "vid": 55
+          },
+          {
+            "version": "1.3.1",
+            "nimVersion": "0.18.0",
+            "status": "Normal",
+            "requirements": [
+              {
+                "url": "https://github.com/treeform/ws",
+                "version": "*"
+              },
+              {
+                "url": "https://github.com/euantorano/dotenv.nim",
+                "version": ">= 2.0.0"
+              }
+            ],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "1.3.2@f009b6f59a83c2e06db5379b03eb0c64be2a3324",
+            "vid": 56
+          },
+          {
+            "version": "1.3.1",
+            "nimVersion": "0.18.0",
+            "status": "Normal",
+            "requirements": [
+              {
+                "url": "https://github.com/treeform/ws",
+                "version": "*"
+              },
+              {
+                "url": "https://github.com/euantorano/dotenv.nim",
+                "version": ">= 2.0.0"
+              }
+            ],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "1.3.3@352d6bbe3359c4011cf80f610ab807782fdbc012",
+            "vid": 57
+          },
+          {
+            "version": "1.3.3",
+            "nimVersion": "0.18.0",
+            "status": "Normal",
+            "requirements": [
+              {
+                "url": "https://github.com/treeform/ws",
+                "version": "*"
+              },
+              {
+                "url": "https://github.com/euantorano/dotenv.nim",
+                "version": ">= 2.0.0"
+              }
+            ],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ]
+      ],
+      "activeVersion": null,
+      "module": "",
+      "ondisk": "/Volumes/projects/nims/atlas/tests/ws_integration/deps/karax",
+      "nimbleFile": "",
+      "active": false,
+      "isAtlasProject": false,
+      "isFork": false,
+      "isRoot": false,
+      "isLocalOnly": false,
+      "errors": [],
+      "originHead": {
+        "h": "2536062b7c2ffc031c70b9b92216b771a1206f98",
+        "orig": "FromGitTag"
+      }
+    },
+    "https://github.com/dom96/sass": {
+      "url": "https://github.com/dom96/sass",
+      "state": "Processed",
+      "versions": [
+        [
+          {
+            "vtag": "#7dfdd03ccfe3384c995ea70d6d727bfe886fdd4e@7dfdd03ccfe3384c995ea70d6d727bfe886fdd4e",
+            "vid": 58
+          },
+          {
+            "version": "0.3.0",
+            "nimVersion": "0.18.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "#e683aa1943bf8b4bc60ba895aa79967df84bcfdb@e683aa1943bf8b4bc60ba895aa79967df84bcfdb",
+            "vid": 59
+          },
+          {
+            "version": "0.1.0",
+            "nimVersion": "0.18.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "96.@649e0701fa5c1ad6451b7e546e72667ba1d128ff",
+            "vid": 60
+          },
+          {
+            "version": "0.1.0",
+            "nimVersion": "0.18.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "96.@70af832b6eb37b148b0dbbc51085a73163c20041",
+            "vid": 61
+          },
+          {
+            "version": "0.2.0",
+            "nimVersion": "0.18.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ]
+      ],
+      "activeVersion": null,
+      "module": "",
+      "ondisk": "/Volumes/projects/nims/atlas/tests/ws_integration/deps/sass",
+      "nimbleFile": "",
+      "active": false,
+      "isAtlasProject": false,
+      "isFork": false,
+      "isRoot": false,
+      "isLocalOnly": false,
+      "errors": [],
+      "originHead": {
+        "h": "c466216018d45acbfd5381c7ee55fd03db300fa3",
+        "orig": "FromGitTag"
+      }
+    },
+    "https://github.com/soasme/nim-markdown": {
+      "url": "https://github.com/soasme/nim-markdown",
+      "state": "Processed",
+      "versions": [
+        [
+          {
+            "vtag": "#158efe32b1436a9b4d7ef37f1a4733ee4252c7f4@158efe32b1436a9b4d7ef37f1a4733ee4252c7f4",
+            "vid": 62
+          },
+          {
+            "version": "0.8.6",
+            "nimVersion": "0.19.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "#a661c260795cbdbb02fc73b52b3aa8b6b78bfb08@a661c260795cbdbb02fc73b52b3aa8b6b78bfb08",
+            "vid": 63
+          },
+          {
+            "version": "0.8.5",
+            "nimVersion": "0.19.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.1.0@d0d888efc6b0907c8f3f796cb299ef513d74a162",
+            "vid": 64
+          },
+          {
+            "version": "0.1.0",
+            "nimVersion": "0.19.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.1.1@2324ffb8a376989cac7dee67b0847cc03af22365",
+            "vid": 65
+          },
+          {
+            "version": "0.1.1",
+            "nimVersion": "0.19.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.1.2@e3f69f5f2b95d841cd5bdb5c28ee5d6eeafa9cfb",
+            "vid": 66
+          },
+          {
+            "version": "0.1.1",
+            "nimVersion": "0.19.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.2.0@798fe474778bf2d1d85683dc108b8ab82f6b4ffa",
+            "vid": 67
+          },
+          {
+            "version": "0.2.0",
+            "nimVersion": "0.19.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.3.0@07a7808558040229117217b51eb327f38a2aae79",
+            "vid": 68
+          },
+          {
+            "version": "0.3.0",
+            "nimVersion": "0.19.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.3.1@9348402d601a7a284e8e3da4137293d79cf201e7",
+            "vid": 69
+          },
+          {
+            "version": "0.3.1",
+            "nimVersion": "0.19.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.3.2@505fc33d318e37226c92665abce276fa690d9f42",
+            "vid": 70
+          },
+          {
+            "version": "0.3.2",
+            "nimVersion": "0.19.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.3.3@a50dfd3b444cbbc2e587a88ec4c1f5c72513f1e1",
+            "vid": 71
+          },
+          {
+            "version": "0.3.3",
+            "nimVersion": "0.19.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.3.4@7c2ca335a2740991115f0c12dfe9b589363d2331",
+            "vid": 72
+          },
+          {
+            "version": "0.3.4",
+            "nimVersion": "0.19.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.4.0@da735a5cbd1721ba0fc486f14203328f26857afe",
+            "vid": 73
+          },
+          {
+            "version": "0.4.0",
+            "nimVersion": "0.19.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.5.0@1b538f7f37cbb8448bd8878b8c8d81cf33a17de3",
+            "vid": 74
+          },
+          {
+            "version": "0.5.0",
+            "nimVersion": "0.19.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.5.1@876b3634415409207023b239ed8ef58a594e599d",
+            "vid": 75
+          },
+          {
+            "version": "0.5.1",
+            "nimVersion": "0.19.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.5.2@955a36c55df127f50f68ca7b928f109bfc731698",
+            "vid": 76
+          },
+          {
+            "version": "0.5.2",
+            "nimVersion": "0.19.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.6.0@2768d4f593bb18300af05e0a7e4d5ec48bc56471",
+            "vid": 77
+          },
+          {
+            "version": "0.5.2",
+            "nimVersion": "0.19.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.6.1@6b8d04122b42da48f8d8bbba9abdfaa4fc8d5858",
+            "vid": 78
+          },
+          {
+            "version": "0.5.2",
+            "nimVersion": "0.19.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.7.0@c017d1c3459a3e6b797bf6c7a205e4e5383baaf6",
+            "vid": 79
+          },
+          {
+            "version": "0.7.0",
+            "nimVersion": "0.19.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.7.1@2ca7dff22a9024c5e01e45e1b212e03f62c67c4e",
+            "vid": 80
+          },
+          {
+            "version": "0.7.1",
+            "nimVersion": "0.19.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.7.2@8095b259afd4c4aa8dc56936fab45f4da356b433",
+            "vid": 81
+          },
+          {
+            "version": "0.7.2",
+            "nimVersion": "0.19.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.8.0@c0e9f90f5b1274f72cc5f80748044b69f7b1e4f1",
+            "vid": 82
+          },
+          {
+            "version": "0.8.0",
+            "nimVersion": "0.19.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.8.1@abdbe5e0eac357744c8844d3dc040f9685f1b1a6",
+            "vid": 83
+          },
+          {
+            "version": "0.8.0",
+            "nimVersion": "0.19.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.8.2@1737ba575cf0390f0e05c8490b396008c3edb7b9",
+            "vid": 84
+          },
+          {
+            "version": "0.8.2",
+            "nimVersion": "0.19.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.8.3@4a53af910a4fb98829182c2c207b2888ca290f66",
+            "vid": 85
+          },
+          {
+            "version": "0.8.3",
+            "nimVersion": "0.19.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.8.4@73efc701b6040eabb5861fb45a2893a3314472fa",
+            "vid": 86
+          },
+          {
+            "version": "0.8.4",
+            "nimVersion": "0.19.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.8.5@46d5905dd02fe381cad31f0a18dc1fcf4af8dfe6",
+            "vid": 87
+          },
+          {
+            "version": "0.8.5",
+            "nimVersion": "0.19.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.8.7@e6379e25a33d1d79bb62ee285574e41a395ae2d7",
+            "vid": 88
+          },
+          {
+            "version": "0.8.7",
+            "nimVersion": "0.19.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.8.8@5a7a7bafd1da23b25332316a7b888e6586f4177a",
+            "vid": 89
+          },
+          {
+            "version": "0.8.8",
+            "nimVersion": "0.19.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.8.8@01950b87d6a74e79c86df30b422ad3bcb27b8119^",
+            "vid": 90
+          },
+          {
+            "version": "0.8.8",
+            "nimVersion": "0.19.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ]
+      ],
+      "activeVersion": null,
+      "module": "",
+      "ondisk": "/Volumes/projects/nims/atlas/tests/ws_integration/deps/markdown",
+      "nimbleFile": "",
+      "active": false,
+      "isAtlasProject": false,
+      "isFork": false,
+      "isRoot": false,
+      "isLocalOnly": false,
+      "errors": [],
+      "originHead": {
+        "h": "01950b87d6a74e79c86df30b422ad3bcb27b8119",
+        "orig": "FromGitTag"
+      }
+    },
+    "https://github.com/zedeus/redis": {
+      "url": "https://github.com/zedeus/redis",
+      "state": "Processed",
+      "versions": [
+        [
+          {
+            "vtag": "#94bcbf1eac8774f48325531792790fb324635000@94bcbf1eac8774f48325531792790fb324635000",
+            "vid": 91
+          },
+          {
+            "version": "0.3.0",
+            "nimVersion": "0.11.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.3.0@5b66c1c228daa1fa56a063fba53d28356f601854",
+            "vid": 92
+          },
+          {
+            "version": "0.3.0",
+            "nimVersion": "0.11.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.3.0@d0a0e6fb3010015f0cc483ca2e540ace02446570^",
+            "vid": 93
+          },
+          {
+            "version": "0.3.0",
+            "nimVersion": "0.11.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.4.0@90930b1fa805eca1a690e1f63a68e8df536c2e2e",
+            "vid": 94
+          },
+          {
+            "version": "0.4.0",
+            "nimVersion": "0.11.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ]
+      ],
+      "activeVersion": null,
+      "module": "",
+      "ondisk": "/Volumes/projects/nims/atlas/tests/ws_integration/deps/redis",
+      "nimbleFile": "",
+      "active": false,
+      "isAtlasProject": false,
+      "isFork": true,
+      "isRoot": false,
+      "isLocalOnly": false,
+      "errors": [],
+      "originHead": {
+        "h": "d0a0e6fb3010015f0cc483ca2e540ace02446570",
+        "orig": "FromGitTag"
+      }
+    },
+    "https://github.com/zedeus/redpool": {
+      "url": "https://github.com/zedeus/redpool",
+      "state": "Processed",
+      "versions": [
+        [
+          {
+            "vtag": "#499396d2e6eba579fb72fbab79b0e0b1d09b118a@499396d2e6eba579fb72fbab79b0e0b1d09b118a",
+            "vid": 95
+          },
+          {
+            "version": "0.1.0",
+            "nimVersion": "1.2.0",
+            "status": "Normal",
+            "requirements": [
+              {
+                "url": "https://github.com/zedeus/redis",
+                "version": "#d0a0e6f"
+              }
+            ],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "#57aeb25dd971bd790d758004cfee62b1fee93ba4@57aeb25dd971bd790d758004cfee62b1fee93ba4",
+            "vid": 96
+          },
+          {
+            "version": "0.1.0",
+            "nimVersion": "1.2.0",
+            "status": "Normal",
+            "requirements": [
+              {
+                "url": "https://github.com/zedeus/redis",
+                "version": "#94bcbf1"
+              }
+            ],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "#f880f4996f35e6d089293b3de5a05047f89e9da0@f880f4996f35e6d089293b3de5a05047f89e9da0",
+            "vid": 97
+          },
+          {
+            "version": "0.1.0",
+            "nimVersion": "1.2.0",
+            "status": "Normal",
+            "requirements": [
+              {
+                "url": "https://github.com/zedeus/redis",
+                "version": "#94bcbf1"
+              }
+            ],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.1.0@8265ee2faa52dcc5ed36a4bb0634a17e46681f27",
+            "vid": 98
+          },
+          {
+            "version": "0.1.0",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [
+              {
+                "url": "https://github.com/nim-lang/redis",
+                "version": ">= 0.3.0"
+              }
+            ],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.1.0@8b7c1db069797300425037c98b825c5d3316f752^",
+            "vid": 99
+          },
+          {
+            "version": "0.1.0",
+            "nimVersion": "1.4.8",
+            "status": "Normal",
+            "requirements": [
+              {
+                "url": "https://github.com/zedeus/redis",
+                "version": "#d0a0e6f"
+              }
+            ],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ]
+      ],
+      "activeVersion": null,
+      "module": "",
+      "ondisk": "/Volumes/projects/nims/atlas/tests/ws_integration/deps/redpool",
+      "nimbleFile": "",
+      "active": false,
+      "isAtlasProject": false,
+      "isFork": false,
+      "isRoot": false,
+      "isLocalOnly": false,
+      "errors": [],
+      "originHead": {
+        "h": "8b7c1db069797300425037c98b825c5d3316f752",
+        "orig": "FromGitTag"
+      }
+    },
+    "https://github.com/Araq/packedjson": {
+      "url": "https://github.com/Araq/packedjson",
+      "state": "Processed",
+      "versions": [
+        [
+          {
+            "vtag": "#7198cc8d3385d5392b8fb6bb90a9feb24b2dddbf@7198cc8d3385d5392b8fb6bb90a9feb24b2dddbf",
+            "vid": 100
+          },
+          {
+            "version": "0.2.1",
+            "nimVersion": "0.18.1",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "#9e6fbb63cb9e0ab8ff570c04bec28cc713ca1f7c@9e6fbb63cb9e0ab8ff570c04bec28cc713ca1f7c",
+            "vid": 101
+          },
+          {
+            "version": "0.2.2",
+            "nimVersion": "0.18.1",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "#d11d167905f65935e31772c1edec88ca8fe055e2@d11d167905f65935e31772c1edec88ca8fe055e2",
+            "vid": 102
+          },
+          {
+            "version": "0.2.2",
+            "nimVersion": "0.18.1",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.1.0@f74b7700eba84531694c72c69b56b1a1210d068d",
+            "vid": 103
+          },
+          {
+            "version": "0.1.0",
+            "nimVersion": "0.18.1",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.2.1@cb01aabcd5e5010b28adda34a0c869181e387b02",
+            "vid": 104
+          },
+          {
+            "version": "0.2.1",
+            "nimVersion": "0.18.1",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.2.2@69686f0345fb01f3c5150b9897ebdbcfa85f5df4",
+            "vid": 105
+          },
+          {
+            "version": "0.2.2",
+            "nimVersion": "0.18.1",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ]
+      ],
+      "activeVersion": null,
+      "module": "",
+      "ondisk": "/Volumes/projects/nims/atlas/tests/ws_integration/deps/packedjson",
+      "nimbleFile": "",
+      "active": false,
+      "isAtlasProject": false,
+      "isFork": false,
+      "isRoot": false,
+      "isLocalOnly": false,
+      "errors": [],
+      "originHead": {
+        "h": "02e2b1a590a32f6f3ddb25e988045aeb8acf691a",
+        "orig": "FromGitTag"
+      }
+    },
+    "https://github.com/guzba/supersnappy": {
+      "url": "https://github.com/guzba/supersnappy",
+      "state": "Processed",
+      "versions": [
+        [
+          {
+            "vtag": "#6c94198ea0e6835dcf11e3a207542cbb6bfb1cd9@6c94198ea0e6835dcf11e3a207542cbb6bfb1cd9",
+            "vid": 106
+          },
+          {
+            "version": "2.1.3",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "1.0.0@d025f4fdcf68e7eaaee2b19e0e69a903938ff54a",
+            "vid": 107
+          },
+          {
+            "version": "1.0.0",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "1.1.0@e8a390ccae185230f0e58055b17f6179b42a98dc",
+            "vid": 108
+          },
+          {
+            "version": "1.1.0",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "1.1.1@80b356dab109cf155e07a2532615a34a8ed6a38f",
+            "vid": 109
+          },
+          {
+            "version": "1.1.1",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "1.1.2@c3af3cfb7e19d0f01051a475ff46d91d55e3ceee",
+            "vid": 110
+          },
+          {
+            "version": "1.1.2",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "1.1.3@c697e94aa92b289d5931955558a7231e8166be88",
+            "vid": 111
+          },
+          {
+            "version": "1.1.3",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "1.1.4@0fa52d89f9d65bb0a09755ce2291a67069116021",
+            "vid": 112
+          },
+          {
+            "version": "1.1.4",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "1.1.5@9d86bbdcff3b540419c49b3bc88c471ce071ba44",
+            "vid": 113
+          },
+          {
+            "version": "1.1.5",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "2.0.0@a239a5a9e3e53867098aa10939bd050db1a7f3a6",
+            "vid": 114
+          },
+          {
+            "version": "2.0.0",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "2.1.0@09544d02d71657f28508b63a5d51f747ac264dce",
+            "vid": 115
+          },
+          {
+            "version": "2.1.0",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "2.1.1@f28c051f13a05773e78c8c0ae1598f310b7bf7e4",
+            "vid": 116
+          },
+          {
+            "version": "2.1.1",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "2.1.3@e4df8cb5468dd96fc5a4764028e20c8a3942f16a",
+            "vid": 117
+          },
+          {
+            "version": "2.1.3",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ]
+      ],
+      "activeVersion": null,
+      "module": "",
+      "ondisk": "/Volumes/projects/nims/atlas/tests/ws_integration/deps/supersnappy",
+      "nimbleFile": "",
+      "active": false,
+      "isAtlasProject": false,
+      "isFork": false,
+      "isRoot": false,
+      "isLocalOnly": false,
+      "errors": [],
+      "originHead": {
+        "h": "ff8fe2bffefc1f4edc15deb20d921f600babb8c4",
+        "orig": "FromGitTag"
+      }
+    },
+    "https://github.com/guzba/zippy": {
+      "url": "https://github.com/guzba/zippy",
+      "state": "Processed",
+      "versions": [
+        [
+          {
+            "vtag": "#61922b92646830ab972e188436fa36d9d05c1271@61922b92646830ab972e188436fa36d9d05c1271",
+            "vid": 118
+          },
+          {
+            "version": "0.10.4",
+            "nimVersion": "1.0.10",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "#88a5a5ab5a1493f71a3249ca3fe6614848adbf71@88a5a5ab5a1493f71a3249ca3fe6614848adbf71",
+            "vid": 119
+          },
+          {
+            "version": "0.10.6",
+            "nimVersion": "1.0.10",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.1.0@eeaf595f1e3725d9f0cc747cdf65e4bffb2b9414",
+            "vid": 120
+          },
+          {
+            "version": "0.1.0",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.1.1@fa7182df199be23ed134cc2173d432dc595b2113",
+            "vid": 121
+          },
+          {
+            "version": "0.1.0",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.1.2@c59616ad8c3240ce1d3cd3fa1ecc56b1da4f8583",
+            "vid": 122
+          },
+          {
+            "version": "0.1.2",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.1.3@f868590886bab4b75a3620be6e655b08f3736700",
+            "vid": 123
+          },
+          {
+            "version": "0.1.3",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.2.0@8eb699f6bc91a28511631b126520df29265d7f06",
+            "vid": 124
+          },
+          {
+            "version": "0.2.0",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.2.1@62e5494714e711c72bda48d11fe8c5896a2e8e49",
+            "vid": 125
+          },
+          {
+            "version": "0.2.1",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.2.2@29aac8cdacd8e5e621b79243562a3a3daeae261b",
+            "vid": 126
+          },
+          {
+            "version": "0.2.2",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.2.3@6ceeccfa9e20c35882aebb5e8c4301c8d586c823",
+            "vid": 127
+          },
+          {
+            "version": "0.2.3",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.2.4@e46705563d12ce2aca0c4eebc13e340b4139d24d",
+            "vid": 128
+          },
+          {
+            "version": "0.2.4",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.2.5@18a9fdd5fb1d31f43e18722cb41497f1be2c6fc9",
+            "vid": 129
+          },
+          {
+            "version": "0.2.5",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.2.6@a0339f085dbcdbd1fdca9b0d633528fee48816b6",
+            "vid": 130
+          },
+          {
+            "version": "0.2.6",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.3.0@921913c11cc5bed2db1aa25148cb9047c9e16294",
+            "vid": 131
+          },
+          {
+            "version": "0.3.0",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.3.1@f1d27c1eb35c9945b37f749ef53997a3416b03c4",
+            "vid": 132
+          },
+          {
+            "version": "0.3.1",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.3.2@a84738488d12174ca625871396215977ba2e2630",
+            "vid": 133
+          },
+          {
+            "version": "0.3.2",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.3.3@dd9d14386492b83e5e260614dc1da8e0d406a290",
+            "vid": 134
+          },
+          {
+            "version": "0.3.3",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.3.4@c82fd96c95f3540f57410909fcafec7d267896b1",
+            "vid": 135
+          },
+          {
+            "version": "0.3.4",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.3.5@0894e157b11a156769b4da61ecf7ae4054e71afe",
+            "vid": 136
+          },
+          {
+            "version": "0.3.5",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.3.6@0b67f3fa1e67559b23b90019049786b8c050bb53",
+            "vid": 137
+          },
+          {
+            "version": "0.3.6",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.3.7@d444fbfa47c27583c6e5e29940e8d664cbe7332d",
+            "vid": 138
+          },
+          {
+            "version": "0.3.7",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.3.8@4325677db25bcf11aa1a6d9f78a5f042f6ad5d6f",
+            "vid": 139
+          },
+          {
+            "version": "0.3.8",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.3.9@02dd1c2e17b12879746d05fc3753d49c1ec86de1",
+            "vid": 140
+          },
+          {
+            "version": "0.3.9",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.3.10@0f8a1d151065fafa008ab4aea8a2eb88a2a3b4fa",
+            "vid": 141
+          },
+          {
+            "version": "0.3.10",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.3.11@a310230eeca390bfd0f0bc07e056e579d4c6f567",
+            "vid": 142
+          },
+          {
+            "version": "0.3.11",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.3.12@d113110a09aa4eb221e8f858536ca4b8bad3ba7f",
+            "vid": 143
+          },
+          {
+            "version": "0.3.12",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.3.13@4b92ef59ff6f23b6eb793cb972c536761106ac43",
+            "vid": 144
+          },
+          {
+            "version": "0.3.13",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.3.14@fff4cdf11f3c17dc76e480e5d9eccaf41e16f11c",
+            "vid": 145
+          },
+          {
+            "version": "0.3.14",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.4.0@65c3ae18995dc9ff18c6f3ff5882cc2735491608",
+            "vid": 146
+          },
+          {
+            "version": "0.4.0",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.4.1@e7b604f08406b7fa31a2e4a9f377f3bdb07fbbbf",
+            "vid": 147
+          },
+          {
+            "version": "0.4.1",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.5.0@9863019774dc48383f2776483323e441d2fd37d7",
+            "vid": 148
+          },
+          {
+            "version": "0.5.0",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.5.1@e80d61f168164d0940e75a51542372f08dcdc56e",
+            "vid": 149
+          },
+          {
+            "version": "0.5.1",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.5.2@bd020475497fd8657158c68147a0660badf01c7c",
+            "vid": 150
+          },
+          {
+            "version": "0.5.2",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.5.3@3828cd9887b48ad2ff291428a9a2878b4fbe4835",
+            "vid": 151
+          },
+          {
+            "version": "0.5.3",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.5.4@35423278c5c86d53ef2bd3607a712f9defcc0ece",
+            "vid": 152
+          },
+          {
+            "version": "0.5.4",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.5.5@f3aa011a6d4e0318236718b242030ac2ac213cbd",
+            "vid": 153
+          },
+          {
+            "version": "0.5.5",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.5.6@461eed2089758abc0eca97fb1e93b8a5dbde1321",
+            "vid": 154
+          },
+          {
+            "version": "0.5.6",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.5.7@c3aad0fc32f8d87fad3c44102185421d0ad2e9c7",
+            "vid": 155
+          },
+          {
+            "version": "0.5.7",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.5.8@237b59e300c67da289433a805f09d4b7ce7d64d3",
+            "vid": 156
+          },
+          {
+            "version": "0.5.8",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.5.9@63da134ab0887ab66b109e8abd40db9f9be9068e",
+            "vid": 157
+          },
+          {
+            "version": "0.5.9",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.5.10@0148bc5a6741b4d1de539a77ee3e4f5bcf043077",
+            "vid": 158
+          },
+          {
+            "version": "0.5.10",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.5.11@04a675ea6dd571bd45053fb572b3fa7afe576a66",
+            "vid": 159
+          },
+          {
+            "version": "0.5.11",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.5.12@a059310cb2348bd4b8b2573b6204af289b8cf16b",
+            "vid": 160
+          },
+          {
+            "version": "0.5.12",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.5.13@f4469436f8fc003b51f02bbd22bcc4289671f7d1",
+            "vid": 161
+          },
+          {
+            "version": "0.5.13",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.5.14@21c8e279e257b0bc2a063b34e2304ea3aade21ec",
+            "vid": 162
+          },
+          {
+            "version": "0.5.14",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.6.0@2692f9c2054159b825ceaa986cc1ad0b6af9ca08",
+            "vid": 163
+          },
+          {
+            "version": "0.6.0",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.6.1@692650becfd4d20a1ef180460051c2b1be9d3e38",
+            "vid": 164
+          },
+          {
+            "version": "0.6.1",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.6.2@14739c9e8bedc1110fd935d04fcf3ab0f2bf1b59",
+            "vid": 165
+          },
+          {
+            "version": "0.6.2",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.7.0@246385f67a71979ea10da1a068ac6f7d94d73f7b",
+            "vid": 166
+          },
+          {
+            "version": "0.6.2",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.7.1@228a6e1eb1f33860135c74783b16620d62d5676a",
+            "vid": 167
+          },
+          {
+            "version": "0.7.1",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.7.2@a35f4146dab4c69a04dfd7e41344890cac01c6fa",
+            "vid": 168
+          },
+          {
+            "version": "0.7.2",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.7.3@0f4e264e4eabbc9914032792007575c37fdccfd8",
+            "vid": 169
+          },
+          {
+            "version": "0.7.3",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.7.4@a8f4a7c7040631eecefcbd675db0ba2cf61d2ea0",
+            "vid": 170
+          },
+          {
+            "version": "0.7.4",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.8.0@8fa8f42499fa14fc533302ae74d79a49f1a64e03",
+            "vid": 171
+          },
+          {
+            "version": "0.8.0",
+            "nimVersion": "1.0.10",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.8.1@1112c71b4e215c1b52b607dec786af27ba55ce9f",
+            "vid": 172
+          },
+          {
+            "version": "0.8.1",
+            "nimVersion": "1.0.10",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.9.0@649dcf1e8132562929a5c6336d8bcee88c15becb",
+            "vid": 173
+          },
+          {
+            "version": "0.9.0",
+            "nimVersion": "1.0.10",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.9.1@3ab3067c74b92a8a1ba3a4a2bd6094b6861547a1",
+            "vid": 174
+          },
+          {
+            "version": "0.9.1",
+            "nimVersion": "1.0.10",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.9.3@c01ac5dc11b35cbb8168c33a047d732c01b22ca2",
+            "vid": 175
+          },
+          {
+            "version": "0.9.3",
+            "nimVersion": "1.0.10",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.9.4@419ebae29ba0cdc6471aa76fe2019016c4dad558",
+            "vid": 176
+          },
+          {
+            "version": "0.9.4",
+            "nimVersion": "1.0.10",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.9.5@5ee7e4c96dc2b02fb6c79ad8fd1b8eea5ed61aca",
+            "vid": 177
+          },
+          {
+            "version": "0.9.5",
+            "nimVersion": "1.0.10",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.9.6@0b231af5cd482fb756d6c1d127e99be3bab05e45",
+            "vid": 178
+          },
+          {
+            "version": "0.9.6",
+            "nimVersion": "1.0.10",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.9.7@4a7ff984cc97f3930007468ff265726d019c4a52",
+            "vid": 179
+          },
+          {
+            "version": "0.9.7",
+            "nimVersion": "1.0.10",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.9.8@3eee4f66049b2c1a0b99e24915ab9180c0c8b1eb",
+            "vid": 180
+          },
+          {
+            "version": "0.9.8",
+            "nimVersion": "1.0.10",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.9.9@2b8defc0f01b5d6ec98f86e4237305d040c47954",
+            "vid": 181
+          },
+          {
+            "version": "0.9.9",
+            "nimVersion": "1.0.10",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.9.10@ac6ded9faf30c70214afd4638ee6ba225a6d4a2e",
+            "vid": 182
+          },
+          {
+            "version": "0.9.10",
+            "nimVersion": "1.0.10",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.9.11@e9500eb4d8ea512f6ffd87e9e87314de93fa18b0",
+            "vid": 183
+          },
+          {
+            "version": "0.9.11",
+            "nimVersion": "1.0.10",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.9.12@3803a12e7bbdc67b9c83936571b057ce4f78b6f5",
+            "vid": 184
+          },
+          {
+            "version": "0.9.12",
+            "nimVersion": "1.0.10",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.10.0@5f415f9281150a3410dc3b2531c6482d92590b62",
+            "vid": 185
+          },
+          {
+            "version": "0.10.0",
+            "nimVersion": "1.0.10",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.10.1@3a899f19646acdac65d255fedc76efc215f9cebc",
+            "vid": 186
+          },
+          {
+            "version": "0.10.1",
+            "nimVersion": "1.0.10",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.10.2@a4eb6cb9b49049d70528ffb88a32469badf493ad",
+            "vid": 187
+          },
+          {
+            "version": "0.10.2",
+            "nimVersion": "1.0.10",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.10.3@8e472c468c1c67b3221a71ad7224cd058492b752",
+            "vid": 188
+          },
+          {
+            "version": "0.10.3",
+            "nimVersion": "1.0.10",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.10.4@17e23253693cf8e09683cd6088b18ebd2789245b",
+            "vid": 189
+          },
+          {
+            "version": "0.10.4",
+            "nimVersion": "1.0.10",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.10.5@7628a306ab454699429685b32e317080d58791e4",
+            "vid": 190
+          },
+          {
+            "version": "0.10.5",
+            "nimVersion": "1.0.10",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.10.6@123cd593f513d584526f119e7ccb65a7baefa8fa",
+            "vid": 191
+          },
+          {
+            "version": "0.10.6",
+            "nimVersion": "1.0.10",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.10.7@ca5989a1ba8bdba897d7906dfd6ccda2580d9a5a",
+            "vid": 192
+          },
+          {
+            "version": "0.10.7",
+            "nimVersion": "1.0.10",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.10.8@3b863db776e343d7cac8da3f4182dff070f0458a",
+            "vid": 193
+          },
+          {
+            "version": "0.10.8",
+            "nimVersion": "1.0.10",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.10.9@8d75e3d7c010dcd5d050ea04cbdb5d64e0b6cf6a",
+            "vid": 194
+          },
+          {
+            "version": "0.10.9",
+            "nimVersion": "1.0.10",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.10.10@a3fd6f0458ffdd7cbbd416be99f2ca80a7852d82",
+            "vid": 195
+          },
+          {
+            "version": "0.10.10",
+            "nimVersion": "1.0.10",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.10.11@9560f3d20479fb390c97f731ef8d100f1ed54e6c",
+            "vid": 196
+          },
+          {
+            "version": "0.10.11",
+            "nimVersion": "1.0.10",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.10.12@007f70335dcd3a3ff2f9300f404ab22454dcc8c4",
+            "vid": 197
+          },
+          {
+            "version": "0.10.12",
+            "nimVersion": "1.0.10",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.10.13@7ec77e25b8f2d3c122bbc47ee281a8e27637002b",
+            "vid": 198
+          },
+          {
+            "version": "0.10.13",
+            "nimVersion": "1.0.10",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.10.14@da11c67196163fe14053717f661c1b5a9a5e856f",
+            "vid": 199
+          },
+          {
+            "version": "0.10.14",
+            "nimVersion": "1.0.10",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.10.15@687f03f8bced17a1e7a92eb54f45aeec63978e5b",
+            "vid": 200
+          },
+          {
+            "version": "0.10.15",
+            "nimVersion": "1.0.10",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.10.16@a99f6a7d8a8e3e0213b3cad0daf0ea974bf58e3f^",
+            "vid": 201
+          },
+          {
+            "version": "0.10.16",
+            "nimVersion": "1.0.10",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ]
+      ],
+      "activeVersion": null,
+      "module": "",
+      "ondisk": "/Volumes/projects/nims/atlas/tests/ws_integration/deps/zippy",
+      "nimbleFile": "",
+      "active": false,
+      "isAtlasProject": false,
+      "isFork": false,
+      "isRoot": false,
+      "isLocalOnly": false,
+      "errors": [],
+      "originHead": {
+        "h": "a99f6a7d8a8e3e0213b3cad0daf0ea974bf58e3f",
+        "orig": "FromGitTag"
+      }
+    },
+    "https://github.com/treeform/flatty": {
+      "url": "https://github.com/treeform/flatty",
+      "state": "Processed",
+      "versions": [
+        [
+          {
+            "vtag": "#9f885d704253e4299612736edde0dbfe3b0437c9@9f885d704253e4299612736edde0dbfe3b0437c9",
+            "vid": 202
+          },
+          {
+            "version": "0.3.4",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "#e66808508b3e5a05c53039226b467404febeb7f0@e66808508b3e5a05c53039226b467404febeb7f0",
+            "vid": 203
+          },
+          {
+            "version": "0.3.4",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.1.0@6259045bf004dc13e04ca45979cf2cd7326de138",
+            "vid": 204
+          },
+          {
+            "version": "0.1.0",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.1.1@3fd3703a774250424b88b985b1e84306bb21c1c4",
+            "vid": 205
+          },
+          {
+            "version": "0.1.1",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.1.2@8998192fe4b24ddf8ec8ace70f219ac2e2ebfa85",
+            "vid": 206
+          },
+          {
+            "version": "0.1.2",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.1.3@5929d6bf489896581f7b31062b574e447c600ab7",
+            "vid": 207
+          },
+          {
+            "version": "0.1.3",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.1.4@85ebdc7a94682f6d2b0a6434e702d300f4ca87b9",
+            "vid": 208
+          },
+          {
+            "version": "0.1.4",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.1.5@d39ed645a92353af12885035e7c6c4836e3ec6d7",
+            "vid": 209
+          },
+          {
+            "version": "0.1.5",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.2.0@f644a95e7e6b3bc93db25589eba69ddab7350456",
+            "vid": 210
+          },
+          {
+            "version": "0.2.0",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.2.1@86c33905d08966400dc051560c0d724af7590433",
+            "vid": 211
+          },
+          {
+            "version": "0.2.1",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.2.2@d9044606cad0de94f7ca01addd9b9ae8a44b98fb",
+            "vid": 212
+          },
+          {
+            "version": "0.2.2",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.2.3@c3c4a40c7be6d105943f0298f5211afab81f2ea0",
+            "vid": 213
+          },
+          {
+            "version": "0.2.3",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.2.4@c87340c9a09fffc794f588c4a19b53c8d71cd6f6",
+            "vid": 214
+          },
+          {
+            "version": "0.2.4",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.3.0@4422fc547151cce6f552da21a34629bbacc405c5",
+            "vid": 215
+          },
+          {
+            "version": "0.3.0",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.3.1@6991c44d939483d9745705c7bab0d59d93fd142b",
+            "vid": 216
+          },
+          {
+            "version": "0.3.1",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.3.2@103c93e70bebcbac3363bce103a6dcc7e7975802",
+            "vid": 217
+          },
+          {
+            "version": "0.3.2",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.3.3@41252987a466245b28e332caa2861881cd50b54e",
+            "vid": 218
+          },
+          {
+            "version": "0.3.3",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.3.4@07f6ba8ab96238e5bd1264cf0cea1d1746abb00c",
+            "vid": 219
+          },
+          {
+            "version": "0.3.4",
+            "nimVersion": "1.0.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ]
+      ],
+      "activeVersion": null,
+      "module": "",
+      "ondisk": "/Volumes/projects/nims/atlas/tests/ws_integration/deps/flatty",
+      "nimbleFile": "",
+      "active": false,
+      "isAtlasProject": false,
+      "isFork": false,
+      "isRoot": false,
+      "isLocalOnly": false,
+      "errors": [],
+      "originHead": {
+        "h": "9eba916b28ef3a8c2ca6070c4a6829fad64f18ae",
+        "orig": "FromGitTag"
+      }
+    },
+    "https://github.com/treeform/jsony": {
+      "url": "https://github.com/treeform/jsony",
+      "state": "Processed",
+      "versions": [
+        [
+          {
+            "vtag": "#1de1f0815e4ed6bfc36be4c96a59041e4620ebe2@1de1f0815e4ed6bfc36be4c96a59041e4620ebe2",
+            "vid": 220
+          },
+          {
+            "version": "1.1.5",
+            "nimVersion": "1.4.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "#d0e69bddf83874e15b5c2f52f8b1386ac080b443@d0e69bddf83874e15b5c2f52f8b1386ac080b443",
+            "vid": 221
+          },
+          {
+            "version": "1.1.3",
+            "nimVersion": "1.4.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.0.1@d02c42675f048084a2c9e31c859e7e7625f13d77",
+            "vid": 222
+          },
+          {
+            "version": "0.0.1",
+            "nimVersion": "1.2.2",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.0.2@295a07c2dcedf476ac46e0ab2afe84c1f420911b",
+            "vid": 223
+          },
+          {
+            "version": "0.0.2",
+            "nimVersion": "1.2.2",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.0.4@9395dd9b8bbae6eafa846e0f1d00868588bca9c2",
+            "vid": 224
+          },
+          {
+            "version": "0.0.4",
+            "nimVersion": "1.2.2",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.0.5@0c9bd410e80cce96bd6b958ff30b22b0b53372ca",
+            "vid": 225
+          },
+          {
+            "version": "0.0.5",
+            "nimVersion": "1.2.2",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "1.0.0@a5d4af82dd49ee441d94cf88b03f70b3bf7ce941",
+            "vid": 226
+          },
+          {
+            "version": "1.0.0",
+            "nimVersion": "1.2.2",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "1.0.1@0f9c8eb044581796cb84f9365e022222edd05e13",
+            "vid": 227
+          },
+          {
+            "version": "1.0.1",
+            "nimVersion": "1.2.2",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "1.0.3@d418588b6be051cf3485ba90d479df4b626f030d",
+            "vid": 228
+          },
+          {
+            "version": "1.0.3",
+            "nimVersion": "1.2.2",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "1.0.4@33c3daade91c0fa84b422b9a1f744ef5fb8369d0",
+            "vid": 229
+          },
+          {
+            "version": "1.0.4",
+            "nimVersion": "1.2.2",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "1.0.5@f5a2925f0ce82796deb4a2017759b3f0fb02a079",
+            "vid": 230
+          },
+          {
+            "version": "1.0.5",
+            "nimVersion": "1.4.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "1.1.0@3eefbe211f64fc9cf84fe05230ce9f769fa4111a",
+            "vid": 231
+          },
+          {
+            "version": "1.1.0",
+            "nimVersion": "1.4.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "1.1.1@eb63a326b7f16537764c090f8859eb2451ad8d4d",
+            "vid": 232
+          },
+          {
+            "version": "1.1.1",
+            "nimVersion": "1.4.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "1.1.2@0278135250783a9bd5fd6636fe18ba3c44e2dead",
+            "vid": 233
+          },
+          {
+            "version": "1.1.2",
+            "nimVersion": "1.4.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "1.1.3@2a2cc4331720b7695c8b66529dbfea6952727e7b",
+            "vid": 234
+          },
+          {
+            "version": "1.1.3",
+            "nimVersion": "1.4.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "1.1.4@981f868cfca6e2ccde820cc20bb18d835d283233",
+            "vid": 235
+          },
+          {
+            "version": "1.1.4",
+            "nimVersion": "1.4.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "1.1.5@ea811bec7fa50f5abd3088ba94cda74285e93f18",
+            "vid": 236
+          },
+          {
+            "version": "1.1.5",
+            "nimVersion": "1.4.0",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ]
+      ],
+      "activeVersion": null,
+      "module": "",
+      "ondisk": "/Volumes/projects/nims/atlas/tests/ws_integration/deps/jsony",
+      "nimbleFile": "",
+      "active": false,
+      "isAtlasProject": false,
+      "isFork": false,
+      "isRoot": false,
+      "isLocalOnly": false,
+      "errors": [],
+      "originHead": {
+        "h": "8d58f03fe92aa13ed2e5d471ed83cac5bfec1bd3",
+        "orig": "FromGitTag"
+      }
+    },
+    "https://github.com/CORDEA/oauth": {
+      "url": "https://github.com/CORDEA/oauth",
+      "state": "Processed",
+      "versions": [
+        [
+          {
+            "vtag": "#b8c163b0d9cfad6d29ce8c1fb394e5f47182ee1c@b8c163b0d9cfad6d29ce8c1fb394e5f47182ee1c",
+            "vid": 237
+          },
+          {
+            "version": "0.10",
+            "nimVersion": "0.19.0",
+            "status": "Normal",
+            "requirements": [
+              {
+                "url": "https://github.com/onionhammer/sha1",
+                "version": "*"
+              }
+            ],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.2@df6074c0e47c08c3bc24eb0bff3c47060155c419",
+            "vid": 238
+          },
+          {
+            "version": "0.2",
+            "nimVersion": "~",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.3@d976556fa798ef13b714b8de42ef58189e490ef4",
+            "vid": 239
+          },
+          {
+            "version": "0.3",
+            "nimVersion": "~",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.4@35e45f41fa2d63fdc3e5c17abcd85d199bc29e70",
+            "vid": 240
+          },
+          {
+            "version": "0.4",
+            "nimVersion": "~",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.4.1@baac486ca2be79f76d6ffc66f2ef3c8550b3f77b",
+            "vid": 241
+          },
+          {
+            "version": "0.4.1",
+            "nimVersion": "~",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.5@79997b761012fcbad52bd5bcfeac11d6be068965",
+            "vid": 242
+          },
+          {
+            "version": "0.5",
+            "nimVersion": "~",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.6@43561b16cd3e2af666665d3fc8b137f025fc6ab4",
+            "vid": 243
+          },
+          {
+            "version": "0.6",
+            "nimVersion": "~",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.7@b512e31d74c97932532af8e8d4735191e8c43564",
+            "vid": 244
+          },
+          {
+            "version": "0.7",
+            "nimVersion": "~",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.8@c458ea007bfeded5ee5e37218884db27345e739f",
+            "vid": 245
+          },
+          {
+            "version": "0.8",
+            "nimVersion": "0.19.0",
+            "status": "Normal",
+            "requirements": [
+              {
+                "url": "https://github.com/onionhammer/sha1",
+                "version": "*"
+              }
+            ],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.9@2bd6dce587881660ee033a6c0acf2bc5fe6869c8",
+            "vid": 246
+          },
+          {
+            "version": "0.8",
+            "nimVersion": "0.19.0",
+            "status": "Normal",
+            "requirements": [
+              {
+                "url": "https://github.com/onionhammer/sha1",
+                "version": "*"
+              }
+            ],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.10@2609e710ab76e61a503560b73618fc24eb97e8f9",
+            "vid": 247
+          },
+          {
+            "version": "0.10",
+            "nimVersion": "0.19.0",
+            "status": "Normal",
+            "requirements": [
+              {
+                "url": "https://github.com/onionhammer/sha1",
+                "version": "*"
+              }
+            ],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ],
+        [
+          {
+            "vtag": "0.11@ec2e058fc46f04deaf3cb55eca32b3b83c614953^",
+            "vid": 248
+          },
+          {
+            "version": "0.11",
+            "nimVersion": "0.19.0",
+            "status": "Normal",
+            "requirements": [
+              {
+                "url": "https://github.com/onionhammer/sha1",
+                "version": "*"
+              }
+            ],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "src",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ]
+      ],
+      "activeVersion": null,
+      "module": "",
+      "ondisk": "/Volumes/projects/nims/atlas/tests/ws_integration/deps/oauth",
+      "nimbleFile": "",
+      "active": false,
+      "isAtlasProject": false,
+      "isFork": false,
+      "isRoot": false,
+      "isLocalOnly": false,
+      "errors": [],
+      "originHead": {
+        "h": "ec2e058fc46f04deaf3cb55eca32b3b83c614953",
+        "orig": "FromGitTag"
+      }
+    },
+    "https://github.com/cheatfate/asynctools": {
+      "url": "https://github.com/cheatfate/asynctools",
+      "state": "LazyDeferred",
+      "versions": [
+        [
+          {
+            "vtag": "*@-",
+            "vid": 249
+          },
+          {
+            "version": "#head",
+            "nimVersion": "~",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ]
+      ],
+      "activeVersion": null,
+      "module": "",
+      "ondisk": "",
+      "nimbleFile": "",
+      "active": false,
+      "isAtlasProject": false,
+      "isFork": false,
+      "isRoot": false,
+      "isLocalOnly": false,
+      "errors": [],
+      "originHead": {
+        "h": "",
+        "orig": "FromNone"
+      }
+    },
+    "https://github.com/timotheecour/asynctools": {
+      "url": "https://github.com/timotheecour/asynctools",
+      "state": "LazyDeferred",
+      "versions": [
+        [
+          {
+            "vtag": "*@-",
+            "vid": 250
+          },
+          {
+            "version": "#head",
+            "nimVersion": "~",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ]
+      ],
+      "activeVersion": null,
+      "module": "",
+      "ondisk": "",
+      "nimbleFile": "",
+      "active": false,
+      "isAtlasProject": false,
+      "isFork": true,
+      "isRoot": false,
+      "isLocalOnly": false,
+      "errors": [],
+      "originHead": {
+        "h": "",
+        "orig": "FromNone"
+      }
+    },
+    "https://github.com/treeform/ws": {
+      "url": "https://github.com/treeform/ws",
+      "state": "LazyDeferred",
+      "versions": [
+        [
+          {
+            "vtag": "*@-",
+            "vid": 251
+          },
+          {
+            "version": "#head",
+            "nimVersion": "~",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ]
+      ],
+      "activeVersion": null,
+      "module": "",
+      "ondisk": "",
+      "nimbleFile": "",
+      "active": false,
+      "isAtlasProject": false,
+      "isFork": false,
+      "isRoot": false,
+      "isLocalOnly": false,
+      "errors": [],
+      "originHead": {
+        "h": "",
+        "orig": "FromNone"
+      }
+    },
+    "https://github.com/euantorano/dotenv.nim": {
+      "url": "https://github.com/euantorano/dotenv.nim",
+      "state": "LazyDeferred",
+      "versions": [
+        [
+          {
+            "vtag": "*@-",
+            "vid": 252
+          },
+          {
+            "version": "#head",
+            "nimVersion": "~",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ]
+      ],
+      "activeVersion": null,
+      "module": "",
+      "ondisk": "",
+      "nimbleFile": "",
+      "active": false,
+      "isAtlasProject": false,
+      "isFork": false,
+      "isRoot": false,
+      "isLocalOnly": false,
+      "errors": [],
+      "originHead": {
+        "h": "",
+        "orig": "FromNone"
+      }
+    },
+    "https://github.com/nim-lang/redis": {
+      "url": "https://github.com/nim-lang/redis",
+      "state": "LazyDeferred",
+      "versions": [
+        [
+          {
+            "vtag": "*@-",
+            "vid": 253
+          },
+          {
+            "version": "#head",
+            "nimVersion": "~",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ]
+      ],
+      "activeVersion": null,
+      "module": "",
+      "ondisk": "",
+      "nimbleFile": "",
+      "active": false,
+      "isAtlasProject": false,
+      "isFork": false,
+      "isRoot": false,
+      "isLocalOnly": false,
+      "errors": [],
+      "originHead": {
+        "h": "",
+        "orig": "FromNone"
+      }
+    },
+    "https://github.com/onionhammer/sha1": {
+      "url": "https://github.com/onionhammer/sha1",
+      "state": "LazyDeferred",
+      "versions": [
+        [
+          {
+            "vtag": "*@-",
+            "vid": 254
+          },
+          {
+            "version": "#head",
+            "nimVersion": "~",
+            "status": "Normal",
+            "requirements": [],
+            "reqsByFeatures": {},
+            "hasInstallHooks": false,
+            "srcDir": "",
+            "err": "",
+            "features": {},
+            "featureVars": {}
+          }
+        ]
+      ],
+      "activeVersion": null,
+      "module": "",
+      "ondisk": "",
+      "nimbleFile": "",
+      "active": false,
+      "isAtlasProject": false,
+      "isFork": false,
+      "isRoot": false,
+      "isLocalOnly": false,
+      "errors": [],
+      "originHead": {
+        "h": "",
+        "orig": "FromNone"
+      }
+    }
+  }
+}
