@@ -169,6 +169,43 @@ proc addRelease(
     info pkg.url.projectName, "error processing nimble release:", $vtag, "error:", $e.msg
     return false
 
+proc commitPrefixMatches(a, b: CommitHash): bool =
+  if a.isEmpty() or b.isEmpty():
+    return false
+  result = a.h.startsWith(b.h) or b.h.startsWith(a.h)
+
+proc explicitVersionMatches(explicit, candidate: VersionTag): bool =
+  if explicit.version.isHead():
+    return candidate.isTip
+
+  if commitPrefixMatches(explicit.commit, candidate.commit):
+    return true
+
+  if explicit.version.string.len > 1 and explicit.version.string[0] == '#':
+    if explicit.version.string.len > 1 and not candidate.commit.isEmpty():
+      return candidate.commit.h.startsWith(explicit.version.string.substr(1))
+    return false
+
+  if explicit.version != Version"":
+    return explicit.version == candidate.version
+
+  return false
+
+proc filterToExplicitVersions(pkg: var Package, explicitVersions: seq[VersionTag]) =
+  if explicitVersions.len == 0:
+    return
+
+  var filtered = initOrderedTable[PackageVersion, NimbleRelease]()
+  for ver, rel in pkg.versions:
+    for explicit in explicitVersions:
+      if explicitVersionMatches(explicit, ver.vtag):
+        filtered[ver] = rel
+        break
+
+  if filtered.len > 0 and filtered.len < pkg.versions.len:
+    info pkg.url.projectName, "filtering to explicit versions:", filtered.values().toSeq().mapIt($it.version).join(", ")
+    pkg.versions = filtered
+
 proc traverseDependency*(
     nc: var NimbleContext;
     pkg: var Package,
@@ -179,6 +216,7 @@ proc traverseDependency*(
   doAssert pkg.ondisk.dirExists() and pkg.state != NotInitialized, "Package should've been found or cloned at this point. Package: " & $pkg.url & " on disk: " & $pkg.ondisk
 
   var versions: seq[(PackageVersion, NimbleRelease)]
+  var expandedExplicitVersions = explicitVersions
 
   let currentCommit = currentGitCommit(pkg.ondisk, Warning)
   if not pkg.isLocalOnly:
@@ -203,7 +241,7 @@ proc traverseDependency*(
     discard versions.addRelease(nc, pkg, vtag, deferChildDeps)
 
   of ExplicitVersions:
-    debug pkg.url.projectName, "traversing dependency found explicit versions:", $explicitVersions
+    debug pkg.url.projectName, "traversing dependency found explicit versions:", $expandedExplicitVersions
     # for ver, rel in pkg.versions:
     #   versions.add((ver, rel))
 
@@ -213,13 +251,12 @@ proc traverseDependency*(
 
     # get full hash from short hashes
     # TODO: handle shallow clones here?
-    var explicitVersions = explicitVersions
-    for version in mitems(explicitVersions):
+    for version in mitems(expandedExplicitVersions):
       let vtag = gitops.expandSpecial(pkg.ondisk, vtag = version)
       version = vtag
       debug pkg.url.projectName, "explicit version:", $version, "vtag:", repr vtag
 
-    for version in explicitVersions:
+    for version in expandedExplicitVersions:
       debug pkg.url.projectName, "check explicit version:", repr version
       if version.commit.isEmpty():
         warn pkg.url.projectName, "explicit version has empty commit:", $version
@@ -294,7 +331,13 @@ proc traverseDependency*(
       error pkg.url.projectName, "duplicate release found:", $ver.vtag, "new:", repr(rel), " existing: ", repr(pkg.versions[ver])
       error pkg.url.projectName, "versions table:", $pkg.versions.keys().toSeq()
     pkg.versions[ver] = uniqueReleases[rel]
-  
+
+  # Keep non-explicit versions for non-lazy traversals (used by tests and graph
+  # exploration), but narrow in lazy SAT mode to avoid selecting unrelated
+  # historical versions after explicit pin expansion.
+  if mode == ExplicitVersions and deferChildDeps:
+    filterToExplicitVersions(pkg, expandedExplicitVersions)
+
   # TODO: filter by unique versions first?
   pkg.state = Processed
 

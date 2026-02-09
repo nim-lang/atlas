@@ -40,6 +40,18 @@ template withOpenBr(b, op, blk) =
   `blk`
   b.closeOpr()
 
+proc addAtMostOneOf(b: var Builder; vars: seq[VarId]) =
+  for i in 0 ..< vars.len:
+    for j in (i + 1) ..< vars.len:
+      withOpenBr(b, OrForm):
+        b.addNegated(vars[i])
+        b.addNegated(vars[j])
+
+proc addAtLeastOneOf(b: var Builder; vars: seq[VarId]) =
+  withOpenBr(b, OrForm):
+    for v in vars:
+      b.add v
+
 proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
   var anyReleaseSatisfied = false
 
@@ -230,22 +242,27 @@ proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
       doAssert p.state != NotInitialized, "package not initialized: " & $p.toJson(ToJsonOptions(enumMode: joptEnumString))
 
       # Add constraints based on the package status
+      var versionVars: seq[VarId]
+      for ver, rel in p.validVersions():
+        versionVars.add ver.vid
+
       if p.state == Error:
         # If package is broken, enforce that none of its versions can be selected
-        withOpenBr(b, AndForm):
-          for ver, rel in p.validVersions():
-            b.addNegated ver.vid
+        for vid in versionVars:
+          b.addNegated vid
       elif p.isRoot:
-        # If it's a root package, enforce that exactly one version must be selected
-        withOpenBr(b, ExactlyOneOfForm):
+        # If it's a root package, enforce exactly one selected version:
+        # (v1 OR v2 OR ...) AND pairwise-not-both.
+        if versionVars.len == 0:
+          b.add falseLit()
+        else:
           for ver, rel in p.validVersions():
             debug p.url.projectName, "adding root package version:", $ver, "vid:", $ver.vid
-            b.add ver.vid
+          b.addAtLeastOneOf(versionVars)
+          b.addAtMostOneOf(versionVars)
       else:
-        # For non-root packages, they can either have one version selected or none at all
-        withOpenBr(b, ZeroOrOneOfForm):
-          for ver, rel in p.validVersions():
-            b.add ver.vid
+        # For non-root packages, at most one version can be selected.
+        b.addAtMostOneOf(versionVars)
       
     # This simpler deps loop was copied from Nimble after it was first ported from Atlas :)
     # It appears to acheive the same results, but it's a lot simpler
@@ -446,6 +463,49 @@ proc solve*(graph: var DepGraph; form: Form, rerun: var bool) =
         inc notFoundCount
     if notFoundCount > 0:
       return
+
+    var lazyDefersNeeded: seq[Package]
+    var lazyDeferUrls: HashSet[PkgUrl]
+
+    template includeLazyDeps(reqs: untyped, reason: string) =
+      for req in reqs:
+        let depUrl = req[0]
+        if depUrl in graph.pkgs and graph.pkgs[depUrl].state == LazyDeferred:
+          if not lazyDeferUrls.containsOrIncl(depUrl):
+            lazyDefersNeeded.add graph.pkgs[depUrl]
+            debug graph.pkgs[depUrl].url.projectName, "lazy deferred package selected for load after UNSAT:", reason
+
+    # If SAT fails while lazy packages remain, load transitive lazy deps for
+    # currently loaded packages and retry once more before reporting conflict.
+    for pkg in graph.pkgs.values():
+      if pkg.state == LazyDeferred:
+        continue
+
+      var hasSpecialVersions = false
+      for ver, rel in validVersions(pkg):
+        let verStr = ver.version().string
+        if verStr.len > 1 and verStr[0] == '#':
+          hasSpecialVersions = true
+          break
+
+      for ver, rel in validVersions(pkg):
+        if hasSpecialVersions:
+          let verStr = ver.version().string
+          if verStr.len <= 1 or verStr[0] != '#':
+            continue
+
+        includeLazyDeps(rel.requirements, $pkg.url.projectName & ":" & $ver)
+        for feature, reqs in rel.features:
+          includeLazyDeps(reqs, $pkg.url.projectName & ":" & feature)
+
+    if lazyDefersNeeded.len > 0:
+      notice "atlas:resolved", "rerunning SAT after conflict; loading lazy deferred packages:", lazyDefersNeeded.mapIt(it.url.projectName).join(", ")
+      for pkg in lazyDefersNeeded:
+        pkg.state = DoLoad
+        pkg.versions.clear()
+      rerun = true
+      return
+
     error project(), "version conflict; for more information use --showGraph"
     for pkg in mvalues(graph.pkgs):
       var usedVersionCount = 0
