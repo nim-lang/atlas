@@ -253,7 +253,12 @@ proc linkPackage(linkDir, linkedNimble: Path) =
       error $pkg.url.projectName, "error finding nimble file; got:", $nimbleFiles
       continue
     let nimble = nimbleFiles[0]
-    createNimbleLink(pkg.url, nimble, CfgPath(srcDir))
+    let linkPkgUrl =
+      if pkg.isRoot and pkg.url.url.scheme == "atlas":
+        linkUri
+      else:
+        pkg.url
+    createNimbleLink(linkPkgUrl, nimble, CfgPath(srcDir))
 
   installDependencies(nc, nimbleFile)
 
