@@ -156,7 +156,7 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
       if not allFeatDepsCompatible:
         warn pkg.url.projectName, "all requirements needed for feature:", feature, "were not able to be satisfied:", $reqs.mapIt(it[0].projectName & " " & $it[1]).join("; ")
         b.addNegated(featureVarId)
-        break
+        continue
 
       for dep, query in items(reqs):
         if dep notin graph.pkgs:

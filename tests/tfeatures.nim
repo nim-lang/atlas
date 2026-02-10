@@ -33,6 +33,12 @@ proc setupProjTest() =
     exec "git commit -m \"feat: add proj_feature_dep.nimble\""
     exec "git tag v1.0.0"
 
+proc isProjFeatureDep(pkg: Package): bool =
+  result =
+    pkg.url.projectName == "proj_feature_dep" or
+    pkg.url.shortName == "proj_feature_dep" or
+    ($pkg.ondisk).splitPath().tail == "proj_feature_dep"
+
 suite "test features":
   setup:
     # setAtlasVerbosity(Trace)
@@ -291,7 +297,80 @@ suite "test global features":
 
         var nc2 = createNimbleContext()
         let graph = loadDepGraph(nc2, (paths.getCurrentDir() / Path"ws_features_global.nimble").absolutePath)
-        let featurePkgs = graph.pkgs.values().toSeq().filterIt(it.url.projectName == "proj_feature_dep")
+        let featurePkgs = graph.pkgs.values().toSeq().filterIt(it.isProjFeatureDep())
+        check featurePkgs.len == 1
+        if featurePkgs.len == 1:
+          check featurePkgs[0].active
+          check not featurePkgs[0].activeVersion.isNil
+          check $featurePkgs[0].activeVersion.vtag.version == "1.0.0"
+
+  test "broken feature does not block other selected features":
+      setAtlasVerbosity(Error)
+      withDir "tests/ws_features_global":
+        removeDir("deps")
+        removeDir("proj_feature_dep")
+
+        setContext(AtlasContext())
+        context().nameOverrides = Patterns()
+        context().urlOverrides = Patterns()
+        context().proxy = parseUri "http://localhost:4242"
+        context().flags = {DumbProxy, ListVersions}
+        context().depsDir = Path "deps"
+        context().defaultAlgo = SemVer
+        project(paths.getCurrentDir())
+
+        expectedVersionWithGitTags()
+        var nc = createNimbleContext()
+        nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a", true))
+        nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b", true))
+        nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c", true))
+        nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d", true))
+
+        let dir = paths.getCurrentDir().absolutePath
+        discard dir.loadWorkspace(nc, AllReleases, onClone=DoClone, doSolve=false)
+
+        let featureDepPath = (paths.getCurrentDir() / Path"proj_feature_dep").absolutePath
+        createDir($featureDepPath)
+        withDir $featureDepPath:
+          writeFile("proj_feature_dep.nimble", dedent"""
+          version "1.0.0"
+          """)
+          exec "git init"
+          exec "git add proj_feature_dep.nimble"
+          exec "git commit -m \"feat: add proj_feature_dep.nimble\""
+          exec "git tag v1.0.0"
+
+        withDir "deps" / "proj_a":
+          writeFile("proj_a.nimble", dedent"""
+          requires "proj_b >= 1.1.0"
+          feature "testing":
+            requires "$1 >= 1.0.0"
+          feature "broken":
+            requires "proj_b >= 9.9.9"
+          """ % [("file://" & $featureDepPath)])
+          exec "git add proj_a.nimble"
+          exec "git commit -m \"feat: add mixed valid/broken features for solver test\""
+          exec "git tag v1.2.0"
+
+        setContext(AtlasContext())
+        context().nameOverrides = Patterns()
+        context().urlOverrides = Patterns()
+        context().proxy = parseUri "http://localhost:4242"
+        context().flags = {DumbProxy, ListVersions}
+        context().depsDir = Path "deps"
+        context().defaultAlgo = SemVer
+        context().features.incl "feature.proj_a.testing"
+        context().features.incl "feature.proj_a.broken"
+        project(paths.getCurrentDir())
+
+        var nc2 = createNimbleContext()
+        nc2.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a", true))
+        nc2.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b", true))
+        nc2.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c", true))
+        nc2.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d", true))
+
+        let graph = dir.loadWorkspace(nc2, AllReleases, onClone=DoClone, doSolve=true)
+        let featurePkgs = graph.pkgs.values().toSeq().filterIt(it.isProjFeatureDep())
         check featurePkgs.len == 1
         if featurePkgs.len == 1:
           check featurePkgs[0].active
