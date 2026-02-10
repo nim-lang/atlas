@@ -132,6 +132,7 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
 
   var didReplace = false
   var name = nameOrig
+  let origWasUrl = nameOrig.isUrl()
   
   # First try URL overrides if it looks like a URL
   if nameOrig.isUrl():
@@ -142,11 +143,13 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
   if name.isUrl():
     result = createUrlSkipPatterns(name)
 
-    # TODO: not 100% sure this is needed, but it makes the behavior more consistent
-    var didReplace = false
-    name = substitute(nc.nameOverrides, result.shortName(), didReplace)
-    if didReplace:
-      result = createUrlSkipPatterns(name)
+    # Keep explicit URLs stable. Name overrides are for package-name lookups,
+    # not for remapping already explicit URL requirements (especially file://).
+    if not origWasUrl:
+      var didReplace = false
+      name = substitute(nc.nameOverrides, result.shortName(), didReplace)
+      if didReplace:
+        result = createUrlSkipPatterns(name)
   else:
     let lname = nc.lookup(name)
     if not lname.isEmpty():

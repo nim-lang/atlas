@@ -65,7 +65,7 @@ Command:
 
 Options:
   --feature=<feature>   enables the given feature, pass multiple for multiple features
-                        for project specific use: `feature.<project>.<feature>`
+                        for project specific use: `<project>.<feature>`
                         (note always be passed when you want to use features)
   --keepCommits         do not perform any `git checkouts`
   --project=path        use the project at the given path
@@ -452,7 +452,18 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
       of "confdir":
         context().confDirOverride = Path val
       of "feature":
-        context().features.incl val.normalize
+        # Package-scoped features use `<pkg>.<feature>` and are normalized to
+        # `feature.<pkg>.<feature>` internally for nim.cfg defines.
+        let raw = val.strip().toLowerAscii()
+        if raw.len == 0:
+          writeHelp()
+        elif raw.startsWith("feature."):
+          context().features.incl raw
+        elif '.' in raw:
+          context().features.incl "feature." & raw
+        else:
+          # Root-package feature shorthand.
+          context().features.incl raw
       of "list":
         if val.normalize in ["on", ""]:
           context().flags.incl ListVersions

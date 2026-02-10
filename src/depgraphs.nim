@@ -52,6 +52,13 @@ proc addAtLeastOneOf(b: var Builder; vars: seq[VarId]) =
     for v in vars:
       b.add v
 
+proc hasContextFeature(pkg: Package; feature: string): bool =
+  if pkg.isRoot and feature in context().features:
+    return true
+  let scopedByShortName = "feature." & pkg.url.shortName & "." & feature
+  let scopedByProjectName = "feature." & pkg.url.projectName & "." & feature
+  result = scopedByShortName in context().features or scopedByProjectName in context().features
+
 proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
   var anyReleaseSatisfied = false
 
@@ -176,9 +183,8 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
           debug pkg.url.projectName, "added compatVer feature dep variables:", $compatibleVersions.mapIt($it).join(", ")
         
         # Add implictations for globally set features
-        let pkgFeature = "feature" & "." & pkg.url.projectName & "." & feature
-        if (pkg.isRoot and feature in context().features) or (pkgFeature in context().features):
-          debug pkg.url.projectName, "checking global feature:", $feature, "in version:", $ver, "pkgFeature:", $pkgFeature, "context().features:", $context().features.toSeq().mapIt($it).join(", ")
+        if hasContextFeature(pkg, feature):
+          debug pkg.url.projectName, "checking global feature:", $feature, "in version:", $ver, "context().features:", $context().features.toSeq().mapIt($it).join(", ")
           var featureVersions: Table[VarId, seq[VarId]]
           for depVer, nimbleRelease in depNode.validVersions():
             trace pkg.url.projectName, "checking global feature dependency:", depNode.url.projectName, "version:", $depVer
@@ -434,8 +440,7 @@ proc solve*(graph: var DepGraph; form: Form, rerun: var bool) =
 
       for feature, reqs in rel.features:
         var isFeatureEnabled = false
-        let pkgFeature = "feature" & "." & pkg.url.projectName & "." & feature
-        if (pkg.isRoot and feature in context().features) or (pkgFeature in context().features):
+        if hasContextFeature(pkg, feature):
           isFeatureEnabled = true
         elif feature in rel.featureVars and solution.isTrue(rel.featureVars[feature]):
           isFeatureEnabled = true
@@ -603,7 +608,7 @@ proc activateGraph*(graph: DepGraph): tuple[paths: seq[CfgPath], features: seq[s
         let pkgName = parts[1]
         let featName = parts[2 .. ^1].join(".")
         for pkg in graph.pkgs.values():
-          if pkg.active and pkg.url.projectName == pkgName:
+          if pkg.active and (pkg.url.shortName == pkgName or pkg.url.projectName == pkgName):
             pkg.activeFeatures.addUnique(featName)
     else:
       if not graph.root.isNil and graph.root.active:
@@ -614,4 +619,4 @@ proc activateGraph*(graph: DepGraph): tuple[paths: seq[CfgPath], features: seq[s
     trace pkg.url.projectName, "adding CfgPath:", $relativeToWorkspace(toDestDir(graph, pkg) / getCfgPath(graph, pkg).Path)
     result.paths.add CfgPath(toDestDir(graph, pkg) / getCfgPath(graph, pkg).Path)
     for feature in pkg.activeFeatures:
-      result.features.addUnique "feature." & pkg.url.projectName & "." & feature
+      result.features.addUnique "feature." & pkg.url.shortName & "." & feature
