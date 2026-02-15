@@ -210,6 +210,80 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
   if not anyReleaseSatisfied:
     warn pkg.url.projectName, "no versions satisfied for this package:", $pkg.url
 
+proc hasVersionSatisfiableByLoadedDeps(graph: DepGraph; pkg: Package): bool =
+  ## Returns true when at least one normal release can satisfy all currently
+  ## loaded non-lazy dependencies. If false, lazy retry cannot help this pkg.
+  for ver, rel in validVersions(pkg):
+    var allDepsCompatible = true
+
+    for dep, query in items(rel.requirements):
+      if dep notin graph.pkgs:
+        allDepsCompatible = false
+        break
+
+      let depNode = graph.pkgs[dep]
+      if depNode.state == LazyDeferred:
+        continue
+
+      var hasCompatible = false
+      for depVer, _ in depNode.validVersions():
+        if query.matches(depVer):
+          hasCompatible = true
+          break
+
+      if not hasCompatible:
+        allDepsCompatible = false
+        break
+
+    if allDepsCompatible:
+      return true
+
+  false
+
+proc collectHardUnsatNonLazyPackages(graph: DepGraph): seq[string] =
+  ## Only retry lazy deferred packages when they could change SAT.
+  ## If already-loaded non-lazy packages have no satisfiable versions, lazy
+  ## retry cannot fix the conflict and should be skipped.
+  for pkg in graph.pkgs.values():
+    if pkg.state == LazyDeferred or pkg.versions.len == 0:
+      continue
+    if not hasVersionSatisfiableByLoadedDeps(graph, pkg):
+      result.add(pkg.url.projectName)
+
+proc collectLazyDeferredPackagesForUnsatRetry(graph: DepGraph): seq[Package] =
+  ## If SAT fails, collect lazy deferred packages that are reachable from the
+  ## currently loaded graph and could change satisfiability on one retry pass.
+  var lazyDeferUrls: HashSet[PkgUrl]
+
+  template includeLazyDeps(reqs: untyped, reason: string) =
+    for req in reqs:
+      let depUrl = req[0]
+      if depUrl in graph.pkgs and graph.pkgs[depUrl].state == LazyDeferred:
+        if not lazyDeferUrls.containsOrIncl(depUrl):
+          result.add graph.pkgs[depUrl]
+          debug graph.pkgs[depUrl].url.projectName, "lazy deferred package selected for load after UNSAT:", reason
+
+  for pkg in graph.pkgs.values():
+    if pkg.state == LazyDeferred:
+      continue
+
+    var hasSpecialVersions = false
+    for ver, rel in validVersions(pkg):
+      let verStr = ver.version().string
+      if verStr.len > 1 and verStr[0] == '#':
+        hasSpecialVersions = true
+        break
+
+    for ver, rel in validVersions(pkg):
+      if hasSpecialVersions:
+        let verStr = ver.version().string
+        if verStr.len <= 1 or verStr[0] != '#':
+          continue
+
+      includeLazyDeps(rel.requirements, $pkg.url.projectName & ":" & $ver)
+      for feature, reqs in rel.features:
+        includeLazyDeps(reqs, $pkg.url.projectName & ":" & feature)
+
 proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
   result = Form()
   var b = Builder()
@@ -404,7 +478,7 @@ proc solve*(graph: var DepGraph; form: Form, rerun: var bool) =
       let vid = VarId varIdx
       if vid in form.mapping:
         let mapInfo = form.mapping[vid]
-        debug mapInfo.pkg.projectName, "v" & $varIdx & " sat var: " & $solution.getVar(vid).toPretty()
+        trace mapInfo.pkg.projectName, "v" & $varIdx & " sat var: " & $solution.getVar(vid).toPretty()
 
       if solution.isTrue(VarId(varIdx)) and form.mapping.hasKey(VarId varIdx):
         let mapInfo = form.mapping[VarId varIdx]
@@ -469,47 +543,20 @@ proc solve*(graph: var DepGraph; form: Form, rerun: var bool) =
     if notFoundCount > 0:
       return
 
-    var lazyDefersNeeded: seq[Package]
-    var lazyDeferUrls: HashSet[PkgUrl]
+    let hardUnsatPkgs = collectHardUnsatNonLazyPackages(graph)
 
-    template includeLazyDeps(reqs: untyped, reason: string) =
-      for req in reqs:
-        let depUrl = req[0]
-        if depUrl in graph.pkgs and graph.pkgs[depUrl].state == LazyDeferred:
-          if not lazyDeferUrls.containsOrIncl(depUrl):
-            lazyDefersNeeded.add graph.pkgs[depUrl]
-            debug graph.pkgs[depUrl].url.projectName, "lazy deferred package selected for load after UNSAT:", reason
+    if hardUnsatPkgs.len == 0:
+      let lazyDefersNeeded = collectLazyDeferredPackagesForUnsatRetry(graph)
 
-    # If SAT fails while lazy packages remain, load transitive lazy deps for
-    # currently loaded packages and retry once more before reporting conflict.
-    for pkg in graph.pkgs.values():
-      if pkg.state == LazyDeferred:
-        continue
-
-      var hasSpecialVersions = false
-      for ver, rel in validVersions(pkg):
-        let verStr = ver.version().string
-        if verStr.len > 1 and verStr[0] == '#':
-          hasSpecialVersions = true
-          break
-
-      for ver, rel in validVersions(pkg):
-        if hasSpecialVersions:
-          let verStr = ver.version().string
-          if verStr.len <= 1 or verStr[0] != '#':
-            continue
-
-        includeLazyDeps(rel.requirements, $pkg.url.projectName & ":" & $ver)
-        for feature, reqs in rel.features:
-          includeLazyDeps(reqs, $pkg.url.projectName & ":" & feature)
-
-    if lazyDefersNeeded.len > 0:
-      notice "atlas:resolved", "rerunning SAT after conflict; loading lazy deferred packages:", lazyDefersNeeded.mapIt(it.url.projectName).join(", ")
-      for pkg in lazyDefersNeeded:
-        pkg.state = DoLoad
-        pkg.versions.clear()
-      rerun = true
-      return
+      if lazyDefersNeeded.len > 0:
+        notice "atlas:resolved", "rerunning SAT after conflict; loading lazy deferred packages:", lazyDefersNeeded.mapIt(it.url.projectName).join(", ")
+        for pkg in lazyDefersNeeded:
+          pkg.state = DoLoad
+          pkg.versions.clear()
+        rerun = true
+        return
+    else:
+      warn "atlas:resolved", "not retrying lazy deferred packages; non-lazy dependencies are unsatisfiable for:", hardUnsatPkgs.join(", ")
 
     error project(), "version conflict; for more information use --showGraph"
     for pkg in mvalues(graph.pkgs):
