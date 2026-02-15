@@ -100,7 +100,7 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
 
     # If any dependency can't be satisfied, make this version unsatisfiable
     if not allDepsCompatible:
-      warn pkg.url.projectName, "all requirements needed for nimble release:", $ver, "were not able to be satisfied:", $rel.requirements.mapIt(it[0].projectName & " " & $it[1]).join("; ")
+      error pkg.url.projectName, "all requirements needed for nimble release:", $ver, "were not able to be satisfied:", $rel.requirements.mapIt(it[0].projectName & " " & $it[1]).join("; ")
       b.addNegated(ver.vid)
       continue
 
@@ -556,7 +556,7 @@ proc solve*(graph: var DepGraph; form: Form, rerun: var bool) =
         rerun = true
         return
     else:
-      warn "atlas:resolved", "not retrying lazy deferred packages; non-lazy dependencies are unsatisfiable for:", hardUnsatPkgs.join(", ")
+      error "atlas:resolved", "not retrying lazy deferred packages; non-lazy dependencies are unsatisfiable for:", hardUnsatPkgs.join(", ")
 
     error project(), "version conflict; for more information use --showGraph"
     for pkg in mvalues(graph.pkgs):
