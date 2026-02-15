@@ -185,6 +185,30 @@ if there are no uncommitted changes.
 
 Run `atlas --help` for more features.
 
+### Usage With CI
+
+Atlas works well with CI since deps are installed in the cloned repo. Just cache the `deps/` dir.
+
+Here's a snippet Github Actions YML:
+
+```yml
+    ... Nim setup ...
+
+    - name: Install Latest Atlas (recommend until Nim's Atlas verision catches up in 2.2.8+)
+      run: |
+        nimble install 'https://github.com/nim-lang/atlas@#head'
+
+    - name: Cache packages
+      uses: actions/cache@v3
+      with:
+        path: deps/
+        key: ${{ runner.os }}-${{ hashFiles('foo.nimble') }}
+
+    - name: Install Deps
+      run: |
+        atlas install --feature:test --feature:other # etc
+```
+
 ## Package Overrides
 
 Sometimes two URLs can conflict for the same dependency shortname. For example, when a project uses a forked dependency with bug fixes. These conflicts need to be manually resolved using `pkgOverrides` in `atlas.config`. The format is package name and the selected URL:
