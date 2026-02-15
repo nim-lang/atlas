@@ -65,7 +65,7 @@ suite "test features":
         nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c", true))
         nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d", true))
         # nc.put("proj_feature_dep", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_feature_dep", true))
-        nc.put("proj_feature_dep", toPkgUriRaw(parseUri "file://" & (ospaths2.getCurrentDir() / "proj_feature_dep").absolutePath, true))
+        nc.put("proj_feature_dep", toPkgUriRaw(parseUri(toWindowsFileUrl("file://" & $(ospaths2.getCurrentDir() / "proj_feature_dep").absolutePath)), true))
 
         check nc.lookup("proj_a").hasShortName
         check nc.lookup("proj_a").projectName == "proj_a"
@@ -94,7 +94,7 @@ suite "test features":
         nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c", true))
         nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d", true))
         # nc.put("proj_feature_dep", toPkgUriRaw(parseUri "deps/proj_feature_dep_git", true))
-        nc.put("proj_feature_dep", toPkgUriRaw(parseUri "file://" & (ospaths2.getCurrentDir() / "proj_feature_dep").absolutePath, true))
+        nc.put("proj_feature_dep", toPkgUriRaw(parseUri(toWindowsFileUrl("file://" & $(ospaths2.getCurrentDir() / "proj_feature_dep").absolutePath)), true))
 
         check nc.lookup("proj_a").hasShortName
         check nc.lookup("proj_a").projectName == "proj_a"
@@ -163,7 +163,7 @@ suite "test global features":
         nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c", true))
         nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d", true))
         # nc.put("proj_feature_dep", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_feature_dep", true))
-        nc.put("proj_feature_dep", toPkgUriRaw(parseUri "file://" & (ospaths2.getCurrentDir() / "proj_feature_dep").absolutePath, true))
+        nc.put("proj_feature_dep", toPkgUriRaw(parseUri(toWindowsFileUrl("file://" & $(ospaths2.getCurrentDir() / "proj_feature_dep").absolutePath)), true))
 
         check nc.lookup("proj_a").hasShortName
         check nc.lookup("proj_a").projectName == "proj_a"
@@ -193,7 +193,7 @@ suite "test global features":
         nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c", true))
         nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d", true))
         # nc.put("proj_feature_dep", toPkgUriRaw(parseUri "deps/proj_feature_dep_git", true))
-        nc.put("proj_feature_dep", toPkgUriRaw(parseUri "file://" & (ospaths2.getCurrentDir() / "proj_feature_dep").absolutePath, true))
+        nc.put("proj_feature_dep", toPkgUriRaw(parseUri(toWindowsFileUrl("file://" & $(ospaths2.getCurrentDir() / "proj_feature_dep").absolutePath)), true))
 
         check nc.lookup("proj_a").hasShortName
         check nc.lookup("proj_a").projectName == "proj_a"
@@ -278,7 +278,7 @@ suite "test global features":
           requires "proj_b >= 1.1.0"
           feature "testing":
             requires "$1 >= 1.0.0"
-          """ % [("file://" & $featureDepPath)])
+          """ % [toWindowsFileUrl("file://" & $featureDepPath)])
           exec "git add proj_a.nimble"
           exec "git commit -m \"feat: add proj_a feature dep for atlasRun test\""
           exec "git tag v1.2.0"
@@ -347,7 +347,7 @@ suite "test global features":
             requires "$1 >= 1.0.0"
           feature "broken":
             requires "proj_b >= 9.9.9"
-          """ % [("file://" & $featureDepPath)])
+          """ % [toWindowsFileUrl("file://" & $featureDepPath)])
           exec "git add proj_a.nimble"
           exec "git commit -m \"feat: add mixed valid/broken features for solver test\""
           exec "git tag v1.2.0"
