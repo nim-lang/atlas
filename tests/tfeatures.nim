@@ -376,3 +376,51 @@ suite "test global features":
           check featurePkgs[0].active
           check not featurePkgs[0].activeVersion.isNil
           check $featurePkgs[0].activeVersion.vtag.version == "1.0.0"
+
+  test "unsat root dependency should not trigger lazy historical retry":
+    ## Expected behavior:
+    ## - root unsat for a non-lazy requirement should error immediately
+    ## - lazy deps should remain deferred (retrying them cannot satisfy root)
+    ##
+    ## This test currently fails and documents the desired fix.
+    setAtlasVerbosity(Error)
+    withDir "tests/ws_features_global":
+      removeDir("deps")
+
+      let rootNimble = "ws_features_global.nimble"
+      let originalRootNimble = readFile(rootNimble)
+      defer:
+        writeFile(rootNimble, originalRootNimble)
+
+      setContext(AtlasContext())
+      context().nameOverrides = Patterns()
+      context().urlOverrides = Patterns()
+      context().proxy = parseUri "http://localhost:4242"
+      context().flags = {DumbProxy}
+      context().depsDir = Path "deps"
+      context().defaultAlgo = SemVer
+      project(paths.getCurrentDir())
+
+      expectedVersionWithGitTags()
+      var nc = createNimbleContext()
+      nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a", true))
+      nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b", true))
+      nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c", true))
+      nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d", true))
+
+      # Force an unsatisfiable non-lazy root requirement.
+      writeFile(rootNimble, "requires \"proj_a >= 9.9.9\"\n")
+
+      let dir = paths.getCurrentDir().absolutePath
+      let errorsBefore = atlasErrors()
+      let graph = dir.loadWorkspace(nc, AllReleases, onClone=DoClone, doSolve=true)
+      let errorsAfter = atlasErrors()
+
+      check errorsAfter > errorsBefore
+      check not graph.root.active
+
+      # Desired behavior: keep lazy deps deferred on UNSAT caused by non-lazy deps.
+      let projBUrl = nc.createUrl("proj_b")
+      check projBUrl in graph.pkgs
+      if projBUrl in graph.pkgs:
+        check graph.pkgs[projBUrl].state == LazyDeferred
