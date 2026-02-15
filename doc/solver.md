@@ -70,6 +70,8 @@ If SAT fails:
 
 - Atlas tries a conflict-recovery lazy load pass:
   - It scans already-loaded packages and pulls in referenced lazy deps.
+  - For feature-dependent lazy deps, it only includes features enabled via
+    context/CLI flags (unselected features are ignored during UNSAT recovery).
   - If a package has special (`#...`) versions, it prioritizes deps from those
     special versions while building the recovery set.
 - If any lazy deps are added, rerun is requested.
@@ -134,6 +136,9 @@ Lazy feature dependencies are pulled in only if features are enabled via:
 
 - CLI/global feature flags, or
 - SAT-selected feature vars for active releases.
+
+During UNSAT recovery specifically, only context/CLI-enabled features are used
+to select lazy feature deps (there is no SAT-selected feature model on UNSAT).
 
 If a feature is not enabled, its lazy deps are intentionally not loaded.
 

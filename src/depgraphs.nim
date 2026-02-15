@@ -283,7 +283,8 @@ proc collectLazyDeferredPackagesForUnsatRetry(graph: DepGraph): seq[Package] =
 
       includeLazyDeps(rel.requirements, $pkg.url.projectName & ":" & $ver)
       for feature, reqs in rel.features:
-        includeLazyDeps(reqs, $pkg.url.projectName & ":" & feature)
+        if hasContextFeature(pkg, feature):
+          includeLazyDeps(reqs, $pkg.url.projectName & ":" & feature)
 
 proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
   result = Form()

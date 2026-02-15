@@ -424,3 +424,70 @@ suite "test global features":
       check projBUrl in graph.pkgs
       if projBUrl in graph.pkgs:
         check graph.pkgs[projBUrl].state == LazyDeferred
+
+  test "unsat retry should not load feature deps for unselected features":
+    setAtlasVerbosity(Error)
+    withDir "tests/ws_features_global":
+      removeDir("deps")
+      removeDir("proj_feature_dep")
+
+      let rootNimble = "ws_features_global.nimble"
+      let originalRootNimble = readFile(rootNimble)
+      defer:
+        writeFile(rootNimble, originalRootNimble)
+
+      setContext(AtlasContext())
+      context().nameOverrides = Patterns()
+      context().urlOverrides = Patterns()
+      context().proxy = parseUri "http://localhost:4242"
+      context().flags = {DumbProxy}
+      context().depsDir = Path "deps"
+      context().defaultAlgo = SemVer
+      project(paths.getCurrentDir())
+
+      expectedVersionWithGitTags()
+      var nc = createNimbleContext()
+      nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a", true))
+      nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b", true))
+      nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c", true))
+      nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d", true))
+      nc.put("proj_feature_dep", toPkgUriRaw(parseUri(toWindowsFileUrl("file://" & $(ospaths2.getCurrentDir() / "proj_feature_dep").absolutePath)), true))
+
+      let dir = paths.getCurrentDir().absolutePath
+      discard dir.loadWorkspace(nc, AllReleases, onClone=DoClone, doSolve=false)
+      setupProjTest()
+
+      # Force a global version conflict (not a hard non-lazy "no matching release").
+      writeFile(rootNimble, dedent"""
+      requires "proj_a >= 1.1.0"
+      requires "proj_b <= 1.0.0"
+      """)
+
+      setContext(AtlasContext())
+      context().nameOverrides = Patterns()
+      context().urlOverrides = Patterns()
+      context().proxy = parseUri "http://localhost:4242"
+      context().flags = {DumbProxy}
+      context().depsDir = Path "deps"
+      context().defaultAlgo = SemVer
+      project(paths.getCurrentDir())
+
+      var nc2 = createNimbleContext()
+      nc2.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a", true))
+      nc2.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b", true))
+      nc2.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c", true))
+      nc2.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d", true))
+      nc2.put("proj_feature_dep", toPkgUriRaw(parseUri(toWindowsFileUrl("file://" & $(ospaths2.getCurrentDir() / "proj_feature_dep").absolutePath)), true))
+
+      let errorsBefore = atlasErrors()
+      let graph = dir.loadWorkspace(nc2, AllReleases, onClone=DoClone, doSolve=true)
+      let errorsAfter = atlasErrors()
+
+      check errorsAfter > errorsBefore
+      check not graph.root.active
+      check not dirExists("deps" / "proj_feature_dep")
+
+      let featureDepUrl = nc2.createUrl("proj_feature_dep")
+      check featureDepUrl in graph.pkgs
+      if featureDepUrl in graph.pkgs:
+        check graph.pkgs[featureDepUrl].state == LazyDeferred
