@@ -62,14 +62,15 @@ proc hasContextFeature(pkg: Package; feature: string): bool =
 proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
   var anyReleaseSatisfied = false
 
-  proc checkDeps(graph: var DepGraph, ver: PackageVersion, reqs: seq[(PkgUrl, VersionInterval)]): bool =
-    var allDepsCompatible = true
+  proc checkDeps(graph: var DepGraph, ver: PackageVersion, reqs: seq[(PkgUrl, VersionInterval)]): tuple[allDepsCompatible: bool, unmatchedDeps: seq[string]] =
+    result.allDepsCompatible = true
 
     # First check if all dependencies can be satisfied
     for dep, query in items(reqs):
       if dep notin graph.pkgs:
         debug pkg.url.projectName, "checking dependency for ", $ver, "not found:", $dep
-        allDepsCompatible = false
+        result.allDepsCompatible = false
+        result.unmatchedDeps.add($dep.projectName & " " & $query & " (not found)")
         continue
       debug pkg.url.projectName, "checking dependency for ", $ver, ":", $dep.projectName, "query:", $query
       let depNode = graph.pkgs[dep]
@@ -87,20 +88,20 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
           break
 
       if not hasCompatible:
-        allDepsCompatible = false
+        result.allDepsCompatible = false
+        result.unmatchedDeps.add($dep.projectName & " " & $query)
         warn pkg.url.projectName, "no versions matched requirements for the dependency:", $dep.projectName
-        break
       else:
         debug pkg.url.projectName, "a compatible version matched requirements for the dependency version:", $depNode.url.projectName
 
-    return allDepsCompatible
-
   for ver, rel in validVersions(pkg):
-    let allDepsCompatible = checkDeps(graph, ver, rel.requirements)
+    let depCheck = checkDeps(graph, ver, rel.requirements)
 
     # If any dependency can't be satisfied, make this version unsatisfiable
-    if not allDepsCompatible:
-      error pkg.url.projectName, "all requirements needed for nimble release:", $ver, "were not able to be satisfied:", $rel.requirements.mapIt(it[0].projectName & " " & $it[1]).join("; ")
+    if not depCheck.allDepsCompatible:
+      warn pkg.url.projectName, "all requirements needed for nimble release:", $ver, "were not able to be satisfied:", $rel.requirements.mapIt(it[0].projectName & " " & $it[1]).join("; ")
+      if depCheck.unmatchedDeps.len > 0:
+        error pkg.url.projectName, "deps with no matching releases:", depCheck.unmatchedDeps.join("; ")
       b.addNegated(ver.vid)
       continue
 
@@ -150,11 +151,11 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
     # Add implications for each feature requirement
     for feature, reqs in rel.features:
       let featureVarId = rel.featureVars[feature]
-      let allFeatDepsCompatible = checkDeps(graph, ver, reqs)
+      let featDepCheck = checkDeps(graph, ver, reqs)
 
-      debug pkg.url.projectName, "checking feature dep:", $feature, "query:", $reqs, "compat versions:", $allFeatDepsCompatible
-      if not allFeatDepsCompatible:
-        warn pkg.url.projectName, "all requirements needed for feature:", feature, "were not able to be satisfied:", $reqs.mapIt(it[0].projectName & " " & $it[1]).join("; ")
+      debug pkg.url.projectName, "checking feature dep:", $feature, "query:", $reqs, "compat versions:", $featDepCheck.allDepsCompatible
+      if not featDepCheck.allDepsCompatible:
+        warn pkg.url.projectName, "all requirements needed for feature:", feature, "were not able to be satisfied:", $reqs.mapIt(it[0].projectName & " " & $it[1]).join("; "), "deps with no matching releases:", featDepCheck.unmatchedDeps.join("; ")
         b.addNegated(featureVarId)
         continue
 
