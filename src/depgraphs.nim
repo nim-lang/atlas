@@ -75,7 +75,7 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
       let depNode = graph.pkgs[dep]
 
       if depNode.state == LazyDeferred:
-        info pkg.url.projectName, "dependency:", $dep.projectName, "is lazily deferred and not loaded"
+        debug pkg.url.projectName, "dependency:", $dep.projectName, "is lazily deferred and not loaded"
         continue
 
       var hasCompatible = false
