@@ -237,7 +237,7 @@ proc fetchRemoteHeads*(path: Path; origin = "origin"; errorReportLevel: MsgKind 
   if ShallowClones in context().flags:
     args.add "--depth=1"
   args.add remote
-  args.add "refs/heads/*:refs/remotes/" & remote & "/*"
+  args.add "+refs/heads/*:refs/remotes/" & remote & "/*"
   let (outp, status) = exec(GitFetch, path, args, errorReportLevel)
   if status != RES_OK:
     message(errorReportLevel, path, "could not fetch remote heads:", outp)
@@ -703,7 +703,7 @@ proc fetchRemoteTags*(path: Path; origin = "origin"; errorReportLevel: MsgKind =
   if ShallowClones in context().flags:
     args.add "--depth=1"
   args.add remote
-  args.add "refs/tags/*:refs/remotes/" & remote & "/tags/*"
+  args.add "+refs/tags/*:refs/remotes/" & remote & "/tags/*"
   let (outp, status) = exec(GitFetch, path, args, errorReportLevel)
   if status != RES_OK:
     message(errorReportLevel, path, "could not fetch remote tags:", outp)

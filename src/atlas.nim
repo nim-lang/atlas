@@ -338,7 +338,7 @@ proc update(filter: string) =
     warn "atlas:update", "deps directory not found:", $depsRoot
     return
 
-  var needsUpdate = false
+  var updatedAny = false
   for repoPath in findProjects(depsRoot):
     let repoName = $repoPath.splitPath().tail
     info "atlas:update", "checking package:", repoName
@@ -351,22 +351,12 @@ proc update(filter: string) =
       warn repoName, "filter not matched; skipping..."
       continue
 
-    let res = gitops.hasNewTags(repoPath)
-    if res.isNone:
-      warn repoName, "no remote version tags found, doing full update"
-      gitops.updateRepo(repoPath, onlyTags = false)
-      needsUpdate = true
-    else:
-      let (outdated, cnt) = res.get()
-      if outdated and cnt > 0:
-        warn repoName, "outdated, updating... " & $cnt & " new tags available"
-        gitops.updateRepo(repoPath, onlyTags = true)
-        needsUpdate = true
-      else:
-        notice repoName, "up to date"
+    info repoName, "updating remote refs"
+    gitops.updateRepo(repoPath)
+    updatedAny = true
   
-  if needsUpdate:
-    notice project(), "new dep versions available, run `atlas install` to update"
+  if updatedAny:
+    notice project(), "dependency refs updated, run `atlas install` to update"
 
 proc newProject(projectName: string) =
   ## Tries to create a new project directory in the current dir
