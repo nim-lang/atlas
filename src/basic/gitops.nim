@@ -43,8 +43,10 @@ type
     GitForEachRef = "git -C $DIR for-each-ref"
 
 proc fetchRemoteTags*(path: Path; origin = "origin"; errorReportLevel: MsgKind = Warning): bool
+proc fetchRemoteTagsByName(path: Path; remote: string; errorReportLevel: MsgKind = Warning): bool
 proc resolveRemoteName*(path: Path; origin = "origin"; errorReportLevel: MsgKind = Warning): string
 proc maybeUrlProxy*(url: Uri): Uri
+proc syncRemoteRefs(path: Path; srcRemote, dstRemote: string; errorReportLevel: MsgKind = Warning): bool
 proc exec*(gitCmd: Command;
            path: Path;
            args: openArray[string],
@@ -228,9 +230,8 @@ proc ensureRemoteForUrl*(path: Path; url: Uri; errorReportLevel: MsgKind = Warni
       url
   discard ensureRemoteUrl(path, result, $fetchUrl, errorReportLevel)
 
-proc fetchRemoteHeads*(path: Path; origin = "origin"; errorReportLevel: MsgKind = Warning): bool =
+proc fetchRemoteHeadsByName(path: Path; remote: string; errorReportLevel: MsgKind = Warning): bool =
   ## Fetch heads into refs/remotes/<remote>/ so branch names can be resolved.
-  let remote = resolveRemoteName(path, origin, errorReportLevel)
   if remote.len == 0:
     return false
 
@@ -241,6 +242,12 @@ proc fetchRemoteHeads*(path: Path; origin = "origin"; errorReportLevel: MsgKind 
   if status != RES_OK:
     message(errorReportLevel, path, "could not fetch remote heads:", outp)
   status == RES_OK
+
+proc fetchRemoteHeads*(path: Path; origin = "origin"; errorReportLevel: MsgKind = Warning): bool =
+  let remote = resolveRemoteName(path, origin, errorReportLevel)
+  if remote.len == 0:
+    return false
+  fetchRemoteHeadsByName(path, remote, errorReportLevel)
 
 proc resolveRemoteName*(path: Path; origin = "origin"; errorReportLevel: MsgKind = Warning): string =
   ## Resolves the operational remote name from the canonical URL stored in `origin`.
@@ -669,33 +676,102 @@ proc hasNewTags*(path: Path; origin = "origin"): Option[tuple[outdated: bool, ne
 
   return some((false, 0))
 
-proc updateRepo*(path: Path; origin = "origin"; onlyTags = false) =
-  ## updates the repo by 
-  let url = getRemoteUrl(path, origin)
-  if url.len == 0:
-    info path, "no remote URL found; cannot update"
-    return
-
-  let remote = resolveRemoteName(path, origin)
+proc updateRemote*(path: Path; remote: string; onlyTags = false): bool =
   if remote.len == 0:
     info path, "no remote found; cannot update"
-    return
-  if onlyTags:
-    if not fetchRemoteTags(path, origin):
-      error(path, "could not update repo tags")
-    else:
-      notice(path, "successfully updated repo tags")
-  else:
-    if not fetchRemoteHeads(path, origin):
-      error(path, "could not update repo heads")
-    elif not fetchRemoteTags(path, origin):
-      error(path, "could not update repo tags")
-    else:
-      notice(path, "successfully updated repo")
+    return false
 
-proc fetchRemoteTags*(path: Path; origin = "origin"; errorReportLevel: MsgKind = Warning): bool =
+  if onlyTags:
+    if not fetchRemoteTagsByName(path, remote):
+      error(path, "could not update remote tags: " & remote)
+      return false
+    notice(path, "successfully updated remote tags: " & remote)
+    return true
+  else:
+    if not fetchRemoteHeadsByName(path, remote):
+      error(path, "could not update remote heads: " & remote)
+      return false
+    elif not fetchRemoteTagsByName(path, remote):
+      error(path, "could not update remote tags: " & remote)
+      return false
+    notice(path, "successfully updated remote: " & remote)
+    return true
+
+proc syncRemoteRefs(path: Path; srcRemote, dstRemote: string; errorReportLevel: MsgKind = Warning): bool =
+  if srcRemote.len == 0 or dstRemote.len == 0:
+    return false
+  if srcRemote == dstRemote:
+    return true
+
+  let refspec = "+refs/remotes/" & srcRemote & "/*:refs/remotes/" & dstRemote & "/*"
+  let (outp, status) = exec(GitFetch, path, [".", refspec], errorReportLevel)
+  if status != RES_OK:
+    message(errorReportLevel, path,
+      "could not sync remote refs from '" & srcRemote & "' to '" & dstRemote & "':", outp)
+  status == RES_OK
+
+proc updateRepo*(path: Path; origin = "origin"; onlyTags = false) =
+  ## updates all remotes for the repo
+  if not isGitDir(path):
+    info path, "not a git repo; cannot update"
+    return
+
+  # Keep canonical remote setup in sync before iterating all remotes.
+  let canonicalUrl = getCanonicalUrl(path, origin)
+  let canonicalRemote =
+    if canonicalUrl.len > 0:
+      resolveRemoteName(path, origin)
+    else:
+      ""
+
+  let remotes = listRemotes(path)
+  if remotes.len == 0:
+    info path, "no remotes found; cannot update"
+    return
+
+  # Prefer canonical qualified remote first so aliases like `origin`
+  # can sync from it without additional network fetches.
+  var orderedRemotes: seq[string] = @[]
+  if canonicalRemote.len > 0 and canonicalRemote in remotes:
+    orderedRemotes.add canonicalRemote
+  for remote in remotes:
+    if remote != canonicalRemote:
+      orderedRemotes.add remote
+
+  var hasErrors = false
+  var updatedByUrl: seq[tuple[url: string, remote: string]] = @[]
+  for remote in orderedRemotes:
+    let remoteUrl = getRemoteUrlFor(path, remote)
+
+    if remoteUrl.len > 0:
+      var syncedFrom = ""
+      for it in updatedByUrl:
+        if it.url == remoteUrl:
+          syncedFrom = it.remote
+          break
+      if syncedFrom.len > 0:
+        info path, "skipping remote '" & remote & "'; same URL as '" & syncedFrom & "'"
+        if not syncRemoteRefs(path, syncedFrom, remote, Debug):
+          warn path, "could not sync remote alias refs '" & syncedFrom & "' -> '" & remote & "'"
+        continue
+      updatedByUrl.add (remoteUrl, remote)
+
+    if not updateRemote(path, remote, onlyTags):
+      hasErrors = true
+
+  if hasErrors:
+    if onlyTags:
+      error(path, "could not update repo tags across remotes")
+    else:
+      error(path, "could not update repo remotes")
+  else:
+    if onlyTags:
+      info(path, "successfully updated repo tags")
+    else:
+      info(path, "successfully updated repo")
+
+proc fetchRemoteTagsByName(path: Path; remote: string; errorReportLevel: MsgKind = Warning): bool =
   ## Fetch tags into refs/remotes/<remote>/tags/ instead of refs/tags/.
-  let remote = resolveRemoteName(path, origin, errorReportLevel)
   if remote.len == 0:
     return false
   var args: seq[string] = @[]
@@ -707,3 +783,9 @@ proc fetchRemoteTags*(path: Path; origin = "origin"; errorReportLevel: MsgKind =
   if status != RES_OK:
     message(errorReportLevel, path, "could not fetch remote tags:", outp)
   result = status == RES_OK
+
+proc fetchRemoteTags*(path: Path; origin = "origin"; errorReportLevel: MsgKind = Warning): bool =
+  let remote = resolveRemoteName(path, origin, errorReportLevel)
+  if remote.len == 0:
+    return false
+  fetchRemoteTagsByName(path, remote, errorReportLevel)
