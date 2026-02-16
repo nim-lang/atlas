@@ -435,6 +435,74 @@ proc loadDependency*(
       pkg.state = Error
       pkg.errors.add "ondisk location missing"
 
+proc processPendingPackages(
+    graph: var DepGraph;
+    nc: var NimbleContext;
+    root: Package;
+    traversalMode: TraversalMode;
+    onClone: PackageAction;
+    deferChildDeps: bool
+) =
+  var processing = true
+  while processing:
+    processing = false
+    let pkgUrls = nc.packageToDependency.keys().toSeq()
+
+    # just for more concise logging
+    var initializingPkgs: seq[string]
+    var processingPkgs: seq[string]
+    for pkgUrl in pkgUrls:
+      var pkg = nc.packageToDependency[pkgUrl]
+      case pkg.state:
+      of NotInitialized:
+        initializingPkgs.add pkg.projectName
+      of Found:
+        processingPkgs.add pkg.projectName
+      else:
+        discard
+    if initializingPkgs.len() > 0:
+      notice root.projectName, "Initializing packages:", initializingPkgs.join(", ")
+    if processingPkgs.len() > 0:
+      notice root.projectName, "Processing packages:", processingPkgs.join(", ")
+
+    # process packages
+    debug "atlas:expandGraph", "Processing package count: ", $pkgUrls.len()
+    for pkgUrl in pkgUrls:
+      var pkg = nc.packageToDependency[pkgUrl]
+      case pkg.state:
+      of NotInitialized, DoLoad:
+        info pkg.projectName, "Initializing package:", $pkg.url
+        nc.loadDependency(pkg, onClone)
+        trace pkg.projectName, "expanded pkg:", pkg.repr
+        processing = true
+      of LazyDeferred:
+        if pkgUrl notin graph.pkgs:
+          graph.pkgs[pkgUrl] = pkg
+          pkg.versions[VersionTag(v: Version"*", c: initCommitHash("#head", FromHead)).toPkgVer] = NimbleRelease(version: Version"#head", status: Normal)
+          graph.pkgs[pkgUrl] = pkg
+          info pkg.projectName, "Adding lazy deferred package to pkgs list:", $pkg.url
+        else:
+          trace pkg.projectName, "Skipping lazy deferred package:", $pkg.url
+        pkg.state = LazyDeferred
+      of Found:
+        info pkg.projectName, "Processing package at:", pkg.ondisk.relativeToWorkspace()
+        let effectiveMode =
+          if pkg.isRoot or pkg.isAtlasProject or pkg.url.isNimbleLink():
+            CurrentCommit
+          else:
+            traversalMode
+        nc.traverseDependency(pkg, effectiveMode, @[], deferChildDeps=deferChildDeps)
+        trace pkg.projectName, "processed pkg:", $pkg
+        processing = true
+        if pkgUrl notin graph.pkgs:
+          graph.pkgs[pkgUrl] = pkg
+      of Processed:
+        if pkgUrl notin graph.pkgs:
+          graph.pkgs[pkgUrl] = pkg
+      else:
+        discard
+        info pkg.projectName, "Skipping package:", $pkg.url, "state:", $pkg.state
+
 proc expandGraph*(
     path: Path,
     nc: var NimbleContext;
@@ -456,70 +524,12 @@ proc expandGraph*(
 
   notice "atlas:expand", "Expanding packages for:", $root.projectName
 
-  template processPendingPackages() =
-    var processing = true
-    while processing:
-      processing = false
-      let pkgUrls = nc.packageToDependency.keys().toSeq()
-
-      # just for more concise logging
-      var initializingPkgs: seq[string]
-      var processingPkgs: seq[string]
-      for pkgUrl in pkgUrls:
-        var pkg = nc.packageToDependency[pkgUrl]
-        case pkg.state:
-        of NotInitialized:
-          initializingPkgs.add pkg.projectName
-        of Found:
-          processingPkgs.add pkg.projectName
-        else:
-          discard
-      if initializingPkgs.len() > 0:
-        notice root.projectName, "Initializing packages:", initializingPkgs.join(", ")
-      if processingPkgs.len() > 0:
-        notice root.projectName, "Processing packages:", processingPkgs.join(", ")
-
-      # process packages
-      debug "atlas:expandGraph", "Processing package count: ", $pkgUrls.len()
-      for pkgUrl in pkgUrls:
-        var pkg = nc.packageToDependency[pkgUrl]
-        case pkg.state:
-        of NotInitialized, DoLoad:
-          info pkg.projectName, "Initializing package:", $pkg.url
-          nc.loadDependency(pkg, onClone)
-          trace pkg.projectName, "expanded pkg:", pkg.repr
-          processing = true
-        of LazyDeferred:
-          if pkgUrl notin result.pkgs:
-            result.pkgs[pkgUrl] = pkg
-            pkg.versions[VersionTag(v: Version"*", c: initCommitHash("#head", FromHead)).toPkgVer] = NimbleRelease(version: Version"#head", status: Normal)
-            result.pkgs[pkgUrl] = pkg
-            info pkg.projectName, "Adding lazy deferred package to pkgs list:", $pkg.url
-          else:
-            trace pkg.projectName, "Skipping lazy deferred package:", $pkg.url
-          pkg.state = LazyDeferred
-        of Found:
-          info pkg.projectName, "Processing package at:", pkg.ondisk.relativeToWorkspace()
-          # processing = true
-          let mode = if pkg.isRoot or pkg.isAtlasProject or pkg.url.isNimbleLink(): CurrentCommit else: mode
-          nc.traverseDependency(pkg, mode, @[], deferChildDeps=deferChildDeps)
-          trace pkg.projectName, "processed pkg:", $pkg
-          processing = true
-          if pkgUrl notin result.pkgs:
-            result.pkgs[pkgUrl] = pkg
-        of Processed:
-          if pkgUrl notin result.pkgs:
-            result.pkgs[pkgUrl] = pkg
-        else:
-          discard
-          info pkg.projectName, "Skipping package:", $pkg.url, "state:", $pkg.state
-
   # Explicit-version traversal can discover additional dependencies.
   # Re-run package processing until no new packages are introduced.
   var graphChanged = true
   while graphChanged:
     graphChanged = false
-    processPendingPackages()
+    result.processPendingPackages(nc, root, mode, onClone, deferChildDeps)
 
     let pkgCountBeforeExplicit = nc.packageToDependency.len
     let explicitCountBeforeExplicit = nc.explicitVersions.len
