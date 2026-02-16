@@ -45,6 +45,12 @@ proc isForkUrl(nc: NimbleContext; url: PkgUrl): bool =
     officialUrl.url.scheme notin ["file", "link", "atlas"] and
     officialUrl.url != url.url
 
+proc childDependencyState(pkg: Package; deferChildDeps: bool): PackageState =
+  ## Returns the initial state for newly discovered child dependencies.
+  ## Non-root children are marked lazy when `deferChildDeps` is enabled.
+  if deferChildDeps and not pkg.isRoot: LazyDeferred
+  else: NotInitialized
+
 proc processNimbleRelease(
     nc: var NimbleContext;
     pkg: Package,
@@ -78,17 +84,13 @@ proc processNimbleRelease(
     result = nc.parseNimbleFile(nimbleFile)
 
     if result.status == Normal:
-      proc childDependencyState(): PackageState =
-        if deferChildDeps and not pkg.isRoot: LazyDeferred
-        else: NotInitialized
-
       for pkgUrl, interval in items(result.requirements):
         # debug pkg.url.projectName, "INTERVAL: ", $interval, "isSpecial:", $interval.isSpecial, "explicit:", $interval.extractSpecificCommit()
         if interval.isSpecial:
           let commit = interval.extractSpecificCommit()
           nc.explicitVersions.mgetOrPut(pkgUrl, initHashSet[VersionTag]()).incl(VersionTag(v: Version($(interval)), c: commit))
 
-        let state = childDependencyState()
+        let state = childDependencyState(pkg, deferChildDeps)
         if pkgUrl notin nc.packageToDependency:
           debug pkg.url.projectName, "Found new pkg:", pkgUrl.projectName, "url:", $pkgUrl.url, "projectName:", $pkgUrl.projectName, "state:", $state
           # debug pkg.url.projectName, "Found new pkg:", pkgUrl.projectName, "repr:", $pkgUrl.repr
@@ -107,11 +109,11 @@ proc processNimbleRelease(
           if pkgUrl notin nc.packageToDependency:
             let state =
               if feature notin context().features: LazyDeferred
-              else: childDependencyState()
+              else: childDependencyState(pkg, deferChildDeps)
             debug pkg.url.projectName, "Found new feature pkg:", pkgUrl.projectName, "url:", $pkgUrl.url, "projectName:", $pkgUrl.projectName, "state:", $state
             let pkgDep = Package(url: pkgUrl, state: state, isFork: isForkUrl(nc, pkgUrl))
             nc.packageToDependency[pkgUrl] = pkgDep
-          elif feature in context().features and nc.packageToDependency[pkgUrl].state == LazyDeferred and childDependencyState() != LazyDeferred:
+          elif feature in context().features and nc.packageToDependency[pkgUrl].state == LazyDeferred and childDependencyState(pkg, deferChildDeps) != LazyDeferred:
             warn pkg.url.projectName, "Changing LazyDeferred feature pkg to DoLoad:", $pkgUrl.url
             nc.packageToDependency[pkgUrl].state = DoLoad
 
