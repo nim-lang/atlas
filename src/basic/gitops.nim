@@ -687,9 +687,8 @@ proc updateRepo*(path: Path; origin = "origin"; onlyTags = false) =
     else:
       notice(path, "successfully updated repo tags")
   else:
-    let (outp, status) = exec(GitFetchAll, path, [], subs = ["REMOTE", remote])
-    if status != RES_OK:
-      error(path, "could not update repo: " & outp)
+    if not fetchRemoteHeads(path, origin):
+      error(path, "could not update repo heads")
     elif not fetchRemoteTags(path, origin):
       error(path, "could not update repo tags")
     else:
