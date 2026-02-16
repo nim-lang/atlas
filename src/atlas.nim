@@ -348,7 +348,7 @@ proc update(filter: string) =
       warn repoName, "no remote URL found; skipping..."
       continue
     if filter.len > 0 and filter notin url and filter notin repoName:
-      notice repoName, "filter not matched; skipping..."
+      info repoName, "filter not matched; skipping..."
       continue
 
     info repoName, "updating remote refs"
