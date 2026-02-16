@@ -61,6 +61,26 @@ proc hasContextFeature(pkg: Package; feature: string): bool =
 
 proc collectUnsatisfiedContextFeatures(graph: DepGraph): seq[string] =
   ## Compare requested `--feature` flags with SAT-selected package features.
+  proc hasSatisfiedFeatureDeps(rel: NimbleRelease; featName: string): bool =
+    if featName notin rel.features:
+      return false
+
+    let reqs = rel.features[featName]
+    if reqs.len == 0:
+      return true
+
+    for depReq in items(reqs):
+      let (depUrl, query) = depReq
+      if depUrl notin graph.pkgs:
+        return false
+      let depPkg = graph.pkgs[depUrl]
+      if not depPkg.active or depPkg.activeVersion.isNil:
+        return false
+      if not query.matches(depPkg.activeVersion):
+        return false
+
+    return true
+
   var requested = context().features.toSeq()
   requested.sort()
   for raw in requested:
@@ -92,7 +112,7 @@ proc collectUnsatisfiedContextFeatures(graph: DepGraph): seq[string] =
           continue
         if featName in rel.features:
           declaredInNimble = true
-          if featName in pkg.activeFeatures or hasContextFeature(pkg, featName):
+          if featName in pkg.activeFeatures or hasSatisfiedFeatureDeps(rel, featName):
             featureSatisfied = true
             break
 
@@ -195,10 +215,11 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
     for feature, reqs in rel.features:
       let featureVarId = rel.featureVars[feature]
       let featDepCheck = checkDeps(graph, ver, reqs)
+      let qualifiedFeature = "feature." & pkg.url.projectName & "." & feature
 
       debug pkg.url.projectName, "checking feature dep:", $feature, "query:", $reqs, "compat versions:", $featDepCheck.allDepsCompatible
       if not featDepCheck.allDepsCompatible:
-        warn pkg.url.projectName, "all requirements needed for feature:", feature, "were not able to be satisfied:", $reqs.mapIt(it[0].projectName & " " & $it[1]).join("; "), "deps with no matching releases:", featDepCheck.unmatchedDeps.join("; ")
+        warn pkg.url.projectName, "all requirements needed for feature:", qualifiedFeature, "were not able to be satisfied:", $reqs.mapIt(it[0].projectName & " " & $it[1]).join("; "), "deps with no matching releases:", featDepCheck.unmatchedDeps.join("; ")
         b.addNegated(featureVarId)
         continue
 
