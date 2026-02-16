@@ -64,30 +64,43 @@ proc collectUnsatisfiedContextFeatures(graph: DepGraph): seq[string] =
   var requested = context().features.toSeq()
   requested.sort()
   for raw in requested:
-    if raw.startsWith("feature."):
-      let parts = raw.split(".")
-      if parts.len < 3:
-        result.add raw
-        continue
+    let qualified =
+      if raw.startsWith("feature."):
+        raw
+      elif not graph.root.isNil:
+        "feature." & graph.root.url.projectName & "." & raw
+      else:
+        "feature." & raw
 
-      let pkgName = parts[1]
-      let featName = parts[2 .. ^1].join(".")
-      var matchedPkg = false
-      var featureSatisfied = false
-      for pkg in allActiveNodes(graph):
-        if pkg.url.shortName == pkgName or pkg.url.projectName == pkgName:
-          matchedPkg = true
+    if not qualified.startsWith("feature."):
+      continue
+
+    let parts = qualified.split(".")
+    if parts.len < 3:
+      continue
+
+    let pkgName = parts[1]
+    let featName = parts[2 .. ^1].join(".")
+    var matchedPkg = false
+    var declaredInNimble = false
+    var featureSatisfied = false
+    for pkg in allActiveNodes(graph):
+      if pkg.url.shortName == pkgName or pkg.url.projectName == pkgName:
+        matchedPkg = true
+        let rel = pkg.activeNimbleRelease()
+        if rel.isNil:
+          continue
+        if featName in rel.features:
+          declaredInNimble = true
           if featName in pkg.activeFeatures:
             featureSatisfied = true
             break
 
-      if not matchedPkg:
-        result.add(raw & " (no active package matched '" & pkgName & "')")
-      elif not featureSatisfied:
-        result.add raw
-    else:
-      if graph.root.isNil or not graph.root.active or raw notin graph.root.activeFeatures:
-        result.add raw
+    # Ignore features that are not declared in the selected nimble release.
+    if not matchedPkg:
+      result.add(qualified & " (no active package matched '" & pkgName & "')")
+    elif declaredInNimble and not featureSatisfied:
+      result.add qualified
 
 proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
   var anyReleaseSatisfied = false
@@ -666,7 +679,7 @@ proc activateGraph*(graph: DepGraph): tuple[paths: seq[CfgPath], features: seq[s
 
   let unsatisfiedFeatures = collectUnsatisfiedContextFeatures(graph)
   if unsatisfiedFeatures.len > 0:
-    error "atlas:graph", "requested feature(s) were not able to be satisfied:", unsatisfiedFeatures.join(", ")
+    warn "atlas:graph", "requested feature(s) were not able to be satisfied:", unsatisfiedFeatures.join(", ")
 
   if NoExec notin context().flags:
     notice "atlas:graph", "Running build steps"
