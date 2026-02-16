@@ -92,7 +92,7 @@ proc collectUnsatisfiedContextFeatures(graph: DepGraph): seq[string] =
           continue
         if featName in rel.features:
           declaredInNimble = true
-          if featName in pkg.activeFeatures:
+          if featName in pkg.activeFeatures or hasContextFeature(pkg, featName):
             featureSatisfied = true
             break
 
