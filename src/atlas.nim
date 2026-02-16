@@ -332,41 +332,38 @@ proc listOutdated() =
 proc update(filter: string) =
   ## update the dependencies
   ##
-  ## this will update the workspace by checking for outdated packages and
-  ## updating them if they are outdated
-  let dir = project()
-  var nc = createNimbleContext()
+  ## this will check every git repository in `depsDir` and update it if needed
+  let depsRoot = depsDir()
+  if depsRoot == Path"" or not dirExists(depsRoot):
+    warn "atlas:update", "deps directory not found:", $depsRoot
+    return
+
   var needsUpdate = false
+  for repoPath in findProjects(depsRoot):
+    let repoName = $repoPath.splitPath().tail
+    info "atlas:update", "checking package:", repoName
 
-  let graph = dir.loadWorkspace(nc, CurrentCommit, onClone=DoNothing, doSolve=false)
-  for pkg in allNodes(graph):
-    info "atlas:update", "checking package:", $pkg.url.projectName, "state:", $pkg.state
-    if pkg.isRoot:
-      continue
-    if pkg.state != Processed:
-      continue
-    
-    let url = gitops.getRemoteUrl(pkg.ondisk)
+    let url = gitops.getRemoteUrl(repoPath)
     if url.len == 0:
-      warn pkg.url.projectName, "no remote URL found; skipping..."
+      warn repoName, "no remote URL found; skipping..."
       continue
-    if url.len == 0 or filter notin url or filter notin pkg.url.projectName:
-      warn pkg.url.projectName, "filter not matched; skipping..."
+    if filter.len > 0 and filter notin url and filter notin repoName:
+      warn repoName, "filter not matched; skipping..."
       continue
 
-    let res = gitops.hasNewTags(pkg.ondisk)
+    let res = gitops.hasNewTags(repoPath)
     if res.isNone:
-      warn pkg.url.projectName, "no remote version tags found, doing full update"
-      gitops.updateRepo(pkg.ondisk, onlyTags = false)
+      warn repoName, "no remote version tags found, doing full update"
+      gitops.updateRepo(repoPath, onlyTags = false)
       needsUpdate = true
     else:
       let (outdated, cnt) = res.get()
       if outdated and cnt > 0:
-        warn pkg.url.projectName, "outdated, updating... " & $cnt & " new tags available"
-        gitops.updateRepo(pkg.ondisk, onlyTags = true)
+        warn repoName, "outdated, updating... " & $cnt & " new tags available"
+        gitops.updateRepo(repoPath, onlyTags = true)
         needsUpdate = true
       else:
-        notice pkg.url.projectName, "up to date"
+        notice repoName, "up to date"
   
   if needsUpdate:
     notice project(), "new dep versions available, run `atlas install` to update"
