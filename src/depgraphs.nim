@@ -59,6 +59,36 @@ proc hasContextFeature(pkg: Package; feature: string): bool =
   let scopedByProjectName = "feature." & pkg.url.projectName & "." & feature
   result = scopedByShortName in context().features or scopedByProjectName in context().features
 
+proc collectUnsatisfiedContextFeatures(graph: DepGraph): seq[string] =
+  ## Compare requested `--feature` flags with SAT-selected package features.
+  var requested = context().features.toSeq()
+  requested.sort()
+  for raw in requested:
+    if raw.startsWith("feature."):
+      let parts = raw.split(".")
+      if parts.len < 3:
+        result.add raw
+        continue
+
+      let pkgName = parts[1]
+      let featName = parts[2 .. ^1].join(".")
+      var matchedPkg = false
+      var featureSatisfied = false
+      for pkg in allActiveNodes(graph):
+        if pkg.url.shortName == pkgName or pkg.url.projectName == pkgName:
+          matchedPkg = true
+          if featName in pkg.activeFeatures:
+            featureSatisfied = true
+            break
+
+      if not matchedPkg:
+        result.add(raw & " (no active package matched '" & pkgName & "')")
+      elif not featureSatisfied:
+        result.add raw
+    else:
+      if graph.root.isNil or not graph.root.active or raw notin graph.root.activeFeatures:
+        result.add raw
+
 proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
   var anyReleaseSatisfied = false
 
@@ -633,6 +663,10 @@ proc activateGraph*(graph: DepGraph): tuple[paths: seq[CfgPath], features: seq[s
           discard gitops.ensureCanonicalOrigin(pkg.ondisk, pkgUri)
         notice pkg.url.projectName, "Checked out to:", $pkg.activeVersion.commit().short(), "at:", pkg.ondisk.relativeToWorkspace()
         discard checkoutGitCommitFull(pkg.ondisk, pkg.activeVersion.commit())
+
+  let unsatisfiedFeatures = collectUnsatisfiedContextFeatures(graph)
+  if unsatisfiedFeatures.len > 0:
+    warn "atlas:graph", "requested feature(s) were not able to be satisfied:", unsatisfiedFeatures.join(", ")
 
   if NoExec notin context().flags:
     notice "atlas:graph", "Running build steps"
