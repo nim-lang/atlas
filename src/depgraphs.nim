@@ -679,7 +679,7 @@ proc activateGraph*(graph: DepGraph): tuple[paths: seq[CfgPath], features: seq[s
 
   let unsatisfiedFeatures = collectUnsatisfiedContextFeatures(graph)
   if unsatisfiedFeatures.len > 0:
-    warn "atlas:graph", "requested feature(s) were not able to be satisfied:", unsatisfiedFeatures.join(", ")
+    error "atlas:graph", "requested feature(s) were not able to be satisfied:", unsatisfiedFeatures.join(", ")
 
   if NoExec notin context().flags:
     notice "atlas:graph", "Running build steps"
