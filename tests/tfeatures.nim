@@ -377,6 +377,64 @@ suite "test global features":
           check not featurePkgs[0].activeVersion.isNil
           check $featurePkgs[0].activeVersion.vtag.version == "1.0.0"
 
+  test "feature requested states: missing, satisfiable, unsatisfiable":
+    setAtlasVerbosity(Error)
+    withDir "tests/ws_features_global":
+      let rootNimble = "ws_features_global.nimble"
+      let originalRootNimble = readFile(rootNimble)
+      defer:
+        writeFile(rootNimble, originalRootNimble)
+
+      proc resetFeatureTestContext() =
+        setContext(AtlasContext())
+        context().nameOverrides = Patterns()
+        context().urlOverrides = Patterns()
+        context().proxy = parseUri "http://localhost:4242"
+        context().flags = {DumbProxy}
+        context().depsDir = Path "deps"
+        context().defaultAlgo = SemVer
+        project(paths.getCurrentDir())
+
+      proc runInstallWithFeature(featureArg: string): int =
+        resetFeatureTestContext()
+        let errorsBefore = atlasErrors()
+        atlasRun(@[
+          "--deps=deps",
+          "--proxy=http://localhost:4242/",
+          "--dumbproxy",
+          "--feature:" & featureArg,
+          "install"
+        ])
+        atlasErrors() - errorsBefore
+
+      # 1) Feature missing from selected root nimble release: no error.
+      if dirExists("deps"):
+        removeDir("deps")
+      writeFile(rootNimble, dedent"""
+      requires "proj_a"
+      """)
+      check runInstallWithFeature("siwin") == 0
+
+      # 2) Feature declared and satisfiable: no error.
+      if dirExists("deps"):
+        removeDir("deps")
+      writeFile(rootNimble, dedent"""
+      requires "proj_a"
+      feature "siwin":
+        requires "proj_a >= 1.1.0"
+      """)
+      check runInstallWithFeature("siwin") == 0
+
+      # 3) Feature declared but unsatisfiable: must produce an error.
+      if dirExists("deps"):
+        removeDir("deps")
+      writeFile(rootNimble, dedent"""
+      requires "proj_a"
+      feature "siwin":
+        requires "proj_a >= 9.9.9"
+      """)
+      check runInstallWithFeature("siwin") > 0
+
   test "unsat root dependency should not trigger lazy historical retry":
     ## Expected behavior:
     ## - root unsat for a non-lazy requirement should error immediately
