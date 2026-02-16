@@ -243,6 +243,23 @@ proc fetchRemoteHeadsByName(path: Path; remote: string; errorReportLevel: MsgKin
     message(errorReportLevel, path, "could not fetch remote heads:", outp)
   status == RES_OK
 
+proc fetchRemoteHeadsAndTagsByName(path: Path; remote: string; errorReportLevel: MsgKind = Warning): bool =
+  ## Fetch heads and tags in a single network round-trip.
+  if remote.len == 0:
+    return false
+
+  var args: seq[string] = @[]
+  if ShallowClones in context().flags:
+    args.add "--depth=1"
+  args.add remote
+  args.add "+refs/heads/*:refs/remotes/" & remote & "/*"
+  args.add "+refs/tags/*:refs/remotes/" & remote & "/tags/*"
+
+  let (outp, status) = exec(GitFetch, path, args, errorReportLevel)
+  if status != RES_OK:
+    message(errorReportLevel, path, "could not fetch remote heads/tags:", outp)
+  status == RES_OK
+
 proc fetchRemoteHeads*(path: Path; origin = "origin"; errorReportLevel: MsgKind = Warning): bool =
   let remote = resolveRemoteName(path, origin, errorReportLevel)
   if remote.len == 0:
@@ -733,11 +750,8 @@ proc updateRemote*(path: Path; remote: string; onlyTags = false): bool =
       warn(path, "updated remote tags: " & remote)
     return true
   else:
-    if not fetchRemoteHeadsByName(path, remote):
-      error(path, "could not update remote heads: " & remote)
-      return false
-    elif not fetchRemoteTagsByName(path, remote):
-      error(path, "could not update remote tags: " & remote)
+    if not fetchRemoteHeadsAndTagsByName(path, remote):
+      error(path, "could not update remote heads/tags: " & remote)
       return false
     let afterFetch = remoteRefsSnapshot(path, remote, onlyTags)
     if beforeFetch.ok and afterFetch.ok:
