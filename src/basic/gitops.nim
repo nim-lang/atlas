@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std/[os, files, paths, osproc, options, sequtils, strutils, uri, sets]
+import std/[os, files, paths, osproc, options, sequtils, strutils, uri, sets, tables]
 import reporters, osutils, versions, context
 
 type
@@ -676,16 +676,61 @@ proc hasNewTags*(path: Path; origin = "origin"): Option[tuple[outdated: bool, ne
 
   return some((false, 0))
 
+proc remoteRefsSnapshot(path: Path; remote: string; onlyTags: bool): tuple[ok: bool, refs: string] =
+  let refsPrefix =
+    if onlyTags:
+      "refs/remotes/" & remote & "/tags"
+    else:
+      "refs/remotes/" & remote
+  let (outp, status) = exec(
+    GitForEachRef,
+    path,
+    ["--format=%(objectname) %(refname)", refsPrefix],
+    Debug
+  )
+  if status != RES_OK:
+    return (false, "")
+  (true, outp.strip())
+
+proc countUpdatedRefs(beforeRefs, afterRefs: string): int =
+  var beforeByRef = initTable[string, string]()
+
+  for line in beforeRefs.splitLines():
+    let parts = line.splitWhitespace()
+    if parts.len >= 2:
+      beforeByRef[parts[1]] = parts[0]
+
+  for line in afterRefs.splitLines():
+    let parts = line.splitWhitespace()
+    if parts.len < 2:
+      continue
+    let refName = parts[1]
+    let refCommit = parts[0]
+    if refName notin beforeByRef or beforeByRef[refName] != refCommit:
+      inc result
+
 proc updateRemote*(path: Path; remote: string; onlyTags = false): bool =
   if remote.len == 0:
-    info path, "no remote found; cannot update"
+    warn path, "no remote found; cannot update"
     return false
+
+  let beforeFetch = remoteRefsSnapshot(path, remote, onlyTags)
 
   if onlyTags:
     if not fetchRemoteTagsByName(path, remote):
       error(path, "could not update remote tags: " & remote)
       return false
-    notice(path, "successfully updated remote tags: " & remote)
+    let afterFetch = remoteRefsSnapshot(path, remote, onlyTags)
+    if beforeFetch.ok and afterFetch.ok:
+      if beforeFetch.refs == afterFetch.refs:
+        notice(path, "remote tags already up to date: " & remote)
+      else:
+        let updatedRefs = countUpdatedRefs(beforeFetch.refs, afterFetch.refs)
+        let refLabel = if updatedRefs == 1: " ref" else: " refs"
+        warn(path, "successfully updated remote tags: " & remote & " (" &
+          $updatedRefs & refLabel & " updated)")
+    else:
+      warn(path, "successfully updated remote tags: " & remote)
     return true
   else:
     if not fetchRemoteHeadsByName(path, remote):
@@ -694,7 +739,17 @@ proc updateRemote*(path: Path; remote: string; onlyTags = false): bool =
     elif not fetchRemoteTagsByName(path, remote):
       error(path, "could not update remote tags: " & remote)
       return false
-    notice(path, "successfully updated remote: " & remote)
+    let afterFetch = remoteRefsSnapshot(path, remote, onlyTags)
+    if beforeFetch.ok and afterFetch.ok:
+      if beforeFetch.refs == afterFetch.refs:
+        notice(path, "remote already up to date: " & remote)
+      else:
+        let updatedRefs = countUpdatedRefs(beforeFetch.refs, afterFetch.refs)
+        let refLabel = if updatedRefs == 1: " ref" else: " refs"
+        warn(path, "successfully updated remote: " & remote & " (" &
+          $updatedRefs & refLabel & " updated)")
+    else:
+      warn(path, "successfully updated remote: " & remote)
     return true
 
 proc syncRemoteRefs(path: Path; srcRemote, dstRemote: string; errorReportLevel: MsgKind = Warning): bool =
