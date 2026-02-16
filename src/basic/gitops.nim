@@ -723,14 +723,14 @@ proc updateRemote*(path: Path; remote: string; onlyTags = false): bool =
     let afterFetch = remoteRefsSnapshot(path, remote, onlyTags)
     if beforeFetch.ok and afterFetch.ok:
       if beforeFetch.refs == afterFetch.refs:
-        notice(path, "remote tags already up to date: " & remote)
+        notice(path, "tags already up to date: " & remote)
       else:
         let updatedRefs = countUpdatedRefs(beforeFetch.refs, afterFetch.refs)
         let refLabel = if updatedRefs == 1: " ref" else: " refs"
-        warn(path, "successfully updated remote tags: " & remote & " (" &
+        warn(path, "updated remote tags: " & remote & " (" &
           $updatedRefs & refLabel & " updated)")
     else:
-      warn(path, "successfully updated remote tags: " & remote)
+      warn(path, "updated remote tags: " & remote)
     return true
   else:
     if not fetchRemoteHeadsByName(path, remote):
@@ -742,14 +742,14 @@ proc updateRemote*(path: Path; remote: string; onlyTags = false): bool =
     let afterFetch = remoteRefsSnapshot(path, remote, onlyTags)
     if beforeFetch.ok and afterFetch.ok:
       if beforeFetch.refs == afterFetch.refs:
-        notice(path, "remote already up to date: " & remote)
+        notice(path, "up to date: " & remote)
       else:
         let updatedRefs = countUpdatedRefs(beforeFetch.refs, afterFetch.refs)
         let refLabel = if updatedRefs == 1: " ref" else: " refs"
-        warn(path, "successfully updated remote: " & remote & " (" &
+        warn(path, "updated remote: " & remote & " (" &
           $updatedRefs & refLabel & " updated)")
     else:
-      warn(path, "successfully updated remote: " & remote)
+      warn(path, "updated remote: " & remote)
     return true
 
 proc syncRemoteRefs(path: Path; srcRemote, dstRemote: string; errorReportLevel: MsgKind = Warning): bool =
