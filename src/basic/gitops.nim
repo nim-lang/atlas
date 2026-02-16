@@ -19,7 +19,8 @@ type
     GitRemoteRename = "git -C $DIR remote rename",
     GitDiff = "git -C $DIR diff",
     GitFetch = "git -C $DIR fetch",
-    GitFetchAll = "git -C $DIR fetch --no-tags $REMOTE " & quoteShell("refs/heads/*:refs/heads/*"),
+    GitFetchHeads = "git -C $DIR fetch $REMOTE " &
+      quoteShell("+refs/heads/*:refs/remotes/$REMOTE/*"),
     GitTag = "git -C $DIR tag",
     GitTags = "git -C $DIR show-ref --tags",
     GitShowRef = "git -C $DIR show-ref",
@@ -236,9 +237,7 @@ proc fetchRemoteHeads*(path: Path; origin = "origin"; errorReportLevel: MsgKind 
   var args: seq[string] = @[]
   if ShallowClones in context().flags:
     args.add "--depth=1"
-  args.add remote
-  args.add "+refs/heads/*:refs/remotes/" & remote & "/*"
-  let (outp, status) = exec(GitFetch, path, args, errorReportLevel)
+  let (outp, status) = exec(GitFetchHeads, path, args, errorReportLevel, subs = ["REMOTE", remote])
   if status != RES_OK:
     message(errorReportLevel, path, "could not fetch remote heads:", outp)
   status == RES_OK
