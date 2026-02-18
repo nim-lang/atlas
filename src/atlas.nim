@@ -11,16 +11,13 @@
 
 import std / [parseopt, files, dirs, strutils, os, options, osproc, tables, sets, json, uri, paths]
 import basic / [versions, context, osutils, configutils, reporters,
-                nimbleparser, gitops, pkgurls, nimblecontext, compiledpatterns, packageinfos]
+                nimbleparser, gitops, pkgurls, nimblecontext,
+                compiledpatterns, packageinfos, sattypes]
 import depgraphs, nimenv, lockfiles, confighandler, dependencies, pkgsearch
 
 
 from std/terminal import isatty
 
-when defined(nimAtlasBootstrap):
-  import ../dist/sat/src/sat/sat
-else:
-  import sat/sat
 
 const
   AtlasVersion =
@@ -68,7 +65,7 @@ Command:
 
 Options:
   --feature=<feature>   enables the given feature, pass multiple for multiple features
-                        for project specific use: `feature.<project>.<feature>`
+                        for project specific use: `<project>.<feature>`
                         (note always be passed when you want to use features)
   --keepCommits         do not perform any `git checkouts`
   --project=path        use the project at the given path
@@ -79,6 +76,8 @@ Options:
   --noautoinit          do not auto initialize an atlas project
   --resolver=minver|semver|maxver
                         which resolution algorithm to use, default is semver
+  --no-lazy-deps        disable lazy dependency loading and use eager loading
+                        for all transitive dependencies during SAT solving
   --proxy=url           use the given proxy URL for all git operations
   --dumbProxy           use a dumb proxy without smart git protocol
   --packagesRepo        use the nim-lang/packages git repo (legacy behavior)
@@ -254,7 +253,12 @@ proc linkPackage(linkDir, linkedNimble: Path) =
       error $pkg.url.projectName, "error finding nimble file; got:", $nimbleFiles
       continue
     let nimble = nimbleFiles[0]
-    createNimbleLink(pkg.url, nimble, CfgPath(srcDir))
+    let linkPkgUrl =
+      if pkg.isRoot and pkg.url.url.scheme == "atlas":
+        linkUri
+      else:
+        pkg.url
+    createNimbleLink(linkPkgUrl, nimble, CfgPath(srcDir))
 
   installDependencies(nc, nimbleFile)
 
@@ -328,44 +332,31 @@ proc listOutdated() =
 proc update(filter: string) =
   ## update the dependencies
   ##
-  ## this will update the workspace by checking for outdated packages and
-  ## updating them if they are outdated
-  let dir = project()
-  var nc = createNimbleContext()
-  var needsUpdate = false
+  ## this will check every git repository in `depsDir` and update it if needed
+  let depsRoot = depsDir()
+  if depsRoot == Path"" or not dirExists(depsRoot):
+    warn "atlas:update", "deps directory not found:", $depsRoot
+    return
 
-  let graph = dir.loadWorkspace(nc, CurrentCommit, onClone=DoNothing, doSolve=false)
-  for pkg in allNodes(graph):
-    info "atlas:update", "checking package:", $pkg.url.projectName, "state:", $pkg.state
-    if pkg.isRoot:
-      continue
-    if pkg.state != Processed:
-      continue
-    
-    let url = gitops.getRemoteUrl(pkg.ondisk)
+  var updatedAny = false
+  for repoPath in findProjects(depsRoot):
+    let repoName = $repoPath.splitPath().tail
+    info "atlas:update", "checking package:", repoName
+
+    let url = gitops.getRemoteUrl(repoPath)
     if url.len == 0:
-      warn pkg.url.projectName, "no remote URL found; skipping..."
+      warn repoName, "no remote URL found; skipping..."
       continue
-    if url.len == 0 or filter notin url or filter notin pkg.url.projectName:
-      warn pkg.url.projectName, "filter not matched; skipping..."
+    if filter.len > 0 and filter notin url and filter notin repoName:
+      info repoName, "filter not matched; skipping..."
       continue
 
-    let res = gitops.hasNewTags(pkg.ondisk)
-    if res.isNone:
-      warn pkg.url.projectName, "no remote version tags found, doing full update"
-      gitops.updateRepo(pkg.ondisk, onlyTags = false)
-      needsUpdate = true
-    else:
-      let (outdated, cnt) = res.get()
-      if outdated and cnt > 0:
-        warn pkg.url.projectName, "outdated, updating... " & $cnt & " new tags available"
-        gitops.updateRepo(pkg.ondisk, onlyTags = true)
-        needsUpdate = true
-      else:
-        notice pkg.url.projectName, "up to date"
+    info repoName, "updating remote refs"
+    gitops.updateRepo(repoPath)
+    updatedAny = true
   
-  if needsUpdate:
-    notice project(), "new dep versions available, run `atlas install` to update"
+  if updatedAny:
+    notice project(), "dependency refs updated, run `atlas install` to update"
 
 proc newProject(projectName: string) =
   ## Tries to create a new project directory in the current dir
@@ -453,7 +444,18 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
       of "confdir":
         context().confDirOverride = Path val
       of "feature":
-        context().features.incl val.normalize
+        # Package-scoped features use `<pkg>.<feature>` and are normalized to
+        # `feature.<pkg>.<feature>` internally for nim.cfg defines.
+        let raw = val.strip().toLowerAscii()
+        if raw.len == 0:
+          writeHelp()
+        elif raw.startsWith("feature."):
+          context().features.incl raw
+        elif '.' in raw:
+          context().features.incl "feature." & raw
+        else:
+          # Root-package feature shorthand.
+          context().features.incl raw
       of "list":
         if val.normalize in ["on", ""]:
           context().flags.incl ListVersions
@@ -483,6 +485,8 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
         of "maxver": context().defaultAlgo = MaxVer
         of "semver": context().defaultAlgo = SemVer
         else: writeHelp()
+      of "nolazydeps", "no-lazy-deps":
+        context().flags.incl NoLazyDeps
       of "verbosity":
         case val.normalize
         of "normal": setAtlasVerbosity(Info)

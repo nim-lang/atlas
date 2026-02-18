@@ -45,10 +45,17 @@ proc isForkUrl(nc: NimbleContext; url: PkgUrl): bool =
     officialUrl.url.scheme notin ["file", "link", "atlas"] and
     officialUrl.url != url.url
 
+proc childDependencyState(pkg: Package; deferChildDeps: bool): PackageState =
+  ## Returns the initial state for newly discovered child dependencies.
+  ## Non-root children are marked lazy when `deferChildDeps` is enabled.
+  if deferChildDeps and not pkg.isRoot: LazyDeferred
+  else: NotInitialized
+
 proc processNimbleRelease(
     nc: var NimbleContext;
     pkg: Package,
-    release: VersionTag
+    release: VersionTag;
+    deferChildDeps: bool
 ): NimbleRelease =
   trace pkg.url.projectName, "Processing release:", $release
 
@@ -83,13 +90,14 @@ proc processNimbleRelease(
           let commit = interval.extractSpecificCommit()
           nc.explicitVersions.mgetOrPut(pkgUrl, initHashSet[VersionTag]()).incl(VersionTag(v: Version($(interval)), c: commit))
 
+        let state = childDependencyState(pkg, deferChildDeps)
         if pkgUrl notin nc.packageToDependency:
-          debug pkg.url.projectName, "Found new pkg:", pkgUrl.projectName, "url:", $pkgUrl.url, "projectName:", $pkgUrl.projectName
+          debug pkg.url.projectName, "Found new pkg:", pkgUrl.projectName, "url:", $pkgUrl.url, "projectName:", $pkgUrl.projectName, "state:", $state
           # debug pkg.url.projectName, "Found new pkg:", pkgUrl.projectName, "repr:", $pkgUrl.repr
-          let pkgDep = Package(url: pkgUrl, state: NotInitialized, isFork: isForkUrl(nc, pkgUrl))
+          let pkgDep = Package(url: pkgUrl, state: state, isFork: isForkUrl(nc, pkgUrl))
           nc.packageToDependency[pkgUrl] = pkgDep
         else:
-          if nc.packageToDependency[pkgUrl].state == LazyDeferred:
+          if nc.packageToDependency[pkgUrl].state == LazyDeferred and state != LazyDeferred:
             warn pkg.url.projectName, "Changing LazyDeferred pkg to DoLoad:", $pkgUrl.url
             nc.packageToDependency[pkgUrl].state = DoLoad
 
@@ -99,10 +107,15 @@ proc processNimbleRelease(
             let commit = interval.extractSpecificCommit()
             nc.explicitVersions.mgetOrPut(pkgUrl, initHashSet[VersionTag]()).incl(VersionTag(v: Version($(interval)), c: commit))
           if pkgUrl notin nc.packageToDependency:
-            let state = if feature notin context().features: LazyDeferred else: NotInitialized
+            let state =
+              if feature notin context().features: LazyDeferred
+              else: childDependencyState(pkg, deferChildDeps)
             debug pkg.url.projectName, "Found new feature pkg:", pkgUrl.projectName, "url:", $pkgUrl.url, "projectName:", $pkgUrl.projectName, "state:", $state
             let pkgDep = Package(url: pkgUrl, state: state, isFork: isForkUrl(nc, pkgUrl))
             nc.packageToDependency[pkgUrl] = pkgDep
+          elif feature in context().features and nc.packageToDependency[pkgUrl].state == LazyDeferred and childDependencyState(pkg, deferChildDeps) != LazyDeferred:
+            warn pkg.url.projectName, "Changing LazyDeferred feature pkg to DoLoad:", $pkgUrl.url
+            nc.packageToDependency[pkgUrl].state = DoLoad
 
 proc addFeatureDependencies(pkg: Package) =
 
@@ -134,12 +147,13 @@ proc addRelease(
     # pkg: var Package,
     nc: var NimbleContext;
     pkg: Package,
-    vtag: VersionTag
+    vtag: VersionTag;
+    deferChildDeps: bool
 ): bool =
   var pkgver = vtag.toPkgVer()
   trace pkg.url.projectName, "Adding Nimble version:", $vtag
   try:
-    let release = nc.processNimbleRelease(pkg, vtag)
+    let release = nc.processNimbleRelease(pkg, vtag, deferChildDeps)
 
     if vtag.v.string == "":
       pkgver.vtag.v = release.version
@@ -157,15 +171,61 @@ proc addRelease(
     info pkg.url.projectName, "error processing nimble release:", $vtag, "error:", $e.msg
     return false
 
+proc commitPrefixMatches(a, b: CommitHash): bool =
+  ## Returns true when two commit hashes refer to the same commit prefix.
+  ## This allows explicit short hashes and full hashes to match each other.
+  if a.isEmpty() or b.isEmpty():
+    return false
+  result = a.h.startsWith(b.h) or b.h.startsWith(a.h)
+
+proc explicitVersionMatches(explicit, candidate: VersionTag): bool =
+  ## Checks whether a candidate version tag matches an explicit SAT-selected
+  ## version request, supporting #head, commit-based, and semver equality cases.
+  if explicit.version.isHead():
+    return candidate.isTip
+
+  if commitPrefixMatches(explicit.commit, candidate.commit):
+    return true
+
+  if explicit.version.string.len > 1 and explicit.version.string[0] == '#':
+    if explicit.version.string.len > 1 and not candidate.commit.isEmpty():
+      return candidate.commit.h.startsWith(explicit.version.string.substr(1))
+    return false
+
+  if explicit.version != Version"":
+    return explicit.version == candidate.version
+
+  return false
+
+proc filterToExplicitVersions(pkg: var Package, explicitVersions: seq[VersionTag]) =
+  ## Narrows pkg.versions to only versions that match explicit SAT-selected
+  ## versions. Used in lazy deferred resolution to avoid unrelated historical
+  ## versions after explicit pin expansion.
+  if explicitVersions.len == 0:
+    return
+
+  var filtered = initOrderedTable[PackageVersion, NimbleRelease]()
+  for ver, rel in pkg.versions:
+    for explicit in explicitVersions:
+      if explicitVersionMatches(explicit, ver.vtag):
+        filtered[ver] = rel
+        break
+
+  if filtered.len > 0 and filtered.len < pkg.versions.len:
+    info pkg.url.projectName, "filtering to explicit versions:", filtered.values().toSeq().mapIt($it.version).join(", ")
+    pkg.versions = filtered
+
 proc traverseDependency*(
     nc: var NimbleContext;
     pkg: var Package,
     mode: TraversalMode;
     explicitVersions: seq[VersionTag];
+    deferChildDeps = false;
 ) =
   doAssert pkg.ondisk.dirExists() and pkg.state != NotInitialized, "Package should've been found or cloned at this point. Package: " & $pkg.url & " on disk: " & $pkg.ondisk
 
   var versions: seq[(PackageVersion, NimbleRelease)]
+  var expandedExplicitVersions = explicitVersions
 
   let currentCommit = currentGitCommit(pkg.ondisk, Warning)
   if not pkg.isLocalOnly:
@@ -187,10 +247,10 @@ proc traverseDependency*(
   of CurrentCommit:
     trace pkg.url.projectName, "traversing dependency for only current commit"
     let vtag = VersionTag(v: Version"#head", c: initCommitHash(currentCommit, FromHead))
-    discard versions.addRelease(nc, pkg, vtag)
+    discard versions.addRelease(nc, pkg, vtag, deferChildDeps)
 
   of ExplicitVersions:
-    debug pkg.url.projectName, "traversing dependency found explicit versions:", $explicitVersions
+    debug pkg.url.projectName, "traversing dependency found explicit versions:", $expandedExplicitVersions
     # for ver, rel in pkg.versions:
     #   versions.add((ver, rel))
 
@@ -200,19 +260,18 @@ proc traverseDependency*(
 
     # get full hash from short hashes
     # TODO: handle shallow clones here?
-    var explicitVersions = explicitVersions
-    for version in mitems(explicitVersions):
+    for version in mitems(expandedExplicitVersions):
       let vtag = gitops.expandSpecial(pkg.ondisk, vtag = version)
       version = vtag
       debug pkg.url.projectName, "explicit version:", $version, "vtag:", repr vtag
 
-    for version in explicitVersions:
+    for version in expandedExplicitVersions:
       debug pkg.url.projectName, "check explicit version:", repr version
       if version.commit.isEmpty():
         warn pkg.url.projectName, "explicit version has empty commit:", $version
       elif not uniqueCommits.containsOrIncl(version.commit):
         debug pkg.url.projectName, "add explicit version:", $version
-        discard versions.addRelease(nc, pkg, version)
+        discard versions.addRelease(nc, pkg, version, deferChildDeps)
 
   of AllReleases:
     try:
@@ -227,14 +286,14 @@ proc traverseDependency*(
             not uniqueCommits.containsOrIncl(version.commit):
             let vtag = VersionTag(v: Version"", c: version.commit)
             assert vtag.commit.orig == FromDep, "maybe this needs to be overriden like before: " & $vtag.commit.orig
-            discard versions.addRelease(nc, pkg, vtag)
+            discard versions.addRelease(nc, pkg, vtag, deferChildDeps)
 
       ## Note: always prefer tagged versions
       let tags = collectTaggedVersions(pkg.ondisk, isLocalOnly = pkg.isLocalOnly)
       debug pkg.url.projectName, "nimble tags:", $tags
       for tag in tags:
         if not uniqueCommits.containsOrIncl(tag.c):
-          discard versions.addRelease(nc, pkg, tag)
+          discard versions.addRelease(nc, pkg, tag, deferChildDeps)
           assert tag.commit.orig == FromGitTag, "maybe this needs to be overriden like before: " & $tag.commit.orig
 
       if tags.len() == 0 or IncludeTagsAndNimbleCommits in context().flags:
@@ -249,7 +308,7 @@ proc traverseDependency*(
           if not uniqueCommits.containsOrIncl(tag.c):
             # trace pkg.url.projectName, "traverseDependency adding nimble commit:", $tag
             var vers: seq[(PackageVersion, NimbleRelease)]
-            let added = vers.addRelease(nc, pkg, tag)
+            let added = vers.addRelease(nc, pkg, tag, deferChildDeps)
             if added and not nimbleVersions.containsOrIncl(vers[0][0].vtag.v):
               versions.add(vers)
           else:
@@ -258,7 +317,7 @@ proc traverseDependency*(
       if versions.len() == 0:
         let vtag = VersionTag(v: Version"#head", c: initCommitHash(currentCommit, FromHead))
         debug pkg.url.projectName, "traverseDependency no versions found, using default #head", "at", $pkg.ondisk
-        discard versions.addRelease(nc, pkg, vtag)
+        discard versions.addRelease(nc, pkg, vtag, deferChildDeps)
 
     finally:
       if not checkoutGitCommit(pkg.ondisk, currentCommit, Warning):
@@ -281,7 +340,13 @@ proc traverseDependency*(
       error pkg.url.projectName, "duplicate release found:", $ver.vtag, "new:", repr(rel), " existing: ", repr(pkg.versions[ver])
       error pkg.url.projectName, "versions table:", $pkg.versions.keys().toSeq()
     pkg.versions[ver] = uniqueReleases[rel]
-  
+
+  # Keep non-explicit versions for non-lazy traversals (used by tests and graph
+  # exploration), but narrow in lazy SAT mode to avoid selecting unrelated
+  # historical versions after explicit pin expansion.
+  if mode == ExplicitVersions and deferChildDeps:
+    filterToExplicitVersions(pkg, expandedExplicitVersions)
+
   # TODO: filter by unique versions first?
   pkg.state = Processed
 
@@ -370,20 +435,14 @@ proc loadDependency*(
       pkg.state = Error
       pkg.errors.add "ondisk location missing"
 
-proc expandGraph*(path: Path, nc: var NimbleContext; mode: TraversalMode, onClone: PackageAction, isLinkPath = false): DepGraph =
-  ## Expand the graph by adding all dependencies.
-  
-  doAssert path.string != "."
-  let url = nc.createUrlFromPath(path, isLinkPath)
-  notice url.projectName, "expanding root package at:", $path, "url:", $url
-  var root = Package(url: url, isRoot: true, isFork: isForkUrl(nc, url))
-  # nc.loadDependency(pkg)
-
-  result = DepGraph(root: root, mode: mode)
-  nc.packageToDependency[root.url] = root
-
-  notice "atlas:expand", "Expanding packages for:", $root.projectName
-
+proc processPendingPackages(
+    graph: var DepGraph;
+    nc: var NimbleContext;
+    root: Package;
+    traversalMode: TraversalMode;
+    onClone: PackageAction;
+    deferChildDeps: bool
+) =
   var processing = true
   while processing:
     processing = false
@@ -417,37 +476,74 @@ proc expandGraph*(path: Path, nc: var NimbleContext; mode: TraversalMode, onClon
         trace pkg.projectName, "expanded pkg:", pkg.repr
         processing = true
       of LazyDeferred:
-        if pkgUrl notin result.pkgs:
-          result.pkgs[pkgUrl] = pkg
+        if pkgUrl notin graph.pkgs:
+          graph.pkgs[pkgUrl] = pkg
           pkg.versions[VersionTag(v: Version"*", c: initCommitHash("#head", FromHead)).toPkgVer] = NimbleRelease(version: Version"#head", status: Normal)
-          result.pkgs[pkgUrl] = pkg
+          graph.pkgs[pkgUrl] = pkg
           info pkg.projectName, "Adding lazy deferred package to pkgs list:", $pkg.url
         else:
           trace pkg.projectName, "Skipping lazy deferred package:", $pkg.url
         pkg.state = LazyDeferred
       of Found:
         info pkg.projectName, "Processing package at:", pkg.ondisk.relativeToWorkspace()
-        # processing = true
-        let mode = if pkg.isRoot or pkg.isAtlasProject or pkg.url.isNimbleLink(): CurrentCommit else: mode
-        nc.traverseDependency(pkg, mode, @[])
+        let effectiveMode =
+          if pkg.isRoot or pkg.isAtlasProject or pkg.url.isNimbleLink():
+            CurrentCommit
+          else:
+            traversalMode
+        nc.traverseDependency(pkg, effectiveMode, @[], deferChildDeps=deferChildDeps)
         trace pkg.projectName, "processed pkg:", $pkg
         processing = true
-        if pkgUrl notin result.pkgs:
-          result.pkgs[pkgUrl] = pkg
+        if pkgUrl notin graph.pkgs:
+          graph.pkgs[pkgUrl] = pkg
       of Processed:
-        if pkgUrl notin result.pkgs:
-          result.pkgs[pkgUrl] = pkg
+        if pkgUrl notin graph.pkgs:
+          graph.pkgs[pkgUrl] = pkg
       else:
         discard
         info pkg.projectName, "Skipping package:", $pkg.url, "state:", $pkg.state
 
-  debug "atlas:expandGraph", "Processing explicit versions count: ", $nc.explicitVersions.len()
-  for pkgUrl in nc.explicitVersions.keys().toSeq():
-    let versions = nc.explicitVersions[pkgUrl]
-    info pkgUrl.projectName, "explicit versions: ", versions.toSeq().mapIt($it).join(", ")
-    var pkg = nc.packageToDependency[pkgUrl]
-    if pkg.state == Processed:
-      nc.traverseDependency(pkg, ExplicitVersions, versions.toSeq())
+proc expandGraph*(
+    path: Path,
+    nc: var NimbleContext;
+    mode: TraversalMode,
+    onClone: PackageAction,
+    isLinkPath = false,
+    deferChildDeps = false
+): DepGraph =
+  ## Expand the graph by adding all dependencies.
+  
+  doAssert path.string != "."
+  let url = nc.createUrlFromPath(path, isLinkPath)
+  notice url.projectName, "expanding root package at:", $path, "url:", $url
+  var root = Package(url: url, isRoot: true, isFork: isForkUrl(nc, url))
+  # nc.loadDependency(pkg)
+
+  result = DepGraph(root: root, mode: mode)
+  nc.packageToDependency[root.url] = root
+
+  notice "atlas:expand", "Expanding packages for:", $root.projectName
+
+  # Explicit-version traversal can discover additional dependencies.
+  # Re-run package processing until no new packages are introduced.
+  var graphChanged = true
+  while graphChanged:
+    graphChanged = false
+    result.processPendingPackages(nc, root, mode, onClone, deferChildDeps)
+
+    let pkgCountBeforeExplicit = nc.packageToDependency.len
+    let explicitCountBeforeExplicit = nc.explicitVersions.len
+    debug "atlas:expandGraph", "Processing explicit versions count: ", $nc.explicitVersions.len()
+    for pkgUrl in nc.explicitVersions.keys().toSeq():
+      let versions = nc.explicitVersions[pkgUrl]
+      info pkgUrl.projectName, "explicit versions: ", versions.toSeq().mapIt($it).join(", ")
+      if pkgUrl in nc.packageToDependency:
+        var pkg = nc.packageToDependency[pkgUrl]
+        if pkg.state == Processed:
+          nc.traverseDependency(pkg, ExplicitVersions, versions.toSeq(), deferChildDeps=deferChildDeps)
+
+    graphChanged = nc.packageToDependency.len != pkgCountBeforeExplicit or
+      nc.explicitVersions.len != explicitCountBeforeExplicit
 
   info "atlas:expand", "Finished expanding packages for:", $root.projectName
 

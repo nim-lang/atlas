@@ -1,6 +1,6 @@
 # Small program that runs the test cases
 
-import std / [strutils, os, uri, jsonutils, json, sets, tables, sequtils, algorithm, strformat, unittest]
+import std / [strutils, os, osproc, uri, jsonutils, json, sets, tables, sequtils, algorithm, strformat, unittest]
 import std/terminal
 import basic/[sattypes, context, reporters, pkgurls, compiledpatterns, versions]
 import basic/[deptypes, nimblecontext]
@@ -290,6 +290,49 @@ suite "test expand with git tags":
       echo "explicit versions: "
       for pkgUrl, commits in nc.explicitVersions.pairs:
         echo "\tversions: ", pkgUrl, " commits: ", commits.toSeq().mapIt($it).join("; ")
+
+  test "explicit commit deps are represented in lazy graph":
+    withDir "tests//ws_testtraverse_explicit":
+      removeDir("deps")
+      removeDir("buildGraph")
+      project(paths.getCurrentDir())
+      context().flags = {KeepWorkspace, ListVersions}
+      context().defaultAlgo = SemVer
+      context().nameOverrides = Patterns()
+      discard context().nameOverrides.addPattern("$+", "file://./buildGraph/$#")
+
+      discard setupGraph()
+
+      createDir("buildGraph/proj_e")
+      withDir "buildGraph/proj_e":
+        writeFile("proj_e.nimble", "version = \"1.0.0\"\n")
+        writeFile("proj_e.nim", "discard\n")
+        exec("git init")
+        exec("git config user.name test-user")
+        exec("git config user.email test@example.com")
+        exec("git add proj_e.nimble proj_e.nim")
+        exec("git commit -m \"initial proj_e\"")
+
+      var explicitCommit = ""
+      withDir "buildGraph/proj_a":
+        exec("git config user.name test-user")
+        exec("git config user.email test@example.com")
+        let content = readFile("proj_a.nimble").strip() & "\nrequires \"proj_e >= 1.0.0\"\n"
+        writeFile("proj_a.nimble", content)
+        exec("git add proj_a.nimble")
+        exec("git commit -m \"add explicit-only proj_e dep\"")
+        explicitCommit = execProcess("git rev-parse --short HEAD").strip()
+
+      writeFile("ws_testtraverse_explicit.nimble", "requires \"proj_a#$1\"\n" % [explicitCommit])
+
+      var nc = createNimbleContext()
+      let graph = project().expandGraph(nc, AllReleases, onClone=DoClone, deferChildDeps=true)
+      let projE = nc.createUrl("proj_e")
+
+      check projE in nc.packageToDependency
+      check projE in graph.pkgs
+      if projE in graph.pkgs:
+        check graph.pkgs[projE].state == LazyDeferred
 
 suite "test expand with no git tags":
 

@@ -16,8 +16,6 @@ jobs:
         target:
           - os: linux
             cpu: amd64
-          # - os: linux
-          #   cpu: i386
           - os: macos
             cpu: amd64
           - os: macos
@@ -109,16 +107,6 @@ jobs:
           echo '${{ github.workspace }}'"/external/mingw-${{ matrix.target.cpu }}/bin" >> $GITHUB_PATH
           echo '${{ github.workspace }}'"/external/dlls-${{ matrix.target.cpu }}" >> $GITHUB_PATH
 
-      # - name: Restore Nim from cache
-      #   if: >
-      #     steps.nim-compiler-cache.outputs.cache-hit != 'true' &&
-      #     matrix.nim_branch != 'devel'
-      #   id: nim-compiler-cache
-      #   uses: actions/cache@v2
-      #   with:
-      #     path: '${{ github.workspace }}/nim-${{ matrix.nim_branch }}-${{ matrix.target.cpu }}'
-      #     key: 'nim-${{ matrix.target.cpu }}-${{ matrix.nim_branch }}'
-
       - name: Setup Nim
         uses: alaviss/setup-nim@0.1.1
         with:
@@ -133,8 +121,6 @@ jobs:
 
       - name: Install SAT
         run: |
-          # cd atlas
-          # nimble install -y sat
           git clone https://github.com/nim-lang/sat.git
 
       - name: Run tests
@@ -152,38 +138,3 @@ jobs:
           cd atlas
           nimble install -y
 
-  tag-version-bumps:
-    name: 'Run graffiti on atlas.nimble changes'
-    runs-on: ubuntu-latest
-    needs: build
-    if: github.ref == 'refs/heads/master'
-    env:
-      NIM_BRANCH: devel
-      NIM_ARCH: amd64
-    steps:
-      - name: set `core.autocrlf` to false
-        run: |
-          git config --global core.autocrlf false
-          git config --global init.defaultBranch master
-          git config --global user.email "atlasbot@nimlang.com"
-          git config --global user.name "atlasbot"
-
-      - name: Checkout atlas
-        uses: actions/checkout@v5
-        with:
-          submodules: false
-
-      - name: Setup Nim
-        uses: alaviss/setup-nim@0.1.1
-        with:
-          path: 'nim'
-          version: ${{ env.NIM_BRANCH }}
-          architecture: ${{ env.NIM_ARCH }}
-
-      - name: Install graffiti
-        run: |
-          nimble install -y https://github.com/beef331/graffiti.git@\#d5a16033b84d223ec65da2a68f88607ca9ab61e9
-
-      - name: Run graffiti
-        run: |
-          graffiti atlas.nimble

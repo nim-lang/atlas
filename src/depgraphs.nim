@@ -5,11 +5,6 @@ import dependencies, runners
 
 export depgraphtypes, deptypesjson
 
-when defined(nimAtlasBootstrap):
-  import ../dist/sat/src/sat/[sat]
-else:
-  import sat/[sat]
-
 export sat
 
 when not compiles(newSeq[int]().addUnique(1)):
@@ -45,24 +40,106 @@ template withOpenBr(b, op, blk) =
   `blk`
   b.closeOpr()
 
+proc addAtMostOneOf(b: var Builder; vars: seq[VarId]) =
+  for i in 0 ..< vars.len:
+    for j in (i + 1) ..< vars.len:
+      withOpenBr(b, OrForm):
+        b.addNegated(vars[i])
+        b.addNegated(vars[j])
+
+proc addAtLeastOneOf(b: var Builder; vars: seq[VarId]) =
+  withOpenBr(b, OrForm):
+    for v in vars:
+      b.add v
+
+proc hasContextFeature(pkg: Package; feature: string): bool =
+  if pkg.isRoot and feature in context().features:
+    return true
+  let scopedByShortName = "feature." & pkg.url.shortName & "." & feature
+  let scopedByProjectName = "feature." & pkg.url.projectName & "." & feature
+  result = scopedByShortName in context().features or scopedByProjectName in context().features
+
+proc collectUnsatisfiedContextFeatures(graph: DepGraph): seq[string] =
+  ## Compare requested `--feature` flags with SAT-selected package features.
+  proc hasSatisfiedFeatureDeps(rel: NimbleRelease; featName: string): bool =
+    if featName notin rel.features:
+      return false
+
+    let reqs = rel.features[featName]
+    if reqs.len == 0:
+      return true
+
+    for depReq in items(reqs):
+      let (depUrl, query) = depReq
+      if depUrl notin graph.pkgs:
+        return false
+      let depPkg = graph.pkgs[depUrl]
+      if not depPkg.active or depPkg.activeVersion.isNil:
+        return false
+      if not query.matches(depPkg.activeVersion):
+        return false
+
+    return true
+
+  var requested = context().features.toSeq()
+  requested.sort()
+  for raw in requested:
+    let qualified =
+      if raw.startsWith("feature."):
+        raw
+      elif not graph.root.isNil:
+        "feature." & graph.root.url.projectName & "." & raw
+      else:
+        "feature." & raw
+
+    if not qualified.startsWith("feature."):
+      continue
+
+    let parts = qualified.split(".")
+    if parts.len < 3:
+      continue
+
+    let pkgName = parts[1]
+    let featName = parts[2 .. ^1].join(".")
+    var matchedPkg = false
+    var declaredInNimble = false
+    var featureSatisfied = false
+    for pkg in allActiveNodes(graph):
+      if pkg.url.shortName == pkgName or pkg.url.projectName == pkgName:
+        matchedPkg = true
+        let rel = pkg.activeNimbleRelease()
+        if rel.isNil:
+          continue
+        if featName in rel.features:
+          declaredInNimble = true
+          if featName in pkg.activeFeatures or hasSatisfiedFeatureDeps(rel, featName):
+            featureSatisfied = true
+            break
+
+    # Ignore features that are not declared in the selected nimble release.
+    if not matchedPkg:
+      result.add(qualified & " (no active package matched '" & pkgName & "')")
+    elif declaredInNimble and not featureSatisfied:
+      result.add qualified
+
 proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
   var anyReleaseSatisfied = false
 
-  proc checkDeps(graph: var DepGraph, ver: PackageVersion, reqs: seq[(PkgUrl, VersionInterval)]): bool =
-    var allDepsCompatible = true
+  proc checkDeps(graph: var DepGraph, ver: PackageVersion, reqs: seq[(PkgUrl, VersionInterval)]): tuple[allDepsCompatible: bool, unmatchedDeps: seq[string]] =
+    result.allDepsCompatible = true
 
     # First check if all dependencies can be satisfied
     for dep, query in items(reqs):
       if dep notin graph.pkgs:
         debug pkg.url.projectName, "checking dependency for ", $ver, "not found:", $dep
-        allDepsCompatible = false
+        result.allDepsCompatible = false
+        result.unmatchedDeps.add($dep.projectName & " " & $query & " (not found)")
         continue
       debug pkg.url.projectName, "checking dependency for ", $ver, ":", $dep.projectName, "query:", $query
       let depNode = graph.pkgs[dep]
 
       if depNode.state == LazyDeferred:
-        allDepsCompatible = true
-        warn pkg.url.projectName, "dependency:", $dep.projectName, "is lazily deferred and not loaded"
+        debug pkg.url.projectName, "dependency:", $dep.projectName, "is lazily deferred and not loaded"
         continue
 
       var hasCompatible = false
@@ -74,20 +151,20 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
           break
 
       if not hasCompatible:
-        allDepsCompatible = false
+        result.allDepsCompatible = false
+        result.unmatchedDeps.add($dep.projectName & " " & $query)
         warn pkg.url.projectName, "no versions matched requirements for the dependency:", $dep.projectName
-        break
       else:
         debug pkg.url.projectName, "a compatible version matched requirements for the dependency version:", $depNode.url.projectName
 
-    return allDepsCompatible
-
   for ver, rel in validVersions(pkg):
-    let allDepsCompatible = checkDeps(graph, ver, rel.requirements)
+    let depCheck = checkDeps(graph, ver, rel.requirements)
 
     # If any dependency can't be satisfied, make this version unsatisfiable
-    if not allDepsCompatible:
+    if not depCheck.allDepsCompatible:
       warn pkg.url.projectName, "all requirements needed for nimble release:", $ver, "were not able to be satisfied:", $rel.requirements.mapIt(it[0].projectName & " " & $it[1]).join("; ")
+      if depCheck.unmatchedDeps.len > 0:
+        warn pkg.url.projectName, "deps with no matching releases:", depCheck.unmatchedDeps.join("; ")
       b.addNegated(ver.vid)
       continue
 
@@ -99,6 +176,9 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
         info pkg.url.projectName, "requirement depdendency not found:", $dep.projectName, "query:", $query
         continue
       let depNode = graph.pkgs[dep]
+      if depNode.state == LazyDeferred:
+        debug pkg.url.projectName, "skipping deferred dependency implication:", $dep.projectName
+        continue
         
       var flags: seq[string]
       if dep in rel.reqsByFeatures:
@@ -134,19 +214,23 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
     # Add implications for each feature requirement
     for feature, reqs in rel.features:
       let featureVarId = rel.featureVars[feature]
-      let allFeatDepsCompatible = checkDeps(graph, ver, reqs)
+      let featDepCheck = checkDeps(graph, ver, reqs)
+      let qualifiedFeature = "feature." & pkg.url.projectName & "." & feature
 
-      debug pkg.url.projectName, "checking feature dep:", $feature, "query:", $reqs, "compat versions:", $allFeatDepsCompatible
-      if not allFeatDepsCompatible:
-        warn pkg.url.projectName, "all requirements needed for feature:", feature, "were not able to be satisfied:", $reqs.mapIt(it[0].projectName & " " & $it[1]).join("; ")
+      debug pkg.url.projectName, "checking feature dep:", $feature, "query:", $reqs, "compat versions:", $featDepCheck.allDepsCompatible
+      if not featDepCheck.allDepsCompatible:
+        warn pkg.url.projectName, "all requirements needed for feature:", qualifiedFeature, "were not able to be satisfied:", $reqs.mapIt(it[0].projectName & " " & $it[1]).join("; "), "deps with no matching releases:", featDepCheck.unmatchedDeps.join("; ")
         b.addNegated(featureVarId)
-        break
+        continue
 
       for dep, query in items(reqs):
         if dep notin graph.pkgs:
           info pkg.url.projectName, "feature depdendency not found:", $dep.projectName, "query:", $query
           continue
         let depNode = graph.pkgs[dep]
+        if depNode.state == LazyDeferred:
+          debug pkg.url.projectName, "skipping deferred feature dependency implication:", $dep.projectName, "feature:", $feature
+          continue
 
         var compatibleVersions: seq[VarId] = @[]
         for depVer, relVer in depNode.validVersions():
@@ -164,9 +248,8 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
           debug pkg.url.projectName, "added compatVer feature dep variables:", $compatibleVersions.mapIt($it).join(", ")
         
         # Add implictations for globally set features
-        let pkgFeature = "feature" & "." & pkg.url.projectName & "." & feature
-        if (pkg.isRoot and feature in context().features) or (pkgFeature in context().features):
-          debug pkg.url.projectName, "checking global feature:", $feature, "in version:", $ver, "pkgFeature:", $pkgFeature, "context().features:", $context().features.toSeq().mapIt($it).join(", ")
+        if hasContextFeature(pkg, feature):
+          debug pkg.url.projectName, "checking global feature:", $feature, "in version:", $ver, "context().features:", $context().features.toSeq().mapIt($it).join(", ")
           var featureVersions: Table[VarId, seq[VarId]]
           for depVer, nimbleRelease in depNode.validVersions():
             trace pkg.url.projectName, "checking global feature dependency:", depNode.url.projectName, "version:", $depVer
@@ -191,6 +274,81 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
 
   if not anyReleaseSatisfied:
     warn pkg.url.projectName, "no versions satisfied for this package:", $pkg.url
+
+proc hasVersionSatisfiableByLoadedDeps(graph: DepGraph; pkg: Package): bool =
+  ## Returns true when at least one normal release can satisfy all currently
+  ## loaded non-lazy dependencies. If false, lazy retry cannot help this pkg.
+  for ver, rel in validVersions(pkg):
+    var allDepsCompatible = true
+
+    for dep, query in items(rel.requirements):
+      if dep notin graph.pkgs:
+        allDepsCompatible = false
+        break
+
+      let depNode = graph.pkgs[dep]
+      if depNode.state == LazyDeferred:
+        continue
+
+      var hasCompatible = false
+      for depVer, _ in depNode.validVersions():
+        if query.matches(depVer):
+          hasCompatible = true
+          break
+
+      if not hasCompatible:
+        allDepsCompatible = false
+        break
+
+    if allDepsCompatible:
+      return true
+
+  false
+
+proc collectHardUnsatNonLazyPackages(graph: DepGraph): seq[string] =
+  ## Only retry lazy deferred packages when they could change SAT.
+  ## If already-loaded non-lazy packages have no satisfiable versions, lazy
+  ## retry cannot fix the conflict and should be skipped.
+  for pkg in graph.pkgs.values():
+    if pkg.state == LazyDeferred or pkg.versions.len == 0:
+      continue
+    if not hasVersionSatisfiableByLoadedDeps(graph, pkg):
+      result.add(pkg.url.projectName)
+
+proc collectLazyDeferredPackagesForUnsatRetry(graph: DepGraph): seq[Package] =
+  ## If SAT fails, collect lazy deferred packages that are reachable from the
+  ## currently loaded graph and could change satisfiability on one retry pass.
+  var lazyDeferUrls: HashSet[PkgUrl]
+
+  template includeLazyDeps(reqs: untyped, reason: string) =
+    for req in reqs:
+      let depUrl = req[0]
+      if depUrl in graph.pkgs and graph.pkgs[depUrl].state == LazyDeferred:
+        if not lazyDeferUrls.containsOrIncl(depUrl):
+          result.add graph.pkgs[depUrl]
+          debug graph.pkgs[depUrl].url.projectName, "lazy deferred package selected for load after UNSAT:", reason
+
+  for pkg in graph.pkgs.values():
+    if pkg.state == LazyDeferred:
+      continue
+
+    var hasSpecialVersions = false
+    for ver, rel in validVersions(pkg):
+      let verStr = ver.version().string
+      if verStr.len > 1 and verStr[0] == '#':
+        hasSpecialVersions = true
+        break
+
+    for ver, rel in validVersions(pkg):
+      if hasSpecialVersions:
+        let verStr = ver.version().string
+        if verStr.len <= 1 or verStr[0] != '#':
+          continue
+
+      includeLazyDeps(rel.requirements, $pkg.url.projectName & ":" & $ver)
+      for feature, reqs in rel.features:
+        if hasContextFeature(pkg, feature):
+          includeLazyDeps(reqs, $pkg.url.projectName & ":" & feature)
 
 proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
   result = Form()
@@ -230,22 +388,27 @@ proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
       doAssert p.state != NotInitialized, "package not initialized: " & $p.toJson(ToJsonOptions(enumMode: joptEnumString))
 
       # Add constraints based on the package status
+      var versionVars: seq[VarId]
+      for ver, rel in p.validVersions():
+        versionVars.add ver.vid
+
       if p.state == Error:
         # If package is broken, enforce that none of its versions can be selected
-        withOpenBr(b, AndForm):
-          for ver, rel in p.validVersions():
-            b.addNegated ver.vid
+        for vid in versionVars:
+          b.addNegated vid
       elif p.isRoot:
-        # If it's a root package, enforce that exactly one version must be selected
-        withOpenBr(b, ExactlyOneOfForm):
+        # If it's a root package, enforce exactly one selected version:
+        # (v1 OR v2 OR ...) AND pairwise-not-both.
+        if versionVars.len == 0:
+          b.add falseLit()
+        else:
           for ver, rel in p.validVersions():
             debug p.url.projectName, "adding root package version:", $ver, "vid:", $ver.vid
-            b.add ver.vid
+          b.addAtLeastOneOf(versionVars)
+          b.addAtMostOneOf(versionVars)
       else:
-        # For non-root packages, they can either have one version selected or none at all
-        withOpenBr(b, ZeroOrOneOfForm):
-          for ver, rel in p.validVersions():
-            b.add ver.vid
+        # For non-root packages, at most one version can be selected.
+        b.addAtMostOneOf(versionVars)
       
     # This simpler deps loop was copied from Nimble after it was first ported from Atlas :)
     # It appears to acheive the same results, but it's a lot simpler
@@ -381,7 +544,7 @@ proc solve*(graph: var DepGraph; form: Form, rerun: var bool) =
       let vid = VarId varIdx
       if vid in form.mapping:
         let mapInfo = form.mapping[vid]
-        debug mapInfo.pkg.projectName, "v" & $varIdx & " sat var: " & $solution.getVar(vid).toPretty()
+        trace mapInfo.pkg.projectName, "v" & $varIdx & " sat var: " & $solution.getVar(vid).toPretty()
 
       if solution.isTrue(VarId(varIdx)) and form.mapping.hasKey(VarId varIdx):
         let mapInfo = form.mapping[VarId varIdx]
@@ -399,10 +562,31 @@ proc solve*(graph: var DepGraph; form: Form, rerun: var bool) =
     checkDuplicateModules(graph)
 
     var lazyDefersNeeded: seq[Package]
-    for varId, mapping in form.mapping:
-      if mapping.pkg.state == LazyDeferred and solution.isTrue(varId):
-        lazyDefersNeeded.add mapping.pkg
-        debug mapping.pkg.url.projectName, "lazy deferred package found in SAT solution:", $(varId)
+    var lazyDeferUrls: HashSet[PkgUrl]
+
+    template includeLazyDeps(reqs: untyped, reason: string) =
+      for req in reqs:
+        let depUrl = req[0]
+        if depUrl in graph.pkgs and graph.pkgs[depUrl].state == LazyDeferred:
+          if not lazyDeferUrls.containsOrIncl(depUrl):
+            lazyDefersNeeded.add graph.pkgs[depUrl]
+            debug graph.pkgs[depUrl].url.projectName, "lazy deferred package selected for load:", reason
+
+    for pkg in graph.pkgs.values():
+      if not pkg.active or pkg.activeVersion.isNil or pkg.activeVersion notin pkg.versions:
+        continue
+      let rel = pkg.versions[pkg.activeVersion]
+      includeLazyDeps(rel.requirements, $pkg.url.projectName & ":" & $pkg.activeVersion)
+
+      for feature, reqs in rel.features:
+        var isFeatureEnabled = false
+        if hasContextFeature(pkg, feature):
+          isFeatureEnabled = true
+        elif feature in rel.featureVars and solution.isTrue(rel.featureVars[feature]):
+          isFeatureEnabled = true
+
+        if isFeatureEnabled:
+          includeLazyDeps(reqs, $pkg.url.projectName & ":" & feature)
 
     if lazyDefersNeeded.len > 0:
       notice "atlas:resolved", "rerunning SAT; found lazy deferred packages:", lazyDefersNeeded.mapIt(it.url.projectName).join(", ")
@@ -424,6 +608,22 @@ proc solve*(graph: var DepGraph; form: Form, rerun: var bool) =
         inc notFoundCount
     if notFoundCount > 0:
       return
+
+    let hardUnsatPkgs = collectHardUnsatNonLazyPackages(graph)
+
+    if hardUnsatPkgs.len == 0:
+      let lazyDefersNeeded = collectLazyDeferredPackagesForUnsatRetry(graph)
+
+      if lazyDefersNeeded.len > 0:
+        notice "atlas:resolved", "rerunning SAT after conflict; loading lazy deferred packages:", lazyDefersNeeded.mapIt(it.url.projectName).join(", ")
+        for pkg in lazyDefersNeeded:
+          pkg.state = DoLoad
+          pkg.versions.clear()
+        rerun = true
+        return
+    else:
+      error "atlas:resolved", "not retrying lazy deferred packages; non-lazy dependencies are unsatisfiable for:", hardUnsatPkgs.join(", ")
+
     error project(), "version conflict; for more information use --showGraph"
     for pkg in mvalues(graph.pkgs):
       var usedVersionCount = 0
@@ -443,7 +643,8 @@ proc solve*(graph: var DepGraph; form: Form) =
   solve(graph, form, rerun)
 
 proc loadWorkspace*(path: Path, nc: var NimbleContext, mode: TraversalMode, onClone: PackageAction, doSolve: bool): DepGraph =
-  result = path.expandGraph(nc, mode, onClone)
+  let deferChildDeps = doSolve and mode == AllReleases and NoLazyDeps notin context().flags
+  result = path.expandGraph(nc, mode, onClone, deferChildDeps=deferChildDeps)
 
   if doSolve:
     let form = result.toFormular(context().defaultAlgo)
@@ -497,6 +698,10 @@ proc activateGraph*(graph: DepGraph): tuple[paths: seq[CfgPath], features: seq[s
         notice pkg.url.projectName, "Checked out to:", $pkg.activeVersion.commit().short(), "at:", pkg.ondisk.relativeToWorkspace()
         discard checkoutGitCommitFull(pkg.ondisk, pkg.activeVersion.commit())
 
+  let unsatisfiedFeatures = collectUnsatisfiedContextFeatures(graph)
+  if unsatisfiedFeatures.len > 0:
+    error "atlas:graph", "requested feature(s) were not able to be satisfied:", unsatisfiedFeatures.join(", ")
+
   if NoExec notin context().flags:
     notice "atlas:graph", "Running build steps"
     runBuildSteps(graph)
@@ -520,7 +725,7 @@ proc activateGraph*(graph: DepGraph): tuple[paths: seq[CfgPath], features: seq[s
         let pkgName = parts[1]
         let featName = parts[2 .. ^1].join(".")
         for pkg in graph.pkgs.values():
-          if pkg.active and pkg.url.projectName == pkgName:
+          if pkg.active and (pkg.url.shortName == pkgName or pkg.url.projectName == pkgName):
             pkg.activeFeatures.addUnique(featName)
     else:
       if not graph.root.isNil and graph.root.active:
@@ -531,4 +736,4 @@ proc activateGraph*(graph: DepGraph): tuple[paths: seq[CfgPath], features: seq[s
     trace pkg.url.projectName, "adding CfgPath:", $relativeToWorkspace(toDestDir(graph, pkg) / getCfgPath(graph, pkg).Path)
     result.paths.add CfgPath(toDestDir(graph, pkg) / getCfgPath(graph, pkg).Path)
     for feature in pkg.activeFeatures:
-      result.features.addUnique "feature." & pkg.url.projectName & "." & feature
+      result.features.addUnique "feature." & pkg.url.shortName & "." & feature
