@@ -57,3 +57,13 @@ suite "requires @ parsing":
     let req = "https://github.com/seaqt/nim-seaqt.git@#qt-6.4"
     expect ValueError:
       let (name, feats, idx) = extractRequirementName(req)
+
+  test "scp style git url requirement":
+    let req = "git@github.com:elcritch/knutella"
+    let (name, feats, idx) = extractRequirementName(req)
+    check name == req
+    check feats.len == 0
+    var err = false
+    let iv = parseVersionInterval(req, idx, err)
+    check not err
+    check $iv == "*"

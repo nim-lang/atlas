@@ -127,6 +127,14 @@ suite "urls and naming":
     expect ValueError:
       discard nc.createUrl("atlas")
 
+  test "atlas ssh url without .git":
+    let upkg = nc.createUrl("git@github.com:elcritch/knutella")
+    check upkg.url.hostname == "github.com"
+    check $upkg.url == "ssh://git@github.com/elcritch/knutella"
+    check $upkg.projectName == "knutella.elcritch.github.com"
+    check upkg.toDirectoryPath() == ws / Path"deps" / Path("knutella")
+    check upkg.toLinkPath() == ws / Path"deps" / Path("knutella.nimble-link")
+
   test "proj_a file url":
     let pth = "file://" & "." & DirSep & "buildGraph" & DirSep & "proj_a"
     echo "PATH: ", pth

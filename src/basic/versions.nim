@@ -392,6 +392,10 @@ proc matches*(pattern: VersionInterval; v: Version): bool =
 
 proc extractRequirementName*(req: string): (string, seq[string], int) =
   const verChars = {'#', '<', '=', '>', '['}
+  proc isScpStyleGitUrl(name: string): bool =
+    ## Accept scp-like git URLs such as `git@github.com:user/repo`.
+    name.startsWith("git@") and name.find(':') >= 0 and name.find('/') >= 0
+
   var i = 0
   while i < req.len and req[i] notin verChars + Whitespace:
     inc i
@@ -399,7 +403,7 @@ proc extractRequirementName*(req: string): (string, seq[string], int) =
 
   let url = parseUri(name)
   if not validIdentifier(name) and
-      (url.scheme == "" or url.path.endsWith('@')):
+      ((url.scheme == "" and not isScpStyleGitUrl(name)) or url.path.endsWith('@')):
     # note: somtimes this gets added: `requires "xyx@#branch"`
     #       which is a mixup of using `nimble install xyx@#branch` from the CLI
     #       so it occurs rarely but breaks things for atlas
