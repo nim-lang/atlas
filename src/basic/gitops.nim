@@ -115,7 +115,7 @@ proc exec*(gitCmd: Command;
            requireRepo: bool = true,
            streamOutput: bool = false,
            ): (string, ResultCode) =
-  var repl: seq[string] = @["DIR", $path]
+  var repl: seq[string] = @["DIR", quoteShell($path)]
   for s in subs:
     repl.add s
   let cmd = $gitCmd % repl

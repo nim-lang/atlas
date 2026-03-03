@@ -65,6 +65,21 @@ suite "Git Operations Tests":
       let commit = versionToCommit(Path ".", algo = MinVer, query = parseVersionInterval("1.0.0", 0, err))
       check(not commit.isEmpty)
 
+  test "git -C handles repository paths with spaces":
+    let spacedRepo = testDir / Path "repo with spaces"
+    createDir(spacedRepo)
+    withDir spacedRepo:
+      discard execCmd("git init")
+      discard execCmd("git config user.name test-user")
+      discard execCmd("git config user.email test@example.com")
+      writeFile("space.txt", "space-path commit")
+      discard execCmd("git add space.txt")
+      discard execCmd("git commit -m \"space path commit\"")
+
+    let commit = currentGitCommit(spacedRepo, Warning)
+    check(not commit.isEmpty)
+    check(commit.h.len == 40)
+
   test "Git clone functionality":
     let testUrl = parseUri "http://localhost:4242/buildGraph/proj_a.git"
     let res = clone(testUrl, testDir)
