@@ -12,15 +12,14 @@ import reporters, osutils, versions, context
 type
   Command* = enum
     GitClone = "git clone",
-    GitRemoteUrl = "git -C $DIR config --get remote.$REMOTE.url",
+    GitRemoteUrl = "git -C $DIR config --get",
     GitRemotesShow = "git -C $DIR remote",
     GitRemoteAdd = "git -C $DIR remote add",
     GitRemoteSetUrl = "git -C $DIR remote set-url",
     GitRemoteRename = "git -C $DIR remote rename",
     GitDiff = "git -C $DIR diff",
     GitFetch = "git -C $DIR fetch",
-    GitFetchHeads = "git -C $DIR fetch $REMOTE " &
-      quoteShell("+refs/heads/*:refs/remotes/$REMOTE/*"),
+    GitFetchHeads = "git -C $DIR fetch",
     GitTag = "git -C $DIR tag",
     GitTags = "git -C $DIR show-ref --tags",
     GitShowRef = "git -C $DIR show-ref",
@@ -29,12 +28,12 @@ type
     GitRevParse = "git -C $DIR rev-parse",
     GitCheckout = "git -C $DIR checkout",
     GitSubModUpdate = "git -C $DIR submodule update --init",
-    GitPush = "git -C $DIR push $REMOTE",
+    GitPush = "git -C $DIR push",
     GitPull = "git -C $DIR pull",
     GitCurrentCommit = "git -C $DIR log -n1 --format=%H"
     GitMergeBase = "git -C $DIR merge-base"
     GitLsFiles = "git -C $DIR ls-files"
-    GitLog = "git -C $DIR log --format=%H $REMOTE"
+    GitLog = "git -C $DIR log --format=%H"
     GitLogLocal = "git -C $DIR log --format=%H HEAD"
     GitCurrentBranch = "git -C $DIR rev-parse --abbrev-ref HEAD"
     GitLsRemote = "git -C $DIR ls-remote --quiet --tags"
@@ -184,9 +183,8 @@ proc getRemoteUrlFor(path: Path; remote: string): string =
   let (outp, status) = exec(
     GitRemoteUrl,
     path,
-    [],
-    Debug,
-    subs = ["REMOTE", remote]
+    ["remote." & remote & ".url"],
+    Debug
   )
   if status != RES_OK:
     return ""
@@ -238,7 +236,9 @@ proc fetchRemoteHeadsByName(path: Path; remote: string; errorReportLevel: MsgKin
   var args: seq[string] = @[]
   if ShallowClones in context().flags:
     args.add "--depth=1"
-  let (outp, status) = exec(GitFetchHeads, path, args, errorReportLevel, subs = ["REMOTE", remote])
+  args.add remote
+  args.add "+refs/heads/*:refs/remotes/" & remote & "/*"
+  let (outp, status) = exec(GitFetchHeads, path, args, errorReportLevel)
   if status != RES_OK:
     message(errorReportLevel, path, "could not fetch remote heads:", outp)
   status == RES_OK
@@ -376,20 +376,17 @@ proc findOriginTip*(path: Path; origin = "origin"; errorReportLevel: MsgKind = W
     # Ensure we have remote heads available for branch resolution.
     if fetchRemoteHeads(path, origin, errorReportLevel):
       remoteRef = resolveRemoteTipRef(path, remoteName)
-  let cmd = if isLocalOnly: GitLogLocal else: GitLog
-  let subs =
-    if isLocalOnly or remoteRef.len == 0:
-      @[]
-    else:
-      @["REMOTE", remoteRef]
-  let cmd2 =
+  let cmd =
     if isLocalOnly or remoteRef.len == 0:
       GitLogLocal
     else:
-      cmd
+      GitLog
   if not isLocalOnly and remoteRef.len == 0:
     message(errorReportLevel, path, "could not find remote head for '" & remoteName & "'; using local HEAD at:", $path)
-  let (outp1, status1) = exec(cmd2, path, ["-n1"], Warning, subs = subs)
+  var args: seq[string] = @["-n1"]
+  if cmd == GitLog:
+    args.add remoteRef
+  let (outp1, status1) = exec(cmd, path, args, Warning)
   var allVersions: seq[VersionTag]
   if status1 == RES_OK:
     allVersions = parseTaggedVersions(outp1, requireVersions = false)
@@ -432,12 +429,12 @@ proc collectFileCommits*(path, file: Path; origin = "origin"; errorReportLevel: 
       GitLogLocal
     else:
       GitLog
-  let subs =
-    if isLocalOnly or remoteRef.len == 0:
-      @[]
-    else:
-      @["REMOTE", remoteRef]
-  let (outp, status) = exec(cmd, path, ["--", $file], Warning, subs = subs)
+  var args: seq[string] = @[]
+  if cmd == GitLog:
+    args.add remoteRef
+  args.add "--"
+  args.add $file
+  let (outp, status) = exec(cmd, path, args, Warning)
   if status == RES_OK:
     result = parseTaggedVersions(outp, requireVersions = false)
     if result.len > 0 and tip.isTip:
@@ -608,7 +605,7 @@ proc pushTag*(path: Path; origin = "origin"; tag: string) =
   if remote.len == 0:
     error(path, "could not resolve remote from canonical '" & origin & "'")
     return
-  let (outp, status) = exec(GitPush, path, [tag], subs = ["REMOTE", remote])
+  let (outp, status) = exec(GitPush, path, [remote, tag])
   if status != RES_OK:
     error(path, "could not 'git push " & remote & " " & tag & "'")
   elif outp.strip() == "Everything up-to-date":

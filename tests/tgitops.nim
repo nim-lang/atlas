@@ -189,14 +189,14 @@ suite "Git Operations Tests":
           break
       check(hasOrigin)
 
-      let (urlOut, urlStatus) = exec(GitRemoteUrl, Path ".", [], subs = ["REMOTE", "origin"])
+      let (urlOut, urlStatus) = exec(GitRemoteUrl, Path ".", ["remote.origin.url"])
       check(urlStatus == RES_OK)
       check(urlOut.strip() == firstUrl)
 
       let updatedUrl = "https://github.com/test/renamed.git"
       let (_, setStatus) = exec(GitRemoteSetUrl, Path ".", ["origin", updatedUrl])
       check(setStatus == RES_OK)
-      let (urlOut2, urlStatus2) = exec(GitRemoteUrl, Path ".", [], subs = ["REMOTE", "origin"])
+      let (urlOut2, urlStatus2) = exec(GitRemoteUrl, Path ".", ["remote.origin.url"])
       check(urlStatus2 == RES_OK)
       check(urlOut2.strip() == updatedUrl)
 
@@ -214,9 +214,20 @@ suite "Git Operations Tests":
           hasOriginAfter = true
       check(hasRenamed)
       check(not hasOriginAfter)
-      let (renamedUrl, renamedStatus) = exec(GitRemoteUrl, Path ".", [], subs = ["REMOTE", "renamed"])
+      let (renamedUrl, renamedStatus) = exec(GitRemoteUrl, Path ".", ["remote.renamed.url"])
       check(renamedStatus == RES_OK)
       check(renamedUrl.strip() == updatedUrl)
+
+  test "GitRemoteUrl handles remotes with shell metacharacters":
+    withDir testDir:
+      discard execCmd("git init")
+      let specialRemote = "semi;colon"
+      let specialUrl = "https://github.com/test/weird.git"
+      let (_, addStatus) = exec(GitRemoteAdd, Path ".", [specialRemote, specialUrl])
+      check(addStatus == RES_OK)
+      let (urlOut, status) = exec(GitRemoteUrl, Path ".", ["remote." & specialRemote & ".url"])
+      check(status == RES_OK)
+      check(urlOut.strip() == specialUrl)
 
   test "expandSpecial fetches remote heads when missing":
     let testUrl = parseUri "http://localhost:4242/buildGraph/proj_a.git"
