@@ -127,6 +127,14 @@ suite "urls and naming":
     expect ValueError:
       discard nc.createUrl("atlas")
 
+  test "atlas ssh url without .git":
+    let upkg = nc.createUrl("git@github.com:elcritch/knutella")
+    check upkg.url.hostname == "github.com"
+    check $upkg.url == "ssh://git@github.com/elcritch/knutella"
+    check $upkg.projectName == "knutella.elcritch.github.com"
+    check upkg.toDirectoryPath() == ws / Path"deps" / Path("knutella")
+    check upkg.toLinkPath() == ws / Path"deps" / Path("knutella.nimble-link")
+
   test "proj_a file url":
     let pth = "file://" & "." & DirSep & "buildGraph" & DirSep & "proj_a"
     echo "PATH: ", pth
@@ -444,6 +452,7 @@ suite "versions":
 
 
 import basic/[versions]
+import depgraphs
 
 template v(x): untyped = Version(x)
 
@@ -549,6 +558,38 @@ suite "version interval matches":
     let regularVersion = p"1.0.0"
     check regularVersion.matches(tag1) == true
     check regularVersion.matches(tag2) == false
+
+  test "requirement matching handles explicit commit pins with semver deps":
+    let depCommit = initCommitHash("ee77a27eca7042a2b68061d0bcee691e5b56aa10", FromDep)
+    let depVer = PackageVersion(vtag: VersionTag(v: v"#ee77a27", c: depCommit))
+    let depRel = NimbleRelease(version: v"0.2.1", status: Normal)
+
+    check requirementMatches(p"#ee77a27", depVer, depRel)
+    check requirementMatches(p">= 0.2.1", depVer, depRel)
+
+  test "requirement matching preserves #head and branch behavior":
+    let depCommit = initCommitHash("ee77a27eca7042a2b68061d0bcee691e5b56aa10", FromDep)
+    let tipVer = PackageVersion(vtag: VersionTag(v: v"#head", c: depCommit, isTip: true))
+    let nonTipVer = PackageVersion(vtag: VersionTag(v: v"#head", c: depCommit, isTip: false))
+    let masterVer = PackageVersion(vtag: VersionTag(v: v"#master", c: depCommit))
+    let depRel = NimbleRelease(version: v"0.2.1", status: Normal)
+
+    check requirementMatches(p"#head", tipVer, depRel)
+    check not requirementMatches(p"#head", nonTipVer, depRel)
+    check requirementMatches(p"#master", masterVer, depRel)
+    check not requirementMatches(p"#master", tipVer, depRel)
+
+  test "requirement matching uses nimble semver on tag-nimble mismatch":
+    let depCommit = initCommitHash("ee77a27eca7042a2b68061d0bcee691e5b56aa10", FromDep)
+    let depVer = PackageVersion(vtag: VersionTag(v: v"#master", c: depCommit))
+    let depRel = NimbleRelease(version: v"0.2.1", status: Normal)
+    let semverQuery = p">= 0.2.1"
+
+    # Direct version-tag matching fails for special refs, so SAT must use the
+    # release's nimble version for semver constraints.
+    check not semverQuery.matches(depVer)
+    check requirementMatches(semverQuery, depVer, depRel)
+    check not requirementMatches(p"< 0.2.1", depVer, depRel)
   
   test "invalid interval":
     # Test >= 2.0.0 & <= 1.0.0 (invalid interval, should match nothing)

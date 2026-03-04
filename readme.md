@@ -18,7 +18,7 @@ nim c src/atlas.nim
 If you're using Nimble you can install the latest Atlas with:
 
 ```sh
-nimble install https://github.com/nim-lang/atlas@\#head
+nimble install "https://github.com/nim-lang/atlas@#head"
 ```
 
 # Documentation

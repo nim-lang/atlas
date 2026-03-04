@@ -59,6 +59,14 @@ proc hasContextFeature(pkg: Package; feature: string): bool =
   let scopedByProjectName = "feature." & pkg.url.projectName & "." & feature
   result = scopedByShortName in context().features or scopedByProjectName in context().features
 
+proc requirementMatches*(query: VersionInterval; depVer: PackageVersion; depRel: NimbleRelease): bool =
+  ## Match semver constraints against nimble-declared release versions, while
+  ## preserving special ref semantics (#head/#branch/#commit) on package tags.
+  if query.isSpecial:
+    result = query.matches(depVer)
+  else:
+    result = query.matches(depRel.version)
+
 proc collectUnsatisfiedContextFeatures(graph: DepGraph): seq[string] =
   ## Compare requested `--feature` flags with SAT-selected package features.
   proc hasSatisfiedFeatureDeps(rel: NimbleRelease; featName: string): bool =
@@ -76,7 +84,10 @@ proc collectUnsatisfiedContextFeatures(graph: DepGraph): seq[string] =
       let depPkg = graph.pkgs[depUrl]
       if not depPkg.active or depPkg.activeVersion.isNil:
         return false
-      if not query.matches(depPkg.activeVersion):
+      let depRel = depPkg.activeNimbleRelease()
+      if depRel.isNil:
+        return false
+      if not requirementMatches(query, depPkg.activeVersion, depRel):
         return false
 
     return true
@@ -144,8 +155,9 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
 
       var hasCompatible = false
       for depVer, relVer in depNode.validVersions():
-        trace pkg.url.projectName, "checking dependency version:", $depVer, "query:", $query, "matches:", $query.matches(depVer)
-        if query.matches(depVer):
+        let depMatches = requirementMatches(query, depVer, relVer)
+        trace pkg.url.projectName, "checking dependency version:", $depVer, "query:", $query, "matches:", $depMatches
+        if depMatches:
           hasCompatible = true
           trace pkg.url.projectName, "version matched requirements for the dependency version:", $depVer
           break
@@ -189,8 +201,9 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
       var compatibleVersions: seq[VarId]
       var featureVersions: Table[VarId, seq[VarId]]
       for depVer, nimbleRelease in depNode.validVersions():
-        trace pkg.url.projectName, "checking dependency:", depNode.url.projectName, "version:", $depVer, "query:", $query, "matches:", $query.matches(depVer)
-        if query.matches(depVer):
+        let depMatches = requirementMatches(query, depVer, nimbleRelease)
+        trace pkg.url.projectName, "checking dependency:", depNode.url.projectName, "version:", $depVer, "query:", $query, "matches:", $depMatches
+        if depMatches:
           compatibleVersions.add(depVer.vid)
         for feature in flags:
           if feature in nimbleRelease.features:
@@ -234,7 +247,7 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
 
         var compatibleVersions: seq[VarId] = @[]
         for depVer, relVer in depNode.validVersions():
-          if query.matches(depVer):
+          if requirementMatches(query, depVer, relVer):
             compatibleVersions.add(depVer.vid)
           elif depVer == toVersionTag("*@head").toPkgVer:
             compatibleVersions.add(depVer.vid)
@@ -291,8 +304,8 @@ proc hasVersionSatisfiableByLoadedDeps(graph: DepGraph; pkg: Package): bool =
         continue
 
       var hasCompatible = false
-      for depVer, _ in depNode.validVersions():
-        if query.matches(depVer):
+      for depVer, depRel in depNode.validVersions():
+        if requirementMatches(query, depVer, depRel):
           hasCompatible = true
           break
 

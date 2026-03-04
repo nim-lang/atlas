@@ -65,6 +65,21 @@ suite "Git Operations Tests":
       let commit = versionToCommit(Path ".", algo = MinVer, query = parseVersionInterval("1.0.0", 0, err))
       check(not commit.isEmpty)
 
+  test "git -C handles repository paths with spaces":
+    let spacedRepo = testDir / Path "repo with spaces"
+    createDir(spacedRepo)
+    withDir spacedRepo:
+      discard execCmd("git init")
+      discard execCmd("git config user.name test-user")
+      discard execCmd("git config user.email test@example.com")
+      writeFile("space.txt", "space-path commit")
+      discard execCmd("git add space.txt")
+      discard execCmd("git commit -m \"space path commit\"")
+
+    let commit = currentGitCommit(spacedRepo, Warning)
+    check(not commit.isEmpty)
+    check(commit.h.len == 40)
+
   test "Git clone functionality":
     let testUrl = parseUri "http://localhost:4242/buildGraph/proj_a.git"
     let res = clone(testUrl, testDir)
@@ -174,14 +189,14 @@ suite "Git Operations Tests":
           break
       check(hasOrigin)
 
-      let (urlOut, urlStatus) = exec(GitRemoteUrl, Path ".", [], subs = ["REMOTE", "origin"])
+      let (urlOut, urlStatus) = exec(GitRemoteUrl, Path ".", ["remote.origin.url"])
       check(urlStatus == RES_OK)
       check(urlOut.strip() == firstUrl)
 
       let updatedUrl = "https://github.com/test/renamed.git"
       let (_, setStatus) = exec(GitRemoteSetUrl, Path ".", ["origin", updatedUrl])
       check(setStatus == RES_OK)
-      let (urlOut2, urlStatus2) = exec(GitRemoteUrl, Path ".", [], subs = ["REMOTE", "origin"])
+      let (urlOut2, urlStatus2) = exec(GitRemoteUrl, Path ".", ["remote.origin.url"])
       check(urlStatus2 == RES_OK)
       check(urlOut2.strip() == updatedUrl)
 
@@ -199,9 +214,20 @@ suite "Git Operations Tests":
           hasOriginAfter = true
       check(hasRenamed)
       check(not hasOriginAfter)
-      let (renamedUrl, renamedStatus) = exec(GitRemoteUrl, Path ".", [], subs = ["REMOTE", "renamed"])
+      let (renamedUrl, renamedStatus) = exec(GitRemoteUrl, Path ".", ["remote.renamed.url"])
       check(renamedStatus == RES_OK)
       check(renamedUrl.strip() == updatedUrl)
+
+  test "GitRemoteUrl handles remotes with shell metacharacters":
+    withDir testDir:
+      discard execCmd("git init")
+      let specialRemote = "semi;colon"
+      let specialUrl = "https://github.com/test/weird.git"
+      let (_, addStatus) = exec(GitRemoteAdd, Path ".", [specialRemote, specialUrl])
+      check(addStatus == RES_OK)
+      let (urlOut, status) = exec(GitRemoteUrl, Path ".", ["remote." & specialRemote & ".url"])
+      check(status == RES_OK)
+      check(urlOut.strip() == specialUrl)
 
   test "expandSpecial fetches remote heads when missing":
     let testUrl = parseUri "http://localhost:4242/buildGraph/proj_a.git"
