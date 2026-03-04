@@ -63,8 +63,9 @@ proc requirementMatches*(query: VersionInterval; depVer: PackageVersion; depRel:
   ## Match semver constraints against nimble-declared release versions, while
   ## preserving special ref semantics (#head/#branch/#commit) on package tags.
   if query.isSpecial:
-    return query.matches(depVer)
-  result = query.matches(depRel.version)
+    result = query.matches(depVer)
+  else:
+    result = query.matches(depRel.version)
 
 proc collectUnsatisfiedContextFeatures(graph: DepGraph): seq[string] =
   ## Compare requested `--feature` flags with SAT-selected package features.
