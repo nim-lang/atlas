@@ -11,8 +11,8 @@ Building from source:
 ```sh
 git clone https://github.com/nim-lang/atlas.git
 cd atlas/
-nim c src/atlas.nim
-# copy src/atlas[.exe] somewhere in your PATH
+nim build
+# copy bin/atlas[.exe] somewhere in your PATH
 ```
 
 If you're using Nimble you can install the latest Atlas with:
@@ -30,7 +30,7 @@ Read the [full documentation](./doc/atlas.md) or go through the following tutori
 Clone or create a Nim project. For example:
 
 ```sh
-git clone git clone https://github.com/nim-lang/sat
+git clone https://github.com/nim-lang/sat
 cd sat/
 atlas install
 ```
@@ -84,7 +84,7 @@ You can also add or override URLs, package names, etc there as well. The current
 }
 ```
 
-See [full documentation](./doc/atlas.md) a for more details on `nameOverrides` and others.
+See the [full documentation](./doc/atlas.md) for more details on `nameOverrides` and others.
 
 ## Using URLs and local folders
 
@@ -95,7 +95,7 @@ atlas use https://github.com/zedeus/nitter
 
 Link to another project and its deps:
 ```sh
-atlas link ../../existingDepdency/
+atlas link ../../existingDependency/
 ```
 
 ## Manually Changing Deps
@@ -114,17 +114,17 @@ To setup a folder `ws/` as a workspace simply clone a project into the `ws/` fol
 mkdir ws/ && cd ws/
 git clone https://github.com/nim-lang/choosenim
 cd choosenim/
-atlas --deps:../ --confdir:. init
+atlas --deps=../ --confdir=. init
 atlas install
 ```
 
 Now `ws/` contains all the dependencies for `choosenim` such as `zippy`, `checksums`, etc.
 
-**Note**: The `deps` config setting can be relative or absolute. So you could do a global workspace like `atlas --deps:~/ws/ --confdir:. init`.
+**Note**: The `deps` config setting can be relative or absolute. So you could do a global workspace like `atlas --deps=~/ws/ --confdir=. init`.
 
 ## Debugging
 
-Sometimes it's helpful to understand what Atlas is doing. You can run commands with: `atlas --verbosity:<trace|debug>` to get more information. 
+Sometimes it's helpful to understand what Atlas is doing. You can run commands with `atlas --verbosity=trace` (or `--verbosity=debug`) to get more information.
 
 ## Installing Nim with Atlas
 
@@ -166,4 +166,3 @@ The `deps/` directory contains:
 - `nimble-link` files for linked projects
 
 Note that `atlas.config` file can be placed in the main project directory as well. In this case, the dependencies directory can modified by setting the `deps` field.
-
