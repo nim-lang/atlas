@@ -127,7 +127,7 @@ Now `ws/` contains all the dependencies for `choosenim` such as `zippy`, `checks
 
 ## Debugging
 
-Sometimes it's helpful to understand what Atlas is doing. You can run commands with `atlas --verbosity=trace` (or `--verbosity=debug`) to get more information.
+Sometimes it's helpful to understand what Atlas is doing. You can run commands with `atlas --verbosity=info` (or `--verbosity=debug`) to get more information.
 
 ## Installing Nim with Atlas
 
