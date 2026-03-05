@@ -38,7 +38,6 @@ Usage:
   atlas [options] [command] [arguments]
 Commands:
   init                  initializes the current project as an Atlas project
-  new <url|pkgname>     clone a package into a new project directory
   use <url|pkgname>     add package and its dependencies to the project
                         and patch the project's Nimble file
   install               use the nimble file to setup the project's dependencies
@@ -363,33 +362,6 @@ proc update(filter: string) =
   if updatedAny:
     notice project(), "dependency refs updated, run `atlas install` to update"
 
-proc cloneNewProject(target: string) =
-  ## clone a package URL/name into a new project directory and initialize atlas
-  var purl: PkgUrl
-  try:
-    if pkgurls.isUrl(target):
-      purl = createUrlSkipPatterns(target)
-    else:
-      var nc = createNimbleContext()
-      purl = nc.createUrl(target)
-  except CatchableError as e:
-    fatal "invalid package URL or name: " & target & " (" & e.msg & ")"
-
-  let dirName = purl.shortName().strip()
-  if dirName.len == 0:
-    fatal "unable to derive project directory name from: " & target
-
-  let dir = (paths.getCurrentDir() / Path(dirName)).absolutePath
-  if dir.dirExists() or fileExists(dir):
-    fatal "'" & $dir & "' already exists! Cowardly refusing to overwrite"
-
-  let (status, msg) = gitops.clone(purl.toUri, dir)
-  if status != Ok:
-    fatal "error cloning project: " & target & " message: " & msg
-
-  project(dir)
-  createWorkspace()
-
 proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[string]) =
   var autoinit = true
   if existsEnv("NO_COLOR") or not isatty(stdout) or (getEnv("TERM") == "dumb"):
@@ -492,7 +464,7 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
   if detectProject():
     notice "atlas:project", "Using project directory:", $project()
     readConfig()
-  elif action notin ["init", "tag", "new"]:
+  elif action notin ["init", "tag"]:
     notice "atlas:project", "Using project directory:", $project()
     if autoinit and action notin ["search", "list"]:
       if autoProject(paths.getCurrentDir()):
@@ -502,7 +474,7 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
     elif action notin ["search", "list"]:
       fatal "No project found. Run `atlas init` if you want this current directory to be your project."
 
-  if action notin ["tag", "search", "list", "new"]:
+  if action notin ["tag", "search", "list"]:
     createDir(depsDir())
 
 proc atlasRun*(params: seq[string]) =
@@ -520,7 +492,7 @@ proc atlasRun*(params: seq[string]) =
 
   parseAtlasOptions(params, action, args)
 
-  if action notin ["init", "tag", "search", "list", "new"]:
+  if action notin ["init", "tag", "search", "list"]:
     doAssert project().string != "" and project().dirExists(), "project was not set"
 
   if action in ["install", "update", "use"]:
@@ -539,9 +511,6 @@ proc atlasRun*(params: seq[string]) =
   of "tag":
     singleArg()
     tag(args[0])
-  of "new":
-    singleArg()
-    cloneNewProject(args[0])
   of "install":
     let nimbleFile = findProjectNimbleFile()
 
