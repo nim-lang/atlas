@@ -93,6 +93,9 @@ Use URLs:
 atlas use https://github.com/zedeus/nitter
 ```
 
+If your dependency metadata uses `git://` remotes, pass `--forceGitToHttps`
+to rewrite them to `https://` before cloning.
+
 Link to another project and its deps:
 ```sh
 atlas link ../../existingDependency/

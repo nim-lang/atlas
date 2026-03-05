@@ -88,7 +88,7 @@ Options:
   --proxy=url           use the given proxy URL for all git operations
   --dumbProxy           use a dumb proxy without smart git protocol
   --packagesRepo        use the nim-lang/packages git repo (legacy behavior)
-  --forcegittophps      force git URLs to https (legacy option name)
+  --forceGitToHttps     force git:// URLs to https://
   --ignoreUrls          don't error on mismatching urls
   --colors=on|off       turn on|off colored output
   --verbosity=normal|info|warn|warning|error|trace|debug
@@ -438,7 +438,7 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
         context().flags.incl PackagesGit
       of "dumpgraphs":
         context().flags.incl DumpGraphs
-      of "forcegittophps":
+      of "forcegittohttps":
         context().flags.incl ForceGitToHttps
       of "resolver":
         case val.normalize
