@@ -36,7 +36,7 @@ const
   (c) 2021 Andreas Rumpf
 Usage:
   atlas [options] [command] [arguments]
-Command:
+Commands:
   init                  initializes the current project as an Atlas project
   use <url|pkgname>     add package and its dependencies to the project
                         and patch the project's Nimble file
@@ -48,48 +48,52 @@ Command:
                         search for package that contains the given keywords
   link <path>           link an existing project into the current project
                         to share its dependencies
-  extract <file.nimble> extract the requirements and custom commands from
-                        the given Nimble file
-  tag [major|minor|patch]
+  tag [major|minor|patch|<semver>|a..z]
                         add and push a new tag, input must be one of:
                         ['major'|'minor'|'patch'] or a SemVer tag like ['1.0.3']
                         or a letter ['a'..'z']: a.b.c.d.e.f.g
   pin [atlas.lock]      pin the current checkouts and store them in the lock file
-  rep [atlas.lock]      replay the state of the projects according to the lock file
-  changed <atlas.lock>  list any packages that differ from the lock file
+  rep [atlas.lock]      replay the state of projects according to the lock file
+  replay [atlas.lock]   alias of `rep`
+  reproduce [atlas.lock]
+                        alias of `rep`
+  changed [atlas.lock]  list any packages that differ from the lock file
   outdated              list the packages that are outdated
-  build|test|doc|tasks  currently delegates to `nimble build|test|doc`
-  task <taskname>       currently delegates to `nimble <taskname>`
   env <nimversion>      setup a Nim virtual environment
-    --keep              keep the c_code subdirectory
 
 Options:
+  --help, -h            show this help
+  --version, -v         show the version
+  --project=path, -p    use the project at the given path
+  --deps=path           override the deps directory
+  --confdir=path        use the atlas.config at the given path
   --feature=<feature>   enables the given feature, pass multiple for multiple features
                         for project specific use: `<project>.<feature>`
                         (note always be passed when you want to use features)
+  --resolver=minver|semver|maxver
+                        which resolution algorithm to use, default is semver
+  --list[=on|off]       list all available and installed versions
   --keepCommits         do not perform any `git checkouts`
-  --project=path        use the project at the given path
-  --confdir=path        use the atlas.config at the given path
+  --keepworkspace       keep generated workspace artifacts
+  --ignoreerrors        continue even when errors were recorded
+  --dumpformular        dump SAT formula for debugging
+  --dumpgraphs          dump dependency graphs for debugging
+  --showGraph           show the dependency graph
   --noexec              do not perform any action that may run arbitrary code
   --autoenv             detect the minimal Nim $version and setup a
                         corresponding Nim virtual environment
   --noautoinit          do not auto initialize an atlas project
-  --resolver=minver|semver|maxver
-                        which resolution algorithm to use, default is semver
   --no-lazy-deps        disable lazy dependency loading and use eager loading
                         for all transitive dependencies during SAT solving
   --proxy=url           use the given proxy URL for all git operations
   --dumbProxy           use a dumb proxy without smart git protocol
   --packagesRepo        use the nim-lang/packages git repo (legacy behavior)
-  --showGraph           show the dependency graph
-  --list                list all available and installed versions
-  --version             show the version
+  --forceGitToHttps     force git:// URLs to https://
   --ignoreUrls          don't error on mismatching urls
   --colors=on|off       turn on|off colored output
-  --verbosity=info|warning|error|trace|debug
-                        set verbosity level to info, warning, error, trace, debug
+  --verbosity=normal|info|warn|warning|error|trace|debug
+                        set verbosity level to normal/info/warn/warning/error/trace/debug
                         the default level is warning
-  --help                show this help
 """
 
 proc writeHelp(code = 2) =
@@ -358,49 +362,6 @@ proc update(filter: string) =
   if updatedAny:
     notice project(), "dependency refs updated, run `atlas install` to update"
 
-proc newProject(projectName: string) =
-  ## Tries to create a new project directory in the current dir
-  ## with a single bare `projectname.nim` file inside.
-  ## `projectName` is validated.
-
-  proc isValidProjectName(n: openArray[char]): bool =
-    ## Validates `n` as a project name:
-    ## Valid Nim identifier with addition of dashes (`-`) being allowed,
-    ## but replaced with underscores (`_`) for the `.nim` file name.
-    ## .. Note: Doesn't check if `n` is a valid file/directory name.
-    if n.len > 0 and n[0] in IdentStartChars:
-      for i, c in n:
-        case c
-        of Letters + Digits: discard "fine"
-        of '-', '_':
-          if i > 0 and n[i-1] in {'-', '_'}: return false
-          else: discard "fine"
-        else: return false
-      return true
-    else: return false
-
-  let name = projectName.strip()
-  if not (isValidFilename(name) and isValidProjectName(name)):
-    error name, "'" & name & "' is not a vaild project name!"
-    quit(1)
-  if dirExists(name):
-    error name, "Directory '" & name & "' already exists!"
-    quit(1)
-  try:
-    createDir(name)
-  except OSError as e:
-    error name, "Failed to create directory '$#': $#" % [name, e.msg]
-    quit(1)
-  info name, "created project dir"
-
-  let fname = name / name.replace('-', '_') & ".nim"
-  try:
-    # A header doc comment with the project's name
-    fname.writeFile("## $#\n" % name)
-  except IOError as e:
-    error name, "Failed writing to file '$#': $#" % [fname, e.msg]
-    quit(1)
-
 proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[string]) =
   var autoinit = true
   if existsEnv("NO_COLOR") or not isatty(stdout) or (getEnv("TERM") == "dumb"):
@@ -477,7 +438,7 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
         context().flags.incl PackagesGit
       of "dumpgraphs":
         context().flags.incl DumpGraphs
-      of "forcegittophps":
+      of "forcegittohttps":
         context().flags.incl ForceGitToHttps
       of "resolver":
         case val.normalize
@@ -550,29 +511,6 @@ proc atlasRun*(params: seq[string]) =
   of "tag":
     singleArg()
     tag(args[0])
-  of "new":
-    singleArg()
-    var nc = createNimbleContext()
-    let dir = args[0]
-    if dir.dirExists():
-      error "atlas", "'" & dir & "' already exists! Cowardly refusing to overwrite"
-      quit(1)
-
-    var purl: PkgUrl
-    try:
-      purl = nc.createUrl(args[0])
-    except CatchableError:
-      error "atlas", "'" & dir & "' is not a vaild project name!"
-      quit(1)
-
-    project(paths.getCurrentDir() / Path purl.projectName)
-    let (status, msg) = gitops.clone(purl.toUri, project())
-    if status != Ok:
-      error "atlas", "error cloning project:", dir, "message:", msg
-      quit(1)
-    
-    newProject(args[0])
-
   of "install":
     let nimbleFile = findProjectNimbleFile()
 

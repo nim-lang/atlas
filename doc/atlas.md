@@ -32,7 +32,7 @@ The project structure looks like this:
   $project / deps / dependency-C.nimble-link (for linked projects)
 ```
 
-The deps directory can be set via `--deps:DIR` during `atlas init`.
+The deps directory can be set via `--deps=DIR` during `atlas init`.
 
 
 ### Dependencies
@@ -61,7 +61,9 @@ via Nimble's  `packages.json` file. Atlas uses "shortnames" for known URLs from
 packages. Unofficial URLs, including forks, using a name triplet of the form
 `projectName.author.host`. For example Atlas would be `atlas.nim-lang.github.com`. Packages can be added using `nameOverrides` in `atlas.config` which adds a new name to URL mapping.
 Atlas downloads `packages.json` into `deps/_packages` by default; pass
-`--packagesGit` to keep the git-clone behavior for the full packages repo.
+`--packagesRepo` to keep the git-clone behavior for the full packages repo.
+If dependency URLs use `git://`, pass `--forceGitToHttps` to rewrite them to
+`https://` before cloning.
 
 Atlas does not call the Nim compiler for a build, instead it creates/patches
 a `nim.cfg` file for the compiler. For example:
@@ -84,7 +86,7 @@ version. Thanks to this design, lock files are much less important.
 
 ## Commands
 
-Atlas supports the following commands:
+Some commonly used commands:
 
 
 ### Use <url> / <package name>
@@ -123,12 +125,12 @@ The linked project will be added to this project's Nimble file if it's not alrea
 
 Note, that the other project's `nameOverrides` and `urlOverrides` *aren't* imported. You may need to import the name-overrides to properly use the deps. This is due to the triplet-naming above.
 
-### Clone/Update <url>/<package name>
+### Use / Update <url>/<package name>
 
-Clones a URL and all of its dependencies (recursively) into the project.
-Creates or patches a `nim.cfg` file with the required `--path` entries.
+`atlas use <url|pkgname>` clones a package and its dependencies (recursively) into the project.
+It also creates or patches a `nim.cfg` file with the required `--path` entries.
 
-**Note**: Due to the used algorithms an `update` is the same as a `clone`.
+`atlas update [filter]` updates dependency remote refs in `deps/`, optionally filtered by package name or URL.
 
 
 If a `<package name>` is given instead the name is first translated into an URL
@@ -147,7 +149,7 @@ If a when statement isn't supported consider using `feature` statements instead.
 
 Features in Nimble files enable optional requirements for things different scenarios. This is useful when dealing with scenarios like testing only dependencies.
 
-*Note*: Currently features aren't saved to the Atlas config you must always pass `atlas --feature:foobar` when doing any command. This simplifies configuration and state management in Atlas. It only does what you ask it to do. 
+*Note*: Currently features aren't saved to the Atlas config you must always pass `atlas --feature=foobar` when doing any command. This simplifies configuration and state management in Atlas. It only does what you ask it to do.
 
 ```nim
 require "normallib"
@@ -171,15 +173,14 @@ Search the package index `packages.json` for a package that contains the given t
 in its description (or name or list of tags).
 
 
-### Install <proj.nimble>
+### Install
 
-Use the .nimble file to setup the project's dependencies.
+Use the project's `.nimble` file to set up dependencies.
 
-### UpdateProjects / updateDeps [filter]
+### Update [filter]
 
-Update every project / dependency in the project that has a remote URL that
-matches `filter` if a filter is given. The project / dependency is only updated
-if there are no uncommitted changes.
+Update every dependency that matches `filter` by name or URL. If no filter is given,
+all dependencies are considered.
 
 ### Others
 
@@ -206,7 +207,7 @@ Here's a snippet Github Actions YML:
 
     - name: Install Deps
       run: |
-        atlas install --feature:test --feature:other # etc
+        atlas install --feature=test --feature=other # etc
 ```
 
 ## Package Overrides
@@ -275,7 +276,7 @@ atlas env 1.6.12
 atlas env devel
 ```
 
-When completed, run `source nim-1.6.12/activate.sh` on UNIX and `nim-1.6.12/activate.bat` on Windows.
+When completed, run `source deps/nim-1.6.12/activate.sh` on UNIX and `deps\nim-1.6.12\activate.bat` on Windows.
 
 
 ## Dependency resolution
@@ -340,6 +341,8 @@ lock file.
 The `rep` command replays or repeats the projects to use the pinned commit hashes. If the
 projects have any "build" instructions these are performed too unless the `--noexec` switch
 is used.
+
+`replay` and `reproduce` are aliases for `rep`.
 
 
 ## Plugins
