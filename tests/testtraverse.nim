@@ -531,10 +531,7 @@ suite "test forked dep selection":
     context().depsDir = Path "deps"
     setAtlasErrorsColor(fgMagenta)
 
-  test "does not activate official and fork together":
-    ## This test is expected to fail: Atlas currently treats fork and official
-    ## URLs as distinct packages, so it can mark both active even though they
-    ## map to the same shortName folder and should be switchable via git remotes.
+  test "prefers explicit root dependency over duplicate shortname":
     withDir "tests/ws_fork_dupe":
       removeDir("deps")
       project(paths.getCurrentDir())
@@ -544,20 +541,13 @@ suite "test forked dep selection":
       nc.put("asynctools", toPkgUriRaw(parseUri "https://example.com/cheatfate/asynctools", true))
 
       let dir = paths.getCurrentDir().absolutePath
-      var sawDuplicateError = false
-      var errorMsg = ""
-      try:
-        discard dir.loadWorkspace(nc, AllReleases, onClone=DoClone, doSolve=true)
-        checkpoint "expected duplicate module error when solving forked packages"
-        check false
-      except AtlasFatalError as e:
-        errorMsg = e.msg
-        sawDuplicateError = "duplicate module name" in e.msg
-        checkpoint "duplicate module error message: " & errorMsg
+      let graph = dir.loadWorkspace(nc, AllReleases, onClone=DoClone, doSolve=true)
+      let activePkgs = graph.pkgs.values().toSeq().filterIt(it.active and it.url.shortName() == "asynctools")
 
-      if not sawDuplicateError:
-        checkpoint "unexpected assertion error while testing forked dep selection: " & errorMsg
-      check sawDuplicateError
+      checkpoint "active duplicate candidates: " & activePkgs.mapIt(it.url.projectName).join(", ")
+      check activePkgs.len == 1
+      if activePkgs.len == 1:
+        check $activePkgs[0].url == "https://example.com/timotheecour/asynctools"
 
 infoNow "tester", "All tests run successfully"
 
