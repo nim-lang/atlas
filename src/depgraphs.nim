@@ -455,6 +455,73 @@ proc toPretty*(v: uint64): string =
   elif v == IsInvalid: "!"
   else: ""
 
+proc chooseDuplicatePackage(graph: DepGraph; name: string; dupePkgs: seq[Package]): Package =
+  proc sortedFirst(pkgs: seq[Package]): Package =
+    if pkgs.len == 0:
+      return nil
+    var sortedPkgs = pkgs
+    sortedPkgs.sort(proc (a, b: Package): int = cmp(a.url.projectName, b.url.projectName))
+    sortedPkgs[0]
+
+  proc isRootRequested(url: PkgUrl): bool =
+    if graph.root.isNil:
+      return false
+
+    let rel = graph.root.activeNimbleRelease()
+    if rel.isNil:
+      return false
+
+    for (depUrl, _) in rel.requirements:
+      if depUrl == url:
+        return true
+
+    for feature in graph.root.activeFeatures:
+      if feature in rel.features:
+        for (depUrl, _) in rel.features[feature]:
+          if depUrl == url:
+            return true
+
+  var rootMatches: seq[Package]
+  var explicitRootMatches: seq[Package]
+  var explicitMatches: seq[Package]
+  var remoteIds: HashSet[string]
+  var allSameRemote = true
+
+  for pkg in dupePkgs:
+    if isRootRequested(pkg.url):
+      rootMatches.add pkg
+      if not pkg.url.hasShortName:
+        explicitRootMatches.add pkg
+
+    if not pkg.url.hasShortName:
+      explicitMatches.add pkg
+
+    if pkg.url.url.scheme in ["file", "link", "atlas", "error"]:
+      allSameRemote = false
+    else:
+      let remoteId = remoteNameFromGitUrl($pkg.url.url)
+      if remoteId.len == 0:
+        allSameRemote = false
+      else:
+        remoteIds.incl(remoteId)
+
+  if explicitRootMatches.len == 1:
+    return explicitRootMatches[0]
+  if rootMatches.len == 1:
+    return rootMatches[0]
+
+  if allSameRemote and remoteIds.len == 1:
+    result = sortedFirst(explicitRootMatches)
+    if not result.isNil:
+      return
+    result = sortedFirst(rootMatches)
+    if not result.isNil:
+      return
+    result = sortedFirst(explicitMatches)
+    if not result.isNil:
+      return
+    return sortedFirst(dupePkgs)
+
 proc checkDuplicateModules(graph: var DepGraph) =
   # Check for duplicate module names
   var moduleNames: Table[string, HashSet[Package]]
@@ -465,6 +532,16 @@ proc checkDuplicateModules(graph: var DepGraph) =
 
   var unhandledDuplicates: seq[string]
   for name, dupePkgs in moduleNames:
+    let dupeList = dupePkgs.toSeq()
+    let preferredPkg = chooseDuplicatePackage(graph, name, dupeList)
+    if not preferredPkg.isNil:
+      notice "atlas:resolved", "selecting duplicate package:", name, "with:", preferredPkg.url.projectName
+      for pkg in dupeList:
+        if pkg != preferredPkg:
+          notice "atlas:resolved", "deactivating duplicate package:", pkg.url.projectName
+          pkg.active = false
+      continue
+
     if not context().pkgOverrides.hasKey(name):
       error "atlas:resolved", "duplicate module name:", name, "with pkgs:", dupePkgs.mapIt(it.url.projectName).join(", ")
       notice "atlas:resolved", "please add an entry to `pkgOverrides` to the current project config to select one of: "
