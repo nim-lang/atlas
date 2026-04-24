@@ -486,12 +486,21 @@ proc processPendingPackages(
         pkg.state = LazyDeferred
       of Found:
         info pkg.projectName, "Processing package at:", pkg.ondisk.relativeToWorkspace()
+        let hasExplicitVersions =
+          pkgUrl in nc.explicitVersions and nc.explicitVersions[pkgUrl].len > 0
         let effectiveMode =
           if pkg.isRoot or pkg.isAtlasProject or pkg.url.isNimbleLink():
             CurrentCommit
+          elif deferChildDeps and traversalMode == AllReleases and hasExplicitVersions:
+            ExplicitVersions
           else:
             traversalMode
-        nc.traverseDependency(pkg, effectiveMode, @[], deferChildDeps=deferChildDeps)
+        let selectedExplicitVersions =
+          if effectiveMode == ExplicitVersions:
+            nc.explicitVersions[pkgUrl].toSeq()
+          else:
+            @[]
+        nc.traverseDependency(pkg, effectiveMode, selectedExplicitVersions, deferChildDeps=deferChildDeps)
         trace pkg.projectName, "processed pkg:", $pkg
         processing = true
         if pkgUrl notin graph.pkgs:
