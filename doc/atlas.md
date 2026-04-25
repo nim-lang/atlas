@@ -65,6 +65,33 @@ Atlas downloads `packages.json` into `deps/_packages` by default; pass
 If dependency URLs use `git://`, pass `--forceGitToHttps` to rewrite them to
 `https://` before cloning.
 
+In addition to full URLs and package names, Atlas supports a shorthand
+**forge alias** syntax of the form `<alias>:<user>/<repo>`. The supported
+aliases are:
+
+| Alias         | Expands to               |
+|---------------|--------------------------|
+| `gh` / `github`   | `https://github.com/<user>/<repo>`   |
+| `gl` / `gitlab`   | `https://gitlab.com/<user>/<repo>`   |
+| `srht` / `sourcehut` | `https://git.sr.ht/~<user>/<repo>` |
+| `cb` / `cberg` / `codeberg` | `https://codeberg.org/<user>/<repo>` |
+
+For example:
+
+```
+atlas use gh:zedeus/nitter
+atlas use gl:someuser/somepkg
+atlas use srht:~someuser/somepkg
+atlas use cb:someuser/somepkg
+```
+
+Forge aliases can also be used in Nimble `require` statements:
+
+```nim
+require "gh:user/repo"
+require "gl:user/repo >= 1.0"
+```
+
 Atlas does not call the Nim compiler for a build, instead it creates/patches
 a `nim.cfg` file for the compiler. For example:
 
@@ -89,9 +116,9 @@ version. Thanks to this design, lock files are much less important.
 Some commonly used commands:
 
 
-### Use <url> / <package name>
+### Use <url> / <package name> / <forge alias>
 
-Clone the package behind `url` or `package name` and its dependencies into
+Clone the package behind `url`, `package name`, or `forge alias` and its dependencies into
 the `deps` directory and make it available for your current project.
 Atlas will create or patch the files `$project.nimble` and `nim.cfg` for you so that you can simply
 import the required modules.
@@ -103,6 +130,8 @@ For example:
   cd newproject
   git init
   atlas use lexim
+  # or using a forge alias:
+  atlas use gh:zedeus/nitter
   # add `import lexim` to your example.nim file
   nim c example.nim
 

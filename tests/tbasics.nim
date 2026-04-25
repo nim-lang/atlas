@@ -135,6 +135,56 @@ suite "urls and naming":
     check upkg.toDirectoryPath() == ws / Path"deps" / Path("knutella")
     check upkg.toLinkPath() == ws / Path"deps" / Path("knutella.nimble-link")
 
+  test "forge alias gh shorthand":
+    let upkg = nc.createUrl("gh:disruptek/balls")
+    check upkg.url.hostname == "github.com"
+    check $upkg.url == "https://github.com/disruptek/balls"
+    check $upkg.projectName == "balls.disruptek.github.com"
+    check upkg.toDirectoryPath() == ws / Path"deps" / Path("balls")
+    check upkg.toLinkPath() == ws / Path"deps" / Path("balls.nimble-link")
+
+  test "forge alias github long form":
+    let upkg = nc.createUrl("github:disruptek/balls")
+    check upkg.url.hostname == "github.com"
+    check $upkg.url == "https://github.com/disruptek/balls"
+    check $upkg.projectName == "balls.disruptek.github.com"
+
+  test "forge alias gitlab":
+    let upkg = nc.createUrl("gl:someuser/somepkg")
+    check upkg.url.hostname == "gitlab.com"
+    check $upkg.url == "https://gitlab.com/someuser/somepkg"
+    check $upkg.projectName == "somepkg.someuser.gitlab.com"
+
+  test "forge alias sourcehut":
+    let upkg = nc.createUrl("srht:~someuser/somepkg")
+    check upkg.url.hostname == "git.sr.ht"
+    check $upkg.url == "https://git.sr.ht/~someuser/somepkg"
+    check $upkg.projectName == "somepkg.~someuser.git.sr.ht"
+
+  test "forge alias sourcehut auto tilde":
+    let upkg = nc.createUrl("srht:someuser/somepkg")
+    check $upkg.url == "https://git.sr.ht/~someuser/somepkg"
+
+  test "forge alias codeberg":
+    let upkg = nc.createUrl("cb:someuser/somepkg")
+    check upkg.url.hostname == "codeberg.org"
+    check $upkg.url == "https://codeberg.org/someuser/somepkg"
+
+  test "forge alias isUrl":
+    check isForgeAlias("gh:user/repo")
+    check isForgeAlias("github:user/repo")
+    check isForgeAlias("gl:user/repo")
+    check isForgeAlias("srht:~user/repo")
+    check isForgeAlias("cb:user/repo")
+    check not isForgeAlias("notAForge:user/repo")
+    check pkgurls.isUrl("gh:user/repo")
+    check pkgurls.isUrl("https://github.com/user/repo")
+
+  test "forge alias extractRequirementName":
+    check extractRequirementName("gh:user/repo") == ("gh:user/repo", @[], 12)
+    check extractRequirementName("gh:user/repo >= 1.0") == ("gh:user/repo", @[], 12)
+    check extractRequirementName("github:user/repo") == ("github:user/repo", @[], 16)
+
   test "proj_a file url":
     let pth = "file://" & "." & DirSep & "buildGraph" & DirSep & "proj_a"
     echo "PATH: ", pth

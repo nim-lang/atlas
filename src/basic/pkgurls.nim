@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [hashes, uri, os, strutils, files, dirs, sequtils, pegs]
+import std / [hashes, uri, os, strutils, files, dirs, sequtils, pegs, tables]
 import gitops, reporters, context
 
 export uri
@@ -22,7 +22,51 @@ type
 
 proc isFileProtocol*(s: PkgUrl): bool = s.u.scheme == "file"
 proc isEmpty*(s: PkgUrl): bool = s.qualifiedName[0].len() == 0 or $s.u == ""
-proc isUrl*(s: string): bool = s.startsWith("git@") or "://" in s
+type
+  ForgeKind = enum
+    ForgeGitHub, ForgeGitLab, ForgeSourceHut, ForgeCodeberg
+
+const
+  forgePrefixes = {
+    "gh": ForgeGitHub, "github": ForgeGitHub,
+    "gl": ForgeGitLab, "gitlab": ForgeGitLab,
+    "srht": ForgeSourceHut, "sourcehut": ForgeSourceHut, "shart": ForgeSourceHut,
+    "cb": ForgeCodeberg, "cberg": ForgeCodeberg, "codeberg": ForgeCodeberg
+  }.toTable()
+
+proc isForgeAlias*(s: string): bool =
+  let colon = s.find(':')
+  if colon < 0: return false
+  if "://" in s: return false
+  let prefix = s.substr(0, colon - 1).toLowerAscii()
+  prefix in forgePrefixes
+
+proc expandForgeAlias*(s: string): string =
+  let colon = s.find(':')
+  doAssert colon >= 0
+  let prefix = s.substr(0, colon - 1).toLowerAscii()
+  let rest = s.substr(colon + 1)
+  let slash = rest.find('/')
+  if slash < 0:
+    raise newException(ValueError, "Invalid forge alias format, expected <alias>:<user>/<repo>: " & s)
+  let user = rest.substr(0, slash - 1)
+  let repo = rest.substr(slash + 1)
+  if user.len == 0 or repo.len == 0:
+    raise newException(ValueError, "Invalid forge alias format, expected <alias>:<user>/<repo>: " & s)
+  let kind = forgePrefixes.getOrDefault(prefix)
+  result = "https://"
+  case kind
+  of ForgeGitHub:
+    result &= "github.com/" & user & "/" & repo
+  of ForgeGitLab:
+    result &= "gitlab.com/" & user & "/" & repo
+  of ForgeSourceHut:
+    let tildeUser = if user.startsWith('~'): user else: '~' & user
+    result &= "git.sr.ht/" & tildeUser & "/" & repo
+  of ForgeCodeberg:
+    result &= "codeberg.org/" & user & "/" & repo
+
+proc isUrl*(s: string): bool = s.startsWith("git@") or "://" in s or isForgeAlias(s)
 
 proc fullName*(u: PkgUrl): string =
   if u.qualifiedName.host.len() > 0 or u.qualifiedName.user.len() > 0:  
@@ -186,7 +230,10 @@ proc createUrlSkipPatterns*(raw: string, skipDirTest = false, forceWindows: bool
 
     u.path = u.path.strip(leading=false, trailing=true, {'/'})
 
-  if not raw.isUrl():
+  if raw.isForgeAlias():
+    let expanded = expandForgeAlias(raw)
+    result = createUrlSkipPatterns(expanded, skipDirTest, forceWindows)
+  elif not raw.isUrl():
     if dirExists(raw) or skipDirTest:
       var raw: string = raw
       if isGitDir(raw):
