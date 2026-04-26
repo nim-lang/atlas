@@ -171,50 +171,6 @@ proc addRelease(
     info pkg.url.projectName, "error processing nimble release:", $vtag, "error:", $e.msg
     return false
 
-proc commitPrefixMatches(a, b: CommitHash): bool =
-  ## Returns true when two commit hashes refer to the same commit prefix.
-  ## This allows explicit short hashes and full hashes to match each other.
-  if a.isEmpty() or b.isEmpty():
-    return false
-  result = a.h.startsWith(b.h) or b.h.startsWith(a.h)
-
-proc explicitVersionMatches(explicit, candidate: VersionTag): bool =
-  ## Checks whether a candidate version tag matches an explicit SAT-selected
-  ## version request, supporting #head, commit-based, and semver equality cases.
-  if explicit.version.isHead():
-    return candidate.isTip
-
-  if commitPrefixMatches(explicit.commit, candidate.commit):
-    return true
-
-  if explicit.version.string.len > 1 and explicit.version.string[0] == '#':
-    if explicit.version.string.len > 1 and not candidate.commit.isEmpty():
-      return candidate.commit.h.startsWith(explicit.version.string.substr(1))
-    return false
-
-  if explicit.version != Version"":
-    return explicit.version == candidate.version
-
-  return false
-
-proc filterToExplicitVersions(pkg: var Package, explicitVersions: seq[VersionTag]) =
-  ## Narrows pkg.versions to only versions that match explicit SAT-selected
-  ## versions. Used in lazy deferred resolution to avoid unrelated historical
-  ## versions after explicit pin expansion.
-  if explicitVersions.len == 0:
-    return
-
-  var filtered = initOrderedTable[PackageVersion, NimbleRelease]()
-  for ver, rel in pkg.versions:
-    for explicit in explicitVersions:
-      if explicitVersionMatches(explicit, ver.vtag):
-        filtered[ver] = rel
-        break
-
-  if filtered.len > 0 and filtered.len < pkg.versions.len:
-    info pkg.url.projectName, "filtering to explicit versions:", filtered.values().toSeq().mapIt($it.version).join(", ")
-    pkg.versions = filtered
-
 proc traverseDependency*(
     nc: var NimbleContext;
     pkg: var Package,
@@ -281,12 +237,9 @@ proc traverseDependency*(
 
       debug pkg.url.projectName, "nimble explicit versions:", $explicitVersions
       for version in explicitVersions:
-        if version.version == Version"" and
-            not version.commit.isEmpty() and
-            not uniqueCommits.containsOrIncl(version.commit):
-            let vtag = VersionTag(v: Version"", c: version.commit)
-            assert vtag.commit.orig == FromDep, "maybe this needs to be overriden like before: " & $vtag.commit.orig
-            discard versions.addRelease(nc, pkg, vtag, deferChildDeps)
+        var vtag = gitops.expandSpecial(pkg.ondisk, vtag = version)
+        if not vtag.commit.isEmpty() and not uniqueCommits.containsOrIncl(vtag.commit):
+          discard versions.addRelease(nc, pkg, vtag, deferChildDeps)
 
       ## Note: always prefer tagged versions
       let tags = collectTaggedVersions(pkg.ondisk, isLocalOnly = pkg.isLocalOnly)
@@ -340,12 +293,6 @@ proc traverseDependency*(
       error pkg.url.projectName, "duplicate release found:", $ver.vtag, "new:", repr(rel), " existing: ", repr(pkg.versions[ver])
       error pkg.url.projectName, "versions table:", $pkg.versions.keys().toSeq()
     pkg.versions[ver] = uniqueReleases[rel]
-
-  # Keep non-explicit versions for non-lazy traversals (used by tests and graph
-  # exploration), but narrow in lazy SAT mode to avoid selecting unrelated
-  # historical versions after explicit pin expansion.
-  if mode == ExplicitVersions and deferChildDeps:
-    filterToExplicitVersions(pkg, expandedExplicitVersions)
 
   # TODO: filter by unique versions first?
   pkg.state = Processed
@@ -486,13 +433,9 @@ proc processPendingPackages(
         pkg.state = LazyDeferred
       of Found:
         info pkg.projectName, "Processing package at:", pkg.ondisk.relativeToWorkspace()
-        let hasExplicitVersions =
-          pkgUrl in nc.explicitVersions and nc.explicitVersions[pkgUrl].len > 0
         let effectiveMode =
           if pkg.isRoot or pkg.isAtlasProject or pkg.url.isNimbleLink():
             CurrentCommit
-          elif deferChildDeps and traversalMode == AllReleases and hasExplicitVersions:
-            ExplicitVersions
           else:
             traversalMode
         let selectedExplicitVersions =
