@@ -48,9 +48,12 @@ proc addAtMostOneOf(b: var Builder; vars: seq[VarId]) =
         b.addNegated(vars[j])
 
 proc addAtLeastOneOf(b: var Builder; vars: seq[VarId]) =
-  withOpenBr(b, OrForm):
-    for v in vars:
-      b.add v
+  if vars.len == 1:
+    b.add vars[0]
+  else:
+    withOpenBr(b, OrForm):
+      for v in vars:
+        b.add v
 
 proc hasContextFeature(pkg: Package; feature: string): bool =
   if pkg.isRoot and feature in context().features:
