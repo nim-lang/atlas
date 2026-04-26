@@ -53,3 +53,22 @@ proc patchNimCfg*(deps: seq[CfgPath]; cfgPath: CfgPath; features: seq[string] = 
       # (preserves the file date information):
       writeFile($cfg, cfgContent)
       info(project(), "updated: " & $cfg.readableFile(project()))
+
+proc parseNimCfgFeatures*(cfgPath: CfgPath): seq[string] =
+  let cfg = Path(cfgPath.string / "nim.cfg")
+  if not fileExists(cfg):
+    return
+
+  for line in readFile($cfg).splitLines():
+    var x = line.strip()
+    if x.startsWith("--define:"):
+      x = x["--define:".len .. ^1].strip()
+    elif x.startsWith("-d:"):
+      x = x["-d:".len .. ^1].strip()
+    else:
+      continue
+
+    if x.len >= 2 and x[0] == '"' and x[^1] == '"':
+      x = x[1 .. ^2]
+    if x.startsWith("feature.") and x notin result:
+      result.add x.toLowerAscii()

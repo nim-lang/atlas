@@ -178,7 +178,9 @@ If a when statement isn't supported consider using `feature` statements instead.
 
 Features in Nimble files enable optional requirements for things different scenarios. This is useful when dealing with scenarios like testing only dependencies.
 
-*Note*: Currently features aren't saved to the Atlas config you must always pass `atlas --feature=foobar` when doing any command. This simplifies configuration and state management in Atlas. It only does what you ask it to do.
+*Note*: Features aren't saved to the Atlas config. Pass `atlas --feature=foobar`
+when doing commands that should enable a feature, or pass `--keepFeatures`/`-k`
+to reuse feature defines from the current `nim.cfg`.
 
 ```nim
 require "normallib"
