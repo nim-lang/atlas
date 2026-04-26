@@ -1,6 +1,7 @@
 import std/[os, paths, unittest]
-import basic/context
+import basic/[context, packageinfos]
 import atlas
+import pkgsearch
 
 template withDir(dir: string; body: untyped) =
   let old = os.getCurrentDir()
@@ -22,3 +23,14 @@ suite "search":
       check project() == Path("")
       check not fileExists("atlas.config")
       check not dirExists("deps")
+
+    test "skips aliases":
+      let pkgs = @[
+        PackageInfo(kind: pkAlias, name: "jwt", alias: "jwtpkg"),
+        PackageInfo(kind: pkPackage, name: "jwtpkg", url: "https://example.com/jwtpkg",
+          license: "", downloadMethod: "git", description: "jwt package",
+          tags: @["jwt"])
+      ]
+      let candidates = determineCandidates(pkgs, @["jwt"])
+      check candidates[0].len == 0
+      check candidates[1].len == 1
