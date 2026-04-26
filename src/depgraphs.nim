@@ -827,3 +827,7 @@ proc activateGraph*(graph: DepGraph): tuple[paths: seq[CfgPath], features: seq[s
     result.paths.add CfgPath(toDestDir(graph, pkg) / getCfgPath(graph, pkg).Path)
     for feature in pkg.activeFeatures:
       result.features.addUnique "feature." & pkg.url.shortName & "." & feature
+
+  result.paths.sort(proc (a, b: CfgPath): int =
+    cmp(a.string, b.string)
+  )
