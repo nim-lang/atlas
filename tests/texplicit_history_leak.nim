@@ -35,6 +35,57 @@ suite "historical explicit transitive pins":
     context().depsDir = Path "deps"
     setAtlasErrorsColor(fgMagenta)
 
+  test "root explicit commit selects pinned release over newer semver releases":
+    let ws = "tests/ws_explicit_history_leak"
+    removeDir(ws)
+    createDir(ws)
+
+    withDir ws:
+      project(paths.getCurrentDir())
+      context().flags = {KeepWorkspace, ListVersions}
+      context().defaultAlgo = SemVer
+      discard context().nameOverrides.addPattern("$+", "file://./buildGraph/$#")
+
+      createDir("buildGraph")
+
+      var pinnedCommit = ""
+      var newerCommit = ""
+
+      withDir "buildGraph":
+        createDir("widget")
+        withDir "widget":
+          writePackage("widget", "1.0.0")
+          initGitRepo()
+          commitAll("widget-pinned")
+          pinnedCommit = gitHead()
+
+          writePackage("widget", "2.0.0")
+          commitAll("widget-newer")
+          newerCommit = gitHead()
+
+      writeFile("ws_explicit_history_leak.nimble", [
+        "version = \"0.1.0\"",
+        "requires \"widget#" & pinnedCommit[0..7] & "\"",
+        ""
+      ].join("\n"))
+
+      var nc = createNimbleContext()
+      var graph = loadWorkspace(project(), nc, AllReleases, DoClone, doSolve = true)
+
+      checkpoint "\tgraph:\n" & $graph.toJson()
+
+      let widgetUrl = nc.createUrl("widget")
+
+      check graph.root.active
+      check widgetUrl in graph.pkgs
+
+      if widgetUrl in graph.pkgs:
+        check graph.pkgs[widgetUrl].active
+        if graph.pkgs[widgetUrl].active:
+          check $graph.pkgs[widgetUrl].activeVersion.version == "1.0.0"
+          check graph.pkgs[widgetUrl].activeVersion.commit.h == pinnedCommit
+          check graph.pkgs[widgetUrl].activeVersion.commit.h != newerCommit
+
   test "old explicit transitive pin from historical release does not leak into selected explicit commit":
     let ws = "tests/ws_explicit_history_leak"
     removeDir(ws)
