@@ -112,3 +112,83 @@ suite "historical explicit transitive pins":
           check $graph.pkgs[bearsslUrl].activeVersion.version == "0.2.8"
           check graph.pkgs[bearsslUrl].activeVersion.commit.h == newBearsslCommit
           check graph.pkgs[bearsslUrl].activeVersion.commit.h != oldBearsslCommit
+
+  test "historical jwt bearssl pin does not override root bearssl semver":
+    let ws = "tests/ws_explicit_history_leak"
+    removeDir(ws)
+    createDir(ws)
+
+    withDir ws:
+      project(paths.getCurrentDir())
+      context().flags = {KeepWorkspace, ListVersions}
+      context().defaultAlgo = SemVer
+      discard context().nameOverrides.addPattern("$+", "file://./buildGraph/$#")
+
+      createDir("buildGraph")
+
+      var oldBearsslCommit = ""
+      var newBearsslCommit = ""
+
+      withDir "buildGraph":
+        createDir("bearssl")
+        withDir "bearssl":
+          writePackage("bearssl", "0.1.5")
+          initGitRepo()
+          commitAll("bearssl-old")
+          oldBearsslCommit = gitHead()
+
+          writePackage("bearssl", "0.2.8")
+          commitAll("bearssl-new")
+          newBearsslCommit = gitHead()
+
+        createDir("bearssl_pkey_decoder")
+        withDir "bearssl_pkey_decoder":
+          writePackage("bearssl_pkey_decoder", "0.1.0")
+          initGitRepo()
+          commitAll("bearssl-pkey-decoder")
+
+        createDir("jwt")
+        withDir "jwt":
+          writePackage("jwt", "0.2", [
+            "bearssl#" & oldBearsslCommit,
+            "bearssl_pkey_decoder"
+          ])
+          initGitRepo()
+          commitAll("jwt-old")
+
+          writePackage("jwt", "0.3", [
+            "bearssl >= 0.2.8",
+            "bearssl_pkey_decoder"
+          ])
+          commitAll("jwt-new")
+
+      writeFile("ws_explicit_history_leak.nimble", [
+        "version = \"0.1.0\"",
+        "requires \"jwt >= 0.3\"",
+        "requires \"bearssl >= 0.2.8\"",
+        ""
+      ].join("\n"))
+
+      var nc = createNimbleContext()
+      var graph = loadWorkspace(project(), nc, AllReleases, DoClone, doSolve = true)
+
+      checkpoint "\tgraph:\n" & $graph.toJson()
+
+      let jwtUrl = nc.createUrl("jwt")
+      let bearsslUrl = nc.createUrl("bearssl")
+
+      check graph.root.active
+      check jwtUrl in graph.pkgs
+      check bearsslUrl in graph.pkgs
+
+      if jwtUrl in graph.pkgs:
+        check graph.pkgs[jwtUrl].active
+        if graph.pkgs[jwtUrl].active:
+          check $graph.pkgs[jwtUrl].activeVersion.version == "0.3"
+
+      if bearsslUrl in graph.pkgs:
+        check graph.pkgs[bearsslUrl].active
+        if graph.pkgs[bearsslUrl].active:
+          check $graph.pkgs[bearsslUrl].activeVersion.version == "0.2.8"
+          check graph.pkgs[bearsslUrl].activeVersion.commit.h == newBearsslCommit
+          check graph.pkgs[bearsslUrl].activeVersion.commit.h != oldBearsslCommit
