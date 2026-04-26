@@ -55,6 +55,22 @@ suite "nimbleparser":
     check res.features["useOldAsyncTools"].len == 1
     check res.features["useOldAsyncTools"][0] == "asynctools >= 0.1.0"
 
+  test "patch nimble file skips existing dependency by URL project name":
+    let nimbleFile = Path("tests" / "test_data" / "use_duplicate.nimble")
+    writeFile($nimbleFile, dedent"""
+    requires "https://example.com/someuser/ws_link_semver"
+    """)
+    var nc = NimbleContext()
+    nc.put("ws_link_semver", toPkgUriRaw(parseUri "https://example.com/other/ws_link_semver"))
+
+    patchNimbleFile(nc, nimbleFile, "ws_link_semver")
+
+    let reqs = extractRequiresInfo(nimbleFile).requires
+    check reqs.len == 1
+    check reqs[0] == "https://example.com/someuser/ws_link_semver"
+
+    removeFile($nimbleFile)
+
   test "parse nimble file with when statements":
     let nimbleFile = Path("tests" / "test_data" / "jester_boolean.nimble")
     var res = extractRequiresInfo(nimbleFile)

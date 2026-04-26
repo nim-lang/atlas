@@ -105,13 +105,9 @@ proc patchNimbleFile*(nc: var NimbleContext;
 
   doAssert nimbleFile.string.fileExists()
 
-  let release = parseNimbleFile(nc, nimbleFile)
-  # see if we have this requirement already listed. If so, do nothing:
-  for (dep, ver) in release.requirements:
-    debug nimbleFile, "checking if dep url:", $url, "matches:", $dep
-    if url == dep:
-      info(nimbleFile, "nimble file up to date")
-      return
+  if hasNimbleRequirement(nimbleFile, url):
+    info(nimbleFile, "nimble file up to date")
+    return
 
   let name = if url.hasShortName: url.shortName() else: $url.url
   debug nimbleFile, "patching nimble file using:", $name
