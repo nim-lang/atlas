@@ -4,7 +4,7 @@ import std / [strutils, os, uri, jsonutils, json, tables, sequtils, unittest]
 import std/terminal
 
 import basic/[sattypes, context, reporters, pkgurls, compiledpatterns, versions]
-import basic/[deptypes, nimblecontext, deptypesjson]
+import basic/[deptypes, nimblecontext, deptypesjson, nimbleparser]
 import dependencies
 import depgraphs
 import integration_test_utils
@@ -149,6 +149,20 @@ suite "test link integration":
         check linkLines.len == 2
         check linkLines[0] == $linkedNimble
         check Path(linkLines[1]).absolutePath == project().absolutePath
+
+  test "link precheck detects existing dependency by URL":
+      withDir "tests/ws_link_integration":
+        let nimbleFile = Path"link_precheck.nimble"
+        writeFile($nimbleFile, dedent"""
+        requires "https://example.com/someuser/ws_link_semver"
+        """)
+        let linkedNimble = (paths.getCurrentDir() /
+          Path"../ws_link_semver/ws_link_semver.nimble").absolutePath
+        let linkUri = toPkgUriRaw(parseUri("link://" & $linkedNimble))
+
+        check hasNimbleRequirement(nimbleFile, linkUri)
+
+        removeFile($nimbleFile)
 
   test "expand using link files part 2":
       setAtlasVerbosity(Warning)

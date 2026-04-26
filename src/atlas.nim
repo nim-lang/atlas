@@ -240,8 +240,11 @@ proc linkPackage(linkDir, linkedNimble: Path) =
   var nc = createNimbleContext()
 
   let nimbleFile = findProjectNimbleFile(writeNimbleFile = true)
-  info "atlas:link", "modifying nimble file to use package:", linkUri.projectName, "at:", $nimbleFile
-  patchNimbleFile(nc, nimbleFile, linkUri.projectName)
+  if hasNimbleRequirement(nimbleFile, linkUri):
+    info "atlas:link", "nimble file already depends on package:", linkUri.projectName, "at:", $nimbleFile
+  else:
+    info "atlas:link", "modifying nimble file to use package:", linkUri.projectName, "at:", $nimbleFile
+    patchNimbleFile(nc, nimbleFile, linkUri.projectName)
 
   writeConfig()
   info "atlas:link", "current project dir:", $project()
