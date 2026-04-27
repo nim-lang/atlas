@@ -1,6 +1,6 @@
 import std/[os, osproc, strutils, terminal, unittest]
 
-import basic/[compiledpatterns, context, deptypes, nimblecontext, pkgurls, reporters, versions]
+import basic/[compiledpatterns, context, deptypes, gitops, nimblecontext, pkgurls, reporters, versions]
 import dependencies
 import depgraphs
 import integration_test_utils
@@ -26,6 +26,14 @@ proc writePackage(name, version: string; requires: openArray[string] = []) =
 proc commitAll(msg: string) =
   exec("git add .")
   exec("git commit -m \"" & msg & "\"")
+
+proc addOrigin(url: string) =
+  exec("git remote add origin " & url)
+
+proc setRemoteTip(url, branch, commit: string) =
+  let remote = remoteNameFromGitUrl(url)
+  exec("git update-ref refs/remotes/" & remote & "/" & branch & " " & commit)
+  exec("git symbolic-ref refs/remotes/" & remote & "/HEAD refs/remotes/" & remote & "/" & branch)
 
 suite "historical explicit transitive pins":
   setup:
@@ -243,3 +251,101 @@ suite "historical explicit transitive pins":
           check $graph.pkgs[bearsslUrl].activeVersion.version == "0.2.8"
           check graph.pkgs[bearsslUrl].activeVersion.commit.h == newBearsslCommit
           check graph.pkgs[bearsslUrl].activeVersion.commit.h != oldBearsslCommit
+
+  test "latest sarcophagus resolves jwt from current non-default nim-jwt checkout":
+    let ws = "tests/ws_explicit_history_leak"
+    removeDir(ws)
+    createDir(ws)
+
+    withDir ws:
+      project(paths.getCurrentDir())
+      context().flags = {KeepWorkspace, ListVersions}
+      context().defaultAlgo = SemVer
+
+      createDir("deps")
+
+      let sarcophagusUrlString = "https://example.invalid/elcritch/sarcophagus"
+      let jwtUrlString = "https://example.invalid/yglukhov/nim-jwt"
+      let mummyUrlString = "https://example.invalid/guzba/mummy"
+
+      var latestJwtCommit = ""
+
+      withDir "deps":
+        createDir("mummy")
+        withDir "mummy":
+          writePackage("mummy", "1.0.0")
+          initGitRepo()
+          addOrigin(mummyUrlString)
+          commitAll("mummy")
+          let mummyCommit = gitHead()
+          setRemoteTip(mummyUrlString, "main", mummyCommit)
+
+        createDir("nim-jwt")
+        withDir "nim-jwt":
+          writePackage("jwt", "0.0.1")
+          initGitRepo()
+          addOrigin(jwtUrlString)
+          commitAll("jwt-old")
+
+          writePackage("jwt", "0.2")
+          commitAll("jwt-remote-tip")
+          let remoteTipCommit = gitHead()
+          setRemoteTip(jwtUrlString, "master", remoteTipCommit)
+
+          exec("git checkout -b tmp")
+          writePackage("jwt", "0.3")
+          commitAll("jwt-new")
+          latestJwtCommit = gitHead()
+
+        createDir("sarcophagus")
+        withDir "sarcophagus":
+          writePackage("sarcophagus", "0.4.0", [
+            "mummy",
+            jwtUrlString
+          ])
+          initGitRepo()
+          addOrigin(sarcophagusUrlString)
+          commitAll("sarcophagus-old-explicit-nim-jwt")
+
+          writePackage("sarcophagus", "0.6.3", [
+            "mummy",
+            "jwt >= 0.3"
+          ])
+          commitAll("sarcophagus-latest-bare-jwt")
+          let sarcophagusCommit = gitHead()
+          setRemoteTip(sarcophagusUrlString, "main", sarcophagusCommit)
+
+      writeFile("ws_explicit_history_leak.nimble", [
+        "version = \"0.1.0\"",
+        "requires \"" & sarcophagusUrlString & " >= 0.6.3\"",
+        ""
+      ].join("\n"))
+
+      var nc = createUnfilledNimbleContext()
+      discard nc.put("mummy", createUrlSkipPatterns(mummyUrlString))
+
+      var canonicalJwtUrl = createUrlSkipPatterns(jwtUrlString)
+      canonicalJwtUrl.hasShortName = true
+      canonicalJwtUrl.qualifiedName.name = "jwt"
+      discard nc.put("jwt", canonicalJwtUrl)
+
+      var graph = loadWorkspace(project(), nc, AllReleases, DoClone, doSolve = true)
+
+      checkpoint "\tgraph:\n" & $graph.toJson()
+
+      let sarcophagusUrl = nc.createUrl(sarcophagusUrlString)
+
+      check graph.root.active
+      check sarcophagusUrl in graph.pkgs
+      check canonicalJwtUrl in graph.pkgs
+
+      if sarcophagusUrl in graph.pkgs:
+        check graph.pkgs[sarcophagusUrl].active
+        if graph.pkgs[sarcophagusUrl].active:
+          check $graph.pkgs[sarcophagusUrl].activeNimbleRelease.version == "0.6.3"
+
+      if canonicalJwtUrl in graph.pkgs:
+        check graph.pkgs[canonicalJwtUrl].active
+        if graph.pkgs[canonicalJwtUrl].active:
+          check $graph.pkgs[canonicalJwtUrl].activeNimbleRelease.version == "0.3"
+          check graph.pkgs[canonicalJwtUrl].activeVersion.commit.h == latestJwtCommit
