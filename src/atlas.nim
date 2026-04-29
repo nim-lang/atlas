@@ -70,6 +70,7 @@ Options:
   --feature=<feature>   enables the given feature, pass multiple for multiple features
                         for project specific use: `<project>.<feature>`
                         (note always be passed when you want to use features)
+  --keepFeatures, -k    reuse feature defines from the current nim.cfg
   --resolver=minver|semver|maxver
                         which resolution algorithm to use, default is semver
   --list[=on|off]       list all available and installed versions
@@ -239,8 +240,11 @@ proc linkPackage(linkDir, linkedNimble: Path) =
   var nc = createNimbleContext()
 
   let nimbleFile = findProjectNimbleFile(writeNimbleFile = true)
-  info "atlas:link", "modifying nimble file to use package:", linkUri.projectName, "at:", $nimbleFile
-  patchNimbleFile(nc, nimbleFile, linkUri.projectName)
+  if hasNimbleRequirement(nimbleFile, linkUri):
+    info "atlas:link", "nimble file already depends on package:", linkUri.projectName, "at:", $nimbleFile
+  else:
+    info "atlas:link", "modifying nimble file to use package:", linkUri.projectName, "at:", $nimbleFile
+    patchNimbleFile(nc, nimbleFile, linkUri.projectName)
 
   writeConfig()
   info "atlas:link", "current project dir:", $project()
@@ -378,6 +382,7 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
       of "help", "h": writeHelp(0)
       of "version", "v": writeVersion()
       of "keepcommits": context().flags.incl KeepCommits
+      of "keepfeatures", "k": context().flags.incl KeepFeatures
       of "project", "p":
         context().flags.incl(ManualProjectArg)
         if val == ".":
@@ -476,6 +481,9 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
 
   if action notin ["tag", "search", "list"]:
     createDir(depsDir())
+    if KeepFeatures in context().flags:
+      for feature in parseNimCfgFeatures(CfgPath project()):
+        context().features.incl feature
 
 proc atlasRun*(params: seq[string]) =
   var action = ""

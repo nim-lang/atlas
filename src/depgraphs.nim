@@ -48,9 +48,39 @@ proc addAtMostOneOf(b: var Builder; vars: seq[VarId]) =
         b.addNegated(vars[j])
 
 proc addAtLeastOneOf(b: var Builder; vars: seq[VarId]) =
-  withOpenBr(b, OrForm):
-    for v in vars:
-      b.add v
+  if vars.len == 1:
+    b.add vars[0]
+  else:
+    withOpenBr(b, OrForm):
+      for v in vars:
+        b.add v
+
+proc addCompatibleVersionChoice(
+    b: var Builder;
+    compatibleVersions: seq[VarId];
+    featureVersions: Table[VarId, seq[VarId]]) =
+  template addCompatibleVersion(compatVer: VarId) =
+    block:
+      if featureVersions.hasKey(compatVer):
+        withOpenBr(b, AndForm):
+          b.add(compatVer)
+          for featureVer in featureVersions[compatVer]:
+            b.add(featureVer)
+      else:
+        b.add(compatVer)
+
+  if compatibleVersions.len == 0:
+    b.add falseLit()
+  elif compatibleVersions.len == 1:
+    addCompatibleVersion(compatibleVersions[0])
+  else:
+    withOpenBr(b, ExactlyOneOfForm):
+      for compatVer in compatibleVersions:
+        addCompatibleVersion(compatVer)
+
+proc addCompatibleVersionChoice(b: var Builder; compatibleVersions: seq[VarId]) =
+  var featureVersions: Table[VarId, seq[VarId]]
+  b.addCompatibleVersionChoice(compatibleVersions, featureVersions)
 
 proc hasContextFeature(pkg: Package; feature: string): bool =
   if pkg.isRoot and feature in context().features:
@@ -213,16 +243,7 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
       # Add implication: if this version is selected, one of its compatible deps must be selected
       withOpenBr(b, OrForm):
         b.addNegated(ver.vid)  # not this version
-        withOpenBr(b, OrForm):
-          for compatVer in compatibleVersions:
-            if featureVersions.hasKey(compatVer):
-              withOpenBr(b, AndForm):
-                debug pkg.url.projectName, "adding compatVer requirement:", $compatVer, "featureVersions:", $featureVersions[compatVer].mapIt($it).join(", ")
-                b.add(compatVer)
-                for featureVer in featureVersions[compatVer]:
-                  b.add(featureVer)
-            else:
-              b.add(compatVer)
+        b.addCompatibleVersionChoice(compatibleVersions, featureVersions)
 
     # Add implications for each feature requirement
     for feature, reqs in rel.features:
@@ -255,9 +276,7 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
 
         withOpenBr(b, OrForm):
           b.addNegated(featureVarId) # not this feature
-          withOpenBr(b, OrForm):
-            for compatVer in compatibleVersions:
-              b.add(compatVer)
+          b.addCompatibleVersionChoice(compatibleVersions)
           debug pkg.url.projectName, "added compatVer feature dep variables:", $compatibleVersions.mapIt($it).join(", ")
         
         # Add implictations for globally set features
@@ -274,16 +293,7 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
           if true:
             withOpenBr(b, OrForm):
               b.addNegated(ver.vid)  # not this version
-              withOpenBr(b, OrForm):
-                for compatVer in compatibleVersions:
-                  if featureVersions.hasKey(compatVer):
-                    withOpenBr(b, AndForm):
-                      debug pkg.url.projectName, "adding compatVer requirement:", $compatVer, "featureVersions:", $featureVersions[compatVer].mapIt($it).join(", ")
-                      b.add(compatVer)
-                      for featureVer in featureVersions[compatVer]:
-                        b.add(featureVer)
-                  else:
-                    b.add(compatVer)
+              b.addCompatibleVersionChoice(compatibleVersions, featureVersions)
 
   if not anyReleaseSatisfied:
     warn pkg.url.projectName, "no versions satisfied for this package:", $pkg.url

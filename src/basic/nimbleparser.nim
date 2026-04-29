@@ -73,6 +73,26 @@ proc parseNimbleFile*(nc: var NimbleContext;
 proc genRequiresLine(u: string): string =
   result = "requires \"$1\"\n" % u.escape("", "")
 
+proc hasNimbleRequirement*(nimbleFile: Path; url: PkgUrl): bool =
+  doAssert nimbleFile.string.fileExists()
+
+  let names = [
+    url.shortName().toLowerAscii(),
+    url.projectName().toLowerAscii(),
+    url.fullName().toLowerAscii(),
+    url.requiresName().toLowerAscii()
+  ]
+
+  for req in extractRequiresInfo(nimbleFile).requires:
+    let (name, _, _) = extractRequirementName(req)
+    if name.toLowerAscii() in names:
+      return true
+    if name.isUrl():
+      let reqUrl = createUrlSkipPatterns(name)
+      if reqUrl.shortName().toLowerAscii() == url.shortName().toLowerAscii() or
+          reqUrl.projectName().toLowerAscii() == url.projectName().toLowerAscii():
+        return true
+
 proc patchNimbleFile*(nc: var NimbleContext;
                       nimbleFile: Path, name: string) =
   var url = nc.createUrl(name)  # This will handle both name and URL overrides internally
@@ -85,13 +105,9 @@ proc patchNimbleFile*(nc: var NimbleContext;
 
   doAssert nimbleFile.string.fileExists()
 
-  let release = parseNimbleFile(nc, nimbleFile)
-  # see if we have this requirement already listed. If so, do nothing:
-  for (dep, ver) in release.requirements:
-    debug nimbleFile, "checking if dep url:", $url, "matches:", $dep
-    if url == dep:
-      info(nimbleFile, "nimble file up to date")
-      return
+  if hasNimbleRequirement(nimbleFile, url):
+    info(nimbleFile, "nimble file up to date")
+    return
 
   let name = if url.hasShortName: url.shortName() else: $url.url
   debug nimbleFile, "patching nimble file using:", $name

@@ -17,6 +17,8 @@ proc determineCandidates*(pkgList: seq[PackageInfo];
   result[1] = @[]
   result[2] = @[]
   for pkg in pkgList:
+    if pkg.kind != pkPackage:
+      continue
     block termLoop:
       for term in terms:
         let word = term.toLower
@@ -116,6 +118,8 @@ proc search*(pkgList: seq[PackageInfo]; terms: seq[string]) =
     break forPackage
 
   for pkg in pkgList:
+    if pkg.kind != pkPackage:
+      continue
     if terms.len > 0:
       block forPackage:
         for term in terms:

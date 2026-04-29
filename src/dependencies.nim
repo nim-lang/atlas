@@ -267,6 +267,15 @@ proc traverseDependency*(
           else:
             error pkg.url.projectName, "traverseDependency skipping nimble commit:", $tag, "uniqueCommits:", $(tag.c in uniqueCommits), "nimbleVersions:", $(tag.v in nimbleVersions)
 
+        if not currentCommit.isEmpty() and not uniqueCommits.containsOrIncl(currentCommit):
+          # Existing checkouts can be detached or on a non-default branch.
+          # Include their current nimble version when remote-tip traversal misses it.
+          var vers: seq[(PackageVersion, NimbleRelease)]
+          let currentTag = VersionTag(v: Version"", c: currentCommit)
+          let added = vers.addRelease(nc, pkg, currentTag, deferChildDeps)
+          if added and not nimbleVersions.containsOrIncl(vers[0][0].vtag.v):
+            versions.add(vers)
+
       if versions.len() == 0:
         let vtag = VersionTag(v: Version"#head", c: initCommitHash(currentCommit, FromHead))
         debug pkg.url.projectName, "traverseDependency no versions found, using default #head", "at", $pkg.ondisk

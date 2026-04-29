@@ -4,6 +4,7 @@ import std / [strutils, os, uri, jsonutils, json, tables, sequtils, sets, unitte
 import std/terminal
 
 import basic/[sattypes, context, reporters, pkgurls, compiledpatterns, versions]
+import basic/configutils
 import basic/[deptypes, nimblecontext, deptypesjson]
 import dependencies
 import depgraphs
@@ -303,6 +304,79 @@ suite "test global features":
           check featurePkgs[0].active
           check not featurePkgs[0].activeVersion.isNil
           check $featurePkgs[0].activeVersion.vtag.version == "1.0.0"
+
+  test "parse features from nim.cfg":
+      withDir "tests/ws_features_global":
+        writeFile("nim.cfg", dedent"""
+        --define:"feature.proj_a.testing"
+        -d:feature.proj_b.extra
+        --define:"not_a_feature"
+        """)
+
+        check parseNimCfgFeatures(CfgPath paths.getCurrentDir()).toHashSet ==
+          ["feature.proj_a.testing", "feature.proj_b.extra"].toHashSet
+
+  test "atlasRun install keeps features from nim.cfg with -k":
+      setAtlasVerbosity(Error)
+      withDir "tests/ws_features_global":
+        removeDir("deps")
+        removeDir("proj_feature_dep")
+
+        setContext(AtlasContext())
+        context().nameOverrides = Patterns()
+        context().urlOverrides = Patterns()
+        context().proxy = parseUri "http://localhost:4242"
+        context().flags = {DumbProxy}
+        context().depsDir = Path "deps"
+        context().defaultAlgo = SemVer
+        project(paths.getCurrentDir())
+
+        expectedVersionWithGitTags()
+        var nc = createNimbleContext()
+        nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a", true))
+        nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b", true))
+        nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c", true))
+        nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d", true))
+
+        let dir = paths.getCurrentDir().absolutePath
+        discard dir.loadWorkspace(nc, AllReleases, onClone=DoClone, doSolve=false)
+
+        let featureDepPath = (paths.getCurrentDir() / Path"proj_feature_dep").absolutePath
+        createDir($featureDepPath)
+        withDir $featureDepPath:
+          writeFile("proj_feature_dep.nimble", dedent"""
+          version "1.0.0"
+          """)
+          exec "git init"
+          exec "git add proj_feature_dep.nimble"
+          exec "git commit -m \"feat: add proj_feature_dep.nimble\""
+          exec "git tag v1.0.0"
+
+        withDir "deps" / "proj_a":
+          writeFile("proj_a.nimble", dedent"""
+          requires "proj_b >= 1.1.0"
+          feature "testing":
+            requires "$1 >= 1.0.0"
+          """ % [toWindowsFileUrl("file://" & $featureDepPath)])
+          exec "git add proj_a.nimble"
+          exec "git commit -m \"feat: add proj_a feature dep for keepFeatures test\""
+          exec "git tag v1.2.0"
+
+        writeFile("nim.cfg", dedent"""
+        --define:"feature.proj_a.testing"
+        """)
+
+        setContext(AtlasContext())
+        atlasRun(@[
+          "--deps=deps",
+          "--proxy=http://localhost:4242/",
+          "--dumbproxy",
+          "-k",
+          "install"
+        ])
+
+        check dirExists("deps" / "proj_feature_dep")
+        check "deps/proj_feature_dep" in readFile("nim.cfg")
 
   test "broken feature does not block other selected features":
       setAtlasVerbosity(Error)

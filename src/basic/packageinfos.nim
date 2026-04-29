@@ -75,6 +75,9 @@ proc fromJson*(obj: JsonNode): PackageInfo =
 
 proc `$`*(pkg: PackageInfo): string =
   result = pkg.name & ":\n"
+  if pkg.kind == pkAlias:
+    result &= "  alias:       " & pkg.alias & "\n"
+    return
   result &= "  url:         " & pkg.url & " (" & pkg.downloadMethod & ")\n"
   result &= "  tags:        " & pkg.tags.join(", ") & "\n"
   result &= "  description: " & pkg.description & "\n"
