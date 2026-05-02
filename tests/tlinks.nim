@@ -71,6 +71,7 @@ suite "test link integration":
         context().flags.incl DumpGraphs
         var sol: Solution
         solve(graph, form)
+        writeActivationCache(graph)
 
         check graph.root.active
         check graph.pkgs[nc.createUrl("proj_a")].active

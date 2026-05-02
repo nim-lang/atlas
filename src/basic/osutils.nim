@@ -1,7 +1,7 @@
 ## OS utilities like 'withDir'.
 ## (c) 2021 Andreas Rumpf
 
-import std / [os, paths, strutils, osproc, uri]
+import std / [os, paths, strutils, osproc, uri, dirs]
 import reporters
 
 export paths
@@ -71,6 +71,13 @@ proc nimbleExec*(cmd: string; args: openArray[string]) =
     cmdLine.add ' '
     cmdLine.add quoteShell(args[i])
   discard os.execShellCmd(cmdLine)
+
+proc findProjects*(path: Path): seq[Path] =
+  ## Finds child directories that look like git-backed projects.
+  result = @[]
+  for k, f in walkDir(path):
+    if k == pcDir and dirExists(f / Path".git"):
+      result.add(f)
 
 template withDir*(dir: Path; body: untyped) =
   let oldDir = paths.getCurrentDir()

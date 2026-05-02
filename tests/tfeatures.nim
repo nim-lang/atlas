@@ -295,15 +295,18 @@ suite "test global features":
 
         check dirExists("deps" / "proj_feature_dep")
         check "deps/proj_feature_dep" in readFile("nim.cfg")
+        check fileExists("deps" / ".cache" / "atlas.active.json")
+        check not fileExists("deps" / "atlas.cache.json")
 
-        var nc2 = createNimbleContext()
-        let graph = loadDepGraph(nc2, (paths.getCurrentDir() / Path"ws_features_global.nimble").absolutePath)
-        let featurePkgs = graph.pkgs.values().toSeq().filterIt(it.isProjFeatureDep())
+        let cache = loadActivationCache((paths.getCurrentDir() / Path"ws_features_global.nimble").absolutePath)
+        let featurePkgs = cache.packages.filterIt(
+          it.url.projectName == "proj_feature_dep" or
+          it.url.shortName == "proj_feature_dep" or
+          ($it.ondisk).splitPath().tail == "proj_feature_dep"
+        )
         check featurePkgs.len == 1
         if featurePkgs.len == 1:
-          check featurePkgs[0].active
-          check not featurePkgs[0].activeVersion.isNil
-          check $featurePkgs[0].activeVersion.vtag.version == "1.0.0"
+          check featurePkgs[0].version.startsWith("1.0.0@")
 
   test "parse features from nim.cfg":
       withDir "tests/ws_features_global":

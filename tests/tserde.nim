@@ -1,4 +1,4 @@
-import std/[unittest, json, jsonutils]
+import std/[unittest, json, jsonutils, sets, tables]
 import basic/[context, sattypes, pkgurls, deptypes, nimblecontext, depgraphtypes]
 import basic/[deptypesjson, versions]
 
@@ -68,11 +68,57 @@ suite "json serde":
 
   test "json serde nimble release":
     let release = NimbleRelease(version: Version"1.0.0", requirements: @[(nc.createUrl("foobar"), p"1.0.0")])
-    let jnRelease = toJson(release)
+    let jnRelease = toJsonHook(release)
     echo "jnRelease: ", pretty(jnRelease)
+    check "srcDir" notin jnRelease
+    check "err" notin jnRelease
+    check "features" notin jnRelease
+    check "featureVars" notin jnRelease
+    check "reqsByFeatures" notin jnRelease
+    var versions: OrderedTable[PackageVersion, NimbleRelease]
+    versions[VersionTag(v: Version"1.0.0").toPkgVer] = release
+    let jnVersions = toJsonHook(versions, ToJsonOptions(enumMode: joptEnumString))
+    check "srcDir" notin jnVersions[0][1]
+    check "err" notin jnVersions[0][1]
+    check "features" notin jnVersions[0][1]
+    check "featureVars" notin jnVersions[0][1]
+    check "reqsByFeatures" notin jnVersions[0][1]
     var release2: NimbleRelease
-    release2.fromJson(jnRelease)
+    fromJsonHook(release2, jnRelease)
     check release == release2
+
+  test "json serde nimble release with features":
+    let featureUrl = nc.createUrl("proj_a")
+    var reqsByFeatures: Table[PkgUrl, HashSet[string]]
+    reqsByFeatures[featureUrl] = ["testing"].toHashSet
+    let release = NimbleRelease(
+      version: Version"1.0.0",
+      nimVersion: Version"2.0.0",
+      status: Normal,
+      requirements: @[(nc.createUrl("foobar"), p"1.0.0")],
+      srcDir: Path"src",
+      err: "broken",
+      features: {"testing": @[(featureUrl, p">= 1.0.0")]}.toTable,
+      reqsByFeatures: reqsByFeatures,
+      featureVars: {"testing": VarId(3)}.toTable
+    )
+    let jnRelease = toJsonHook(release)
+    check jnRelease["srcDir"].getStr() == "src"
+    check jnRelease["err"].getStr() == "broken"
+    check jnRelease.hasKey("features")
+    check jnRelease.hasKey("featureVars")
+    check jnRelease.hasKey("reqsByFeatures")
+    var release2: NimbleRelease
+    fromJsonHook(release2, jnRelease)
+
+    check release2.version == release.version
+    check release2.nimVersion == release.nimVersion
+    check release2.requirements == release.requirements
+    check release2.srcDir == release.srcDir
+    check release2.err == release.err
+    check release2.features == release.features
+    check release2.reqsByFeatures == release.reqsByFeatures
+    check release2.featureVars == release.featureVars
 
   test "json serde version interval":
 

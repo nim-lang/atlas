@@ -6,44 +6,19 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [os, strutils, uri, tables, sequtils, sets, hashes, algorithm, paths, dirs]
-import basic/[context, deptypes, versions, osutils, nimbleparser, reporters, gitops, pkgurls, nimblecontext, deptypesjson]
+## Dependency graph expansion and package loading.
+##
+## This module turns a workspace root into a dependency graph by locating or
+## cloning packages, loading their release metadata through `releaseinfo`, and
+## registering requirements discovered in Nimble files. It also handles lazy
+## dependency deferral, explicit commit requirements, and root feature
+## dependencies during traversal.
 
-export deptypes, versions, deptypesjson
+import std / [os, strutils, uri, tables, sequtils, sets, hashes, paths, dirs]
+import basic/[context, deptypes, versions, osutils, reporters, gitops, pkgurls, nimblecontext, deptypesjson, packageutils]
+import releaseinfo
 
-proc collectNimbleVersions*(nc: NimbleContext; pkg: Package): seq[VersionTag] =
-  let nimbleFiles = findNimbleFile(pkg)
-  let dir = pkg.ondisk
-  doAssert(pkg.ondisk.string != "", "Package ondisk must be set before collectNimbleVersions can be called! Package: " & $(pkg))
-  result = @[]
-  if nimbleFiles.len() == 1:
-    result = collectFileCommits(dir, nimbleFiles[0], isLocalOnly = pkg.isLocalOnly)
-    result.reverse()
-    trace pkg, "collectNimbleVersions commits:", mapIt(result, it.c.short()).join(", "), "nimble:", $nimbleFiles[0]
-
-type
-  PackageAction* = enum
-    DoNothing, DoClone
-
-proc copyFromDisk*(pkg: Package, dest: Path): (CloneStatus, string) =
-  let source = pkg.url.toOriginalPath()
-  info pkg, "copyFromDisk cloning:", $dest, "from:", $source
-  if dirExists(source) and not dirExists(dest):
-    trace pkg, "copyFromDisk cloning:", $dest, "from:", $source
-    copyDir(source.string, dest.string)
-    result = (Ok, "")
-  else:
-    error pkg, "copyFromDisk not found:", $source
-    result = (NotFound, $dest)
-
-proc isForkUrl(nc: NimbleContext; url: PkgUrl): bool =
-  let officialUrl = nc.lookup(url.shortName())
-  let isGitUrl = url.url.scheme notin ["file", "link", "atlas"]
-  result =
-    isGitUrl and
-    not officialUrl.isEmpty() and
-    officialUrl.url.scheme notin ["file", "link", "atlas"] and
-    officialUrl.url != url.url
+export deptypes, versions, deptypesjson, releaseinfo
 
 proc childDependencyState(pkg: Package; deferChildDeps: bool): PackageState =
   ## Returns the initial state for newly discovered child dependencies.
@@ -51,73 +26,65 @@ proc childDependencyState(pkg: Package; deferChildDeps: bool): PackageState =
   if deferChildDeps and not pkg.isRoot: LazyDeferred
   else: NotInitialized
 
-proc processNimbleRelease(
+proc registerReleaseDependencies(
     nc: var NimbleContext;
-    pkg: Package,
-    release: VersionTag;
+    pkg: Package;
+    release: NimbleRelease;
     deferChildDeps: bool
-): NimbleRelease =
-  trace pkg.url.projectName, "Processing release:", $release
-
-  var nimbleFiles: seq[Path]
-  if release.version == Version"#head":
-    trace pkg.url.projectName, "processRelease using current commit"
-    nimbleFiles = findNimbleFile(pkg)
-  elif release.commit.isEmpty():
-    warn pkg.url.projectName, "processRelease missing commit ", $release, "at:", $pkg.ondisk
-    result = NimbleRelease(status: HasBrokenRelease, err: "no commit")
+) =
+  ## Registers dependency edges discovered in a loaded Nimble release.
+  ## This also records explicit commit requirements for later traversal.
+  if release.status != Normal:
     return
-  else:
-    nimbleFiles = cacheNimbleFilesFromGit(pkg, release.commit)
 
-    # warn pkg.url.projectName, "processRelease unable to checkout commit ", $release, "at:", $pkg.ondisk
-    # result = NimbleRelease(status: HasBrokenRelease, err: "error checking out release")
+  for pkgUrl, interval in items(release.requirements):
+    if interval.isSpecial:
+      let commit = interval.extractSpecificCommit()
+      nc.explicitVersions.mgetOrPut(pkgUrl, initHashSet[VersionTag]()).incl(VersionTag(v: Version($(interval)), c: commit))
 
-  if nimbleFiles.len() == 0:
-    info "processRelease", "skipping release: missing nimble file:", $release
-    result = NimbleRelease(status: HasUnknownNimbleFile, err: "missing nimble file")
-  elif nimbleFiles.len() > 1:
-    info "processRelease", "skipping release: ambiguous nimble file:", $release, "files:", $(nimbleFiles.mapIt(it.splitPath().tail).join(", "))
-    result = NimbleRelease(status: HasUnknownNimbleFile, err: "ambiguous nimble file")
-  else:
-    let nimbleFile = nimbleFiles[0]
-    result = nc.parseNimbleFile(nimbleFile)
+    let state = childDependencyState(pkg, deferChildDeps)
+    if pkgUrl notin nc.packageToDependency:
+      debug pkg.url.projectName, "Found new pkg:", pkgUrl.projectName, "url:", $pkgUrl.url, "projectName:", $pkgUrl.projectName, "state:", $state
+      let pkgDep = Package(url: pkgUrl, state: state, isFork: isForkUrl(nc, pkgUrl))
+      nc.packageToDependency[pkgUrl] = pkgDep
+    else:
+      if nc.packageToDependency[pkgUrl].state == LazyDeferred and state != LazyDeferred:
+        warn pkg.url.projectName, "Changing LazyDeferred pkg to DoLoad:", $pkgUrl.url
+        nc.packageToDependency[pkgUrl].state = DoLoad
 
-    if result.status == Normal:
-      for pkgUrl, interval in items(result.requirements):
-        # debug pkg.url.projectName, "INTERVAL: ", $interval, "isSpecial:", $interval.isSpecial, "explicit:", $interval.extractSpecificCommit()
-        if interval.isSpecial:
-          let commit = interval.extractSpecificCommit()
-          nc.explicitVersions.mgetOrPut(pkgUrl, initHashSet[VersionTag]()).incl(VersionTag(v: Version($(interval)), c: commit))
+  for feature, rq in release.features:
+    for pkgUrl, interval in items(rq):
+      if interval.isSpecial:
+        let commit = interval.extractSpecificCommit()
+        nc.explicitVersions.mgetOrPut(pkgUrl, initHashSet[VersionTag]()).incl(VersionTag(v: Version($(interval)), c: commit))
+      if pkgUrl notin nc.packageToDependency:
+        let state =
+          if feature notin context().features: LazyDeferred
+          else: childDependencyState(pkg, deferChildDeps)
+        debug pkg.url.projectName, "Found new feature pkg:", pkgUrl.projectName, "url:", $pkgUrl.url, "projectName:", $pkgUrl.projectName, "state:", $state
+        let pkgDep = Package(url: pkgUrl, state: state, isFork: isForkUrl(nc, pkgUrl))
+        nc.packageToDependency[pkgUrl] = pkgDep
+      elif feature in context().features and nc.packageToDependency[pkgUrl].state == LazyDeferred and childDependencyState(pkg, deferChildDeps) != LazyDeferred:
+        warn pkg.url.projectName, "Changing LazyDeferred feature pkg to DoLoad:", $pkgUrl.url
+        nc.packageToDependency[pkgUrl].state = DoLoad
 
-        let state = childDependencyState(pkg, deferChildDeps)
-        if pkgUrl notin nc.packageToDependency:
-          debug pkg.url.projectName, "Found new pkg:", pkgUrl.projectName, "url:", $pkgUrl.url, "projectName:", $pkgUrl.projectName, "state:", $state
-          # debug pkg.url.projectName, "Found new pkg:", pkgUrl.projectName, "repr:", $pkgUrl.repr
-          let pkgDep = Package(url: pkgUrl, state: state, isFork: isForkUrl(nc, pkgUrl))
-          nc.packageToDependency[pkgUrl] = pkgDep
-        else:
-          if nc.packageToDependency[pkgUrl].state == LazyDeferred and state != LazyDeferred:
-            warn pkg.url.projectName, "Changing LazyDeferred pkg to DoLoad:", $pkgUrl.url
-            nc.packageToDependency[pkgUrl].state = DoLoad
+proc enrichPackageDependencies(
+    nc: var NimbleContext;
+    pkg: Package;
+    deferChildDeps: bool
+) =
+  ## Enriches the traversal context from already-loaded package release info.
+  ## This is intentionally separate from release parsing/cache loading.
+  for _, release in pkg.versions:
+    nc.registerReleaseDependencies(pkg, release, deferChildDeps)
 
-      for feature, rq in result.features:
-        for pkgUrl, interval in items(rq):
-          if interval.isSpecial:
-            let commit = interval.extractSpecificCommit()
-            nc.explicitVersions.mgetOrPut(pkgUrl, initHashSet[VersionTag]()).incl(VersionTag(v: Version($(interval)), c: commit))
-          if pkgUrl notin nc.packageToDependency:
-            let state =
-              if feature notin context().features: LazyDeferred
-              else: childDependencyState(pkg, deferChildDeps)
-            debug pkg.url.projectName, "Found new feature pkg:", pkgUrl.projectName, "url:", $pkgUrl.url, "projectName:", $pkgUrl.projectName, "state:", $state
-            let pkgDep = Package(url: pkgUrl, state: state, isFork: isForkUrl(nc, pkgUrl))
-            nc.packageToDependency[pkgUrl] = pkgDep
-          elif feature in context().features and nc.packageToDependency[pkgUrl].state == LazyDeferred and childDependencyState(pkg, deferChildDeps) != LazyDeferred:
-            warn pkg.url.projectName, "Changing LazyDeferred feature pkg to DoLoad:", $pkgUrl.url
-            nc.packageToDependency[pkgUrl].state = DoLoad
+type
+  PackageAction* = enum
+    DoNothing, DoClone
 
 proc addFeatureDependencies(pkg: Package) =
+  ## Marks root package feature requirements as active when requested by context flags.
+  ## This can reopen root processing so newly enabled feature dependencies are traversed.
 
   var featuresAdded = false
   warn pkg.url.projectName, "adding feature dependencies for root package; features:", $(context().features.toSeq().join(", ")), "versions:", $(pkg.versions.keys().toSeq().mapIt($it).join(", "))
@@ -142,34 +109,32 @@ proc addFeatureDependencies(pkg: Package) =
     warn pkg.url.projectName, "feature dependencies added"
     pkg.state = Found
 
-proc addRelease(
-    versions: var seq[(PackageVersion, NimbleRelease)],
-    # pkg: var Package,
-    nc: var NimbleContext;
-    pkg: Package,
-    vtag: VersionTag;
-    deferChildDeps: bool
-): bool =
-  var pkgver = vtag.toPkgVer()
-  trace pkg.url.projectName, "Adding Nimble version:", $vtag
+proc canonicalizeUrl(nc: var NimbleContext; url: PkgUrl): PkgUrl =
+  if url.url.scheme == "error":
+    return url
   try:
-    let release = nc.processNimbleRelease(pkg, vtag, deferChildDeps)
+    result = nc.createUrl($url)
+  except CatchableError:
+    result = url
 
-    if vtag.v.string == "":
-      pkgver.vtag.v = release.version
-      trace pkg.url.projectName, "updating release tag information:", $pkgver.vtag
-    elif release.version.string == "":
-      warn pkg.url.projectName, "nimble file missing version information:", $pkgver.vtag
-      release.version = vtag.version
-    elif vtag.v != release.version and not pkg.isRoot:
-      info pkg.url.projectName, "version mismatch between version tag:", $vtag.v, "and nimble version:", $release.version
-    
-    versions.add((pkgver, release))
+proc canonicalizeReleaseUrls(nc: var NimbleContext; rel: NimbleRelease) =
+  for req in mitems(rel.requirements):
+    req[0] = canonicalizeUrl(nc, req[0])
 
-    result = true
-  except CatchableError as e:
-    info pkg.url.projectName, "error processing nimble release:", $vtag, "error:", $e.msg
-    return false
+  if rel.reqsByFeatures.len > 0:
+    var reqsByFeatures = initTable[PkgUrl, HashSet[string]]()
+    for url, flags in rel.reqsByFeatures:
+      reqsByFeatures[canonicalizeUrl(nc, url)] = flags
+    rel.reqsByFeatures = reqsByFeatures
+
+  if rel.features.len > 0:
+    var features = initTable[string, seq[(PkgUrl, VersionInterval)]]()
+    for feature, reqs in rel.features:
+      var fixedReqs: seq[(PkgUrl, VersionInterval)]
+      for req in reqs:
+        fixedReqs.add (canonicalizeUrl(nc, req[0]), req[1])
+      features[feature] = fixedReqs
+    rel.features = features
 
 proc traverseDependency*(
     nc: var NimbleContext;
@@ -178,143 +143,42 @@ proc traverseDependency*(
     explicitVersions: seq[VersionTag];
     deferChildDeps = false;
 ) =
+  ## Resolves the set of package releases for a found dependency.
+  ## Release metadata is loaded separately, then enriched into traversal state.
   doAssert pkg.ondisk.dirExists() and pkg.state != NotInitialized, "Package should've been found or cloned at this point. Package: " & $pkg.url & " on disk: " & $pkg.ondisk
 
-  var versions: seq[(PackageVersion, NimbleRelease)]
-  var expandedExplicitVersions = explicitVersions
-
-  let currentCommit = currentGitCommit(pkg.ondisk, Warning)
-  if not pkg.isLocalOnly:
-    discard gitops.ensureCanonicalOrigin(pkg.ondisk, pkg.url.toUri)
-  pkg.originHead = gitops.findOriginTip(pkg.ondisk, errorReportLevel = Warning, isLocalOnly = pkg.isLocalOnly).commit()
-
-  if mode == CurrentCommit and currentCommit.isEmpty():
-    discard
-  elif currentCommit.isEmpty():
-    warn pkg.url.projectName, "traversing dependency unable to find git current version at ", $pkg.ondisk
-    let vtag = VersionTag(v: Version"#head", c: initCommitHash("", FromHead))
-    versions.add((vtag.toPkgVer, NimbleRelease(version: vtag.version, status: HasBrokenRepo)))
+  let releaseInfo = nc.loadPackageReleaseInfo(pkg, mode, explicitVersions)
+  if releaseInfo.repoError:
     pkg.state = Error
     return
-  else:
-    trace pkg.url.projectName, "traversing dependency current commit:", $currentCommit
 
-  case mode
-  of CurrentCommit:
-    trace pkg.url.projectName, "traversing dependency for only current commit"
-    let vtag = VersionTag(v: Version"#head", c: initCommitHash(currentCommit, FromHead))
-    discard versions.addRelease(nc, pkg, vtag, deferChildDeps)
+  if releaseInfo.loadedFromCache:
+    pkg.versions.clear()
 
-  of ExplicitVersions:
-    debug pkg.url.projectName, "traversing dependency found explicit versions:", $expandedExplicitVersions
-    # for ver, rel in pkg.versions:
-    #   versions.add((ver, rel))
-
-    var uniqueCommits: HashSet[CommitHash]
-    for ver in pkg.versions.keys():
-      uniqueCommits.incl(ver.vtag.c)
-
-    # get full hash from short hashes
-    # TODO: handle shallow clones here?
-    for version in mitems(expandedExplicitVersions):
-      let vtag = gitops.expandSpecial(pkg.ondisk, vtag = version)
-      version = vtag
-      debug pkg.url.projectName, "explicit version:", $version, "vtag:", repr vtag
-
-    for version in expandedExplicitVersions:
-      debug pkg.url.projectName, "check explicit version:", repr version
-      if version.commit.isEmpty():
-        warn pkg.url.projectName, "explicit version has empty commit:", $version
-      elif not uniqueCommits.containsOrIncl(version.commit):
-        debug pkg.url.projectName, "add explicit version:", $version
-        discard versions.addRelease(nc, pkg, version, deferChildDeps)
-
-  of AllReleases:
-    try:
-      var uniqueCommits: HashSet[CommitHash]
-      var nimbleVersions: HashSet[Version]
-      var nimbleCommits = nc.collectNimbleVersions(pkg)
-
-      debug pkg.url.projectName, "nimble explicit versions:", $explicitVersions
-      for version in explicitVersions:
-        var vtag = gitops.expandSpecial(pkg.ondisk, vtag = version)
-        if not vtag.commit.isEmpty() and not uniqueCommits.containsOrIncl(vtag.commit):
-          discard versions.addRelease(nc, pkg, vtag, deferChildDeps)
-
-      ## Note: always prefer tagged versions
-      let tags = collectTaggedVersions(pkg.ondisk, isLocalOnly = pkg.isLocalOnly)
-      debug pkg.url.projectName, "nimble tags:", $tags
-      for tag in tags:
-        if not uniqueCommits.containsOrIncl(tag.c):
-          discard versions.addRelease(nc, pkg, tag, deferChildDeps)
-          assert tag.commit.orig == FromGitTag, "maybe this needs to be overriden like before: " & $tag.commit.orig
-
-      if tags.len() == 0 or IncludeTagsAndNimbleCommits in context().flags:
-        ## Note: skip nimble commit versions unless explicitly enabled
-        ## package maintainers may delete a tag to skip a versions, which we'd override here
-        if NimbleCommitsMax in context().flags:
-          # reverse the order so the newest commit is preferred for new versions
-          nimbleCommits.reverse()
-
-        debug pkg.url.projectName, "nimble commits:", $nimbleCommits
-        for tag in nimbleCommits:
-          if not uniqueCommits.containsOrIncl(tag.c):
-            # trace pkg.url.projectName, "traverseDependency adding nimble commit:", $tag
-            var vers: seq[(PackageVersion, NimbleRelease)]
-            let added = vers.addRelease(nc, pkg, tag, deferChildDeps)
-            if added and not nimbleVersions.containsOrIncl(vers[0][0].vtag.v):
-              versions.add(vers)
-          else:
-            error pkg.url.projectName, "traverseDependency skipping nimble commit:", $tag, "uniqueCommits:", $(tag.c in uniqueCommits), "nimbleVersions:", $(tag.v in nimbleVersions)
-
-        if not currentCommit.isEmpty() and not uniqueCommits.containsOrIncl(currentCommit):
-          # Existing checkouts can be detached or on a non-default branch.
-          # Include their current nimble version when remote-tip traversal misses it.
-          var vers: seq[(PackageVersion, NimbleRelease)]
-          let currentTag = VersionTag(v: Version"", c: currentCommit)
-          let added = vers.addRelease(nc, pkg, currentTag, deferChildDeps)
-          if added and not nimbleVersions.containsOrIncl(vers[0][0].vtag.v):
-            versions.add(vers)
-
-      if versions.len() == 0:
-        let vtag = VersionTag(v: Version"#head", c: initCommitHash(currentCommit, FromHead))
-        debug pkg.url.projectName, "traverseDependency no versions found, using default #head", "at", $pkg.ondisk
-        discard versions.addRelease(nc, pkg, vtag, deferChildDeps)
-
-    finally:
-      if not checkoutGitCommit(pkg.ondisk, currentCommit, Warning):
-        info pkg.url.projectName, "traverseDependency error loading versions reverting to ", $currentCommit
-
-  # make sure identicle NimbleReleases refer to the same ref
-  var uniqueReleases: Table[NimbleRelease, NimbleRelease]
-  for (ver, rel) in versions:
-    if rel notin uniqueReleases:
-      # trace pkg.url.projectName, "found unique release requirements at:", $ver.vtag
-      uniqueReleases[rel] = rel
-    else:
-      trace pkg.url.projectName, "found duplicate release requirements at:", $ver.vtag
-
-  info pkg.url.projectName, "unique versions found:", uniqueReleases.values().toSeq().mapIt($it.version).join(", ")
-  for (ver, rel) in versions:
+  for (ver, rel) in releaseInfo.releases:
     if mode != ExplicitVersions and ver in pkg.versions:
       error pkg.url.projectName, "duplicate release found:", $ver.vtag, "new:", repr(rel)
       error pkg.url.projectName, "... existing: ", repr(pkg.versions[ver])
       error pkg.url.projectName, "duplicate release found:", $ver.vtag, "new:", repr(rel), " existing: ", repr(pkg.versions[ver])
       error pkg.url.projectName, "versions table:", $pkg.versions.keys().toSeq()
-    pkg.versions[ver] = uniqueReleases[rel]
+    canonicalizeReleaseUrls(nc, rel)
+    pkg.versions[ver] = rel
 
-  # TODO: filter by unique versions first?
+  # Release entries are now loaded; enrichment below registers their dependencies.
   pkg.state = Processed
+
+  nc.enrichPackageDependencies(pkg, deferChildDeps)
 
   if pkg.isRoot and context().features.len > 0:
     addFeatureDependencies(pkg)
-
 
 proc loadDependency*(
     nc: NimbleContext,
     pkg: var Package,
     onClone: PackageAction = DoClone,
 ) = 
+  ## Ensures a package has an on-disk location and marks it ready for traversal.
+  ## Depending on URL and policy this may clone, copy, reuse, update, or defer the package.
   if pkg.isRoot:
     pkg.ondisk = project()
     pkg.isAtlasProject = true
@@ -365,11 +229,10 @@ proc loadDependency*(
           gitops.clone(pkg.url.toUri, pkg.ondisk)
       if status == Ok:
         if not pkg.isLocalOnly:
-          discard gitops.ensureCanonicalOrigin(pkg.ondisk, pkg.url.toUri)
-          discard gitops.resolveRemoteName(pkg.ondisk)
+          var repo = gitops.loadRepoMetadata(pkg.ondisk, expectedCanonicalUrl = $pkg.url.toUri)
           if isFork:
             discard gitops.ensureRemoteForUrl(pkg.ondisk, officialUrl.toUri)
-          discard gitops.fetchRemoteTags(pkg.ondisk)
+          discard gitops.fetchRemoteTags(repo)
         pkg.state = Found
       else:
         pkg.state = Error
@@ -378,14 +241,14 @@ proc loadDependency*(
     if pkg.ondisk.dirExists():
       pkg.state = Found
       if not pkg.isLocalOnly:
-        discard gitops.ensureCanonicalOrigin(pkg.ondisk, pkg.url.toUri)
-        discard gitops.resolveRemoteName(pkg.ondisk)
+        discard gitops.loadRepoMetadata(pkg.ondisk, expectedCanonicalUrl = $pkg.url.toUri)
         if isFork:
           discard gitops.ensureRemoteForUrl(pkg.ondisk, officialUrl.toUri)
       if UpdateRepos in context().flags:
         gitops.updateRepo(pkg.ondisk)
         if not pkg.isLocalOnly:
-          discard gitops.fetchRemoteTags(pkg.ondisk)
+          var repo = gitops.loadRepoMetadata(pkg.ondisk, expectedCanonicalUrl = $pkg.url.toUri)
+          discard gitops.fetchRemoteTags(repo)
         
     else:
       pkg.state = Error
@@ -399,12 +262,14 @@ proc processPendingPackages(
     onClone: PackageAction;
     deferChildDeps: bool
 ) =
+  ## Processes all packages currently known to the context until no immediate work remains.
+  ## Lazy packages are represented in the graph without loading their full release history.
   var processing = true
   while processing:
     processing = false
     let pkgUrls = nc.packageToDependency.keys().toSeq()
 
-    # just for more concise logging
+    # Build concise package lists for progress logging.
     var initializingPkgs: seq[string]
     var processingPkgs: seq[string]
     for pkgUrl in pkgUrls:
@@ -421,7 +286,7 @@ proc processPendingPackages(
     if processingPkgs.len() > 0:
       notice root.projectName, "Processing packages:", processingPkgs.join(", ")
 
-    # process packages
+    # Process a stable snapshot so newly discovered packages are handled on the next loop.
     debug "atlas:expandGraph", "Processing package count: ", $pkgUrls.len()
     for pkgUrl in pkgUrls:
       var pkg = nc.packageToDependency[pkgUrl]
@@ -472,13 +337,13 @@ proc expandGraph*(
     isLinkPath = false,
     deferChildDeps = false
 ): DepGraph =
-  ## Expand the graph by adding all dependencies.
+  ## Expands a workspace root into a dependency graph.
+  ## Explicit commit requirements can add new work, so processing repeats to a fixed point.
   
   doAssert path.string != "."
   let url = nc.createUrlFromPath(path, isLinkPath)
   notice url.projectName, "expanding root package at:", $path, "url:", $url
   var root = Package(url: url, isRoot: true, isFork: isForkUrl(nc, url))
-  # nc.loadDependency(pkg)
 
   result = DepGraph(root: root, mode: mode)
   nc.packageToDependency[root.url] = root
@@ -507,9 +372,3 @@ proc expandGraph*(
       nc.explicitVersions.len != explicitCountBeforeExplicit
 
   info "atlas:expand", "Finished expanding packages for:", $root.projectName
-
-proc findProjects*(path: Path): seq[Path] =
-  result = @[]
-  for k, f in walkDir(path):
-    if k == pcDir and dirExists(f / Path".git"):
-      result.add(f)

@@ -41,11 +41,23 @@ type
     GitListFiles = "git -C $DIR ls-tree --name-only -r"
     GitForEachRef = "git -C $DIR for-each-ref"
 
+  RepoMetadata* = object
+    path*: Path
+    origin*: string
+    isLocalOnly*: bool
+    currentCommit*: CommitHash
+    canonicalUrl*: string
+    remoteName*: string
+    remoteRef*: string
+    originTip*: VersionTag
+
 proc fetchRemoteTags*(path: Path; origin = "origin"; errorReportLevel: MsgKind = Warning): bool
 proc fetchRemoteTagsByName(path: Path; remote: string; errorReportLevel: MsgKind = Warning): bool
 proc resolveRemoteName*(path: Path; origin = "origin"; errorReportLevel: MsgKind = Warning): string
 proc maybeUrlProxy*(url: Uri): Uri
 proc syncRemoteRefs(path: Path; srcRemote, dstRemote: string; errorReportLevel: MsgKind = Warning): bool
+proc readGitRef(path: Path; refName: string): string
+proc currentGitCommit*(path: Path, errorReportLevel: MsgKind = Info): CommitHash
 proc exec*(gitCmd: Command;
            path: Path;
            args: openArray[string],
@@ -65,6 +77,11 @@ proc execQuiet(gitCmd: Command;
 proc resolveRemoteTipRef*(path: Path; remote: string): string =
   ## Returns a local ref to the remote's tip without querying the network.
   if remote.len == 0: return ""
+  for branch in ["HEAD", "main", "master"]:
+    let refName = "refs/remotes/" & remote & "/" & branch
+    if readGitRef(path, refName).len > 0:
+      return remote & "/" & branch
+
   let base = "refs/remotes/" & remote & "/"
   let (outp, status) = execQuiet(GitShowRef, path, [])
   if status != RES_OK: return ""
@@ -132,6 +149,116 @@ proc exec*(gitCmd: Command;
   if result[1] != RES_OK:
     message errorReportLevel, "gitops", "Running Git failed:", $(int(result[1])), "command:", "`$1 $2`" % [cmd, join(args, " ")]
 
+proc gitMetadataDir(path: Path): Path =
+  let dotGit = path / Path".git"
+  if dirExists($dotGit):
+    return dotGit
+  if fileExists($dotGit):
+    for line in readFile($dotGit).splitLines():
+      let entry = line.strip()
+      if entry.startsWith("gitdir:"):
+        let gitDir = entry.substr("gitdir:".len).strip()
+        if gitDir.len == 0:
+          return Path""
+        return if isAbsolute(gitDir): Path(gitDir) else: path / Path(gitDir)
+  Path""
+
+proc commonGitDir(gitDir: Path): Path =
+  if gitDir.string == "":
+    return Path""
+  let commonDirFile = gitDir / Path"commondir"
+  if fileExists($commonDirFile):
+    let common = readFile($commonDirFile).strip()
+    if common.len > 0:
+      return if isAbsolute(common): Path(common) else: gitDir / Path(common)
+  gitDir
+
+proc parseRemoteSection(line: string): string =
+  let line = line.strip()
+  const prefix = "[remote \""
+  if line.startsWith(prefix) and line.endsWith("\"]"):
+    result = line[prefix.len ..< line.len - 2]
+
+proc configRemotes(path: Path): seq[string] =
+  let gitDir = gitMetadataDir(path)
+  if gitDir.string == "":
+    return
+  let configPath = commonGitDir(gitDir) / Path"config"
+  if not fileExists($configPath):
+    return
+  for line in readFile($configPath).splitLines():
+    let remote = parseRemoteSection(line)
+    if remote.len > 0:
+      result.add remote
+
+proc configRemoteUrl(path: Path; remote: string): string =
+  let gitDir = gitMetadataDir(path)
+  if gitDir.string == "":
+    return
+  let configPath = commonGitDir(gitDir) / Path"config"
+  if not fileExists($configPath):
+    return
+
+  var inRemoteSection = false
+  for rawLine in readFile($configPath).splitLines():
+    let line = rawLine.strip()
+    if line.startsWith("["):
+      inRemoteSection = parseRemoteSection(line) == remote
+    elif inRemoteSection and line.startsWith("url"):
+      let eq = line.find('=')
+      if eq >= 0:
+        return line[eq + 1 .. ^1].strip()
+
+proc readPackedRef(gitDir, commonDir: Path; refName: string): string =
+  for dir in [gitDir, commonDir]:
+    if dir.string == "":
+      continue
+    let packedRefs = dir / Path"packed-refs"
+    if not fileExists($packedRefs):
+      continue
+    for rawLine in readFile($packedRefs).splitLines():
+      let line = rawLine.strip()
+      if line.len == 0 or line[0] in {'#', '^'}:
+        continue
+      let parts = line.splitWhitespace()
+      if parts.len >= 2 and parts[1] == refName:
+        return parts[0]
+
+proc readGitRef(path: Path; refName: string): string =
+  let gitDir = gitMetadataDir(path)
+  if gitDir.string == "":
+    return
+  let commonDir = commonGitDir(gitDir)
+
+  for dir in [gitDir, commonDir]:
+    if dir.string == "":
+      continue
+    let refPath = dir / Path(refName)
+    if fileExists($refPath):
+      let refContent = readFile($refPath).strip()
+      if refContent.startsWith("ref:"):
+        return readGitRef(path, refContent.substr("ref:".len).strip())
+      return refContent
+
+  readPackedRef(gitDir, commonDir, refName)
+
+proc readGitHeadCommit(path: Path): string =
+  let gitDir = gitMetadataDir(path)
+  if gitDir.string == "":
+    return
+  let headPath = gitDir / Path"HEAD"
+  if not fileExists($headPath):
+    return
+  let head = readFile($headPath).strip()
+  if head.startsWith("ref:"):
+    readGitRef(path, head.substr("ref:".len).strip())
+  else:
+    head
+
+proc parseCommitRef(commit: string; origin = FromGitTag): VersionTag =
+  if commit.len > 0:
+    result = VersionTag(v: Version"", c: initCommitHash(commit.strip(), origin))
+
 proc checkGitDiffStatus*(path: Path): string =
   let (outp, status) = exec(GitDiff, path, [])
   if outp.len != 0:
@@ -142,11 +269,14 @@ proc checkGitDiffStatus*(path: Path): string =
     ""
 
 proc listRemotes(path: Path): seq[string] =
+  result = configRemotes(path)
+  if result.len > 0:
+    return
   let (outp, status) = exec(GitRemotesShow, path, [], Debug)
   if status == RES_OK:
-    outp.splitLines().mapIt(it.strip()).filterIt(it.len > 0)
+    result = outp.splitLines().mapIt(it.strip()).filterIt(it.len > 0)
   else:
-    @[]
+    result = @[]
 
 proc remoteNameFromGitUrl*(rawUrl: string): string =
   if rawUrl.len == 0:
@@ -180,6 +310,9 @@ proc remoteNameFromGitUrl*(rawUrl: string): string =
     repo & "." & user & "." & u.hostname
 
 proc getRemoteUrlFor(path: Path; remote: string): string =
+  result = configRemoteUrl(path, remote)
+  if result.len > 0:
+    return
   let (outp, status) = exec(
     GitRemoteUrl,
     path,
@@ -188,7 +321,7 @@ proc getRemoteUrlFor(path: Path; remote: string): string =
   )
   if status != RES_OK:
     return ""
-  outp.strip()
+  result = outp.strip()
 
 proc getCanonicalUrl*(path: Path; origin = "origin"): string =
   ## Returns the canonical URL stored in the `origin` remote.
@@ -197,6 +330,9 @@ proc getCanonicalUrl*(path: Path; origin = "origin"): string =
 proc ensureRemoteUrl(path: Path; remote, url: string; errorReportLevel: MsgKind = Warning): bool =
   if remote.len == 0 or url.len == 0 or not isGitDir(path):
     return false
+
+  if getRemoteUrlFor(path, remote) == url:
+    return true
 
   let remotes = listRemotes(path)
   if remote notin remotes:
@@ -365,17 +501,17 @@ proc gitDescribeRefTag*(path: Path, commit: string): string =
   let (lt, status) = exec(GitDescribe, path, ["--tags", commit])
   result = if status == RES_OK: strutils.strip(lt) else: ""
 
-proc findOriginTip*(path: Path; origin = "origin"; errorReportLevel: MsgKind = Warning, isLocalOnly = false): VersionTag =
-  let remoteName =
-    if isLocalOnly: ""
-    else: resolveRemoteName(path, origin, errorReportLevel)
-  var remoteRef =
-    if isLocalOnly: ""
-    else: resolveRemoteTipRef(path, remoteName)
-  if not isLocalOnly and remoteRef.len == 0:
-    # Ensure we have remote heads available for branch resolution.
-    if fetchRemoteHeads(path, origin, errorReportLevel):
-      remoteRef = resolveRemoteTipRef(path, remoteName)
+proc tipFromRef(path: Path; remoteName, remoteRef: string; errorReportLevel: MsgKind; isLocalOnly: bool): VersionTag =
+  let commit =
+    if isLocalOnly or remoteRef.len == 0:
+      readGitHeadCommit(path)
+    else:
+      readGitRef(path, "refs/remotes/" & remoteRef)
+  if commit.len > 0:
+    result = parseCommitRef(commit, FromHead)
+    result.isTip = true
+    return
+
   let cmd =
     if isLocalOnly or remoteRef.len == 0:
       GitLogLocal
@@ -394,47 +530,75 @@ proc findOriginTip*(path: Path; origin = "origin"; errorReportLevel: MsgKind = W
       result = allVersions[0]
       result.isTip = true
 
-proc collectTaggedVersions*(path: Path; origin = "origin"; errorReportLevel: MsgKind = Debug, isLocalOnly = false): seq[VersionTag] =
-  let remote =
-    if isLocalOnly: ""
-    else: resolveRemoteName(path, origin, errorReportLevel)
-  let tip = findOriginTip(path, origin, errorReportLevel, isLocalOnly)
+proc loadRepoMetadata*(
+    path: Path;
+    origin = "origin";
+    expectedCanonicalUrl = "";
+    errorReportLevel: MsgKind = Warning;
+    isLocalOnly = false
+): RepoMetadata =
+  result = RepoMetadata(path: path, origin: origin, isLocalOnly: isLocalOnly)
+  result.currentCommit = currentGitCommit(path, errorReportLevel)
+
+  if not isLocalOnly:
+    if expectedCanonicalUrl.len > 0:
+      discard ensureRemoteUrl(path, origin, expectedCanonicalUrl, errorReportLevel)
+    result.canonicalUrl = getCanonicalUrl(path, origin)
+    result.remoteName = resolveRemoteName(path, origin, errorReportLevel)
+    result.remoteRef = resolveRemoteTipRef(path, result.remoteName)
+    if result.remoteName.len > 0 and result.remoteRef.len == 0:
+      # Ensure we have remote heads available for branch resolution.
+      if fetchRemoteHeadsByName(path, result.remoteName, errorReportLevel):
+        result.remoteRef = resolveRemoteTipRef(path, result.remoteName)
+
+  result.originTip = tipFromRef(path, result.remoteName, result.remoteRef, errorReportLevel, isLocalOnly)
+
+proc findOriginTip*(repo: RepoMetadata; errorReportLevel: MsgKind = Warning): VersionTag =
+  if repo.originTip.commit.isEmpty():
+    tipFromRef(repo.path, repo.remoteName, repo.remoteRef, errorReportLevel, repo.isLocalOnly)
+  else:
+    repo.originTip
+
+proc findOriginTip*(path: Path; origin = "origin"; errorReportLevel: MsgKind = Warning, isLocalOnly = false): VersionTag =
+  let repo = loadRepoMetadata(path, origin, errorReportLevel = errorReportLevel, isLocalOnly = isLocalOnly)
+  findOriginTip(repo, errorReportLevel)
+
+proc collectTaggedVersions*(repo: RepoMetadata; errorReportLevel: MsgKind = Debug): seq[VersionTag] =
+  let tip = findOriginTip(repo, errorReportLevel)
 
   let localTags = "refs/tags"
   var refs: seq[string] = @["--format=%(objectname) %(refname)", localTags]
-  if remote.len > 0:
-    refs.add "refs/remotes/" & remote & "/tags"
-  let (outp, status) = exec(GitForEachRef, path, refs, errorReportLevel)
+  if repo.remoteName.len > 0:
+    refs.add "refs/remotes/" & repo.remoteName & "/tags"
+  let (outp, status) = exec(GitForEachRef, repo.path, refs, errorReportLevel)
   if status == RES_OK:
     result = parseTaggedVersions(outp)
     if result.len > 0 and tip.isTip:
       if result[0].c == tip.c:
         result[0].isTip = true
   else:
-    message(errorReportLevel, path, "could not collect tagged commits at:", $path)
+    message(errorReportLevel, repo.path, "could not collect tagged commits at:", $repo.path)
 
-proc collectFileCommits*(path, file: Path; origin = "origin"; errorReportLevel: MsgKind = Warning, isLocalOnly = false): seq[VersionTag] =
-  let remote =
-    if isLocalOnly: ""
-    else: resolveRemoteName(path, origin, errorReportLevel)
-  let tip = findOriginTip(path, origin, errorReportLevel, isLocalOnly)
+proc collectTaggedVersions*(path: Path; origin = "origin"; errorReportLevel: MsgKind = Debug, isLocalOnly = false): seq[VersionTag] =
+  let repo = loadRepoMetadata(path, origin, errorReportLevel = errorReportLevel, isLocalOnly = isLocalOnly)
+  collectTaggedVersions(repo, errorReportLevel)
 
-  if not isLocalOnly and remote.len == 0:
+proc collectFileCommits*(repo: RepoMetadata; file: Path; errorReportLevel: MsgKind = Warning): seq[VersionTag] =
+  let tip = findOriginTip(repo, errorReportLevel)
+
+  if not repo.isLocalOnly and repo.remoteName.len == 0:
     return @[]
-  let remoteRef =
-    if isLocalOnly: ""
-    else: resolveRemoteTipRef(path, remote)
   let cmd =
-    if isLocalOnly or remoteRef.len == 0:
+    if repo.isLocalOnly or repo.remoteRef.len == 0:
       GitLogLocal
     else:
       GitLog
   var args: seq[string] = @[]
   if cmd == GitLog:
-    args.add remoteRef
+    args.add repo.remoteRef
   args.add "--"
   args.add $file
-  let (outp, status) = exec(cmd, path, args, Warning)
+  let (outp, status) = exec(cmd, repo.path, args, Warning)
   if status == RES_OK:
     result = parseTaggedVersions(outp, requireVersions = false)
     if result.len > 0 and tip.isTip:
@@ -442,6 +606,10 @@ proc collectFileCommits*(path, file: Path; origin = "origin"; errorReportLevel: 
         result[0].isTip = true
   else:
     message(errorReportLevel, file, "could not collect file commits at:", $file)
+
+proc collectFileCommits*(path, file: Path; origin = "origin"; errorReportLevel: MsgKind = Warning, isLocalOnly = false): seq[VersionTag] =
+  let repo = loadRepoMetadata(path, origin, errorReportLevel = errorReportLevel, isLocalOnly = isLocalOnly)
+  collectFileCommits(repo, file, errorReportLevel)
 
 proc versionToCommit*(path: Path; origin = "origin"; algo: ResolutionAlgorithm; query: VersionInterval): CommitHash =
   let allVersions = collectTaggedVersions(path, origin)
@@ -462,12 +630,11 @@ proc shortToCommit*(path: Path, short: CommitHash): CommitHash =
     if vtags.len() == 1:
       result = vtags[0].c
 
-proc expandSpecial*(path: Path; origin = "origin"; vtag: VersionTag, errorReportLevel: MsgKind = Warning): VersionTag =
+proc expandSpecial*(repo: var RepoMetadata; vtag: VersionTag, errorReportLevel: MsgKind = Warning): VersionTag =
   if vtag.version.isHead():
-    return findOriginTip(path, origin, errorReportLevel, false)
+    return findOriginTip(repo, errorReportLevel)
 
-  let remote = resolveRemoteName(path, origin, errorReportLevel)
-  let (cc, status) = exec(GitRevParse, path, [vtag.version.string.substr(1)], errorReportLevel)
+  let query = vtag.version.string.substr(1)
 
   template processSpecial(cc: string) =
     let vtags = parseTaggedVersions(cc, requireVersions = false)
@@ -475,23 +642,38 @@ proc expandSpecial*(path: Path; origin = "origin"; vtag: VersionTag, errorReport
       result.c = vtags[0].c
       if vtag.version.string.substr(1) in result.c.h: # expand short commit hash to full hash
         result.v = Version("#" & $(result.c))
-    info path, "expandSpecial: ", $vtag, "result:", repr result
+    info repo.path, "expandSpecial: ", $vtag, "result:", repr result
 
   result = VersionTag(v: vtag.version, c: initCommitHash("", FromHead))
+  var cc = readGitRef(repo.path, "refs/heads/" & query)
+  if cc.len == 0 and repo.remoteName.len > 0:
+    cc = readGitRef(repo.path, "refs/remotes/" & repo.remoteName & "/" & query)
+  if cc.len > 0:
+    processSpecial(cc)
+    return
+
+  var (revParseOut, status) = exec(GitRevParse, repo.path, [query], errorReportLevel)
   if status == RES_OK:
+    cc = revParseOut
     processSpecial(cc)
   else:
-    if remote.len == 0:
-      message(errorReportLevel, path, "could not resolve remote from canonical '" & origin & "'")
+    if repo.remoteName.len == 0:
+      message(errorReportLevel, repo.path, "could not resolve remote from canonical '" & repo.origin & "'")
       return
-    let remoteRef = remote & "/" & vtag.version.string.substr(1)
-    var (ccRemote, statusRemote) = exec(GitRevParse, path, [remoteRef], errorReportLevel)
-    if statusRemote != RES_OK and fetchRemoteHeads(path, origin, errorReportLevel):
-      (ccRemote, statusRemote) = exec(GitRevParse, path, [remoteRef], errorReportLevel)
+    let remoteRef = repo.remoteName & "/" & query
+    var (ccRemote, statusRemote) = exec(GitRevParse, repo.path, [remoteRef], errorReportLevel)
+    if statusRemote != RES_OK and fetchRemoteHeadsByName(repo.path, repo.remoteName, errorReportLevel):
+      repo.remoteRef = resolveRemoteTipRef(repo.path, repo.remoteName)
+      repo.originTip = tipFromRef(repo.path, repo.remoteName, repo.remoteRef, errorReportLevel, repo.isLocalOnly)
+      (ccRemote, statusRemote) = exec(GitRevParse, repo.path, [remoteRef], errorReportLevel)
     if statusRemote == RES_OK:
       processSpecial(ccRemote)
     else:
-      message(errorReportLevel, path, "could not expand special version:", $vtag)
+      message(errorReportLevel, repo.path, "could not expand special version:", $vtag)
+
+proc expandSpecial*(path: Path; origin = "origin"; vtag: VersionTag, errorReportLevel: MsgKind = Warning): VersionTag =
+  var repo = loadRepoMetadata(path, origin, errorReportLevel = errorReportLevel)
+  expandSpecial(repo, vtag, errorReportLevel)
 
 proc listFiles*(path: Path): seq[string] =
   let (outp, status) = exec(GitLsFiles, path, [])
@@ -524,16 +706,23 @@ proc listRemoteTags*(path: Path, url: string, errorReportLevel: MsgKind = Debug)
     result = (@[], false)
 
 proc currentGitCommit*(path: Path, errorReportLevel: MsgKind = Info): CommitHash =
+  let headCommit = readGitHeadCommit(path)
+  if headCommit.len > 0:
+    return initCommitHash(headCommit, FromGitTag)
   let (currentCommit, status) = exec(GitCurrentCommit, path, [], errorReportLevel)
   if status == RES_OK:
     return initCommitHash(currentCommit.strip(), FromGitTag)
   else:
     return initCommitHash("", FromNone)
 
-proc checkoutGitCommit*(path: Path, commit: CommitHash, errorReportLevel: MsgKind = Warning): bool =
-  let currentCommit = currentGitCommit(path)
+proc checkoutGitCommitKnown(path: Path; commit, currentCommit: CommitHash; currentIsKnown: bool; errorReportLevel: MsgKind): bool =
   if currentCommit.isFull() and currentCommit == commit:
     return true
+
+  if not currentIsKnown:
+    let currentCommit = currentGitCommit(path)
+    if currentCommit.isFull() and currentCommit == commit:
+      return true
 
   let (_, statusB) = exec(GitCheckout, path, [commit.h], errorReportLevel)
   if statusB != RES_OK:
@@ -543,11 +732,20 @@ proc checkoutGitCommit*(path: Path, commit: CommitHash, errorReportLevel: MsgKin
     trace path, "updated package to ", $commit
     result = true
 
+proc checkoutGitCommit*(path: Path, commit: CommitHash, errorReportLevel: MsgKind = Warning): bool =
+  checkoutGitCommitKnown(path, commit, initCommitHash("", FromNone), false, errorReportLevel)
+
+proc checkoutGitCommit*(path: Path, commit, currentCommit: CommitHash, errorReportLevel: MsgKind = Warning): bool =
+  checkoutGitCommitKnown(path, commit, currentCommit, true, errorReportLevel)
+
 proc checkoutGitCommitFull*(path: Path; commit: CommitHash; origin = "origin";
                             errorReportLevel: MsgKind = Warning): bool =
   var smExtraArgs: seq[string] = @[]
   result = true
-  if ShallowClones in context().flags and commit.isFull():
+  let currentCommit = currentGitCommit(path)
+  let alreadyAtCommit = currentCommit.isFull() and currentCommit == commit
+
+  if ShallowClones in context().flags and commit.isFull() and not alreadyAtCommit:
     smExtraArgs.add "--depth=1"
 
     let remote = resolveRemoteName(path, origin, errorReportLevel)
@@ -564,7 +762,7 @@ proc checkoutGitCommitFull*(path: Path; commit: CommitHash; origin = "origin";
       result = false
     else:
       trace($path, "fetched package commit " & $commit)
-  elif commit.isShort():
+  elif commit.isShort() and not alreadyAtCommit:
     info($path, "found short commit id; doing full fetch to resolve " & $commit)
     let (outp, status) = exec(GitFetch, path, ["--unshallow", "--no-tags"])
     if status != RES_OK:
@@ -573,12 +771,13 @@ proc checkoutGitCommitFull*(path: Path; commit: CommitHash; origin = "origin";
     else:
       trace($path, "fetched package updates ")
 
-  let (_, status) = exec(GitCheckout, path, [commit.h], errorReportLevel)
-  if status != RES_OK:
-    message(errorReportLevel, $path, "could not checkout commit " & $commit)
-    result = false
-  else:
-    trace $path, "updated package to:", $commit
+  if not alreadyAtCommit:
+    let (_, status) = exec(GitCheckout, path, [commit.h], errorReportLevel)
+    if status != RES_OK:
+      message(errorReportLevel, $path, "could not checkout commit " & $commit)
+      result = false
+    else:
+      trace $path, "updated package to:", $commit
 
   if fileExists(path / Path".gitmodules"):
     notice relativeToWorkspace(path), "Found submodules; Updating..."
@@ -855,3 +1054,8 @@ proc fetchRemoteTags*(path: Path; origin = "origin"; errorReportLevel: MsgKind =
   if remote.len == 0:
     return false
   fetchRemoteTagsByName(path, remote, errorReportLevel)
+
+proc fetchRemoteTags*(repo: RepoMetadata; errorReportLevel: MsgKind = Warning): bool =
+  if repo.remoteName.len == 0:
+    return false
+  fetchRemoteTagsByName(repo.path, repo.remoteName, errorReportLevel)

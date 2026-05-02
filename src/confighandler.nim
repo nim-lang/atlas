@@ -8,8 +8,8 @@
 
 ## Configuration handling.
 
-import std / [strutils, os, streams, json, tables, jsonutils, uri, sequtils]
-import basic/[versions, nimblecontext, deptypesjson, context, reporters, compiledpatterns, parse_requires, deptypes]
+import std / [algorithm, strutils, os, streams, json, tables, jsonutils, uri, sequtils]
+import basic/[versions, nimblecontext, deptypesjson, context, reporters, compiledpatterns, parse_requires, deptypes, pkgurls]
 
 proc readPluginsDir(dir: Path) =
   for k, f in walkDir($(project() / dir)):
@@ -25,6 +25,18 @@ type
     plugins*: string
     resolver*: string
     graph*: JsonNode
+
+  ActivatedPackage* = object
+    url*: PkgUrl
+    version*: string
+    commit*: CommitHash
+    features*: seq[string]
+    ondisk*: Path
+    srcDir*: Path
+    isRoot*: bool
+
+  ActivationCache* = object
+    packages*: seq[ActivatedPackage]
 
 proc writeDefaultConfigFile*() =
   let config = JsonConfig(
@@ -115,6 +127,53 @@ proc writeDepGraph*(g: DepGraph, debug: bool = false) =
     configFile = configFile.changeFileExt("debug.json")
   debug "atlas", "writing dep graph to: ", $configFile
   dumpJson(g, $configFile, pretty = true)
+
+proc removeDepGraphCache*() =
+  for configFile in [
+    depGraphCacheFile(context()),
+    depGraphCacheFile(context()).changeFileExt("debug.json")
+  ]:
+    if fileExists($configFile):
+      removeFile($configFile)
+
+proc toActivationCache*(g: DepGraph): ActivationCache =
+  for pkg in values(g.pkgs):
+    if not pkg.active or pkg.activeVersion.isNil:
+      continue
+
+    let rel = pkg.activeNimbleRelease()
+    var features = pkg.activeFeatures
+    features.sort()
+
+    result.packages.add ActivatedPackage(
+      url: pkg.url,
+      version: repr(pkg.activeVersion.vtag),
+      commit: pkg.activeVersion.commit(),
+      features: features,
+      ondisk: pkg.ondisk,
+      srcDir: if rel.isNil: Path"" else: rel.srcDir,
+      isRoot: pkg.isRoot
+    )
+
+  result.packages.sort(proc (a, b: ActivatedPackage): int =
+    cmp($a.url, $b.url)
+  )
+
+proc writeActivationCache*(g: DepGraph) =
+  let configFile = activationCacheFile()
+  createDir($configFile.parentDir())
+  debug "atlas", "writing activation cache to: ", $configFile
+  let jn = toJson(toActivationCache(g), ToJsonOptions(enumMode: joptEnumString))
+  writeFile($configFile, pretty(jn))
+
+proc loadActivationCache*(nimbleFile: Path): ActivationCache =
+  doAssert nimbleFile.isAbsolute() and endsWith($nimbleFile, ".nimble") and fileExists($nimbleFile)
+  let projectDir = nimbleFile.parentDir()
+  var ctx = AtlasContext(projectDir: projectDir)
+  readAtlasContext(ctx, projectDir)
+  let configFile = activationCacheFile(ctx)
+  debug "atlas", "reading activation cache from: ", $configFile
+  result.fromJson(parseFile($configFile), Joptions(allowMissingKeys: true, allowExtraKeys: true))
 
 proc loadDepGraph*(nc: var NimbleContext, nimbleFile: Path): DepGraph =
   doAssert nimbleFile.isAbsolute() and endsWith($nimbleFile, ".nimble") and fileExists($nimbleFile)

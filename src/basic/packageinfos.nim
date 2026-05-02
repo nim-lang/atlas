@@ -91,41 +91,53 @@ proc toTags*(j: JsonNode): seq[string] =
     for elem in items j:
       result.add elem.getStr("")
 
-proc getPackageInfos*(pkgsDir = packagesDirectory()): seq[PackageInfo] =
+proc packageInfosFile*(cacheDir = cachesDirectory()): Path =
+  cacheDir / Path"packages.json"
+
+proc removeLegacyPackageCaches*(gitDir = packagesDirectory()) =
+  let oldNimbleCachesDir = depsDir() / Path"_nimble"
+  if dirExists(oldNimbleCachesDir):
+    removeDir($oldNimbleCachesDir)
+
+  if PackagesGit notin context().flags and dirExists(gitDir):
+    removeDir($gitDir)
+
+proc getPackageInfos*(cacheDir = cachesDirectory()): seq[PackageInfo] =
   result = @[]
   var uniqueNames = initHashSet[string]()
-  var jsonFiles = 0
-  for kind, path in walkDir(pkgsDir):
-    if kind == pcFile and path.string.endsWith(".json"):
-      inc jsonFiles
-      let packages = json.parseFile($path)
-      for p in packages:
-        let pkg = p.fromJson()
-        if pkg != nil and not uniqueNames.containsOrIncl(pkg.name):
-          result.add(pkg)
+  let pkgsFile = packageInfosFile(cacheDir)
+  if not fileExists($pkgsFile):
+    return
 
-proc updatePackages*(pkgsDir = packagesDirectory()) =
-  let pkgsPath = pkgsDir
-  let pkgsParent = pkgsPath.parentDir()
-  if pkgsParent.len > 0 and not dirExists(pkgsParent):
-    createDir(pkgsParent)
+  let packages = json.parseFile($pkgsFile)
+  for p in packages:
+    let pkg = p.fromJson()
+    if pkg != nil and not uniqueNames.containsOrIncl(pkg.name):
+      result.add(pkg)
+
+proc updatePackages*(cacheDir = cachesDirectory(); gitDir = packagesDirectory()) =
+  if $cacheDir == $cachesDirectory():
+    removeLegacyPackageCaches(gitDir)
+
+  if cacheDir.len > 0 and not dirExists(cacheDir):
+    createDir(cacheDir)
+
+  let pkgsFile = packageInfosFile(cacheDir)
   if PackagesGit in context().flags:
-    ## TODO: remove later?
-    if dirExists(pkgsPath):
-      gitPull(pkgsPath)
+    if dirExists(gitDir):
+      gitPull(gitDir)
     else:
       let pkgsUrl = parseUri "https://github.com/nim-lang/packages"
-      let res = clone(pkgsUrl, pkgsPath)
+      let res = clone(pkgsUrl, gitDir)
       if res[0] != Ok:
         error DefaultPackagesSubDir, "cannot clone packages repo: " & res[1]
+    copyFile($(gitDir / Path"packages.json"), $pkgsFile)
   else:
-    if not dirExists(pkgsPath):
-      createDir(pkgsPath)
     let client = newHttpClient()
     try:
       let contents = client.getContent(PackagesJsonUrl)
-      writeFile($(pkgsPath / Path"packages.json"), contents)
+      writeFile($pkgsFile, contents)
     except CatchableError as e:
-      error DefaultPackagesSubDir, "cannot download packages.json: " & e.msg
+      error DefaultCachesSubDir, "cannot download packages.json: " & e.msg
     finally:
       client.close()

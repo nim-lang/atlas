@@ -5,6 +5,7 @@ export json, jsonutils
 
 proc toJsonHook*(v: VersionInterval): JsonNode = toJson($(v))
 proc toJsonHook*(v: Version): JsonNode = toJson($v)
+proc toJsonHook*(v: CommitHash): JsonNode = toJson($v)
 proc toJsonHook*(v: VersionTag): JsonNode = toJson(repr(v))
 
 proc fromJsonHook*(a: var VersionInterval; b: JsonNode; opt = Joptions()) =
@@ -14,6 +15,9 @@ proc fromJsonHook*(a: var VersionInterval; b: JsonNode; opt = Joptions()) =
 
 proc fromJsonHook*(a: var Version; b: JsonNode; opt = Joptions()) =
   a = toVersion(b.getStr())
+
+proc fromJsonHook*(a: var CommitHash; b: JsonNode; opt = Joptions()) =
+  a = toCommitHash(b.getStr())
 
 proc fromJsonHook*(a: var VersionTag; b: JsonNode; opt = Joptions()) =
   var raw = b.getStr()
@@ -60,12 +64,15 @@ proc fromJsonHook*(a: var Table[PkgUrl, HashSet[string]]; b: JsonNode; opt = Jop
     flags.fromJson(toJson(v))
     a[url] = flags
 
+proc toJsonHook*(r: NimbleRelease, opt: ToJsonOptions): JsonNode
+proc fromJsonHook*(r: var NimbleRelease; b: JsonNode; opt = Joptions())
+
 proc toJsonHook*(t: OrderedTable[PackageVersion, NimbleRelease], opt: ToJsonOptions): JsonNode =
   result = newJArray()
   for k, v in t:
     var tpl = newJArray()
     tpl.add toJson(k, opt)
-    tpl.add toJson(v, opt)
+    tpl.add toJsonHook(v, opt)
     result.add tpl
     # result[repr(k.vtag)] = toJson(v, opt)
 
@@ -74,7 +81,7 @@ proc fromJsonHook*(t: var OrderedTable[PackageVersion, NimbleRelease]; b: JsonNo
     var pv: PackageVersion
     pv.fromJson(item[0])
     var release: NimbleRelease
-    release.fromJson(item[1])
+    fromJsonHook(release, item[1], opt)
     t[pv] = release
 
 proc toJsonHook*(t: OrderedTable[PkgUrl, Package], opt: ToJsonOptions): JsonNode =
@@ -90,8 +97,8 @@ proc fromJsonHook*(t: var OrderedTable[PkgUrl, Package]; b: JsonNode; opt = Jopt
     pkg.fromJson(v)
     t[url] = pkg
 
-proc toJsonHook*(r: NimbleRelease, opt: ToJsonOptions = ToJsonOptions()): JsonNode =
-  if r == nil:
+proc nimbleReleaseToJson(r: NimbleRelease, opt: ToJsonOptions): JsonNode =
+  if r.isNil:
     return newJNull()
   result = newJObject()
   result["requirements"] = toJson(r.requirements, opt)
@@ -100,14 +107,30 @@ proc toJsonHook*(r: NimbleRelease, opt: ToJsonOptions = ToJsonOptions()): JsonNo
   if r.srcDir != Path "":
     result["srcDir"] = toJson(r.srcDir, opt)
   result["version"] = toJson(r.version, opt)
+  if r.nimVersion != Version"":
+    result["nimVersion"] = toJson(r.nimVersion, opt)
   result["status"] = toJson(r.status, opt)
   if r.err != "":
     result["err"] = toJson(r.err, opt)
+  if r.features.len > 0:
+    result["features"] = toJson(r.features, opt)
+  if r.reqsByFeatures.len > 0:
+    result["reqsByFeatures"] = toJson(r.reqsByFeatures, opt)
+  if r.featureVars.len > 0:
+    result["featureVars"] = toJson(r.featureVars, opt)
+
+proc toJsonHook*(r: NimbleRelease): JsonNode =
+  nimbleReleaseToJson(r, ToJsonOptions())
+
+proc toJsonHook*(r: NimbleRelease, opt: ToJsonOptions): JsonNode =
+  nimbleReleaseToJson(r, opt)
 
 proc fromJsonHook*(r: var NimbleRelease; b: JsonNode; opt = Joptions()) =
   if r.isNil:
     r = new(NimbleRelease)
   r.version.fromJson(b["version"])
+  if b.hasKey("nimVersion"):
+    r.nimVersion.fromJson(b["nimVersion"])
   r.requirements.fromJson(b["requirements"])
   r.status.fromJson(b["status"])
   if b.hasKey("hasInstallHooks"):
@@ -116,6 +139,12 @@ proc fromJsonHook*(r: var NimbleRelease; b: JsonNode; opt = Joptions()) =
     r.srcDir.fromJson(b["srcDir"])
   if b.hasKey("err"):
     r.err = b["err"].getStr()
+  if b.hasKey("features"):
+    r.features.fromJson(b["features"])
+  if b.hasKey("reqsByFeatures"):
+    r.reqsByFeatures.fromJson(b["reqsByFeatures"])
+  if b.hasKey("featureVars"):
+    r.featureVars.fromJson(b["featureVars"])
 
 proc toJsonGraph*(d: DepGraph): JsonNode =
   result = toJson(d, ToJsonOptions(enumMode: joptEnumString))
