@@ -6,6 +6,7 @@ type
     packageToDependency*: OrderedTable[PkgUrl, Package]
     packageExtras*: OrderedTable[string, PkgUrl]
     nameToUrl: OrderedTable[string, PkgUrl]
+    urlToUrl: OrderedTable[string, PkgUrl]
     explicitVersions*: OrderedTable[PkgUrl, HashSet[VersionTag]]
     nameOverrides*: Patterns
     urlOverrides*: Patterns
@@ -152,6 +153,9 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
   if name.isUrl():
     result = createUrlSkipPatterns(name)
 
+    if $result.url in nc.urlToUrl:
+      result = nc.urlToUrl[$result.url]
+
     # Keep explicit URLs stable. Name overrides are for package-name lookups,
     # not for remapping already explicit URL requirements (especially file://).
     if not origWasUrl:
@@ -210,12 +214,12 @@ proc createUrlFromPath*(nc: var NimbleContext, orig: Path, isLinkPath = false): 
     discard nc.putFromPath(result.projectName, result)
 
 proc fillPackageLookupTable(c: var NimbleContext) =
-  let pkgsDir = packagesDirectory()
   if not c.hasPackageList:
     c.hasPackageList = true
-    if not fileExists(pkgsDir / Path"packages.json"):
-      updatePackages(pkgsDir)
-    let packages = getPackageInfos(pkgsDir)
+    removeLegacyPackageCaches()
+    if not fileExists(packageInfosFile()):
+      updatePackages()
+    let packages = getPackageInfos()
     var aliases: seq[PackageInfo] = @[]
 
     # add all packages to the lookup table
@@ -227,7 +231,7 @@ proc fillPackageLookupTable(c: var NimbleContext) =
         pkgUrl.hasShortName = true
         pkgUrl.qualifiedName.name = pkgInfo.name
         c.nameToUrl[unicode.toLower(pkgInfo.name)] = pkgUrl
-        # c.urlToNames[pkgUrl.url] = pkgInfo.name
+        c.urlToUrl[$pkgUrl.url] = pkgUrl
 
     # now we add aliases to the lookup table
     for pkgAlias in aliases:

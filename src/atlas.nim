@@ -547,7 +547,8 @@ proc atlasRun*(params: seq[string]) =
 
   of "search":
     var pkgs: seq[PackageInfo] = @[]
-    if dirExists(packagesDirectory()):
+    removeLegacyPackageCaches()
+    if fileExists(packageInfosFile()):
       pkgs = getPackageInfos()
     pkgsearch.search(pkgs, args)
 

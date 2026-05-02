@@ -159,10 +159,6 @@ proc loadPackageReleaseInfo*(
   of ExplicitVersions:
     debug pkg.url.projectName, "traversing dependency found explicit versions:", $result.expandedExplicitVersions
 
-    var uniqueCommits: HashSet[CommitHash]
-    for ver in pkg.versions.keys():
-      uniqueCommits.incl(ver.vtag.c)
-
     # Expand short hashes, branches, and #head before loading explicit releases.
     for version in mitems(result.expandedExplicitVersions):
       let vtag = gitops.expandSpecial(pkg.ondisk, vtag = version)
@@ -173,7 +169,7 @@ proc loadPackageReleaseInfo*(
       debug pkg.url.projectName, "check explicit version:", repr version
       if version.commit.isEmpty():
         warn pkg.url.projectName, "explicit version has empty commit:", $version
-      elif not uniqueCommits.containsOrIncl(version.commit):
+      elif version.toPkgVer() notin pkg.versions:
         debug pkg.url.projectName, "add explicit version:", $version
         discard result.releases.addRelease(nc, pkg, version)
 
