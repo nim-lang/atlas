@@ -11,8 +11,11 @@ import basic/[context, deptypes, versions, osutils, nimbleparser, reporters, git
 
 export deptypes, versions, deptypesjson
 
-## Returns the initial package state to use for dependencies discovered from a release.
-proc childDependencyState(pkg: Package; deferChildDeps: bool): PackageState
+proc childDependencyState(pkg: Package; deferChildDeps: bool): PackageState =
+  ## Returns the initial state for newly discovered child dependencies.
+  ## Non-root children are marked lazy when `deferChildDeps` is enabled.
+  if deferChildDeps and not pkg.isRoot: LazyDeferred
+  else: NotInitialized
 
 proc registerReleaseDependencies(
     nc: var NimbleContext;
@@ -81,12 +84,6 @@ proc collectNimbleVersions*(nc: NimbleContext; pkg: Package): seq[VersionTag] =
 type
   PackageAction* = enum
     DoNothing, DoClone
-
-proc childDependencyState(pkg: Package; deferChildDeps: bool): PackageState =
-  ## Returns the initial state for newly discovered child dependencies.
-  ## Non-root children are marked lazy when `deferChildDeps` is enabled.
-  if deferChildDeps and not pkg.isRoot: LazyDeferred
-  else: NotInitialized
 
 proc processNimbleRelease(
     nc: var NimbleContext;
