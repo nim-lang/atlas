@@ -99,6 +99,15 @@ proc lookup*(nc: NimbleContext, name: string): PkgUrl =
   elif lname in nc.nameToUrl:
     result = nc.nameToUrl[lname]
 
+proc isForkUrl*(nc: NimbleContext; url: PkgUrl): bool =
+  let officialUrl = nc.lookup(url.shortName())
+  let isGitUrl = url.url.scheme notin ["file", "link", "atlas"]
+  result =
+    isGitUrl and
+    not officialUrl.isEmpty() and
+    officialUrl.url.scheme notin ["file", "link", "atlas"] and
+    officialUrl.url != url.url
+
 proc putImpl(nc: var NimbleContext, name: string, url: PkgUrl, isFromPath = false): bool =
   let name = unicode.toLower(name)
   if name in nc.nameToUrl:

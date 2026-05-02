@@ -7,11 +7,10 @@
 #
 
 import std / [os, strutils, uri, tables, sequtils, sets, hashes, algorithm, paths, dirs]
-import basic/[context, deptypes, versions, osutils, nimbleparser, reporters, gitops, pkgurls, nimblecontext, deptypesjson, dependencycache]
+import basic/[context, deptypes, versions, osutils, nimbleparser, reporters, gitops, pkgurls, nimblecontext, deptypesjson, dependencycache, packageutils]
 
 export deptypes, versions, deptypesjson
 
-proc isForkUrl(nc: NimbleContext; url: PkgUrl): bool
 proc childDependencyState(pkg: Package; deferChildDeps: bool): PackageState
 
 proc registerReleaseDependencies(
@@ -79,26 +78,6 @@ proc collectNimbleVersions*(nc: NimbleContext; pkg: Package): seq[VersionTag] =
 type
   PackageAction* = enum
     DoNothing, DoClone
-
-proc copyFromDisk*(pkg: Package, dest: Path): (CloneStatus, string) =
-  let source = pkg.url.toOriginalPath()
-  info pkg, "copyFromDisk cloning:", $dest, "from:", $source
-  if dirExists(source) and not dirExists(dest):
-    trace pkg, "copyFromDisk cloning:", $dest, "from:", $source
-    copyDir(source.string, dest.string)
-    result = (Ok, "")
-  else:
-    error pkg, "copyFromDisk not found:", $source
-    result = (NotFound, $dest)
-
-proc isForkUrl(nc: NimbleContext; url: PkgUrl): bool =
-  let officialUrl = nc.lookup(url.shortName())
-  let isGitUrl = url.url.scheme notin ["file", "link", "atlas"]
-  result =
-    isGitUrl and
-    not officialUrl.isEmpty() and
-    officialUrl.url.scheme notin ["file", "link", "atlas"] and
-    officialUrl.url != url.url
 
 proc childDependencyState(pkg: Package; deferChildDeps: bool): PackageState =
   ## Returns the initial state for newly discovered child dependencies.
