@@ -64,12 +64,15 @@ proc fromJsonHook*(a: var Table[PkgUrl, HashSet[string]]; b: JsonNode; opt = Jop
     flags.fromJson(toJson(v))
     a[url] = flags
 
+proc toJsonHook*(r: NimbleRelease, opt: ToJsonOptions): JsonNode
+proc fromJsonHook*(r: var NimbleRelease; b: JsonNode; opt = Joptions())
+
 proc toJsonHook*(t: OrderedTable[PackageVersion, NimbleRelease], opt: ToJsonOptions): JsonNode =
   result = newJArray()
   for k, v in t:
     var tpl = newJArray()
     tpl.add toJson(k, opt)
-    tpl.add toJson(v, opt)
+    tpl.add toJsonHook(v, opt)
     result.add tpl
     # result[repr(k.vtag)] = toJson(v, opt)
 
@@ -78,7 +81,7 @@ proc fromJsonHook*(t: var OrderedTable[PackageVersion, NimbleRelease]; b: JsonNo
     var pv: PackageVersion
     pv.fromJson(item[0])
     var release: NimbleRelease
-    release.fromJson(item[1])
+    fromJsonHook(release, item[1], opt)
     t[pv] = release
 
 proc toJsonHook*(t: OrderedTable[PkgUrl, Package], opt: ToJsonOptions): JsonNode =
@@ -94,8 +97,8 @@ proc fromJsonHook*(t: var OrderedTable[PkgUrl, Package]; b: JsonNode; opt = Jopt
     pkg.fromJson(v)
     t[url] = pkg
 
-proc toJsonHook*(r: NimbleRelease, opt: ToJsonOptions = ToJsonOptions()): JsonNode =
-  if r == nil:
+proc nimbleReleaseToJson(r: NimbleRelease, opt: ToJsonOptions): JsonNode =
+  if r.isNil:
     return newJNull()
   result = newJObject()
   result["requirements"] = toJson(r.requirements, opt)
@@ -115,6 +118,12 @@ proc toJsonHook*(r: NimbleRelease, opt: ToJsonOptions = ToJsonOptions()): JsonNo
     result["reqsByFeatures"] = toJson(r.reqsByFeatures, opt)
   if r.featureVars.len > 0:
     result["featureVars"] = toJson(r.featureVars, opt)
+
+proc toJsonHook*(r: NimbleRelease): JsonNode =
+  nimbleReleaseToJson(r, ToJsonOptions())
+
+proc toJsonHook*(r: NimbleRelease, opt: ToJsonOptions): JsonNode =
+  nimbleReleaseToJson(r, opt)
 
 proc fromJsonHook*(r: var NimbleRelease; b: JsonNode; opt = Joptions()) =
   if r.isNil:
