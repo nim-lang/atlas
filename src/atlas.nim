@@ -341,6 +341,9 @@ proc update(filter: string) =
   ## update the dependencies
   ##
   ## this will check every git repository in `depsDir` and update it if needed
+  info "atlas:update", "updating packages database"
+  updatePackages()
+
   let depsRoot = depsDir()
   if depsRoot == Path"" or not dirExists(depsRoot):
     warn "atlas:update", "deps directory not found:", $depsRoot
