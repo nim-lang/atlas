@@ -23,7 +23,6 @@ proc registerReleaseDependencies(
     return
 
   for pkgUrl, interval in items(release.requirements):
-    # debug pkg.url.projectName, "INTERVAL: ", $interval, "isSpecial:", $interval.isSpecial, "explicit:", $interval.extractSpecificCommit()
     if interval.isSpecial:
       let commit = interval.extractSpecificCommit()
       nc.explicitVersions.mgetOrPut(pkgUrl, initHashSet[VersionTag]()).incl(VersionTag(v: Version($(interval)), c: commit))
@@ -31,7 +30,6 @@ proc registerReleaseDependencies(
     let state = childDependencyState(pkg, deferChildDeps)
     if pkgUrl notin nc.packageToDependency:
       debug pkg.url.projectName, "Found new pkg:", pkgUrl.projectName, "url:", $pkgUrl.url, "projectName:", $pkgUrl.projectName, "state:", $state
-      # debug pkg.url.projectName, "Found new pkg:", pkgUrl.projectName, "repr:", $pkgUrl.repr
       let pkgDep = Package(url: pkgUrl, state: state, isFork: isForkUrl(nc, pkgUrl))
       nc.packageToDependency[pkgUrl] = pkgDep
     else:
@@ -103,9 +101,6 @@ proc processNimbleRelease(
     return
   else:
     nimbleFiles = findGitNimbleFiles(pkg, release.commit)
-
-    # warn pkg.url.projectName, "processRelease unable to checkout commit ", $release, "at:", $pkg.ondisk
-    # result = NimbleRelease(status: HasBrokenRelease, err: "error checking out release")
 
   if nimbleFiles.len() == 0:
     info "processRelease", "skipping release: missing nimble file:", $release
@@ -222,15 +217,12 @@ proc traverseDependency*(
 
   of ExplicitVersions:
     debug pkg.url.projectName, "traversing dependency found explicit versions:", $expandedExplicitVersions
-    # for ver, rel in pkg.versions:
-    #   versions.add((ver, rel))
 
     var uniqueCommits: HashSet[CommitHash]
     for ver in pkg.versions.keys():
       uniqueCommits.incl(ver.vtag.c)
 
     # get full hash from short hashes
-    # TODO: handle shallow clones here?
     for version in mitems(expandedExplicitVersions):
       let vtag = gitops.expandSpecial(pkg.ondisk, vtag = version)
       version = vtag
