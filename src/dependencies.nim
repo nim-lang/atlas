@@ -11,6 +11,7 @@ import basic/[context, deptypes, versions, osutils, nimbleparser, reporters, git
 
 export deptypes, versions, deptypesjson
 
+## Returns the initial package state to use for dependencies discovered from a release.
 proc childDependencyState(pkg: Package; deferChildDeps: bool): PackageState
 
 proc registerReleaseDependencies(
@@ -19,6 +20,8 @@ proc registerReleaseDependencies(
     release: NimbleRelease;
     deferChildDeps: bool
 ) =
+  ## Registers dependency edges discovered in a loaded Nimble release.
+  ## This also records explicit commit requirements for later traversal.
   if release.status != Normal:
     return
 
@@ -58,12 +61,14 @@ proc enrichPackageDependencies(
     pkg: Package;
     deferChildDeps: bool
 ) =
-  ## Enrich the traversal context from already-loaded package release info.
+  ## Enriches the traversal context from already-loaded package release info.
   ## This is intentionally separate from release parsing/cache loading.
   for _, release in pkg.versions:
     nc.registerReleaseDependencies(pkg, release, deferChildDeps)
 
 proc collectNimbleVersions*(nc: NimbleContext; pkg: Package): seq[VersionTag] =
+  ## Collects commits that modified the package's Nimble file.
+  ## These commits are used as fallback release candidates when tags are absent.
   let nimbleFiles = findNimbleFile(pkg)
   let dir = pkg.ondisk
   doAssert(pkg.ondisk.string != "", "Package ondisk must be set before collectNimbleVersions can be called! Package: " & $(pkg))
@@ -89,6 +94,8 @@ proc processNimbleRelease(
     release: VersionTag;
     deferChildDeps: bool
 ): NimbleRelease =
+  ## Loads and parses the Nimble file for a specific package release candidate.
+  ## Historical releases are read from git contents and materialized only temporarily.
   trace pkg.url.projectName, "Processing release:", $release
 
   var nimbleFiles: seq[NimbleFileSource]
@@ -118,6 +125,8 @@ proc processNimbleRelease(
         removeFile($nimbleFile)
 
 proc addFeatureDependencies(pkg: Package) =
+  ## Marks root package feature requirements as active when requested by context flags.
+  ## This can reopen root processing so newly enabled feature dependencies are traversed.
 
   var featuresAdded = false
   warn pkg.url.projectName, "adding feature dependencies for root package; features:", $(context().features.toSeq().join(", ")), "versions:", $(pkg.versions.keys().toSeq().mapIt($it).join(", "))
@@ -144,12 +153,13 @@ proc addFeatureDependencies(pkg: Package) =
 
 proc addRelease(
     versions: var seq[(PackageVersion, NimbleRelease)],
-    # pkg: var Package,
     nc: var NimbleContext;
     pkg: Package,
     vtag: VersionTag;
     deferChildDeps: bool
 ): bool =
+  ## Parses one release candidate and appends it to the pending version list.
+  ## The returned release version is normalized against tag or Nimble-file metadata.
   var pkgver = vtag.toPkgVer()
   trace pkg.url.projectName, "Adding Nimble version:", $vtag
   try:
@@ -178,6 +188,8 @@ proc traverseDependency*(
     explicitVersions: seq[VersionTag];
     deferChildDeps = false;
 ) =
+  ## Resolves the set of package releases for a found dependency.
+  ## Results are enriched into traversal state and may be loaded from or saved to cache.
   doAssert pkg.ondisk.dirExists() and pkg.state != NotInitialized, "Package should've been found or cloned at this point. Package: " & $pkg.url & " on disk: " & $pkg.ondisk
 
   var versions: seq[(PackageVersion, NimbleRelease)]
@@ -222,7 +234,7 @@ proc traverseDependency*(
     for ver in pkg.versions.keys():
       uniqueCommits.incl(ver.vtag.c)
 
-    # get full hash from short hashes
+    # Expand short hashes, branches, and #head before loading explicit releases.
     for version in mitems(expandedExplicitVersions):
       let vtag = gitops.expandSpecial(pkg.ondisk, vtag = version)
       version = vtag
@@ -248,7 +260,7 @@ proc traverseDependency*(
         if not vtag.commit.isEmpty() and not uniqueCommits.containsOrIncl(vtag.commit):
           discard versions.addRelease(nc, pkg, vtag, deferChildDeps)
 
-      ## Note: always prefer tagged versions
+      # Prefer tagged versions over versions inferred from Nimble-file history.
       let tags = collectTaggedVersions(pkg.ondisk, isLocalOnly = pkg.isLocalOnly)
       debug pkg.url.projectName, "nimble tags:", $tags
       for tag in tags:
@@ -257,16 +269,15 @@ proc traverseDependency*(
           assert tag.commit.orig == FromGitTag, "maybe this needs to be overriden like before: " & $tag.commit.orig
 
       if tags.len() == 0 or IncludeTagsAndNimbleCommits in context().flags:
-        ## Note: skip nimble commit versions unless explicitly enabled
-        ## package maintainers may delete a tag to skip a versions, which we'd override here
+        # Use Nimble-file commit versions only when tags are absent or explicitly requested.
+        # Otherwise deleted tags could be reintroduced as inferred releases.
         if NimbleCommitsMax in context().flags:
-          # reverse the order so the newest commit is preferred for new versions
+          # Reverse the order so the newest commit is preferred for each version.
           nimbleCommits.reverse()
 
         debug pkg.url.projectName, "nimble commits:", $nimbleCommits
         for tag in nimbleCommits:
           if not uniqueCommits.containsOrIncl(tag.c):
-            # trace pkg.url.projectName, "traverseDependency adding nimble commit:", $tag
             var vers: seq[(PackageVersion, NimbleRelease)]
             let added = vers.addRelease(nc, pkg, tag, deferChildDeps)
             if added and not nimbleVersions.containsOrIncl(vers[0][0].vtag.v):
@@ -292,11 +303,10 @@ proc traverseDependency*(
       if not checkoutGitCommit(pkg.ondisk, currentCommit, Warning):
         info pkg.url.projectName, "traverseDependency error loading versions reverting to ", $currentCommit
 
-  # make sure identicle NimbleReleases refer to the same ref
+  # Make identical NimbleReleases share the same ref object.
   var uniqueReleases: Table[NimbleRelease, NimbleRelease]
   for (ver, rel) in versions:
     if rel notin uniqueReleases:
-      # trace pkg.url.projectName, "found unique release requirements at:", $ver.vtag
       uniqueReleases[rel] = rel
     else:
       trace pkg.url.projectName, "found duplicate release requirements at:", $ver.vtag
@@ -310,7 +320,7 @@ proc traverseDependency*(
       error pkg.url.projectName, "versions table:", $pkg.versions.keys().toSeq()
     pkg.versions[ver] = uniqueReleases[rel]
 
-  # TODO: filter by unique versions first?
+  # Release entries are now loaded; enrichment below registers their dependencies.
   pkg.state = Processed
 
   nc.enrichPackageDependencies(pkg, deferChildDeps)
@@ -327,6 +337,8 @@ proc loadDependency*(
     pkg: var Package,
     onClone: PackageAction = DoClone,
 ) = 
+  ## Ensures a package has an on-disk location and marks it ready for traversal.
+  ## Depending on URL and policy this may clone, copy, reuse, update, or defer the package.
   if pkg.isRoot:
     pkg.ondisk = project()
     pkg.isAtlasProject = true
@@ -411,12 +423,14 @@ proc processPendingPackages(
     onClone: PackageAction;
     deferChildDeps: bool
 ) =
+  ## Processes all packages currently known to the context until no immediate work remains.
+  ## Lazy packages are represented in the graph without loading their full release history.
   var processing = true
   while processing:
     processing = false
     let pkgUrls = nc.packageToDependency.keys().toSeq()
 
-    # just for more concise logging
+    # Build concise package lists for progress logging.
     var initializingPkgs: seq[string]
     var processingPkgs: seq[string]
     for pkgUrl in pkgUrls:
@@ -433,7 +447,7 @@ proc processPendingPackages(
     if processingPkgs.len() > 0:
       notice root.projectName, "Processing packages:", processingPkgs.join(", ")
 
-    # process packages
+    # Process a stable snapshot so newly discovered packages are handled on the next loop.
     debug "atlas:expandGraph", "Processing package count: ", $pkgUrls.len()
     for pkgUrl in pkgUrls:
       var pkg = nc.packageToDependency[pkgUrl]
@@ -484,13 +498,13 @@ proc expandGraph*(
     isLinkPath = false,
     deferChildDeps = false
 ): DepGraph =
-  ## Expand the graph by adding all dependencies.
+  ## Expands a workspace root into a dependency graph.
+  ## Explicit commit requirements can add new work, so processing repeats to a fixed point.
   
   doAssert path.string != "."
   let url = nc.createUrlFromPath(path, isLinkPath)
   notice url.projectName, "expanding root package at:", $path, "url:", $url
   var root = Package(url: url, isRoot: true, isFork: isForkUrl(nc, url))
-  # nc.loadDependency(pkg)
 
   result = DepGraph(root: root, mode: mode)
   nc.packageToDependency[root.url] = root
@@ -519,9 +533,3 @@ proc expandGraph*(
       nc.explicitVersions.len != explicitCountBeforeExplicit
 
   info "atlas:expand", "Finished expanding packages for:", $root.projectName
-
-proc findProjects*(path: Path): seq[Path] =
-  result = @[]
-  for k, f in walkDir(path):
-    if k == pcDir and dirExists(f / Path".git"):
-      result.add(f)
