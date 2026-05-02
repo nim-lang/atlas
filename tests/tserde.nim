@@ -1,4 +1,4 @@
-import std/[unittest, json, jsonutils]
+import std/[unittest, json, jsonutils, sets, tables]
 import basic/[context, sattypes, pkgurls, deptypes, nimblecontext, depgraphtypes]
 import basic/[deptypesjson, versions]
 
@@ -73,6 +73,30 @@ suite "json serde":
     var release2: NimbleRelease
     release2.fromJson(jnRelease)
     check release == release2
+
+  test "json serde nimble release with features":
+    let featureUrl = nc.createUrl("proj_a")
+    var reqsByFeatures: Table[PkgUrl, HashSet[string]]
+    reqsByFeatures[featureUrl] = ["testing"].toHashSet
+    let release = NimbleRelease(
+      version: Version"1.0.0",
+      nimVersion: Version"2.0.0",
+      status: Normal,
+      requirements: @[(nc.createUrl("foobar"), p"1.0.0")],
+      features: {"testing": @[(featureUrl, p">= 1.0.0")]}.toTable,
+      reqsByFeatures: reqsByFeatures,
+      featureVars: {"testing": VarId(3)}.toTable
+    )
+    let jnRelease = toJson(release)
+    var release2: NimbleRelease
+    release2.fromJson(jnRelease)
+
+    check release2.version == release.version
+    check release2.nimVersion == release.nimVersion
+    check release2.requirements == release.requirements
+    check release2.features == release.features
+    check release2.reqsByFeatures == release.reqsByFeatures
+    check release2.featureVars == release.featureVars
 
   test "json serde version interval":
 

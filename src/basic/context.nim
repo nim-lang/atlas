@@ -18,7 +18,7 @@ const
 const
   AtlasProjectConfig = Path"atlas.config"
   DefaultPackagesSubDir* = Path"_packages"
-  DefaultCachesSubDir* = Path"_caches"
+  DefaultCachesSubDir* = Path".cache"
   DefaultNimbleCachesSubDir* = Path"_nimbles"
 
 

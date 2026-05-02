@@ -65,6 +65,12 @@ Atlas downloads `packages.json` into `deps/_packages` by default; pass
 If dependency URLs use `git://`, pass `--forceGitToHttps` to rewrite them to
 `https://` before cloning.
 
+Atlas caches parsed dependency release metadata in `deps/.cache`. Each cache
+file is scoped to one package URL and is reused only while the package's remote
+HEAD, local checked-out commit, and relevant release-collection flags still
+match. If those inputs change, Atlas reparses the package's Nimble files and
+rewrites the cache.
+
 In addition to full URLs and package names, Atlas supports a shorthand
 **forge alias** syntax of the form `<alias>:<user>/<repo>`. The supported
 aliases are:

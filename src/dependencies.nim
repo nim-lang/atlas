@@ -11,6 +11,175 @@ import basic/[context, deptypes, versions, osutils, nimbleparser, reporters, git
 
 export deptypes, versions, deptypesjson
 
+type
+  NimbleFileSource = object
+    path: Path
+    fromGit: bool
+
+  PackageReleaseCacheEntry = object
+    vtag*: VersionTag
+    release*: NimbleRelease
+
+  PackageReleaseCache = object
+    cacheVersion*: int
+    url*: PkgUrl
+    head*: CommitHash
+    current*: CommitHash
+    includeTagsAndNimbleCommits*: bool
+    nimbleCommitsMax*: bool
+    releases*: seq[PackageReleaseCacheEntry]
+
+const PackageReleaseCacheVersion = 1
+
+proc packageCacheStem(url: PkgUrl): string =
+  result = url.fullName()
+  if result.len == 0:
+    result = url.projectName()
+  if result.len == 0:
+    result = $url
+
+  for c in mitems(result):
+    if c notin {'a'..'z', 'A'..'Z', '0'..'9', '.', '_', '-'}:
+      c = '_'
+
+proc packageReleaseCachePath(pkg: Package): Path =
+  cachesDirectory() / Path(packageCacheStem(pkg.url) & ".json")
+
+proc includeTagsAndNimbleCommitsFlag(): bool =
+  IncludeTagsAndNimbleCommits in context().flags
+
+proc nimbleCommitsMaxFlag(): bool =
+  NimbleCommitsMax in context().flags
+
+proc canUsePackageReleaseCache(pkg: Package; mode: TraversalMode; explicitVersions: seq[VersionTag]): bool =
+  mode == AllReleases and
+    explicitVersions.len == 0 and
+    not pkg.isRoot and
+    not pkg.isAtlasProject and
+    not pkg.url.isNimbleLink() and
+    not pkg.isLocalOnly
+
+proc findGitNimbleFiles(pkg: Package; commit: CommitHash): seq[NimbleFileSource] =
+  let files = listFiles(pkg.ondisk, commit)
+  for file in files:
+    if file.endsWith(".nimble"):
+      let source = NimbleFileSource(path: Path(file), fromGit: true)
+      if source.path.splitPath().tail == Path(pkg.url.shortName() & ".nimble"):
+        return @[source]
+      result.add source
+
+proc materializeNimbleFile(pkg: Package; commit: CommitHash; source: NimbleFileSource): Path =
+  if not source.fromGit:
+    return source.path
+
+  let tmpDir = cachesDirectory() / Path"_tmp"
+  createDir(cachesDirectory())
+  createDir(tmpDir)
+  result = tmpDir / Path(packageCacheStem(pkg.url) & "-" & commit.short() & "-" & $source.path.splitPath().tail)
+  writeFile($result, showFile(pkg.ondisk, commit, $source.path))
+
+proc isForkUrl(nc: NimbleContext; url: PkgUrl): bool
+proc childDependencyState(pkg: Package; deferChildDeps: bool): PackageState
+
+proc registerReleaseDependencies(
+    nc: var NimbleContext;
+    pkg: Package;
+    release: NimbleRelease;
+    deferChildDeps: bool
+) =
+  if release.status != Normal:
+    return
+
+  for pkgUrl, interval in items(release.requirements):
+    # debug pkg.url.projectName, "INTERVAL: ", $interval, "isSpecial:", $interval.isSpecial, "explicit:", $interval.extractSpecificCommit()
+    if interval.isSpecial:
+      let commit = interval.extractSpecificCommit()
+      nc.explicitVersions.mgetOrPut(pkgUrl, initHashSet[VersionTag]()).incl(VersionTag(v: Version($(interval)), c: commit))
+
+    let state = childDependencyState(pkg, deferChildDeps)
+    if pkgUrl notin nc.packageToDependency:
+      debug pkg.url.projectName, "Found new pkg:", pkgUrl.projectName, "url:", $pkgUrl.url, "projectName:", $pkgUrl.projectName, "state:", $state
+      # debug pkg.url.projectName, "Found new pkg:", pkgUrl.projectName, "repr:", $pkgUrl.repr
+      let pkgDep = Package(url: pkgUrl, state: state, isFork: isForkUrl(nc, pkgUrl))
+      nc.packageToDependency[pkgUrl] = pkgDep
+    else:
+      if nc.packageToDependency[pkgUrl].state == LazyDeferred and state != LazyDeferred:
+        warn pkg.url.projectName, "Changing LazyDeferred pkg to DoLoad:", $pkgUrl.url
+        nc.packageToDependency[pkgUrl].state = DoLoad
+
+  for feature, rq in release.features:
+    for pkgUrl, interval in items(rq):
+      if interval.isSpecial:
+        let commit = interval.extractSpecificCommit()
+        nc.explicitVersions.mgetOrPut(pkgUrl, initHashSet[VersionTag]()).incl(VersionTag(v: Version($(interval)), c: commit))
+      if pkgUrl notin nc.packageToDependency:
+        let state =
+          if feature notin context().features: LazyDeferred
+          else: childDependencyState(pkg, deferChildDeps)
+        debug pkg.url.projectName, "Found new feature pkg:", pkgUrl.projectName, "url:", $pkgUrl.url, "projectName:", $pkgUrl.projectName, "state:", $state
+        let pkgDep = Package(url: pkgUrl, state: state, isFork: isForkUrl(nc, pkgUrl))
+        nc.packageToDependency[pkgUrl] = pkgDep
+      elif feature in context().features and nc.packageToDependency[pkgUrl].state == LazyDeferred and childDependencyState(pkg, deferChildDeps) != LazyDeferred:
+        warn pkg.url.projectName, "Changing LazyDeferred feature pkg to DoLoad:", $pkgUrl.url
+        nc.packageToDependency[pkgUrl].state = DoLoad
+
+proc enrichPackageDependencies(
+    nc: var NimbleContext;
+    pkg: Package;
+    deferChildDeps: bool
+) =
+  ## Enrich the traversal context from already-loaded package release info.
+  ## This is intentionally separate from release parsing/cache loading.
+  for _, release in pkg.versions:
+    nc.registerReleaseDependencies(pkg, release, deferChildDeps)
+
+proc loadPackageReleaseCache(pkg: Package; currentCommit: CommitHash; entries: var seq[PackageReleaseCacheEntry]): bool =
+  if pkg.originHead.isEmpty():
+    return false
+
+  let cachePath = packageReleaseCachePath(pkg)
+  if not fileExists($cachePath):
+    return false
+
+  var cache: PackageReleaseCache
+  try:
+    cache.fromJson(parseFile($cachePath), Joptions(allowMissingKeys: true, allowExtraKeys: true))
+  except CatchableError as e:
+    warn pkg.url.projectName, "ignoring invalid dependency cache:", $cachePath, "error:", e.msg
+    return false
+
+  result =
+    cache.cacheVersion == PackageReleaseCacheVersion and
+    cache.url == pkg.url and
+    cache.head == pkg.originHead and
+    cache.current == currentCommit and
+    cache.includeTagsAndNimbleCommits == includeTagsAndNimbleCommitsFlag() and
+    cache.nimbleCommitsMax == nimbleCommitsMaxFlag()
+
+  if result:
+    entries = cache.releases
+    debug pkg.url.projectName, "loaded dependency cache:", $cachePath, "releases:", $entries.len
+
+proc savePackageReleaseCache(pkg: Package; currentCommit: CommitHash; versions: seq[(PackageVersion, NimbleRelease)]) =
+  if pkg.originHead.isEmpty():
+    return
+
+  var cache = PackageReleaseCache(
+    cacheVersion: PackageReleaseCacheVersion,
+    url: pkg.url,
+    head: pkg.originHead,
+    current: currentCommit,
+    includeTagsAndNimbleCommits: includeTagsAndNimbleCommitsFlag(),
+    nimbleCommitsMax: nimbleCommitsMaxFlag()
+  )
+  for (ver, release) in versions:
+    cache.releases.add PackageReleaseCacheEntry(vtag: ver.vtag, release: release)
+
+  createDir(cachesDirectory())
+  let cachePath = packageReleaseCachePath(pkg)
+  writeFile($cachePath, pretty(toJson(cache, ToJsonOptions(enumMode: joptEnumString))))
+  debug pkg.url.projectName, "wrote dependency cache:", $cachePath, "releases:", $cache.releases.len
+
 proc collectNimbleVersions*(nc: NimbleContext; pkg: Package): seq[VersionTag] =
   let nimbleFiles = findNimbleFile(pkg)
   let dir = pkg.ondisk
@@ -59,16 +228,16 @@ proc processNimbleRelease(
 ): NimbleRelease =
   trace pkg.url.projectName, "Processing release:", $release
 
-  var nimbleFiles: seq[Path]
+  var nimbleFiles: seq[NimbleFileSource]
   if release.version == Version"#head":
     trace pkg.url.projectName, "processRelease using current commit"
-    nimbleFiles = findNimbleFile(pkg)
+    nimbleFiles = findNimbleFile(pkg).mapIt(NimbleFileSource(path: it, fromGit: false))
   elif release.commit.isEmpty():
     warn pkg.url.projectName, "processRelease missing commit ", $release, "at:", $pkg.ondisk
     result = NimbleRelease(status: HasBrokenRelease, err: "no commit")
     return
   else:
-    nimbleFiles = cacheNimbleFilesFromGit(pkg, release.commit)
+    nimbleFiles = findGitNimbleFiles(pkg, release.commit)
 
     # warn pkg.url.projectName, "processRelease unable to checkout commit ", $release, "at:", $pkg.ondisk
     # result = NimbleRelease(status: HasBrokenRelease, err: "error checking out release")
@@ -77,45 +246,16 @@ proc processNimbleRelease(
     info "processRelease", "skipping release: missing nimble file:", $release
     result = NimbleRelease(status: HasUnknownNimbleFile, err: "missing nimble file")
   elif nimbleFiles.len() > 1:
-    info "processRelease", "skipping release: ambiguous nimble file:", $release, "files:", $(nimbleFiles.mapIt(it.splitPath().tail).join(", "))
+    info "processRelease", "skipping release: ambiguous nimble file:", $release, "files:", $(nimbleFiles.mapIt($it.path.splitPath().tail).join(", "))
     result = NimbleRelease(status: HasUnknownNimbleFile, err: "ambiguous nimble file")
   else:
-    let nimbleFile = nimbleFiles[0]
-    result = nc.parseNimbleFile(nimbleFile)
-
-    if result.status == Normal:
-      for pkgUrl, interval in items(result.requirements):
-        # debug pkg.url.projectName, "INTERVAL: ", $interval, "isSpecial:", $interval.isSpecial, "explicit:", $interval.extractSpecificCommit()
-        if interval.isSpecial:
-          let commit = interval.extractSpecificCommit()
-          nc.explicitVersions.mgetOrPut(pkgUrl, initHashSet[VersionTag]()).incl(VersionTag(v: Version($(interval)), c: commit))
-
-        let state = childDependencyState(pkg, deferChildDeps)
-        if pkgUrl notin nc.packageToDependency:
-          debug pkg.url.projectName, "Found new pkg:", pkgUrl.projectName, "url:", $pkgUrl.url, "projectName:", $pkgUrl.projectName, "state:", $state
-          # debug pkg.url.projectName, "Found new pkg:", pkgUrl.projectName, "repr:", $pkgUrl.repr
-          let pkgDep = Package(url: pkgUrl, state: state, isFork: isForkUrl(nc, pkgUrl))
-          nc.packageToDependency[pkgUrl] = pkgDep
-        else:
-          if nc.packageToDependency[pkgUrl].state == LazyDeferred and state != LazyDeferred:
-            warn pkg.url.projectName, "Changing LazyDeferred pkg to DoLoad:", $pkgUrl.url
-            nc.packageToDependency[pkgUrl].state = DoLoad
-
-      for feature, rq in result.features:
-        for pkgUrl, interval in items(rq):
-          if interval.isSpecial:
-            let commit = interval.extractSpecificCommit()
-            nc.explicitVersions.mgetOrPut(pkgUrl, initHashSet[VersionTag]()).incl(VersionTag(v: Version($(interval)), c: commit))
-          if pkgUrl notin nc.packageToDependency:
-            let state =
-              if feature notin context().features: LazyDeferred
-              else: childDependencyState(pkg, deferChildDeps)
-            debug pkg.url.projectName, "Found new feature pkg:", pkgUrl.projectName, "url:", $pkgUrl.url, "projectName:", $pkgUrl.projectName, "state:", $state
-            let pkgDep = Package(url: pkgUrl, state: state, isFork: isForkUrl(nc, pkgUrl))
-            nc.packageToDependency[pkgUrl] = pkgDep
-          elif feature in context().features and nc.packageToDependency[pkgUrl].state == LazyDeferred and childDependencyState(pkg, deferChildDeps) != LazyDeferred:
-            warn pkg.url.projectName, "Changing LazyDeferred feature pkg to DoLoad:", $pkgUrl.url
-            nc.packageToDependency[pkgUrl].state = DoLoad
+    let source = nimbleFiles[0]
+    let nimbleFile = materializeNimbleFile(pkg, release.commit, source)
+    try:
+      result = nc.parseNimbleFile(nimbleFile)
+    finally:
+      if source.fromGit and fileExists($nimbleFile):
+        removeFile($nimbleFile)
 
 proc addFeatureDependencies(pkg: Package) =
 
@@ -187,6 +327,16 @@ proc traverseDependency*(
   if not pkg.isLocalOnly:
     discard gitops.ensureCanonicalOrigin(pkg.ondisk, pkg.url.toUri)
   pkg.originHead = gitops.findOriginTip(pkg.ondisk, errorReportLevel = Warning, isLocalOnly = pkg.isLocalOnly).commit()
+
+  if canUsePackageReleaseCache(pkg, mode, expandedExplicitVersions):
+    var cachedReleases: seq[PackageReleaseCacheEntry]
+    if loadPackageReleaseCache(pkg, currentCommit, cachedReleases):
+      pkg.versions.clear()
+      for entry in cachedReleases:
+        pkg.versions[entry.vtag.toPkgVer()] = entry.release
+      pkg.state = Processed
+      nc.enrichPackageDependencies(pkg, deferChildDeps)
+      return
 
   if mode == CurrentCommit and currentCommit.isEmpty():
     discard
@@ -306,8 +456,13 @@ proc traverseDependency*(
   # TODO: filter by unique versions first?
   pkg.state = Processed
 
+  nc.enrichPackageDependencies(pkg, deferChildDeps)
+
   if pkg.isRoot and context().features.len > 0:
     addFeatureDependencies(pkg)
+
+  if canUsePackageReleaseCache(pkg, mode, expandedExplicitVersions):
+    savePackageReleaseCache(pkg, currentCommit, pkg.versions.pairs().toSeq())
 
 
 proc loadDependency*(
