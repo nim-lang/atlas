@@ -24,17 +24,20 @@ type
     loadedFromCache*: bool
     repoError*: bool
 
-proc collectNimbleVersions*(nc: NimbleContext; pkg: Package): seq[VersionTag] =
+proc collectNimbleVersions*(nc: NimbleContext; pkg: Package; repo: RepoMetadata): seq[VersionTag] =
   ## Collects commits that modified the package's Nimble file.
   ## These commits are used as fallback release candidates when tags are absent.
   let nimbleFiles = findNimbleFile(pkg)
-  let dir = pkg.ondisk
   doAssert(pkg.ondisk.string != "", "Package ondisk must be set before collectNimbleVersions can be called! Package: " & $(pkg))
   result = @[]
   if nimbleFiles.len() == 1:
-    result = collectFileCommits(dir, nimbleFiles[0], isLocalOnly = pkg.isLocalOnly)
+    result = collectFileCommits(repo, nimbleFiles[0])
     result.reverse()
     trace pkg, "collectNimbleVersions commits:", mapIt(result, it.c.short()).join(", "), "nimble:", $nimbleFiles[0]
+
+proc collectNimbleVersions*(nc: NimbleContext; pkg: Package): seq[VersionTag] =
+  let repo = loadRepoMetadata(pkg.ondisk, isLocalOnly = pkg.isLocalOnly)
+  nc.collectNimbleVersions(pkg, repo)
 
 proc processNimbleRelease*(
     nc: var NimbleContext;
@@ -126,10 +129,14 @@ proc loadPackageReleaseInfo*(
   ## Results may come from cache, git tags, Nimble-file history, or explicit commits.
   result.expandedExplicitVersions = explicitVersions
 
-  result.currentCommit = currentGitCommit(pkg.ondisk, Warning)
-  if not pkg.isLocalOnly:
-    discard gitops.ensureCanonicalOrigin(pkg.ondisk, pkg.url.toUri)
-  pkg.originHead = gitops.findOriginTip(pkg.ondisk, errorReportLevel = Warning, isLocalOnly = pkg.isLocalOnly).commit()
+  var repo = loadRepoMetadata(
+    pkg.ondisk,
+    expectedCanonicalUrl = if pkg.isLocalOnly: "" else: $pkg.url.toUri,
+    errorReportLevel = Warning,
+    isLocalOnly = pkg.isLocalOnly
+  )
+  result.currentCommit = repo.currentCommit
+  pkg.originHead = repo.originTip.commit()
 
   if canUsePackageReleaseCache(pkg, mode, result.expandedExplicitVersions):
     var cachedReleases: seq[PackageReleaseCacheEntry]
@@ -161,7 +168,7 @@ proc loadPackageReleaseInfo*(
 
     # Expand short hashes, branches, and #head before loading explicit releases.
     for version in mitems(result.expandedExplicitVersions):
-      let vtag = gitops.expandSpecial(pkg.ondisk, vtag = version)
+      let vtag = gitops.expandSpecial(repo, vtag = version)
       version = vtag
       debug pkg.url.projectName, "explicit version:", $version, "vtag:", repr vtag
 
@@ -177,16 +184,16 @@ proc loadPackageReleaseInfo*(
     try:
       var uniqueCommits: HashSet[CommitHash]
       var nimbleVersions: HashSet[Version]
-      var nimbleCommits = nc.collectNimbleVersions(pkg)
+      var nimbleCommits = nc.collectNimbleVersions(pkg, repo)
 
       debug pkg.url.projectName, "nimble explicit versions:", $explicitVersions
       for version in explicitVersions:
-        var vtag = gitops.expandSpecial(pkg.ondisk, vtag = version)
+        var vtag = gitops.expandSpecial(repo, vtag = version)
         if not vtag.commit.isEmpty() and not uniqueCommits.containsOrIncl(vtag.commit):
           discard result.releases.addRelease(nc, pkg, vtag)
 
       # Prefer tagged versions over versions inferred from Nimble-file history.
-      let tags = collectTaggedVersions(pkg.ondisk, isLocalOnly = pkg.isLocalOnly)
+      let tags = collectTaggedVersions(repo)
       debug pkg.url.projectName, "nimble tags:", $tags
       for tag in tags:
         if not uniqueCommits.containsOrIncl(tag.c):
@@ -225,7 +232,7 @@ proc loadPackageReleaseInfo*(
         discard result.releases.addRelease(nc, pkg, vtag)
 
     finally:
-      if not checkoutGitCommit(pkg.ondisk, result.currentCommit, Warning):
+      if not checkoutGitCommit(pkg.ondisk, result.currentCommit, result.currentCommit, Warning):
         info pkg.url.projectName, "traverseDependency error loading versions reverting to ", $result.currentCommit
 
   result.releases = deduplicateReleases(pkg, result.releases)

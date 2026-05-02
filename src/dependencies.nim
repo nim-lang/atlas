@@ -229,11 +229,10 @@ proc loadDependency*(
           gitops.clone(pkg.url.toUri, pkg.ondisk)
       if status == Ok:
         if not pkg.isLocalOnly:
-          discard gitops.ensureCanonicalOrigin(pkg.ondisk, pkg.url.toUri)
-          discard gitops.resolveRemoteName(pkg.ondisk)
+          var repo = gitops.loadRepoMetadata(pkg.ondisk, expectedCanonicalUrl = $pkg.url.toUri)
           if isFork:
             discard gitops.ensureRemoteForUrl(pkg.ondisk, officialUrl.toUri)
-          discard gitops.fetchRemoteTags(pkg.ondisk)
+          discard gitops.fetchRemoteTags(repo)
         pkg.state = Found
       else:
         pkg.state = Error
@@ -242,14 +241,14 @@ proc loadDependency*(
     if pkg.ondisk.dirExists():
       pkg.state = Found
       if not pkg.isLocalOnly:
-        discard gitops.ensureCanonicalOrigin(pkg.ondisk, pkg.url.toUri)
-        discard gitops.resolveRemoteName(pkg.ondisk)
+        discard gitops.loadRepoMetadata(pkg.ondisk, expectedCanonicalUrl = $pkg.url.toUri)
         if isFork:
           discard gitops.ensureRemoteForUrl(pkg.ondisk, officialUrl.toUri)
       if UpdateRepos in context().flags:
         gitops.updateRepo(pkg.ondisk)
         if not pkg.isLocalOnly:
-          discard gitops.fetchRemoteTags(pkg.ondisk)
+          var repo = gitops.loadRepoMetadata(pkg.ondisk, expectedCanonicalUrl = $pkg.url.toUri)
+          discard gitops.fetchRemoteTags(repo)
         
     else:
       pkg.state = Error
