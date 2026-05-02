@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std/[paths, dirs]
+import std/[os, paths, dirs]
 import context, deptypes, pkgurls, reporters
 
 proc copyFromDisk*(pkg: Package, dest: Path): (CloneStatus, string) =
@@ -14,7 +14,7 @@ proc copyFromDisk*(pkg: Package, dest: Path): (CloneStatus, string) =
   info pkg, "copyFromDisk cloning:", $dest, "from:", $source
   if dirExists(source) and not dirExists(dest):
     trace pkg, "copyFromDisk cloning:", $dest, "from:", $source
-    copyDir(source, dest)
+    os.copyDir($source, $dest)
     result = (Ok, "")
   else:
     error pkg, "copyFromDisk not found:", $source
