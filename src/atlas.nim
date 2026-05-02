@@ -198,7 +198,13 @@ proc afterGraphActions(g: DepGraph) =
   if atlasErrors() == 0:
     writeConfig()
 
-  writeDepGraph(g, debug = not g.root.active or KeepWorkspace in context().flags)
+  if DumpGraphs in context().flags:
+    writeDepGraph(g, debug = not g.root.active or KeepWorkspace in context().flags)
+  else:
+    removeDepGraphCache()
+
+  if atlasErrors() == 0:
+    writeActivationCache(g)
 
   if ShowGraph in context().flags:
     generateDepGraph g
@@ -251,11 +257,10 @@ proc linkPackage(linkDir, linkedNimble: Path) =
 
   # Load linked project's config to get its deps dir
   info "atlas:link", "linked project dir:", $linkDir
-  let lgraph = loadDepGraph(nc, linkedNimble)
+  let lcache = loadActivationCache(linkedNimble)
 
   # Create links for all nimble files and links in the linked project
-  for pkg in allNodes(lgraph):
-    let srcDir = if pkg.activeNimbleRelease().isNil: Path"" else: pkg.activeNimbleRelease().srcDir
+  for pkg in lcache.packages:
     let nimbleFiles = pkg.ondisk.findNimbleFile()
     if nimbleFiles.len() != 1:
       error $pkg.url.projectName, "error finding nimble file; got:", $nimbleFiles
@@ -266,7 +271,7 @@ proc linkPackage(linkDir, linkedNimble: Path) =
         linkUri
       else:
         pkg.url
-    createNimbleLink(linkPkgUrl, nimble, CfgPath(srcDir))
+    createNimbleLink(linkPkgUrl, nimble, CfgPath(pkg.srcDir))
 
   installDependencies(nc, nimbleFile)
 

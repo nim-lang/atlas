@@ -108,6 +108,12 @@ proc nimbleCachesDirectory*(): Path =
 proc depGraphCacheFile*(ctx: AtlasContext): Path =
   ctx.depsDir() / Path"atlas.cache.json"
 
+proc activationCacheFile*(ctx: AtlasContext): Path =
+  ctx.depsDir() / DefaultCachesSubDir / Path"atlas.active.json"
+
+proc activationCacheFile*(): Path =
+  activationCacheFile(context())
+
 proc relativeToWorkspace*(path: Path): string =
   result = "$project/" & $path.relativePath(project())
 
