@@ -1,8 +1,18 @@
-import std/[unittest, os, times, paths]
+import std/[unittest, os, times, paths, strutils]
 import basic/context
+import basic/atlasversion
+import basic/httpclientutils
 import basic/packageinfos
 
 suite "packages list":
+  test "package list urls prefer CDN and retain fallback":
+    check PackagesJsonUrls[0] == "https://packages.nim-lang.org/packages.json"
+    check PackagesJsonUrls[^1].startsWith("https://raw.githubusercontent.com/nim-lang/packages/")
+
+  test "http client user agent matches atlas version":
+    check AtlasUserAgent == "atlas/" & AtlasPackageVersion
+    check AtlasPackageVersion.len > 0
+
   test "updatePackages downloads packages.json":
     let pkgsDir = Path(getTempDir()) / Path("atlas_pkgs_" & $int(epochTime()))
     let pkgsFile = packageInfosFile(pkgsDir)

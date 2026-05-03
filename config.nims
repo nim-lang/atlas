@@ -56,6 +56,18 @@ task buildRelease, "Build release":
     else:
       exec "nim c -d:release -o:./atlas src/atlas.nim"
 
+task installNimbleDir, "Build and install atlas to $HOME/.nimble/bin":
+  buildReleaseTask()
+  let nimbleBin = getHomeDir() / ".nimble" / "bin"
+  let installedAtlas = nimbleBin / "atlas"
+  if not dirExists(nimbleBin):
+    mkDir(nimbleBin)
+  if fileExists(installedAtlas):
+    rmFile(installedAtlas)
+  cpFile("bin" / "atlas", installedAtlas)
+  echo "Installed Atlas to " & nimbleBin
+  exec nimbleBin / "atlas" & " -v "
+
 task cleanTests, "Clean tests":
   echo "Stashing any changes to tests"
   exec "git stash -- tests"
@@ -102,4 +114,3 @@ task test, "Runs all tests":
 
 task docs, "build Atlas's docs":
   exec "nim rst2html --putenv:atlasversion=$1 --d:nimPreviewSlimSystem doc/atlas.md" % version
-

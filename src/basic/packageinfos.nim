@@ -7,11 +7,14 @@
 #
 
 import std / [json, os, sets, strutils, paths, dirs, httpclient, uri]
-import context, reporters, gitops, pkgurls
+import context, reporters, gitops, pkgurls, httpclientutils
 
 const
   UnitTests = defined(atlasUnitTests)
-  PackagesJsonUrl = "https://raw.githubusercontent.com/nim-lang/packages/refs/heads/master/packages.json"
+  PackagesJsonUrls* = [
+    "https://packages.nim-lang.org/packages.json",
+    "https://raw.githubusercontent.com/nim-lang/packages/refs/heads/master/packages.json"
+  ]
 
 when UnitTests:
   proc findAtlasDir*(): string =
@@ -133,11 +136,16 @@ proc updatePackages*(cacheDir = cachesDirectory(); gitDir = packagesDirectory())
         error DefaultPackagesSubDir, "cannot clone packages repo: " & res[1]
     copyFile($(gitDir / Path"packages.json"), $pkgsFile)
   else:
-    let client = newHttpClient()
-    try:
-      let contents = client.getContent(PackagesJsonUrl)
-      writeFile($pkgsFile, contents)
-    except CatchableError as e:
-      error DefaultCachesSubDir, "cannot download packages.json: " & e.msg
-    finally:
-      client.close()
+    var lastError = ""
+    for url in PackagesJsonUrls:
+      let client = newAtlasHttpClient()
+      try:
+        let contents = client.getContent(url)
+        writeFile($pkgsFile, contents)
+        return
+      except CatchableError as e:
+        lastError = url & ": " & e.msg
+        warn DefaultCachesSubDir, "cannot download packages.json:", lastError
+      finally:
+        client.close()
+    error DefaultCachesSubDir, "cannot download packages.json: " & lastError
