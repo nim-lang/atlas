@@ -233,6 +233,46 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
             nameOrig, "projectName:", $result.projectName,
             "url:", $result.url
 
+proc canonicalizeUrl*(nc: var NimbleContext; url: PkgUrl): PkgUrl =
+  ## Resolves `url` through this context's package registry and overrides.
+  ##
+  ## This preserves already-canonical URLs and returns the original URL if it
+  ## cannot be resolved. Use this for dependency URLs parsed from Nimble files,
+  ## where a bare or partially known URL may need to be lifted to the canonical
+  ## registry URL, including package metadata such as monorepo subdirs.
+  if url.url.scheme == "error":
+    return url
+  if nc.lookup(url.projectName()) == url:
+    return url
+  try:
+    result = nc.createUrl($url)
+  except CatchableError:
+    result = url
+
+proc canonicalizeReleaseUrls*(nc: var NimbleContext; rel: NimbleRelease) =
+  ## Canonicalizes every package URL referenced by `rel`.
+  ##
+  ## Requirements, feature requirements, and feature-scoped requirement flags
+  ## are rewritten through `canonicalizeUrl` so all release dependency edges use
+  ## the same URL identity that the traversal context would create for them.
+  for req in mitems(rel.requirements):
+    req[0] = canonicalizeUrl(nc, req[0])
+
+  if rel.reqsByFeatures.len > 0:
+    var reqsByFeatures = initTable[PkgUrl, HashSet[string]]()
+    for url, flags in rel.reqsByFeatures:
+      reqsByFeatures[canonicalizeUrl(nc, url)] = flags
+    rel.reqsByFeatures = reqsByFeatures
+
+  if rel.features.len > 0:
+    var features = initTable[string, seq[(PkgUrl, VersionInterval)]]()
+    for feature, reqs in rel.features:
+      var fixedReqs: seq[(PkgUrl, VersionInterval)]
+      for req in reqs:
+        fixedReqs.add (canonicalizeUrl(nc, req[0]), req[1])
+      features[feature] = fixedReqs
+    rel.features = features
+
 proc createUrlFromPath*(nc: var NimbleContext, orig: Path, isLinkPath = false): PkgUrl =
   let absPath = absolutePath(orig)
   # Check if this is an Atlas project or if it's the current project

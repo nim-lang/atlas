@@ -109,35 +109,6 @@ proc addFeatureDependencies(pkg: Package) =
     warn pkg.url.projectName, "feature dependencies added"
     pkg.state = Found
 
-proc canonicalizeUrl(nc: var NimbleContext; url: PkgUrl): PkgUrl =
-  if url.url.scheme == "error":
-    return url
-  if nc.lookup(url.projectName()) == url:
-    return url
-  try:
-    result = nc.createUrl($url)
-  except CatchableError:
-    result = url
-
-proc canonicalizeReleaseUrls(nc: var NimbleContext; rel: NimbleRelease) =
-  for req in mitems(rel.requirements):
-    req[0] = canonicalizeUrl(nc, req[0])
-
-  if rel.reqsByFeatures.len > 0:
-    var reqsByFeatures = initTable[PkgUrl, HashSet[string]]()
-    for url, flags in rel.reqsByFeatures:
-      reqsByFeatures[canonicalizeUrl(nc, url)] = flags
-    rel.reqsByFeatures = reqsByFeatures
-
-  if rel.features.len > 0:
-    var features = initTable[string, seq[(PkgUrl, VersionInterval)]]()
-    for feature, reqs in rel.features:
-      var fixedReqs: seq[(PkgUrl, VersionInterval)]
-      for req in reqs:
-        fixedReqs.add (canonicalizeUrl(nc, req[0]), req[1])
-      features[feature] = fixedReqs
-    rel.features = features
-
 proc traverseDependency*(
     nc: var NimbleContext;
     pkg: var Package,
