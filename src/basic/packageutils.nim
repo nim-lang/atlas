@@ -25,7 +25,7 @@ proc copyFromDisk*(pkg: Package, dest: Path): (CloneStatus, string) =
     error pkg, "copyFromDisk not found:", $source
     result = (NotFound, $dest)
 
-proc packageNameFromNimbleFile(pkg: Package; checkoutDir: Path): string =
+proc nameFromNimbleFile(pkg: Package; checkoutDir: Path): string =
   let searchDir =
     if pkg.subdir.len > 0: checkoutDir / pkg.subdir
     else: checkoutDir
@@ -38,18 +38,18 @@ proc tmpCheckoutDir(pkg: Package): Path =
   depsDir() / Path(".tmp") / Path(pkg.url.projectName() & "-" & $hash(pkg.url))
 
 proc warnPackageNameMismatch(pkg: Package; nimbleName: string) =
-  if nimbleName.len > 0 and pkg.packageNameFromRegistry and
-      cmpIgnoreCase(pkg.packageName, nimbleName) != 0:
+  if nimbleName.len > 0 and pkg.isOfficial and
+      cmpIgnoreCase(pkg.name, nimbleName) != 0:
     warn pkg.projectName, "packages.json package name differs from nimble file name:",
-         "packages.json:", pkg.packageName, "nimble:", nimbleName
+         "packages.json:", pkg.name, "nimble:", nimbleName
 
 proc finalizeClonedPackagePath(pkg: var Package; checkoutDir: Path) =
-  let nimbleName = packageNameFromNimbleFile(pkg, checkoutDir)
+  let nimbleName = nameFromNimbleFile(pkg, checkoutDir)
   if nimbleName.len > 0:
-    if pkg.packageNameFromRegistry:
+    if pkg.isOfficial:
       warnPackageNameMismatch(pkg, nimbleName)
     else:
-      pkg.packageName = nimbleName
+      pkg.name = nimbleName
 
   let finalDir = pkg.url.toDirectoryPath(pkg.projectName())
   if checkoutDir != finalDir:
@@ -60,7 +60,7 @@ proc finalizeClonedPackagePath(pkg: var Package; checkoutDir: Path) =
     pkg.ondisk = finalDir
 
 proc shouldCloneToTemp(pkg: Package): bool =
-  not pkg.packageNameFromRegistry and
+  not pkg.isOfficial and
     not pkg.url.isFileProtocol and
     pkg.url.cloneUri().scheme notin ["link", "atlas"]
 
@@ -101,7 +101,7 @@ proc clonePackage*(
   if checkoutDir != pkg.ondisk:
     pkg.finalizeClonedPackagePath(checkoutDir)
   else:
-    warnPackageNameMismatch(pkg, packageNameFromNimbleFile(pkg, pkg.ondisk))
+    warnPackageNameMismatch(pkg, nameFromNimbleFile(pkg, pkg.ondisk))
 
   if not pkg.isLocalOnly:
     var repo = gitops.loadRepoMetadata(pkg.ondisk, expectedCanonicalUrl = $pkg.url.cloneUri())

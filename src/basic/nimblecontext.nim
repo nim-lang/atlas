@@ -158,7 +158,7 @@ proc hasPackageName(nc: NimbleContext; url: PkgUrl): bool =
   ## Returns true when `url` has an explicit package name in this context.
   url in nc.urlToName
 
-proc packageName(nc: NimbleContext; url: PkgUrl): string =
+proc name(nc: NimbleContext; url: PkgUrl): string =
   ## Returns the context package name for `url`, or a URL-derived fallback.
   if url in nc.urlToName:
     result = nc.urlToName[url]
@@ -172,8 +172,8 @@ proc initPackage*(nc: NimbleContext; url: PkgUrl; state = NotInitialized): Packa
   ## detection to the package before graph traversal starts.
   Package(
     url: url,
-    packageName: nc.packageName(url),
-    packageNameFromRegistry: nc.hasPackageName(url),
+    name: nc.name(url),
+    isOfficial: nc.hasPackageName(url),
     state: state,
     subdir: url.subdir(),
     isFork: nc.isForkUrl(url)

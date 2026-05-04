@@ -18,8 +18,6 @@ type
 
   Package* = ref object
     url*: PkgUrl
-    packageName*: string
-    packageNameFromRegistry*: bool
     state*: PackageState
     versions*: OrderedTable[PackageVersion, NimbleRelease]
     activeVersion*: PackageVersion
@@ -29,6 +27,8 @@ type
     subdir*: Path
     nimbleFile*: Path
     active*: bool
+    name*: string
+    isOfficial*: bool
     isAtlasProject*: bool # true if the package is an atlas project
     isFork*: bool
     isRoot*, isLocalOnly*: bool
@@ -97,11 +97,11 @@ proc sortVersionsAsc*(a, b: (PackageVersion, NimbleRelease)): int =
   sortVersionsAsc(a[0].vtag, b[0].vtag)
 
 proc `$`*(d: Package): string =
-  if d.packageName.len > 0: d.packageName
+  if d.name.len > 0: d.name
   else: d.url.projectName()
 
 proc projectName*(d: Package): string =
-  if d.packageName.len > 0: d.packageName
+  if d.name.len > 0: d.name
   else: d.url.projectName()
 
 proc remoteName*(d: Package): string =
