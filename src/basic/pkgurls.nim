@@ -92,8 +92,22 @@ proc requiresName*(u: PkgUrl): string =
 proc toUri*(u: PkgUrl): Uri = result = u.u
 proc url*(p: PkgUrl): Uri = p.u
 proc `$`*(u: PkgUrl): string = $u.u
-proc hash*(a: PkgUrl): Hash {.inline.} = hash(a.u)
-proc `==`*(a, b: PkgUrl): bool {.inline.} = a.u == b.u
+
+proc identityName(u: PkgUrl): string {.inline.} =
+  if u.hasShortName: u.qualifiedName.name.toLowerAscii()
+  else: ""
+
+proc hash*(a: PkgUrl): Hash {.inline.} =
+  var h = hash(a.u)
+  h = h !& hash(a.hasShortName)
+  if a.hasShortName:
+    h = h !& hash(a.identityName())
+  result = !$h
+
+proc `==`*(a, b: PkgUrl): bool {.inline.} =
+  a.u == b.u and
+    a.hasShortName == b.hasShortName and
+    (not a.hasShortName or a.identityName() == b.identityName())
 
 proc toReporterName(u: PkgUrl): string = u.projectName()
 

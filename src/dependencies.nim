@@ -45,7 +45,7 @@ proc registerReleaseDependencies(
     let state = childDependencyState(pkg, deferChildDeps)
     if pkgUrl notin nc.packageToDependency:
       debug pkg.url.projectName, "Found new pkg:", pkgUrl.projectName, "url:", $pkgUrl.url, "projectName:", $pkgUrl.projectName, "state:", $state
-      let pkgDep = Package(url: pkgUrl, state: state, isFork: isForkUrl(nc, pkgUrl))
+      let pkgDep = nc.initPackage(pkgUrl, state)
       nc.packageToDependency[pkgUrl] = pkgDep
     else:
       if nc.packageToDependency[pkgUrl].state == LazyDeferred and state != LazyDeferred:
@@ -62,7 +62,7 @@ proc registerReleaseDependencies(
           if feature notin context().features: LazyDeferred
           else: childDependencyState(pkg, deferChildDeps)
         debug pkg.url.projectName, "Found new feature pkg:", pkgUrl.projectName, "url:", $pkgUrl.url, "projectName:", $pkgUrl.projectName, "state:", $state
-        let pkgDep = Package(url: pkgUrl, state: state, isFork: isForkUrl(nc, pkgUrl))
+        let pkgDep = nc.initPackage(pkgUrl, state)
         nc.packageToDependency[pkgUrl] = pkgDep
       elif feature in context().features and nc.packageToDependency[pkgUrl].state == LazyDeferred and childDependencyState(pkg, deferChildDeps) != LazyDeferred:
         warn pkg.url.projectName, "Changing LazyDeferred feature pkg to DoLoad:", $pkgUrl.url
@@ -111,6 +111,8 @@ proc addFeatureDependencies(pkg: Package) =
 
 proc canonicalizeUrl(nc: var NimbleContext; url: PkgUrl): PkgUrl =
   if url.url.scheme == "error":
+    return url
+  if url.hasShortName and nc.lookup(url.shortName()) == url:
     return url
   try:
     result = nc.createUrl($url)

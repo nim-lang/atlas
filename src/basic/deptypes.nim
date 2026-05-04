@@ -18,12 +18,15 @@ type
 
   Package* = ref object
     url*: PkgUrl
+    registryName*: string
+    registrySubdir*: Path
     state*: PackageState
     versions*: OrderedTable[PackageVersion, NimbleRelease]
     activeVersion*: PackageVersion
     activeFeatures*: seq[string]
     module*: string
     ondisk*: Path
+    subdir*: Path
     nimbleFile*: Path
     active*: bool
     isAtlasProject*: bool # true if the package is an atlas project

@@ -27,10 +27,22 @@ proc fromJsonHook*(a: var VersionTag; b: JsonNode; opt = Joptions()) =
     raw = raw[0..^2]
   a = toVersionTag(raw)
   a.isTip = isTip
-proc toJsonHook*(v: PkgUrl): JsonNode = %($(v))
+proc toJsonHook*(v: PkgUrl): JsonNode =
+  if v.hasShortName:
+    result = newJObject()
+    result["url"] = %($(v))
+    result["name"] = %(v.shortName())
+    result["hasShortName"] = %(true)
+  else:
+    result = %($(v))
 
 proc fromJsonHook*(a: var PkgUrl; b: JsonNode; opt = Joptions()) =
-  a = toPkgUriRaw(parseUri(b.getStr()))
+  if b.kind == JObject:
+    a = toPkgUriRaw(parseUri(b["url"].getStr()), b{"hasShortName"}.getBool(false))
+    if b{"name"}.kind == JString:
+      a.qualifiedName.name = b["name"].getStr()
+  else:
+    a = toPkgUriRaw(parseUri(b.getStr()))
 
 proc toJsonHook*(vid: VarId): JsonNode = toJson(int(vid))
 
@@ -52,17 +64,28 @@ proc fromJsonHook*(a: var (PkgUrl, VersionInterval); b: JsonNode; opt = Joptions
   a[1].fromJson(b["version"])
 
 proc toJsonHook*(v: Table[PkgUrl, HashSet[string]], opt: ToJsonOptions): JsonNode =
-  result = newJObject()
+  result = newJArray()
   for k, v in v:
-    result[$(k)] = toJson(v, opt)
+    var item = newJObject()
+    item["url"] = toJsonHook(k)
+    item["features"] = toJson(v, opt)
+    result.add item
 
 proc fromJsonHook*(a: var Table[PkgUrl, HashSet[string]]; b: JsonNode; opt = Joptions()) =
-  for k, v in b:
-    var url: PkgUrl
-    url.fromJson(toJson(k))
-    var flags: HashSet[string]
-    flags.fromJson(toJson(v))
-    a[url] = flags
+  if b.kind == JObject:
+    for k, v in b:
+      var url: PkgUrl
+      url.fromJson(toJson(k))
+      var flags: HashSet[string]
+      flags.fromJson(toJson(v))
+      a[url] = flags
+  else:
+    for item in b:
+      var url: PkgUrl
+      url.fromJson(item["url"])
+      var flags: HashSet[string]
+      flags.fromJson(item["features"])
+      a[url] = flags
 
 proc toJsonHook*(r: NimbleRelease, opt: ToJsonOptions): JsonNode
 proc fromJsonHook*(r: var NimbleRelease; b: JsonNode; opt = Joptions())
@@ -85,17 +108,28 @@ proc fromJsonHook*(t: var OrderedTable[PackageVersion, NimbleRelease]; b: JsonNo
     t[pv] = release
 
 proc toJsonHook*(t: OrderedTable[PkgUrl, Package], opt: ToJsonOptions): JsonNode =
-  result = newJObject()
+  result = newJArray()
   for k, v in t:
-    result[$(k)] = toJson(v, opt)
+    var item = newJObject()
+    item["url"] = toJsonHook(k)
+    item["package"] = toJson(v, opt)
+    result.add item
 
 proc fromJsonHook*(t: var OrderedTable[PkgUrl, Package]; b: JsonNode; opt = Joptions()) =
-  for k, v in b:
-    var url: PkgUrl
-    url.fromJson(toJson(k))
-    var pkg: Package
-    pkg.fromJson(v)
-    t[url] = pkg
+  if b.kind == JObject:
+    for k, v in b:
+      var url: PkgUrl
+      url.fromJson(toJson(k))
+      var pkg: Package
+      pkg.fromJson(v)
+      t[url] = pkg
+  else:
+    for item in b:
+      var url: PkgUrl
+      url.fromJson(item["url"])
+      var pkg: Package
+      pkg.fromJson(item["package"])
+      t[url] = pkg
 
 proc nimbleReleaseToJson(r: NimbleRelease, opt: ToJsonOptions): JsonNode =
   if r.isNil:
@@ -198,11 +232,19 @@ proc loadJson*(nc: var NimbleContext, json: JsonNode): DepGraph =
   result.pkgs.clear()
 
   for url, pkg in pkgs:
-    let url2 = nc.createUrl($pkg.url)
+    let url2 =
+      if pkg.url.hasShortName and nc.lookup(pkg.url.shortName()) == pkg.url:
+        pkg.url
+      else:
+        nc.createUrl($pkg.url)
     pkg.url = url2
     result.pkgs[url2] = pkg
   
-  let rootUrl = nc.createUrl($result.root.url)
+  let rootUrl =
+    if result.root.url.hasShortName and nc.lookup(result.root.url.shortName()) == result.root.url:
+      result.root.url
+    else:
+      nc.createUrl($result.root.url)
   result.root = result.pkgs[rootUrl]
 
 proc loadJson*(nc: var NimbleContext, filename: string): DepGraph =

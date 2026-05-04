@@ -131,6 +131,46 @@ suite "json serde":
     check "packageName" notin cache
     check "projectName" notin cache
 
+  test "package release cache can use registry identity":
+    let oldCtx = context()
+    let ws = Path(getTempDir()) / Path("atlas_registry_release_cache_" & $int(epochTime()))
+    defer:
+      setContext(oldCtx)
+      if dirExists($ws):
+        removeDir($ws)
+
+    setContext(AtlasContext(projectDir: ws, depsDir: Path"deps"))
+    let url = nc.createUrl("foobar")
+    let current = initCommitHash("24870f48c40da2146ce12ff1e675e6e7b9748355", FromNone)
+    let pkgRoot = Package(url: url, originHead: current, registryName: "foo_root")
+    let pkgSubdir = Package(
+      url: url,
+      originHead: current,
+      registryName: "foo_bindings",
+      registrySubdir: Path"bindings/nim"
+    )
+    let release = NimbleRelease(version: Version"1.0.0", requirements: @[], status: Normal)
+    let version = VersionTag(v: Version"1.0.0", c: current).toPkgVer
+
+    savePackageReleaseCache(pkgRoot, current, @[(version, release)])
+    savePackageReleaseCache(pkgSubdir, current, @[(version, release)])
+
+    let rootPath = packageReleaseCachePath(pkgRoot)
+    let subdirPath = packageReleaseCachePath(pkgSubdir)
+    check rootPath != subdirPath
+    check fileExists($rootPath)
+    check fileExists($subdirPath)
+
+    let cache = parseFile($subdirPath)
+    check cache["registryName"].getStr() == "foo_bindings"
+    check cache["registrySubdir"].getStr() == "bindings/nim"
+
+    var entries: seq[PackageReleaseCacheEntry]
+    check loadPackageReleaseCache(pkgSubdir, current, entries)
+    check entries.len == 1
+    entries.setLen(0)
+    check not loadPackageReleaseCache(Package(url: url, originHead: current), current, entries)
+
   test "package release cache rejects old cache version":
     let oldCtx = context()
     let ws = Path(getTempDir()) / Path("atlas_stale_release_cache_" & $int(epochTime()))

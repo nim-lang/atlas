@@ -7,6 +7,7 @@ type
     packageExtras*: OrderedTable[string, PkgUrl]
     nameToUrl: OrderedTable[string, PkgUrl]
     urlToUrl: OrderedTable[string, PkgUrl]
+    packageSubdirs: OrderedTable[PkgUrl, Path]
     explicitVersions*: OrderedTable[PkgUrl, HashSet[VersionTag]]
     nameOverrides*: Patterns
     urlOverrides*: Patterns
@@ -32,7 +33,10 @@ proc findNimbleFile*(info: Package): seq[Path] =
   doAssert(info.ondisk.string != "", "Package ondisk must be set before findNimbleFile can be called! Package: " & $(info))
   # Prefer the repository's short name (e.g. 'figuro') and let the helper add '.nimble'.
   # Using projectName (which may include host/user) leads to mismatches.
-  result = findNimbleFile(info.ondisk, info.url.shortName())
+  let searchDir =
+    if info.subdir.len > 0: info.ondisk / info.subdir
+    else: info.ondisk
+  result = findNimbleFile(searchDir, info.url.shortName())
 
 proc cacheNimbleFilesFromGit*(pkg: Package, commit: CommitHash): seq[Path] =
   proc cachedNimbleBase(p: Path): string =
@@ -109,6 +113,17 @@ proc isForkUrl*(nc: NimbleContext; url: PkgUrl): bool =
     officialUrl.url.scheme notin ["file", "link", "atlas"] and
     officialUrl.url != url.url
 
+proc initPackage*(nc: NimbleContext; url: PkgUrl; state = NotInitialized): Package =
+  let subdir = nc.packageSubdirs.getOrDefault(url)
+  Package(
+    url: url,
+    registryName: if url.hasShortName: url.shortName() else: "",
+    registrySubdir: subdir,
+    state: state,
+    subdir: subdir,
+    isFork: nc.isForkUrl(url)
+  )
+
 proc putImpl(nc: var NimbleContext, name: string, url: PkgUrl, isFromPath = false): bool =
   let name = unicode.toLower(name)
   if name in nc.nameToUrl:
@@ -135,6 +150,20 @@ proc put*(nc: var NimbleContext, name: string, url: PkgUrl): bool {.discardable.
 
 proc putFromPath*(nc: var NimbleContext, name: string, url: PkgUrl): bool =
   nc.putImpl(name, url, true)
+
+proc putPackageInfo*(nc: var NimbleContext; pkgInfo: PackageInfo): PkgUrl {.discardable.} =
+  doAssert pkgInfo.kind == pkPackage
+  result = createUrlSkipPatterns(pkgInfo.url, skipDirTest=true)
+  result.hasShortName = true
+  result.qualifiedName.name = pkgInfo.name
+  nc.nameToUrl[unicode.toLower(pkgInfo.name)] = result
+  if $result.url in nc.urlToUrl:
+    if nc.urlToUrl[$result.url] != result:
+      nc.urlToUrl.del($result.url)
+  else:
+    nc.urlToUrl[$result.url] = result
+  if pkgInfo.subdir.len > 0:
+    nc.packageSubdirs[result] = Path(pkgInfo.subdir)
 
 proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
   ## primary point to createUrl's from a name or argument
@@ -227,11 +256,7 @@ proc fillPackageLookupTable(c: var NimbleContext) =
       if pkgInfo.kind == pkAlias:
         aliases.add(pkgInfo)
       else:
-        var pkgUrl = createUrlSkipPatterns(pkgInfo.url, skipDirTest=true)
-        pkgUrl.hasShortName = true
-        pkgUrl.qualifiedName.name = pkgInfo.name
-        c.nameToUrl[unicode.toLower(pkgInfo.name)] = pkgUrl
-        c.urlToUrl[$pkgUrl.url] = pkgUrl
+        discard c.putPackageInfo(pkgInfo)
 
     # now we add aliases to the lookup table
     for pkgAlias in aliases:
