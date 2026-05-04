@@ -500,7 +500,6 @@ proc chooseDuplicatePackage(graph: DepGraph; name: string; dupePkgs: seq[Package
   for pkg in dupePkgs:
     if isRootRequested(pkg.url):
       rootMatches.add pkg
-      explicitRootMatches.add pkg
 
     explicitMatches.add pkg
 
@@ -513,6 +512,7 @@ proc chooseDuplicatePackage(graph: DepGraph; name: string; dupePkgs: seq[Package
       else:
         remoteIds.incl(remoteId)
 
+  explicitRootMatches = rootMatches.filterIt(it.isFork)
   if explicitRootMatches.len == 1:
     return explicitRootMatches[0]
   if rootMatches.len == 1:

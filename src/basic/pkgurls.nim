@@ -168,9 +168,12 @@ proc toOriginalPath*(pkgUrl: PkgUrl, isWindowsTest: bool = false): Path =
 proc linkPath*(path: Path): Path =
   result = Path(path.string & ".nimble-link")
 
-proc toDirectoryPath(pkgUrl: PkgUrl, isLinkFile: bool): Path =
+proc toDirectoryPath(pkgUrl: PkgUrl, packageName: string, isLinkFile: bool): Path =
   trace pkgUrl, "directory path from:", $pkgUrl.url
 
+  let dirName =
+    if packageName.len > 0: packageName
+    else: pkgUrl.projectName()
   let url = pkgUrl.cloneUri()
   if url.scheme == "atlas":
     result = project()
@@ -178,12 +181,9 @@ proc toDirectoryPath(pkgUrl: PkgUrl, isLinkFile: bool): Path =
     result = pkgUrl.toOriginalPath().parentDir()
   elif url.scheme == "file":
     # file:// urls are used for local source paths, not dependency paths
-    result = depsDir() / Path(pkgUrl.projectName())
+    result = depsDir() / Path(dirName)
   else:
-    # Clone git deps into repository-based folders. The package registry name
-    # can differ from the repository name, for example package `jwt` lives in
-    # repository `nim-jwt`.
-    result = depsDir() / Path(extractProjectName(url).name)
+    result = depsDir() / Path(dirName)
   
   if not isLinkFile and not dirExists(result) and fileExists(result.linkPath()):
     # prefer the directory path if it exists (?)
@@ -204,7 +204,10 @@ proc toDirectoryPath(pkgUrl: PkgUrl, isLinkFile: bool): Path =
   doAssert result.len() > 0
 
 proc toDirectoryPath*(pkgUrl: PkgUrl): Path =
-  toDirectoryPath(pkgUrl, false)
+  toDirectoryPath(pkgUrl, "", false)
+
+proc toDirectoryPath*(pkgUrl: PkgUrl, packageName: string): Path =
+  toDirectoryPath(pkgUrl, packageName, false)
 
 proc toLinkPath*(pkgUrl: PkgUrl): Path =
   if pkgUrl.cloneUri().scheme == "atlas":
@@ -212,7 +215,7 @@ proc toLinkPath*(pkgUrl: PkgUrl): Path =
   elif pkgUrl.cloneUri().scheme == "link":
     result = depsDir() / Path(pkgUrl.projectName() & ".nimble-link")
   else:
-    result = Path(toDirectoryPath(pkgUrl, true).string & ".nimble-link")
+    result = Path(toDirectoryPath(pkgUrl, "", true).string & ".nimble-link")
 
 proc isLinkPath*(pkgUrl: PkgUrl): bool =
   result = fileExists(toLinkPath(pkgUrl))

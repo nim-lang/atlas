@@ -280,8 +280,8 @@ suite "historical explicit transitive pins":
           let mummyCommit = gitHead()
           setRemoteTip(mummyUrlString, "main", mummyCommit)
 
-        createDir("nim-jwt")
-        withDir "nim-jwt":
+        createDir("jwt")
+        withDir "jwt":
           writePackage("jwt", "0.0.1")
           initGitRepo()
           addOrigin(jwtUrlString)

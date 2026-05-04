@@ -7,6 +7,7 @@ type
     packageExtras*: OrderedTable[string, PkgUrl]
     nameToUrl: OrderedTable[string, PkgUrl]
     urlToUrl: OrderedTable[string, PkgUrl]
+    urlToName: OrderedTable[PkgUrl, string]
     explicitVersions*: OrderedTable[PkgUrl, HashSet[VersionTag]]
     nameOverrides*: Patterns
     urlOverrides*: Patterns
@@ -107,7 +108,10 @@ proc lookup*(nc: NimbleContext, name: string): PkgUrl =
     result = nc.nameToUrl[lname]
 
 proc isForkUrl*(nc: NimbleContext; url: PkgUrl): bool =
-  let officialUrl = nc.lookup(url.projectName())
+  let lookupName =
+    if url in nc.urlToName: nc.urlToName[url]
+    else: url.projectName()
+  let officialUrl = nc.lookup(lookupName)
   let isGitUrl = url.cloneUri().scheme notin ["file", "link", "atlas"]
   result =
     isGitUrl and
@@ -115,9 +119,28 @@ proc isForkUrl*(nc: NimbleContext; url: PkgUrl): bool =
     officialUrl.cloneUri().scheme notin ["file", "link", "atlas"] and
     officialUrl.cloneUri() != url.cloneUri()
 
+proc rememberPackageName(nc: var NimbleContext; name: string; url: PkgUrl) =
+  if name.len == 0:
+    return
+  if url.isEmpty():
+    return
+  if url notin nc.urlToName:
+    nc.urlToName[url] = name
+
+proc hasPackageName(nc: NimbleContext; url: PkgUrl): bool =
+  url in nc.urlToName
+
+proc packageName(nc: NimbleContext; url: PkgUrl): string =
+  if url in nc.urlToName:
+    result = nc.urlToName[url]
+  else:
+    result = url.projectName()
+
 proc initPackage*(nc: NimbleContext; url: PkgUrl; state = NotInitialized): Package =
   Package(
     url: url,
+    packageName: nc.packageName(url),
+    packageNameFromRegistry: nc.hasPackageName(url),
     state: state,
     subdir: url.subdir(),
     isFork: nc.isForkUrl(url)
@@ -130,6 +153,7 @@ proc putImpl(nc: var NimbleContext, name: string, url: PkgUrl, isFromPath = fals
   elif name notin nc.packageExtras:
     nc.packageExtras[name] = url
     nc.urlToUrl[$url.cloneUri()] = url
+    nc.rememberPackageName(name, url)
     result = true
   else:
     let existingPkg = nc.packageExtras[name]
@@ -156,6 +180,7 @@ proc putPackageInfo*(nc: var NimbleContext; pkgInfo: PackageInfo): PkgUrl {.disc
   result = createUrlSkipPatterns(pkgInfo.url, skipDirTest=true)
   result = result.withSubdir(pkgInfo.subdir)
   nc.nameToUrl[unicode.toLower(pkgInfo.name)] = result
+  nc.rememberPackageName(pkgInfo.name, result)
   let cloneUrl = $result.cloneUri()
   if cloneUrl in nc.urlToUrl:
     if nc.urlToUrl[cloneUrl] != result:

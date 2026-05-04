@@ -82,6 +82,36 @@ type
   PackageAction* = enum
     DoNothing, DoClone
 
+proc packageNameFromNimbleFile(pkg: Package; checkoutDir: Path): string =
+  let searchDir =
+    if pkg.subdir.len > 0: checkoutDir / pkg.subdir
+    else: checkoutDir
+  let nimbleFiles = findNimbleFile(searchDir, "")
+  if nimbleFiles.len == 1:
+    let (_, name, _) = nimbleFiles[0].splitFile()
+    result = $name
+
+proc tmpCheckoutDir(pkg: Package): Path =
+  depsDir() / Path(".tmp") / Path(pkg.url.projectName() & "-" & $hash(pkg.url))
+
+proc finalizeClonedPackagePath(pkg: var Package; checkoutDir: Path) =
+  let nimbleName = packageNameFromNimbleFile(pkg, checkoutDir)
+  if nimbleName.len > 0:
+    if pkg.packageNameFromRegistry:
+      if cmpIgnoreCase(pkg.packageName, nimbleName) != 0:
+        warn pkg.projectName, "packages.json package name differs from nimble file name:",
+             "packages.json:", pkg.packageName, "nimble:", nimbleName
+    else:
+      pkg.packageName = nimbleName
+
+  let finalDir = pkg.url.toDirectoryPath(pkg.projectName())
+  if checkoutDir != finalDir:
+    if dirExists(finalDir):
+      removeDir($checkoutDir)
+    else:
+      moveDir($checkoutDir, $finalDir)
+    pkg.ondisk = finalDir
+
 proc addFeatureDependencies(pkg: Package) =
   ## Marks root package feature requirements as active when requested by context flags.
   ## This can reopen root processing so newly enabled feature dependencies are traversed.
@@ -191,12 +221,12 @@ proc loadDependency*(
 
   doAssert pkg.ondisk.string == ""
 
-  let officialUrl = nc.lookup(pkg.url.projectName())
+  let officialUrl = nc.lookup(pkg.projectName())
   let isFork = pkg.isFork
 
   if isFork:
     info pkg.url.projectName, "package is unofficial or forked"
-    let canonicalDir = officialUrl.toDirectoryPath()
+    let canonicalDir = officialUrl.toDirectoryPath(pkg.projectName())
     let forkDir = pkg.url.toDirectoryPath()
     if dirExists(forkDir) and not dirExists(canonicalDir) and
         forkDir.isRelativeTo(depsDir()) and canonicalDir.isRelativeTo(depsDir()):
@@ -206,7 +236,7 @@ proc loadDependency*(
         discard
     pkg.ondisk = canonicalDir
   else:
-    pkg.ondisk = pkg.url.toDirectoryPath()
+    pkg.ondisk = pkg.url.toDirectoryPath(pkg.projectName())
 
   var todo = if dirExists(pkg.ondisk): DoNothing else: DoClone
   pkg.isAtlasProject = pkg.url.isAtlasProject()
@@ -223,13 +253,32 @@ proc loadDependency*(
       pkg.state = Error
       pkg.errors.add "Not found"
     else:
+      let checkoutDir =
+        if not pkg.packageNameFromRegistry and
+            not pkg.url.isFileProtocol and
+            pkg.url.cloneUri().scheme notin ["link", "atlas"]:
+          let tmpDir = tmpCheckoutDir(pkg)
+          if dirExists(tmpDir):
+            removeDir($tmpDir)
+          createDir($tmpDir.parentDir())
+          tmpDir
+        else:
+          pkg.ondisk
       let (status, msg) =
         if pkg.url.isFileProtocol:
           pkg.isLocalOnly = true
-          copyFromDisk(pkg, pkg.ondisk)
+          copyFromDisk(pkg, checkoutDir)
         else:
-          gitops.clone(pkg.url.cloneUri(), pkg.ondisk)
+          gitops.clone(pkg.url.cloneUri(), checkoutDir)
       if status == Ok:
+        if checkoutDir != pkg.ondisk:
+          pkg.finalizeClonedPackagePath(checkoutDir)
+        else:
+          let nimbleName = packageNameFromNimbleFile(pkg, pkg.ondisk)
+          if nimbleName.len > 0 and pkg.packageNameFromRegistry and
+              cmpIgnoreCase(pkg.packageName, nimbleName) != 0:
+            warn pkg.projectName, "packages.json package name differs from nimble file name:",
+                 "packages.json:", pkg.packageName, "nimble:", nimbleName
         if not pkg.isLocalOnly:
           var repo = gitops.loadRepoMetadata(pkg.ondisk, expectedCanonicalUrl = $pkg.url.cloneUri())
           if isFork:

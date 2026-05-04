@@ -18,6 +18,8 @@ type
 
   Package* = ref object
     url*: PkgUrl
+    packageName*: string
+    packageNameFromRegistry*: bool
     state*: PackageState
     versions*: OrderedTable[PackageVersion, NimbleRelease]
     activeVersion*: PackageVersion
@@ -95,10 +97,12 @@ proc sortVersionsAsc*(a, b: (PackageVersion, NimbleRelease)): int =
   sortVersionsAsc(a[0].vtag, b[0].vtag)
 
 proc `$`*(d: Package): string =
-  d.url.projectName()
+  if d.packageName.len > 0: d.packageName
+  else: d.url.projectName()
 
 proc projectName*(d: Package): string =
-  d.url.projectName()
+  if d.packageName.len > 0: d.packageName
+  else: d.url.projectName()
 
 proc remoteName*(d: Package): string =
   d.url.projectName()
