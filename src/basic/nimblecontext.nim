@@ -154,7 +154,7 @@ proc putFromPath*(nc: var NimbleContext, name: string, url: PkgUrl): bool =
 proc putPackageInfo*(nc: var NimbleContext; pkgInfo: PackageInfo): PkgUrl {.discardable.} =
   doAssert pkgInfo.kind == pkPackage
   result = createUrlSkipPatterns(pkgInfo.url, skipDirTest=true)
-  result = result.withPackageMetadata(pkgInfo.name, pkgInfo.subdir)
+  result = result.withSubdir(pkgInfo.subdir)
   nc.nameToUrl[unicode.toLower(pkgInfo.name)] = result
   let cloneUrl = $result.cloneUri()
   if cloneUrl in nc.urlToUrl:
@@ -179,8 +179,6 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
   
   if name.isUrl():
     result = createUrlSkipPatterns(name)
-    if not origWasUrl and didReplace and not result.hasRegistryName():
-      result = result.withPackageMetadata(nameOrig)
 
     let cloneUrl = $result.cloneUri()
     if cloneUrl in nc.urlToUrl:
@@ -217,7 +215,7 @@ proc createUrlFromPath*(nc: var NimbleContext, orig: Path, isLinkPath = false): 
   if isMainProject(absPath) or absPath == absolutePath(project()):
     if isLinkPath:
       let url = parseUri(prefix & $absPath)
-      result = toPkgUriRaw(url, false)
+      result = toPkgUriRaw(url)
     else:
       # Find nimble files in the project directory
       let nimbleFiles = findNimbleFile(absPath, "")
@@ -225,13 +223,13 @@ proc createUrlFromPath*(nc: var NimbleContext, orig: Path, isLinkPath = false): 
         # Use the first nimble file found as the project identifier
         trace "atlas:nimblecontext", "createUrlFromPath: found nimble file: ", $nimbleFiles[0]
         let url = parseUri(prefix & $nimbleFiles[0])
-        result = toPkgUriRaw(url, false)
+        result = toPkgUriRaw(url)
       else:
         # Fallback to directory name if no nimble file found
         let nimble = $(absPath.splitPath().tail) & ".nimble"
         trace "atlas:nimblecontext", "createUrlFromPath: no nimble file found, trying directory name: ", $nimble
         let url = parseUri(prefix & $absPath / nimble)
-        result = toPkgUriRaw(url, false)
+        result = toPkgUriRaw(url)
   else:
     error "atlas:nimblecontext", "createUrlFromPath: not a project: " & $absPath
     # let fileUrl = "file://" & $absPath

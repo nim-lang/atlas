@@ -141,8 +141,8 @@ suite "json serde":
 
     setContext(AtlasContext(projectDir: ws, depsDir: Path"deps"))
     let repoUrl = toPkgUriRaw(parseUri "https://github.com/nimble-test/monorepo")
-    let rootUrl = repoUrl.withPackageMetadata("foo_root")
-    let subdirUrl = repoUrl.withPackageMetadata("foo_bindings", "bindings/nim")
+    let rootUrl = repoUrl
+    let subdirUrl = repoUrl.withSubdir("bindings/nim")
     let current = initCommitHash("24870f48c40da2146ce12ff1e675e6e7b9748355", FromNone)
     let pkgRoot = Package(url: rootUrl, originHead: current)
     let pkgSubdir = Package(
@@ -154,8 +154,8 @@ suite "json serde":
     let version = VersionTag(v: Version"1.0.0", c: current).toPkgVer
 
     check rootUrl.cloneUri() == subdirUrl.cloneUri()
-    check rootUrl.projectName() == "foo_root"
-    check subdirUrl.projectName() == "foo_bindings"
+    check rootUrl.projectName() == "monorepo"
+    check subdirUrl.projectName() == "nim"
     check subdirUrl.shortName() == "monorepo"
     savePackageReleaseCache(pkgRoot, current, @[(version, release)])
     savePackageReleaseCache(pkgSubdir, current, @[(version, release)])
@@ -168,7 +168,7 @@ suite "json serde":
 
     let cache = parseFile($subdirPath)
     check cache["shortName"].getStr() == "monorepo"
-    check cache["url"].getStr().contains("name=foo_bindings")
+    check cache["url"].getStr().contains("subdir=bindings%2Fnim")
     check cache["subdir"].getStr() == "bindings/nim"
     check "registryName" notin cache
     check "registrySubdir" notin cache
@@ -178,7 +178,7 @@ suite "json serde":
     check entries.len == 1
     entries.setLen(0)
     check not loadPackageReleaseCache(
-      Package(url: repoUrl.withPackageMetadata("foo_bindings"), originHead: current),
+      Package(url: repoUrl.withSubdir("bindings/other"), originHead: current),
       current,
       entries
     )

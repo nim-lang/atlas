@@ -500,11 +500,9 @@ proc chooseDuplicatePackage(graph: DepGraph; name: string; dupePkgs: seq[Package
   for pkg in dupePkgs:
     if isRootRequested(pkg.url):
       rootMatches.add pkg
-      if not pkg.url.hasRegistryName:
-        explicitRootMatches.add pkg
+      explicitRootMatches.add pkg
 
-    if not pkg.url.hasRegistryName:
-      explicitMatches.add pkg
+    explicitMatches.add pkg
 
     if pkg.url.cloneUri().scheme in ["file", "link", "atlas", "error"]:
       allSameRemote = false

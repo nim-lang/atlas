@@ -68,7 +68,6 @@ suite "test features":
         # nc.put("proj_feature_dep", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_feature_dep"))
         nc.put("proj_feature_dep", toPkgUriRaw(parseUri(toWindowsFileUrl("file://" & $(ospaths2.getCurrentDir() / "proj_feature_dep").absolutePath))))
 
-        check nc.lookup("proj_a").hasRegistryName
         check nc.lookup("proj_a").projectName == "proj_a"
 
         let dir = paths.getCurrentDir().absolutePath
@@ -97,7 +96,6 @@ suite "test features":
         # nc.put("proj_feature_dep", toPkgUriRaw(parseUri "deps/proj_feature_dep_git"))
         nc.put("proj_feature_dep", toPkgUriRaw(parseUri(toWindowsFileUrl("file://" & $(ospaths2.getCurrentDir() / "proj_feature_dep").absolutePath))))
 
-        check nc.lookup("proj_a").hasRegistryName
         check nc.lookup("proj_a").projectName == "proj_a"
 
         let dir = paths.getCurrentDir().absolutePath
@@ -166,7 +164,6 @@ suite "test global features":
         # nc.put("proj_feature_dep", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_feature_dep"))
         nc.put("proj_feature_dep", toPkgUriRaw(parseUri(toWindowsFileUrl("file://" & $(ospaths2.getCurrentDir() / "proj_feature_dep").absolutePath))))
 
-        check nc.lookup("proj_a").hasRegistryName
         check nc.lookup("proj_a").projectName == "proj_a"
 
         let dir = paths.getCurrentDir().absolutePath
@@ -196,7 +193,6 @@ suite "test global features":
         # nc.put("proj_feature_dep", toPkgUriRaw(parseUri "deps/proj_feature_dep_git"))
         nc.put("proj_feature_dep", toPkgUriRaw(parseUri(toWindowsFileUrl("file://" & $(ospaths2.getCurrentDir() / "proj_feature_dep").absolutePath))))
 
-        check nc.lookup("proj_a").hasRegistryName
         check nc.lookup("proj_a").projectName == "proj_a"
 
         let dir = paths.getCurrentDir().absolutePath

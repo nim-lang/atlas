@@ -234,7 +234,7 @@ proc linkPackage(linkDir, linkedNimble: Path) =
   ## nimble file and create links to the dependent nimble files in the current
   ## project's deps directory
 
-  let linkUri = toPkgUriRaw(parseUri("link://" & $linkedNimble), false)
+  let linkUri = toPkgUriRaw(parseUri("link://" & $linkedNimble))
   discard context().nameOverrides.addPattern(linkUri.projectName, $linkUri.url)
   info "atlas:link", "link uri:", $linkUri
 

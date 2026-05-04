@@ -25,7 +25,7 @@ proc registryPackageUrl*(info: PackageInfo): PkgUrl =
     raise newException(ValueError, "registry package entry is an alias: " & info.name)
 
   result = createUrlSkipPatterns(info.url, skipDirTest = true)
-  result = result.withPackageMetadata(info.name, info.subdir)
+  result = result.withSubdir(info.subdir)
 
 proc initRegistryPackage*(nc: var NimbleContext; info: PackageInfo): Package =
   ## Convert a packages.json package entry into an Atlas Package.

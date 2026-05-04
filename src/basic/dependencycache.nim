@@ -42,11 +42,7 @@ proc sanitizeCacheStem(stem: var string) =
       c = '_'
 
 proc packageCacheStem*(url: PkgUrl; subdir = ""): string =
-  result =
-    if url.registryName().len > 0:
-      url.registryName()
-    else:
-      url.fullName()
+  result = url.fullName()
   if result.len == 0:
     result = url.projectName()
   if result.len == 0:

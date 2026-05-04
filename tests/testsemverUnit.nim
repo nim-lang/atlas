@@ -57,7 +57,6 @@ suite "graph solve":
         nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c"))
         nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d"))
 
-        check nc.lookup("proj_a").hasRegistryName
         check nc.lookup("proj_a").projectName == "proj_a"
 
         let dir = paths.getCurrentDir().absolutePath

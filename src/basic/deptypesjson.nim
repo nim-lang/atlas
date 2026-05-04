@@ -32,11 +32,11 @@ proc toJsonHook*(v: PkgUrl): JsonNode =
 
 proc fromJsonHook*(a: var PkgUrl; b: JsonNode; opt = Joptions()) =
   if b.kind == JObject:
-    a = toPkgUriRaw(parseUri(b["url"].getStr()), false)
-    if b{"name"}.kind == JString:
-      a = a.withPackageMetadata(b["name"].getStr(), $a.subdir())
+    a = toPkgUriRaw(parseUri(b["url"].getStr()))
+    if b{"subdir"}.kind == JString:
+      a = a.withSubdir(b["subdir"].getStr())
   else:
-    a = toPkgUriRaw(parseUri(b.getStr()), false)
+    a = toPkgUriRaw(parseUri(b.getStr()))
 
 proc toJsonHook*(vid: VarId): JsonNode = toJson(int(vid))
 

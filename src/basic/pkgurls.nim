@@ -83,12 +83,6 @@ proc queryValue(u: PkgUrl; key: string): string =
     if k == key:
       return v
 
-proc registryName*(u: PkgUrl): string =
-  u.queryValue("name")
-
-proc hasRegistryName*(u: PkgUrl): bool =
-  u.registryName().len > 0
-
 proc subdir*(u: PkgUrl): Path =
   Path(u.queryValue("subdir"))
 
@@ -97,31 +91,36 @@ proc cloneUri*(u: PkgUrl): Uri =
   result.query = ""
   result.anchor = ""
 
-proc withPackageMetadata*(u: PkgUrl; name = ""; subdir = ""): PkgUrl =
+proc withoutPackageNameQuery(u: Uri): Uri =
+  result = u
+  var query: seq[(string, string)]
+  for k, v in decodeQuery(result.query):
+    if k != "name":
+      query.add (k, v)
+  result.query = encodeQuery(query)
+
+proc withSubdir*(u: PkgUrl; subdir = ""): PkgUrl =
   var uri = u.u
   var query: seq[(string, string)]
   for k, v in decodeQuery(uri.query):
     if k notin ["name", "subdir"]:
       query.add (k, v)
-  if name.len > 0:
-    query.add ("name", name)
   if subdir.len > 0:
     query.add ("subdir", subdir)
   uri.query = encodeQuery(query)
   result = PkgUrl(qualifiedName: extractProjectName(uri), u: uri)
 
 proc projectName*(u: PkgUrl): string =
-  if u.registryName().len > 0:
-    u.registryName()
+  let subdir = u.subdir()
+  if subdir.len > 0:
+    $subdir.splitPath().tail
   elif u.qualifiedName.host == "":
     u.qualifiedName.name
   else:
-    u.qualifiedName.name & "." & u.qualifiedName.user & "." & u.qualifiedName.host
+    u.qualifiedName.name
 
 proc requiresName*(u: PkgUrl): string =
-  if u.registryName().len > 0:
-    u.registryName()
-  elif u.u.scheme in ["file", "link", "atlas"]:
+  if u.u.scheme in ["file", "link", "atlas"]:
     u.shortName()
   else:
     $u.u
@@ -296,6 +295,7 @@ proc createUrlSkipPatterns*(raw: string, skipDirTest = false, forceWindows: bool
   elif raw.startsWith("git@"): # special case git@server.com
     var u = parseUri("ssh://" & raw.replace(":", "/"))
     cleanupUrl(u)
+    u = withoutPackageNameQuery(u)
     result = PkgUrl(qualifiedName: extractProjectName(u), u: u)
   else:
     var u = parseUri(raw)
@@ -312,10 +312,9 @@ proc createUrlSkipPatterns*(raw: string, skipDirTest = false, forceWindows: bool
       u = fixFileRelativeUrl(u, isWindowsTest = forceWindows)
 
     cleanupUrl(u)
+    u = withoutPackageNameQuery(u)
     result = PkgUrl(qualifiedName: extractProjectName(u), u: u)
   # trace result, "created url raw:", repr(raw), "url:", repr(result)
 
-proc toPkgUriRaw*(u: Uri, withRegistryName: bool = true): PkgUrl =
+proc toPkgUriRaw*(u: Uri): PkgUrl =
   result = createUrlSkipPatterns($u, true)
-  if withRegistryName and not result.hasRegistryName():
-    result = result.withPackageMetadata(result.shortName())
