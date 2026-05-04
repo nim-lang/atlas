@@ -14,10 +14,6 @@
 import std/[os, paths, dirs, strutils]
 import context, deptypes, pkgurls, reporters, nimblecontext, gitops
 
-type
-  PackageAction* = enum
-    DoNothing, DoClone
-
 proc copyFromDisk*(pkg: Package, dest: Path): (CloneStatus, string) =
   let source = pkg.url.toOriginalPath()
   info pkg, "copyFromDisk cloning:", $dest, "from:", $source
@@ -82,17 +78,13 @@ proc clonePackage*(
     pkg: var Package;
     officialUrl: PkgUrl;
     isFork: bool;
-    onClone: PackageAction
 ) =
   ## Clones or copies `pkg` into its final on-disk location.
   ##
   ## Packages without a registry name are checked out to a temporary directory
   ## first so the `.nimble` filename can provide the package/install name.
-  if onClone == DoNothing:
-    pkg.state = Error
-    pkg.errors.add "Not found"
-    return
-
+  ## This is useful since if others fork the same unofficial package
+  ## we could end up with different packages.
   let checkoutDir = pkg.checkoutDir()
   let (status, msg) =
     if pkg.url.isFileProtocol:

@@ -18,7 +18,11 @@ import std / [os, strutils, uri, tables, sequtils, sets, paths, dirs]
 import basic/[context, deptypes, versions, osutils, reporters, gitops, pkgurls, nimblecontext, deptypesjson, packageutils]
 import releaseinfo
 
-export deptypes, versions, deptypesjson, releaseinfo
+export deptypes, versions, deptypesjson, releaseinfo, packageutils
+
+type
+  PackageAction* = enum
+    DoNothing, DoClone
 
 proc childDependencyState(pkg: Package; deferChildDeps: bool): PackageState =
   ## Returns the initial state for newly discovered child dependencies.
@@ -215,7 +219,12 @@ proc loadDependency*(
   debug pkg.url.projectName, "loading dependency todo:", $todo, "ondisk:", $pkg.ondisk, "isLinked:", $pkg.url.isFileProtocol, "isLazyDeferred:", $(pkg.state == LazyDeferred)
   case todo
   of DoClone:
-    clonePackage(pkg, officialUrl, isFork, onClone)
+    if onClone == DoNothing:
+      pkg.state = Error
+      pkg.errors.add "Not found"
+      return
+    else:
+      clonePackage(pkg, officialUrl, isFork)
   of DoNothing:
     if pkg.ondisk.dirExists():
       pkg.state = Found
