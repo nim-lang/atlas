@@ -7,7 +7,6 @@ type
     packageExtras*: OrderedTable[string, PkgUrl]
     nameToUrl: OrderedTable[string, PkgUrl]
     urlToUrl: OrderedTable[string, PkgUrl]
-    packageSubdirs: OrderedTable[PkgUrl, Path]
     explicitVersions*: OrderedTable[PkgUrl, HashSet[VersionTag]]
     nameOverrides*: Patterns
     urlOverrides*: Patterns
@@ -33,8 +32,11 @@ proc findNimbleFile*(info: Package): seq[Path] =
   doAssert(info.ondisk.string != "", "Package ondisk must be set before findNimbleFile can be called! Package: " & $(info))
   # Prefer the repository's short name (e.g. 'figuro') and let the helper add '.nimble'.
   # Using projectName (which may include host/user) leads to mismatches.
+  let subdir =
+    if info.subdir.len > 0: info.subdir
+    else: info.url.subdir()
   let searchDir =
-    if info.subdir.len > 0: info.ondisk / info.subdir
+    if subdir.len > 0: info.ondisk / subdir
     else: info.ondisk
   result = findNimbleFile(searchDir, info.url.shortName())
 
@@ -105,20 +107,19 @@ proc lookup*(nc: NimbleContext, name: string): PkgUrl =
     result = nc.nameToUrl[lname]
 
 proc isForkUrl*(nc: NimbleContext; url: PkgUrl): bool =
-  let officialUrl = nc.lookup(url.shortName())
-  let isGitUrl = url.url.scheme notin ["file", "link", "atlas"]
+  let officialUrl = nc.lookup(url.projectName())
+  let isGitUrl = url.cloneUri().scheme notin ["file", "link", "atlas"]
   result =
     isGitUrl and
     not officialUrl.isEmpty() and
-    officialUrl.url.scheme notin ["file", "link", "atlas"] and
-    officialUrl.url != url.url
+    officialUrl.cloneUri().scheme notin ["file", "link", "atlas"] and
+    officialUrl.cloneUri() != url.cloneUri()
 
 proc initPackage*(nc: NimbleContext; url: PkgUrl; state = NotInitialized): Package =
-  let subdir = nc.packageSubdirs.getOrDefault(url)
   Package(
     url: url,
     state: state,
-    subdir: subdir,
+    subdir: url.subdir(),
     isFork: nc.isForkUrl(url)
   )
 
@@ -128,12 +129,12 @@ proc putImpl(nc: var NimbleContext, name: string, url: PkgUrl, isFromPath = fals
     result = false
   elif name notin nc.packageExtras:
     nc.packageExtras[name] = url
-    nc.urlToUrl[$url.url] = url
+    nc.urlToUrl[$url.cloneUri()] = url
     result = true
   else:
     let existingPkg = nc.packageExtras[name]
-    let existingUrl = existingPkg.url
-    let url = url.url
+    let existingUrl = existingPkg.cloneUri()
+    let url = url.cloneUri()
     if existingUrl != url:
       if existingUrl.scheme != url.scheme and existingUrl.port == url.port and
           existingUrl.path == url.path and existingUrl.hostname == url.hostname:
@@ -153,16 +154,14 @@ proc putFromPath*(nc: var NimbleContext, name: string, url: PkgUrl): bool =
 proc putPackageInfo*(nc: var NimbleContext; pkgInfo: PackageInfo): PkgUrl {.discardable.} =
   doAssert pkgInfo.kind == pkPackage
   result = createUrlSkipPatterns(pkgInfo.url, skipDirTest=true)
-  result.hasShortName = true
-  result.qualifiedName.name = pkgInfo.name
+  result = result.withPackageMetadata(pkgInfo.name, pkgInfo.subdir)
   nc.nameToUrl[unicode.toLower(pkgInfo.name)] = result
-  if $result.url in nc.urlToUrl:
-    if nc.urlToUrl[$result.url] != result:
-      nc.urlToUrl.del($result.url)
+  let cloneUrl = $result.cloneUri()
+  if cloneUrl in nc.urlToUrl:
+    if nc.urlToUrl[cloneUrl] != result:
+      nc.urlToUrl.del(cloneUrl)
   else:
-    nc.urlToUrl[$result.url] = result
-  if pkgInfo.subdir.len > 0:
-    nc.packageSubdirs[result] = Path(pkgInfo.subdir)
+    nc.urlToUrl[cloneUrl] = result
 
 proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
   ## primary point to createUrl's from a name or argument
@@ -180,15 +179,18 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
   
   if name.isUrl():
     result = createUrlSkipPatterns(name)
+    if not origWasUrl and didReplace and not result.hasRegistryName():
+      result = result.withPackageMetadata(nameOrig)
 
-    if $result.url in nc.urlToUrl:
-      result = nc.urlToUrl[$result.url]
+    let cloneUrl = $result.cloneUri()
+    if cloneUrl in nc.urlToUrl:
+      result = nc.urlToUrl[cloneUrl]
 
     # Keep explicit URLs stable. Name overrides are for package-name lookups,
     # not for remapping already explicit URL requirements (especially file://).
-    if not origWasUrl:
+    if not origWasUrl and not didReplace:
       var didReplace = false
-      name = substitute(nc.nameOverrides, result.shortName(), didReplace)
+      name = substitute(nc.nameOverrides, result.projectName(), didReplace)
       if didReplace:
         result = createUrlSkipPatterns(name)
   else:
@@ -202,15 +204,11 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
         nc.notFoundNames.incl lname
       raise newException(ValueError, "project name not found in packages database: " & $lname & " original: " & $nameOrig)
   
-  let officialPkg = nc.lookup(result.shortName())
-  if not officialPkg.isEmpty() and officialPkg.url == result.url:
-    result.hasShortName = true
-
   if not result.isEmpty():
     if nc.put(result.projectName, result):
       debug "atlas:createUrl", "created url with name:", name, "orig:",
             nameOrig, "projectName:", $result.projectName,
-            "hasShortName:", $result.hasShortName, "url:", $result.url
+            "url:", $result.url
 
 proc createUrlFromPath*(nc: var NimbleContext, orig: Path, isLinkPath = false): PkgUrl =
   let absPath = absolutePath(orig)
@@ -219,7 +217,7 @@ proc createUrlFromPath*(nc: var NimbleContext, orig: Path, isLinkPath = false): 
   if isMainProject(absPath) or absPath == absolutePath(project()):
     if isLinkPath:
       let url = parseUri(prefix & $absPath)
-      result = toPkgUriRaw(url)
+      result = toPkgUriRaw(url, false)
     else:
       # Find nimble files in the project directory
       let nimbleFiles = findNimbleFile(absPath, "")
@@ -227,13 +225,13 @@ proc createUrlFromPath*(nc: var NimbleContext, orig: Path, isLinkPath = false): 
         # Use the first nimble file found as the project identifier
         trace "atlas:nimblecontext", "createUrlFromPath: found nimble file: ", $nimbleFiles[0]
         let url = parseUri(prefix & $nimbleFiles[0])
-        result = toPkgUriRaw(url)
+        result = toPkgUriRaw(url, false)
       else:
         # Fallback to directory name if no nimble file found
         let nimble = $(absPath.splitPath().tail) & ".nimble"
         trace "atlas:nimblecontext", "createUrlFromPath: no nimble file found, trying directory name: ", $nimble
         let url = parseUri(prefix & $absPath / nimble)
-        result = toPkgUriRaw(url)
+        result = toPkgUriRaw(url, false)
   else:
     error "atlas:nimblecontext", "createUrlFromPath: not a project: " & $absPath
     # let fileUrl = "file://" & $absPath

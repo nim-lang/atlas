@@ -52,12 +52,12 @@ suite "test link integration":
 
         expectedVersionWithGitTags()
         var nc = createNimbleContext()
-        nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a", true))
-        nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b", true))
-        nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c", true))
-        nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d", true))
+        nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a"))
+        nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b"))
+        nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c"))
+        nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d"))
 
-        check nc.lookup("proj_a").hasShortName
+        check nc.lookup("proj_a").hasRegistryName
         check nc.lookup("proj_a").projectName == "proj_a"
 
         let dir = paths.getCurrentDir().absolutePath
@@ -159,7 +159,7 @@ suite "test link integration":
         """)
         let linkedNimble = (paths.getCurrentDir() /
           Path"../ws_link_semver/ws_link_semver.nimble").absolutePath
-        let linkUri = toPkgUriRaw(parseUri("link://" & $linkedNimble))
+        let linkUri = toPkgUriRaw(parseUri("link://" & $linkedNimble), false)
 
         check hasNimbleRequirement(nimbleFile, linkUri)
 

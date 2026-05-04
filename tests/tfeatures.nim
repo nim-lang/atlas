@@ -61,14 +61,14 @@ suite "test features":
 
         expectedVersionWithGitTags()
         var nc = createNimbleContext()
-        nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a", true))
-        nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b", true))
-        nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c", true))
-        nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d", true))
-        # nc.put("proj_feature_dep", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_feature_dep", true))
-        nc.put("proj_feature_dep", toPkgUriRaw(parseUri(toWindowsFileUrl("file://" & $(ospaths2.getCurrentDir() / "proj_feature_dep").absolutePath)), true))
+        nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a"))
+        nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b"))
+        nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c"))
+        nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d"))
+        # nc.put("proj_feature_dep", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_feature_dep"))
+        nc.put("proj_feature_dep", toPkgUriRaw(parseUri(toWindowsFileUrl("file://" & $(ospaths2.getCurrentDir() / "proj_feature_dep").absolutePath))))
 
-        check nc.lookup("proj_a").hasShortName
+        check nc.lookup("proj_a").hasRegistryName
         check nc.lookup("proj_a").projectName == "proj_a"
 
         let dir = paths.getCurrentDir().absolutePath
@@ -90,14 +90,14 @@ suite "test features":
 
         expectedVersionWithGitTags()
         var nc = createNimbleContext()
-        nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a", true))
-        nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b", true))
-        nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c", true))
-        nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d", true))
-        # nc.put("proj_feature_dep", toPkgUriRaw(parseUri "deps/proj_feature_dep_git", true))
-        nc.put("proj_feature_dep", toPkgUriRaw(parseUri(toWindowsFileUrl("file://" & $(ospaths2.getCurrentDir() / "proj_feature_dep").absolutePath)), true))
+        nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a"))
+        nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b"))
+        nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c"))
+        nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d"))
+        # nc.put("proj_feature_dep", toPkgUriRaw(parseUri "deps/proj_feature_dep_git"))
+        nc.put("proj_feature_dep", toPkgUriRaw(parseUri(toWindowsFileUrl("file://" & $(ospaths2.getCurrentDir() / "proj_feature_dep").absolutePath))))
 
-        check nc.lookup("proj_a").hasShortName
+        check nc.lookup("proj_a").hasRegistryName
         check nc.lookup("proj_a").projectName == "proj_a"
 
         let dir = paths.getCurrentDir().absolutePath
@@ -159,14 +159,14 @@ suite "test global features":
 
         expectedVersionWithGitTags()
         var nc = createNimbleContext()
-        nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a", true))
-        nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b", true))
-        nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c", true))
-        nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d", true))
-        # nc.put("proj_feature_dep", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_feature_dep", true))
-        nc.put("proj_feature_dep", toPkgUriRaw(parseUri(toWindowsFileUrl("file://" & $(ospaths2.getCurrentDir() / "proj_feature_dep").absolutePath)), true))
+        nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a"))
+        nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b"))
+        nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c"))
+        nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d"))
+        # nc.put("proj_feature_dep", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_feature_dep"))
+        nc.put("proj_feature_dep", toPkgUriRaw(parseUri(toWindowsFileUrl("file://" & $(ospaths2.getCurrentDir() / "proj_feature_dep").absolutePath))))
 
-        check nc.lookup("proj_a").hasShortName
+        check nc.lookup("proj_a").hasRegistryName
         check nc.lookup("proj_a").projectName == "proj_a"
 
         let dir = paths.getCurrentDir().absolutePath
@@ -189,14 +189,14 @@ suite "test global features":
 
         expectedVersionWithGitTags()
         var nc = createNimbleContext()
-        nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a", true))
-        nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b", true))
-        nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c", true))
-        nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d", true))
-        # nc.put("proj_feature_dep", toPkgUriRaw(parseUri "deps/proj_feature_dep_git", true))
-        nc.put("proj_feature_dep", toPkgUriRaw(parseUri(toWindowsFileUrl("file://" & $(ospaths2.getCurrentDir() / "proj_feature_dep").absolutePath)), true))
+        nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a"))
+        nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b"))
+        nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c"))
+        nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d"))
+        # nc.put("proj_feature_dep", toPkgUriRaw(parseUri "deps/proj_feature_dep_git"))
+        nc.put("proj_feature_dep", toPkgUriRaw(parseUri(toWindowsFileUrl("file://" & $(ospaths2.getCurrentDir() / "proj_feature_dep").absolutePath))))
 
-        check nc.lookup("proj_a").hasShortName
+        check nc.lookup("proj_a").hasRegistryName
         check nc.lookup("proj_a").projectName == "proj_a"
 
         let dir = paths.getCurrentDir().absolutePath
@@ -255,10 +255,10 @@ suite "test global features":
 
         expectedVersionWithGitTags()
         var nc = createNimbleContext()
-        nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a", true))
-        nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b", true))
-        nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c", true))
-        nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d", true))
+        nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a"))
+        nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b"))
+        nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c"))
+        nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d"))
 
         let dir = paths.getCurrentDir().absolutePath
         discard dir.loadWorkspace(nc, AllReleases, onClone=DoClone, doSolve=false)
@@ -336,10 +336,10 @@ suite "test global features":
 
         expectedVersionWithGitTags()
         var nc = createNimbleContext()
-        nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a", true))
-        nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b", true))
-        nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c", true))
-        nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d", true))
+        nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a"))
+        nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b"))
+        nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c"))
+        nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d"))
 
         let dir = paths.getCurrentDir().absolutePath
         discard dir.loadWorkspace(nc, AllReleases, onClone=DoClone, doSolve=false)
@@ -398,10 +398,10 @@ suite "test global features":
 
         expectedVersionWithGitTags()
         var nc = createNimbleContext()
-        nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a", true))
-        nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b", true))
-        nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c", true))
-        nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d", true))
+        nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a"))
+        nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b"))
+        nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c"))
+        nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d"))
 
         let dir = paths.getCurrentDir().absolutePath
         discard dir.loadWorkspace(nc, AllReleases, onClone=DoClone, doSolve=false)
@@ -441,10 +441,10 @@ suite "test global features":
         project(paths.getCurrentDir())
 
         var nc2 = createNimbleContext()
-        nc2.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a", true))
-        nc2.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b", true))
-        nc2.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c", true))
-        nc2.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d", true))
+        nc2.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a"))
+        nc2.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b"))
+        nc2.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c"))
+        nc2.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d"))
 
         let graph = dir.loadWorkspace(nc2, AllReleases, onClone=DoClone, doSolve=true)
         let featurePkgs = graph.pkgs.values().toSeq().filterIt(it.isProjFeatureDep())
@@ -538,10 +538,10 @@ suite "test global features":
 
       expectedVersionWithGitTags()
       var nc = createNimbleContext()
-      nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a", true))
-      nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b", true))
-      nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c", true))
-      nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d", true))
+      nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a"))
+      nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b"))
+      nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c"))
+      nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d"))
 
       # Force an unsatisfiable non-lazy root requirement.
       writeFile(rootNimble, "requires \"proj_a >= 9.9.9\"\n")
@@ -582,11 +582,11 @@ suite "test global features":
 
       expectedVersionWithGitTags()
       var nc = createNimbleContext()
-      nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a", true))
-      nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b", true))
-      nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c", true))
-      nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d", true))
-      nc.put("proj_feature_dep", toPkgUriRaw(parseUri(toWindowsFileUrl("file://" & $(ospaths2.getCurrentDir() / "proj_feature_dep").absolutePath)), true))
+      nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a"))
+      nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b"))
+      nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c"))
+      nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d"))
+      nc.put("proj_feature_dep", toPkgUriRaw(parseUri(toWindowsFileUrl("file://" & $(ospaths2.getCurrentDir() / "proj_feature_dep").absolutePath))))
 
       let dir = paths.getCurrentDir().absolutePath
       discard dir.loadWorkspace(nc, AllReleases, onClone=DoClone, doSolve=false)
@@ -608,11 +608,11 @@ suite "test global features":
       project(paths.getCurrentDir())
 
       var nc2 = createNimbleContext()
-      nc2.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a", true))
-      nc2.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b", true))
-      nc2.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c", true))
-      nc2.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d", true))
-      nc2.put("proj_feature_dep", toPkgUriRaw(parseUri(toWindowsFileUrl("file://" & $(ospaths2.getCurrentDir() / "proj_feature_dep").absolutePath)), true))
+      nc2.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a"))
+      nc2.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b"))
+      nc2.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c"))
+      nc2.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d"))
+      nc2.put("proj_feature_dep", toPkgUriRaw(parseUri(toWindowsFileUrl("file://" & $(ospaths2.getCurrentDir() / "proj_feature_dep").absolutePath))))
 
       let errorsBefore = atlasErrors()
       let graph = dir.loadWorkspace(nc2, AllReleases, onClone=DoClone, doSolve=true)

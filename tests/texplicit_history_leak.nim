@@ -324,9 +324,7 @@ suite "historical explicit transitive pins":
       var nc = createUnfilledNimbleContext()
       discard nc.put("mummy", createUrlSkipPatterns(mummyUrlString))
 
-      var canonicalJwtUrl = createUrlSkipPatterns(jwtUrlString)
-      canonicalJwtUrl.hasShortName = true
-      canonicalJwtUrl.qualifiedName.name = "jwt"
+      var canonicalJwtUrl = createUrlSkipPatterns(jwtUrlString).withPackageMetadata("jwt")
       discard nc.put("jwt", canonicalJwtUrl)
 
       var graph = loadWorkspace(project(), nc, AllReleases, DoClone, doSolve = true)

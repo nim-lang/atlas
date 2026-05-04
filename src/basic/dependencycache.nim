@@ -43,8 +43,8 @@ proc sanitizeCacheStem(stem: var string) =
 
 proc packageCacheStem*(url: PkgUrl; subdir = ""): string =
   result =
-    if url.hasShortName:
-      url.shortName()
+    if url.registryName().len > 0:
+      url.registryName()
     else:
       url.fullName()
   if result.len == 0:
@@ -61,7 +61,10 @@ proc packageCacheStem*(url: PkgUrl; subdir = ""): string =
   sanitizeCacheStem(result)
 
 proc packageCacheStem*(pkg: Package): string =
-  packageCacheStem(pkg.url, $pkg.subdir)
+  let subdir =
+    if pkg.subdir.len > 0: pkg.subdir
+    else: pkg.url.subdir()
+  packageCacheStem(pkg.url, $subdir)
 
 proc packageReleaseCachePath*(pkg: Package): Path =
   cachesDirectory() / Path(packageCacheStem(pkg) & ".json")
@@ -85,10 +88,13 @@ proc canUsePackageReleaseCache*(
     not pkg.isLocalOnly
 
 proc findGitNimbleFiles*(pkg: Package; commit: CommitHash): seq[NimbleFileSource] =
+  let subdir =
+    if pkg.subdir.len > 0: pkg.subdir
+    else: pkg.url.subdir()
   let files = listFiles(pkg.ondisk, commit)
   for file in files:
-    if pkg.subdir.len > 0:
-      let prefix = pkg.subdir.string.strip(leading=false, trailing=true, {'/'}) & "/"
+    if subdir.len > 0:
+      let prefix = subdir.string.strip(leading=false, trailing=true, {'/'}) & "/"
       if not file.startsWith(prefix):
         continue
     if file.endsWith(".nimble"):
@@ -189,8 +195,8 @@ proc loadPackageReleaseCache*(
     return false
 
   result =
-    cache.url.url == pkg.url.url and
-    cache.subdir == pkg.subdir and
+    cache.url == pkg.url and
+    cache.subdir == (if pkg.subdir.len > 0: pkg.subdir else: pkg.url.subdir()) and
     cache.head == pkg.originHead and
     cache.current == currentCommit and
     cache.includeTagsAndNimbleCommits == includeTagsAndNimbleCommitsFlag() and
@@ -211,7 +217,7 @@ proc savePackageReleaseCache*(
   var cache = PackageReleaseCache(
     cacheVersion: PackageReleaseCacheVersion,
     url: pkg.url,
-    subdir: pkg.subdir,
+    subdir: if pkg.subdir.len > 0: pkg.subdir else: pkg.url.subdir(),
     shortName: pkg.url.shortName(),
     fullName: pkg.url.fullName(),
     head: pkg.originHead,

@@ -29,7 +29,7 @@ proc processRequirement(nc: var NimbleContext;
       result.status = HasBrokenDep
       warn nimbleFile, "cannot resolve dependency package name:", name, "error:", $err
       result.err.addError $nimbleFile, "cannot resolve package name: " & name
-      url = toPkgUriRaw(parseUri("error://" & name))
+      url = toPkgUriRaw(parseUri("error://" & name), false)
 
     var err = false
     let query = parseVersionInterval(req, verIdx, err) # update err
@@ -118,7 +118,7 @@ proc patchNimbleFile*(nc: var NimbleContext;
     info(nimbleFile, "nimble file up to date")
     return
 
-  let name = if url.hasShortName: url.shortName() else: $url.url
+  let name = url.requiresName()
   debug nimbleFile, "patching nimble file using:", $name
 
   let line = genRequiresLine(name)

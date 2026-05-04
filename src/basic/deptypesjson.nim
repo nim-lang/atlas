@@ -28,21 +28,15 @@ proc fromJsonHook*(a: var VersionTag; b: JsonNode; opt = Joptions()) =
   a = toVersionTag(raw)
   a.isTip = isTip
 proc toJsonHook*(v: PkgUrl): JsonNode =
-  if v.hasShortName:
-    result = newJObject()
-    result["url"] = %($(v))
-    result["name"] = %(v.shortName())
-    result["hasShortName"] = %(true)
-  else:
-    result = %($(v))
+  %($(v))
 
 proc fromJsonHook*(a: var PkgUrl; b: JsonNode; opt = Joptions()) =
   if b.kind == JObject:
-    a = toPkgUriRaw(parseUri(b["url"].getStr()), b{"hasShortName"}.getBool(false))
+    a = toPkgUriRaw(parseUri(b["url"].getStr()), false)
     if b{"name"}.kind == JString:
-      a.qualifiedName.name = b["name"].getStr()
+      a = a.withPackageMetadata(b["name"].getStr(), $a.subdir())
   else:
-    a = toPkgUriRaw(parseUri(b.getStr()))
+    a = toPkgUriRaw(parseUri(b.getStr()), false)
 
 proc toJsonHook*(vid: VarId): JsonNode = toJson(int(vid))
 
@@ -232,19 +226,13 @@ proc loadJson*(nc: var NimbleContext, json: JsonNode): DepGraph =
   result.pkgs.clear()
 
   for url, pkg in pkgs:
-    let url2 =
-      if pkg.url.hasShortName and nc.lookup(pkg.url.shortName()) == pkg.url:
-        pkg.url
-      else:
-        nc.createUrl($pkg.url)
+    let url2 = nc.createUrl($pkg.url)
     pkg.url = url2
+    if pkg.subdir.string.len == 0:
+      pkg.subdir = url2.subdir()
     result.pkgs[url2] = pkg
   
-  let rootUrl =
-    if result.root.url.hasShortName and nc.lookup(result.root.url.shortName()) == result.root.url:
-      result.root.url
-    else:
-      nc.createUrl($result.root.url)
+  let rootUrl = nc.createUrl($result.root.url)
   result.root = result.pkgs[rootUrl]
 
 proc loadJson*(nc: var NimbleContext, filename: string): DepGraph =

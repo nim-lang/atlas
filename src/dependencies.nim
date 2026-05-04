@@ -112,7 +112,7 @@ proc addFeatureDependencies(pkg: Package) =
 proc canonicalizeUrl(nc: var NimbleContext; url: PkgUrl): PkgUrl =
   if url.url.scheme == "error":
     return url
-  if url.hasShortName and nc.lookup(url.shortName()) == url:
+  if nc.lookup(url.projectName()) == url:
     return url
   try:
     result = nc.createUrl($url)
@@ -191,7 +191,7 @@ proc loadDependency*(
 
   doAssert pkg.ondisk.string == ""
 
-  let officialUrl = nc.lookup(pkg.url.shortName())
+  let officialUrl = nc.lookup(pkg.url.projectName())
   let isFork = pkg.isFork
 
   if isFork:
@@ -228,12 +228,12 @@ proc loadDependency*(
           pkg.isLocalOnly = true
           copyFromDisk(pkg, pkg.ondisk)
         else:
-          gitops.clone(pkg.url.toUri, pkg.ondisk)
+          gitops.clone(pkg.url.cloneUri(), pkg.ondisk)
       if status == Ok:
         if not pkg.isLocalOnly:
-          var repo = gitops.loadRepoMetadata(pkg.ondisk, expectedCanonicalUrl = $pkg.url.toUri)
+          var repo = gitops.loadRepoMetadata(pkg.ondisk, expectedCanonicalUrl = $pkg.url.cloneUri())
           if isFork:
-            discard gitops.ensureRemoteForUrl(pkg.ondisk, officialUrl.toUri)
+            discard gitops.ensureRemoteForUrl(pkg.ondisk, officialUrl.cloneUri())
           discard gitops.fetchRemoteTags(repo)
         pkg.state = Found
       else:
@@ -243,13 +243,13 @@ proc loadDependency*(
     if pkg.ondisk.dirExists():
       pkg.state = Found
       if not pkg.isLocalOnly:
-        discard gitops.loadRepoMetadata(pkg.ondisk, expectedCanonicalUrl = $pkg.url.toUri)
+        discard gitops.loadRepoMetadata(pkg.ondisk, expectedCanonicalUrl = $pkg.url.cloneUri())
         if isFork:
-          discard gitops.ensureRemoteForUrl(pkg.ondisk, officialUrl.toUri)
+          discard gitops.ensureRemoteForUrl(pkg.ondisk, officialUrl.cloneUri())
       if UpdateRepos in context().flags:
         gitops.updateRepo(pkg.ondisk)
         if not pkg.isLocalOnly:
-          var repo = gitops.loadRepoMetadata(pkg.ondisk, expectedCanonicalUrl = $pkg.url.toUri)
+          var repo = gitops.loadRepoMetadata(pkg.ondisk, expectedCanonicalUrl = $pkg.url.cloneUri())
           discard gitops.fetchRemoteTags(repo)
         
     else:

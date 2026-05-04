@@ -77,7 +77,10 @@ suite "monorepo registry packages":
     let provenUrl = nc.createUrl("proven")
     let authUrl = nc.createUrl("proven_auth")
     check provenUrl != authUrl
-    check provenUrl.url == authUrl.url
+    check provenUrl.cloneUri() == authUrl.cloneUri()
+    check provenUrl.projectName() == "proven"
+    check authUrl.projectName() == "proven_auth"
+    check authUrl.subdir() == Path"libs/proven_auth"
 
     var graph = app.expandGraph(nc, CurrentCommit, onClone=DoClone)
     graph = loadJson(nc, toJsonGraph(graph))
