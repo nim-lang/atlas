@@ -15,6 +15,11 @@ type
     notFoundNames: HashSet[string]
 
 proc findNimbleFile*(dir: Path, projectName: string = ""): seq[Path] =
+  ## Finds Nimble files in `dir`.
+  ##
+  ## If `dir` is already a `.nimble` file, it is returned directly. Otherwise
+  ## this first checks `<projectName>.nimble` when a name is supplied, then falls
+  ## back to every `.nimble` file immediately under `dir`.
   if dir.splitFile().ext == "nimble":
     let nimbleFile = dir
     if fileExists(nimbleFile):
@@ -30,6 +35,11 @@ proc findNimbleFile*(dir: Path, projectName: string = ""): seq[Path] =
   debug dir, "finding nimble file searching by name:", projectName, "found:", result.join(", ")
 
 proc findNimbleFile*(info: Package): seq[Path] =
+  ## Finds Nimble files for a loaded package checkout.
+  ##
+  ## Monorepo packages search inside the package subdir. The preferred filename
+  ## is based on the source URL's short name because package display names can be
+  ## registry aliases.
   doAssert(info.ondisk.string != "", "Package ondisk must be set before findNimbleFile can be called! Package: " & $(info))
   # Prefer the repository's short name (e.g. 'figuro') and let the helper add '.nimble'.
   # Using projectName (which may include host/user) leads to mismatches.
@@ -42,7 +52,13 @@ proc findNimbleFile*(info: Package): seq[Path] =
   result = findNimbleFile(searchDir, info.url.shortName())
 
 proc cacheNimbleFilesFromGit*(pkg: Package, commit: CommitHash): seq[Path] =
+  ## Caches `.nimble` files from `pkg` at `commit` and returns their cache paths.
+  ##
+  ## Existing cache entries are reused. When several Nimble files exist, the one
+  ## matching the package source short name is preferred so historical release
+  ## parsing stays deterministic.
   proc cachedNimbleBase(p: Path): string =
+    ## Returns the original Nimble filename from a commit-prefixed cache path.
     let tail = $p.splitPath().tail
     let dash = tail.find('-')
     if dash >= 0 and dash+1 < tail.len: tail.substr(dash+1) else: tail
@@ -101,6 +117,10 @@ proc cacheNimbleFilesFromGit*(pkg: Package, commit: CommitHash): seq[Path] =
     result = preferShortNameNimble(result, pkg.url.shortName())
 
 proc lookup*(nc: NimbleContext, name: string): PkgUrl =
+  ## Looks up a package URL by package name or explicit extra mapping.
+  ##
+  ## Names are matched case-insensitively. Package extras take precedence over
+  ## registry package entries so user/config overrides can shadow the registry.
   let lname = unicode.toLower(name)
   if lname in nc.packageExtras:
     result = nc.packageExtras[lname]
@@ -108,6 +128,10 @@ proc lookup*(nc: NimbleContext, name: string): PkgUrl =
     result = nc.nameToUrl[lname]
 
 proc isForkUrl*(nc: NimbleContext; url: PkgUrl): bool =
+  ## Returns true when `url` points at a non-official git remote for its package.
+  ##
+  ## Registry package names are used when known, which lets aliases such as
+  ## `jwt` still compare against their official registry URL.
   let lookupName =
     if url in nc.urlToName: nc.urlToName[url]
     else: url.projectName()
@@ -120,6 +144,9 @@ proc isForkUrl*(nc: NimbleContext; url: PkgUrl): bool =
     officialUrl.cloneUri() != url.cloneUri()
 
 proc rememberPackageName(nc: var NimbleContext; name: string; url: PkgUrl) =
+  ## Remembers the registry/context package name associated with `url`.
+  ##
+  ## The first name wins so later aliases do not rewrite package layout names.
   if name.len == 0:
     return
   if url.isEmpty():
@@ -128,15 +155,21 @@ proc rememberPackageName(nc: var NimbleContext; name: string; url: PkgUrl) =
     nc.urlToName[url] = name
 
 proc hasPackageName(nc: NimbleContext; url: PkgUrl): bool =
+  ## Returns true when `url` has an explicit package name in this context.
   url in nc.urlToName
 
 proc packageName(nc: NimbleContext; url: PkgUrl): string =
+  ## Returns the context package name for `url`, or a URL-derived fallback.
   if url in nc.urlToName:
     result = nc.urlToName[url]
   else:
     result = url.projectName()
 
 proc initPackage*(nc: NimbleContext; url: PkgUrl; state = NotInitialized): Package =
+  ## Creates a dependency package record for `url` in this context.
+  ##
+  ## This attaches registry package naming, URL subdir metadata, and fork
+  ## detection to the package before graph traversal starts.
   Package(
     url: url,
     packageName: nc.packageName(url),
@@ -147,6 +180,10 @@ proc initPackage*(nc: NimbleContext; url: PkgUrl; state = NotInitialized): Packa
   )
 
 proc putImpl(nc: var NimbleContext, name: string, url: PkgUrl, isFromPath = false): bool =
+  ## Adds a package-name mapping to the context extras table.
+  ##
+  ## Returns false when the name is already reserved by the registry or by a
+  ## conflicting extra URL.
   let name = unicode.toLower(name)
   if name in nc.nameToUrl:
     result = false
@@ -170,12 +207,18 @@ proc putImpl(nc: var NimbleContext, name: string, url: PkgUrl, isFromPath = fals
         result = false
 
 proc put*(nc: var NimbleContext, name: string, url: PkgUrl): bool {.discardable.} =
+  ## Adds an explicit package-name to URL mapping.
   nc.putImpl(name, url, false)
 
 proc putFromPath*(nc: var NimbleContext, name: string, url: PkgUrl): bool =
+  ## Adds a package-name mapping discovered from a local project path.
   nc.putImpl(name, url, true)
 
 proc putPackageInfo*(nc: var NimbleContext; pkgInfo: PackageInfo): PkgUrl {.discardable.} =
+  ## Adds one packages.json package entry to the context lookup tables.
+  ##
+  ## The returned URL includes registry metadata such as `subdir`, while the
+  ## package name is tracked separately for display and dependency layout.
   doAssert pkgInfo.kind == pkPackage
   result = createUrlSkipPatterns(pkgInfo.url, skipDirTest=true)
   result = result.withSubdir(pkgInfo.subdir)
@@ -189,7 +232,11 @@ proc putPackageInfo*(nc: var NimbleContext; pkgInfo: PackageInfo): PkgUrl {.disc
     nc.urlToUrl[cloneUrl] = result
 
 proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
-  ## primary point to createUrl's from a name or argument
+  ## Resolves a package name, explicit URL, forge alias, or override into a URL.
+  ##
+  ## Name and URL overrides are applied first. Registry lookups are used for
+  ## package names, and explicit URLs are canonicalized through known clone URLs
+  ## when possible.
   doAssert not nameOrig.isAbsolute(), "createUrl does not support relative paths: " & $nameOrig
 
   var didReplace = false
@@ -274,6 +321,10 @@ proc canonicalizeReleaseUrls*(nc: var NimbleContext; rel: NimbleRelease) =
     rel.features = features
 
 proc createUrlFromPath*(nc: var NimbleContext, orig: Path, isLinkPath = false): PkgUrl =
+  ## Creates and registers an Atlas or link URL for a local project path.
+  ##
+  ## Main-project paths are represented by their Nimble file when possible, with
+  ## a directory-name fallback for projects whose Nimble file does not yet exist.
   let absPath = absolutePath(orig)
   # Check if this is an Atlas project or if it's the current project
   let prefix = if isLinkPath: "link://" else: "atlas://"
@@ -297,12 +348,14 @@ proc createUrlFromPath*(nc: var NimbleContext, orig: Path, isLinkPath = false): 
         result = toPkgUriRaw(url)
   else:
     error "atlas:nimblecontext", "createUrlFromPath: not a project: " & $absPath
-    # let fileUrl = "file://" & $absPath
-    # result = createUrlSkipPatterns(fileUrl)
   if not result.isEmpty():
     discard nc.putFromPath(result.projectName, result)
 
 proc fillPackageLookupTable(c: var NimbleContext) =
+  ## Loads packages.json into the context's registry lookup tables once.
+  ##
+  ## Package entries are registered before aliases so aliases can resolve through
+  ## their target package names.
   if not c.hasPackageList:
     c.hasPackageList = true
     removeLegacyPackageCaches()
@@ -329,14 +382,15 @@ proc fillPackageLookupTable(c: var NimbleContext) =
         c.nameToUrl[pkgAlias.name] = url
 
 proc createUnfilledNimbleContext*(): NimbleContext =
+  ## Creates a context with user/config overrides but without packages.json.
+  ##
+  ## Use this for tests or workflows that should avoid loading the package
+  ## registry until explicitly requested.
   result = NimbleContext()
   result.nameOverrides = context().nameOverrides
   result.urlOverrides = context().urlOverrides
-  # for key, val in context().packageNameOverrides: 
-  #   let url = createUrlSkipPatterns($val)
-  #   result.packageExtras[key] = url
-  #   result.urlToNames[url.url()] = key
 
 proc createNimbleContext*(): NimbleContext =
+  ## Creates a fully populated Nimble context, including packages.json entries.
   result = createUnfilledNimbleContext()
   fillPackageLookupTable(result)
