@@ -1,4 +1,5 @@
-import std/[unittest, json, os, times, paths, strutils]
+import std/[unittest, json, os, osproc, times, paths, strutils]
+import std/[streams, times, paths, httpclient, tempfiles]
 import basic/context
 import basic/atlasversion
 import basic/httpclientutils
@@ -10,8 +11,32 @@ suite "packages list":
     check PackagesJsonUrls[^1].startsWith("https://raw.githubusercontent.com/nim-lang/packages/")
 
   test "http client user agent matches atlas version":
-    check AtlasUserAgent == "atlas/" & AtlasPackageVersion
-    check AtlasPackageVersion.len > 0
+    let client = newAtlasHttpClient()
+    defer: client.close()
+    check client.headers["User-Agent"] == "atlas/" & AtlasPackageVersion
+    check client.headers["Accept-Encoding"] == "gzip"
+
+  test "gzip encoded package list is decompressed with gzip":
+    if findExe("gzip").len == 0:
+      skip()
+    else:
+      let plain = "[{\"name\":\"pkg\",\"url\":\"https://example.invalid/pkg\"," &
+        "\"method\":\"git\",\"tags\":[],\"description\":\"pkg\"}]"
+      let plainPath = genTempPath("atlas_packages_", ".json")
+      writeFile(plainPath, plain)
+      defer:
+        if fileExists(plainPath):
+          removeFile(plainPath)
+
+      let process = startProcess("gzip", args = ["-c", plainPath],
+                                 options = {poUsePath, poStdErrToStdOut})
+      let compressed = process.outputStream.readAll()
+      let exitCode = process.waitForExit()
+      process.close()
+      check exitCode == 0
+
+      let headers = newHttpHeaders({"Content-Encoding": "gzip"})
+      check decodePackageList(headers, compressed) == plain
 
   test "package info parses registry subdir":
     let pkg = fromJson(parseJson("""

@@ -14,4 +14,7 @@ import atlasversion
 const AtlasUserAgent* = "atlas/" & AtlasPackageVersion
 
 proc newAtlasHttpClient*(): HttpClient =
-  newHttpClient(headers = newHttpHeaders({"User-Agent": AtlasUserAgent}))
+  newHttpClient(headers = newHttpHeaders({
+    "User-Agent": AtlasUserAgent,
+    "Accept-Encoding": "gzip"
+  }))
