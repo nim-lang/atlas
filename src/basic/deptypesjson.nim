@@ -57,30 +57,6 @@ proc fromJsonHook*(a: var (PkgUrl, VersionInterval); b: JsonNode; opt = Joptions
   a[0].fromJson(b["url"])
   a[1].fromJson(b["version"])
 
-proc toJsonHook*(v: Table[PkgUrl, HashSet[string]], opt: ToJsonOptions): JsonNode =
-  result = newJArray()
-  for k, v in v:
-    var item = newJObject()
-    item["url"] = toJsonHook(k)
-    item["features"] = toJson(v, opt)
-    result.add item
-
-proc fromJsonHook*(a: var Table[PkgUrl, HashSet[string]]; b: JsonNode; opt = Joptions()) =
-  if b.kind == JObject:
-    for k, v in b:
-      var url: PkgUrl
-      url.fromJson(toJson(k))
-      var flags: HashSet[string]
-      flags.fromJson(toJson(v))
-      a[url] = flags
-  else:
-    for item in b:
-      var url: PkgUrl
-      url.fromJson(item["url"])
-      var flags: HashSet[string]
-      flags.fromJson(item["features"])
-      a[url] = flags
-
 proc toJsonHook*(r: NimbleRelease, opt: ToJsonOptions): JsonNode
 proc fromJsonHook*(r: var NimbleRelease; b: JsonNode; opt = Joptions())
 
