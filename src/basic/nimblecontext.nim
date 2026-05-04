@@ -130,6 +130,7 @@ proc putImpl(nc: var NimbleContext, name: string, url: PkgUrl, isFromPath = fals
     result = false
   elif name notin nc.packageExtras:
     nc.packageExtras[name] = url
+    nc.urlToUrl[$url.url] = url
     result = true
   else:
     let existingPkg = nc.packageExtras[name]
