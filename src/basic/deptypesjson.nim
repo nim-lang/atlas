@@ -31,12 +31,7 @@ proc toJsonHook*(v: PkgUrl): JsonNode =
   %($(v))
 
 proc fromJsonHook*(a: var PkgUrl; b: JsonNode; opt = Joptions()) =
-  if b.kind == JObject:
-    a = toPkgUriRaw(parseUri(b["url"].getStr()))
-    if b{"subdir"}.kind == JString:
-      a = a.withSubdir(b["subdir"].getStr())
-  else:
-    a = toPkgUriRaw(parseUri(b.getStr()))
+  a = toPkgUriRaw(parseUri(b.getStr()))
 
 proc toJsonHook*(vid: VarId): JsonNode = toJson(int(vid))
 
@@ -86,20 +81,12 @@ proc toJsonHook*(t: OrderedTable[PkgUrl, Package], opt: ToJsonOptions): JsonNode
     result.add item
 
 proc fromJsonHook*(t: var OrderedTable[PkgUrl, Package]; b: JsonNode; opt = Joptions()) =
-  if b.kind == JObject:
-    for k, v in b:
-      var url: PkgUrl
-      url.fromJson(toJson(k))
-      var pkg: Package
-      pkg.fromJson(v)
-      t[url] = pkg
-  else:
-    for item in b:
-      var url: PkgUrl
-      url.fromJson(item["url"])
-      var pkg: Package
-      pkg.fromJson(item["package"])
-      t[url] = pkg
+  for item in b:
+    var url: PkgUrl
+    url.fromJson(item["url"])
+    var pkg: Package
+    pkg.fromJson(item["package"])
+    t[url] = pkg
 
 proc nimbleReleaseToJson(r: NimbleRelease, opt: ToJsonOptions): JsonNode =
   if r.isNil:
