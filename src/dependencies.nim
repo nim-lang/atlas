@@ -179,9 +179,9 @@ proc loadDependency*(
   else:
     pkg.ondisk = pkg.url.toDirectoryPath(pkg.projectName())
 
-  var todo = if dirExists(pkg.ondisk): DoNothing else: DoClone
   pkg.isAtlasProject = pkg.url.isAtlasProject()
   pkg.isLocalOnly = pkg.url.isNimbleLink()
+  var todo = if pkg.resolveExistingPackageDir(): DoNothing else: DoClone
   if pkg.isLocalOnly:
     todo = DoNothing
   if pkg.state == LazyDeferred:

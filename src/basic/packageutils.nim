@@ -37,6 +37,26 @@ proc nameFromNimbleFile(pkg: Package; checkoutDir: Path): string =
 proc tmpCheckoutDir(pkg: Package): Path =
   depsDir() / Path(".tmp") / Path(pkg.url.projectName() & "-" & $hash(pkg.url))
 
+proc matchesPackageUrl(path: Path; pkg: Package): bool =
+  dirExists(path) and gitops.getCanonicalUrl(path) == $pkg.url.cloneUri()
+
+proc disambiguatedDirectoryPath(pkg: Package): Path =
+  let baseName =
+    if pkg.url.fullName().len > 0: pkg.url.fullName()
+    else: pkg.url.projectName()
+
+  var attempt = 0
+  while true:
+    let suffix =
+      case attempt
+      of 0: ""
+      of 1: "-" & $hash(pkg.url)
+      else: "-" & $hash(pkg.url) & "-" & $attempt
+    result = (depsDir() / Path(baseName & suffix)).absolutePath()
+    if not dirExists(result) or matchesPackageUrl(result, pkg):
+      return
+    inc attempt
+
 proc warnPackageNameMismatch(pkg: Package; nimbleName: string) =
   if nimbleName.len > 0 and pkg.isOfficial and
       cmpIgnoreCase(pkg.name, nimbleName) != 0:
@@ -51,10 +71,20 @@ proc finalizeClonedPackagePath(pkg: var Package; checkoutDir: Path) =
     else:
       pkg.name = nimbleName
 
-  let finalDir = pkg.url.toDirectoryPath(pkg.projectName())
+  var finalDir = pkg.url.toDirectoryPath(pkg.projectName())
   if checkoutDir != finalDir:
     if dirExists(finalDir):
-      removeDir($checkoutDir)
+      if matchesPackageUrl(finalDir, pkg):
+        removeDir($checkoutDir)
+      else:
+        finalDir = disambiguatedDirectoryPath(pkg)
+        warn pkg.projectName, "package directory name collides with different repository:",
+             "preferred:", $pkg.url.toDirectoryPath(pkg.projectName()),
+             "using:", $finalDir
+        if dirExists(finalDir):
+          removeDir($checkoutDir)
+        else:
+          moveDir($checkoutDir, $finalDir)
     else:
       moveDir($checkoutDir, $finalDir)
     pkg.ondisk = finalDir
@@ -63,6 +93,27 @@ proc shouldCloneToTemp(pkg: Package): bool =
   not pkg.isOfficial and
     not pkg.url.isFileProtocol and
     pkg.url.cloneUri().scheme notin ["link", "atlas"]
+
+proc resolveExistingPackageDir*(pkg: var Package): bool =
+  ## Returns true when `pkg.ondisk` already contains the correct checkout.
+  ##
+  ## Non-official packages can derive their install directory from the nimble
+  ## filename after cloning. If another unofficial package with the same nimble
+  ## filename already owns that directory, look for this package's deterministic
+  ## disambiguated directory instead of reusing the wrong checkout.
+  if not dirExists(pkg.ondisk):
+    return false
+  if not pkg.shouldCloneToTemp():
+    return true
+  if matchesPackageUrl(pkg.ondisk, pkg):
+    return true
+
+  let alternateDir = disambiguatedDirectoryPath(pkg)
+  if dirExists(alternateDir) and matchesPackageUrl(alternateDir, pkg):
+    pkg.ondisk = alternateDir
+    return true
+
+  false
 
 proc checkoutDir(pkg: Package): Path =
   if pkg.shouldCloneToTemp():
