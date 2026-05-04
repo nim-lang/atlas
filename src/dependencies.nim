@@ -14,7 +14,7 @@
 ## dependency deferral, explicit commit requirements, and root feature
 ## dependencies during traversal.
 
-import std / [os, strutils, uri, tables, sequtils, sets, hashes, paths, dirs]
+import std / [os, strutils, uri, tables, sequtils, sets, paths, dirs]
 import basic/[context, deptypes, versions, osutils, reporters, gitops, pkgurls, nimblecontext, deptypesjson, packageutils]
 import releaseinfo
 
@@ -77,40 +77,6 @@ proc enrichPackageDependencies(
   ## This is intentionally separate from release parsing/cache loading.
   for _, release in pkg.versions:
     nc.registerReleaseDependencies(pkg, release, deferChildDeps)
-
-type
-  PackageAction* = enum
-    DoNothing, DoClone
-
-proc packageNameFromNimbleFile(pkg: Package; checkoutDir: Path): string =
-  let searchDir =
-    if pkg.subdir.len > 0: checkoutDir / pkg.subdir
-    else: checkoutDir
-  let nimbleFiles = findNimbleFile(searchDir, "")
-  if nimbleFiles.len == 1:
-    let (_, name, _) = nimbleFiles[0].splitFile()
-    result = $name
-
-proc tmpCheckoutDir(pkg: Package): Path =
-  depsDir() / Path(".tmp") / Path(pkg.url.projectName() & "-" & $hash(pkg.url))
-
-proc finalizeClonedPackagePath(pkg: var Package; checkoutDir: Path) =
-  let nimbleName = packageNameFromNimbleFile(pkg, checkoutDir)
-  if nimbleName.len > 0:
-    if pkg.packageNameFromRegistry:
-      if cmpIgnoreCase(pkg.packageName, nimbleName) != 0:
-        warn pkg.projectName, "packages.json package name differs from nimble file name:",
-             "packages.json:", pkg.packageName, "nimble:", nimbleName
-    else:
-      pkg.packageName = nimbleName
-
-  let finalDir = pkg.url.toDirectoryPath(pkg.projectName())
-  if checkoutDir != finalDir:
-    if dirExists(finalDir):
-      removeDir($checkoutDir)
-    else:
-      moveDir($checkoutDir, $finalDir)
-    pkg.ondisk = finalDir
 
 proc addFeatureDependencies(pkg: Package) =
   ## Marks root package feature requirements as active when requested by context flags.
@@ -249,45 +215,7 @@ proc loadDependency*(
   debug pkg.url.projectName, "loading dependency todo:", $todo, "ondisk:", $pkg.ondisk, "isLinked:", $pkg.url.isFileProtocol, "isLazyDeferred:", $(pkg.state == LazyDeferred)
   case todo
   of DoClone:
-    if onClone == DoNothing:
-      pkg.state = Error
-      pkg.errors.add "Not found"
-    else:
-      let checkoutDir =
-        if not pkg.packageNameFromRegistry and
-            not pkg.url.isFileProtocol and
-            pkg.url.cloneUri().scheme notin ["link", "atlas"]:
-          let tmpDir = tmpCheckoutDir(pkg)
-          if dirExists(tmpDir):
-            removeDir($tmpDir)
-          createDir($tmpDir.parentDir())
-          tmpDir
-        else:
-          pkg.ondisk
-      let (status, msg) =
-        if pkg.url.isFileProtocol:
-          pkg.isLocalOnly = true
-          copyFromDisk(pkg, checkoutDir)
-        else:
-          gitops.clone(pkg.url.cloneUri(), checkoutDir)
-      if status == Ok:
-        if checkoutDir != pkg.ondisk:
-          pkg.finalizeClonedPackagePath(checkoutDir)
-        else:
-          let nimbleName = packageNameFromNimbleFile(pkg, pkg.ondisk)
-          if nimbleName.len > 0 and pkg.packageNameFromRegistry and
-              cmpIgnoreCase(pkg.packageName, nimbleName) != 0:
-            warn pkg.projectName, "packages.json package name differs from nimble file name:",
-                 "packages.json:", pkg.packageName, "nimble:", nimbleName
-        if not pkg.isLocalOnly:
-          var repo = gitops.loadRepoMetadata(pkg.ondisk, expectedCanonicalUrl = $pkg.url.cloneUri())
-          if isFork:
-            discard gitops.ensureRemoteForUrl(pkg.ondisk, officialUrl.cloneUri())
-          discard gitops.fetchRemoteTags(repo)
-        pkg.state = Found
-      else:
-        pkg.state = Error
-        pkg.errors.add $status & ": " & msg
+    clonePackage(pkg, officialUrl, isFork, onClone)
   of DoNothing:
     if pkg.ondisk.dirExists():
       pkg.state = Found
