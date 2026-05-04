@@ -117,8 +117,6 @@ proc initPackage*(nc: NimbleContext; url: PkgUrl; state = NotInitialized): Packa
   let subdir = nc.packageSubdirs.getOrDefault(url)
   Package(
     url: url,
-    registryName: if url.hasShortName: url.shortName() else: "",
-    registrySubdir: subdir,
     state: state,
     subdir: subdir,
     isFork: nc.isForkUrl(url)

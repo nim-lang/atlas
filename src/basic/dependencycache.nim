@@ -21,8 +21,7 @@ type
   PackageReleaseCache = object
     cacheVersion*: int
     url*: PkgUrl
-    registryName*: string
-    registrySubdir*: Path
+    subdir*: Path
     shortName*: string
     fullName*: string
     head*: CommitHash
@@ -42,10 +41,10 @@ proc sanitizeCacheStem(stem: var string) =
     if c notin {'a'..'z', 'A'..'Z', '0'..'9', '.', '_', '-'}:
       c = '_'
 
-proc packageCacheStem*(url: PkgUrl; registryName = ""; registrySubdir = ""): string =
+proc packageCacheStem*(url: PkgUrl; subdir = ""): string =
   result =
-    if registryName.len > 0:
-      registryName
+    if url.hasShortName:
+      url.shortName()
     else:
       url.fullName()
   if result.len == 0:
@@ -53,8 +52,8 @@ proc packageCacheStem*(url: PkgUrl; registryName = ""; registrySubdir = ""): str
   if result.len == 0:
     result = $url
 
-  if registrySubdir.len > 0:
-    var subdirStem = registrySubdir
+  if subdir.len > 0:
+    var subdirStem = subdir
     sanitizeCacheStem(subdirStem)
     result.add "."
     result.add subdirStem
@@ -62,7 +61,7 @@ proc packageCacheStem*(url: PkgUrl; registryName = ""; registrySubdir = ""): str
   sanitizeCacheStem(result)
 
 proc packageCacheStem*(pkg: Package): string =
-  packageCacheStem(pkg.url, pkg.registryName, $pkg.registrySubdir)
+  packageCacheStem(pkg.url, $pkg.subdir)
 
 proc packageReleaseCachePath*(pkg: Package): Path =
   cachesDirectory() / Path(packageCacheStem(pkg) & ".json")
@@ -122,10 +121,8 @@ proc toPackageReleaseCacheJson(cache: PackageReleaseCache; opt: ToJsonOptions): 
   result = newJObject()
   result["cacheVersion"] = toJson(cache.cacheVersion, opt)
   result["url"] = toJson(cache.url, opt)
-  if cache.registryName.len > 0:
-    result["registryName"] = toJson(cache.registryName, opt)
-  if cache.registrySubdir.len > 0:
-    result["registrySubdir"] = toJson(cache.registrySubdir, opt)
+  if cache.subdir.len > 0:
+    result["subdir"] = toJson(cache.subdir, opt)
   if cache.shortName.len > 0:
     result["shortName"] = toJson(cache.shortName, opt)
   if cache.fullName.len > 0:
@@ -193,8 +190,7 @@ proc loadPackageReleaseCache*(
 
   result =
     cache.url.url == pkg.url.url and
-    cache.registryName == pkg.registryName and
-    cache.registrySubdir == pkg.registrySubdir and
+    cache.subdir == pkg.subdir and
     cache.head == pkg.originHead and
     cache.current == currentCommit and
     cache.includeTagsAndNimbleCommits == includeTagsAndNimbleCommitsFlag() and
@@ -215,8 +211,7 @@ proc savePackageReleaseCache*(
   var cache = PackageReleaseCache(
     cacheVersion: PackageReleaseCacheVersion,
     url: pkg.url,
-    registryName: pkg.registryName,
-    registrySubdir: pkg.registrySubdir,
+    subdir: pkg.subdir,
     shortName: pkg.url.shortName(),
     fullName: pkg.url.fullName(),
     head: pkg.originHead,

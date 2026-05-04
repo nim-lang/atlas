@@ -131,7 +131,7 @@ suite "json serde":
     check "packageName" notin cache
     check "projectName" notin cache
 
-  test "package release cache can use registry identity":
+  test "package release cache uses url identity and subdir":
     let oldCtx = context()
     let ws = Path(getTempDir()) / Path("atlas_registry_release_cache_" & $int(epochTime()))
     defer:
@@ -140,18 +140,22 @@ suite "json serde":
         removeDir($ws)
 
     setContext(AtlasContext(projectDir: ws, depsDir: Path"deps"))
-    let url = nc.createUrl("foobar")
+    var rootUrl = toPkgUriRaw(parseUri "https://github.com/nimble-test/monorepo")
+    rootUrl.hasShortName = true
+    rootUrl.qualifiedName.name = "foo_root"
+    var subdirUrl = rootUrl
+    subdirUrl.qualifiedName.name = "foo_bindings"
     let current = initCommitHash("24870f48c40da2146ce12ff1e675e6e7b9748355", FromNone)
-    let pkgRoot = Package(url: url, originHead: current, registryName: "foo_root")
+    let pkgRoot = Package(url: rootUrl, originHead: current)
     let pkgSubdir = Package(
-      url: url,
+      url: subdirUrl,
       originHead: current,
-      registryName: "foo_bindings",
-      registrySubdir: Path"bindings/nim"
+      subdir: Path"bindings/nim"
     )
     let release = NimbleRelease(version: Version"1.0.0", requirements: @[], status: Normal)
     let version = VersionTag(v: Version"1.0.0", c: current).toPkgVer
 
+    check rootUrl.url == subdirUrl.url
     savePackageReleaseCache(pkgRoot, current, @[(version, release)])
     savePackageReleaseCache(pkgSubdir, current, @[(version, release)])
 
@@ -162,14 +166,16 @@ suite "json serde":
     check fileExists($subdirPath)
 
     let cache = parseFile($subdirPath)
-    check cache["registryName"].getStr() == "foo_bindings"
-    check cache["registrySubdir"].getStr() == "bindings/nim"
+    check cache["shortName"].getStr() == "foo_bindings"
+    check cache["subdir"].getStr() == "bindings/nim"
+    check "registryName" notin cache
+    check "registrySubdir" notin cache
 
     var entries: seq[PackageReleaseCacheEntry]
     check loadPackageReleaseCache(pkgSubdir, current, entries)
     check entries.len == 1
     entries.setLen(0)
-    check not loadPackageReleaseCache(Package(url: url, originHead: current), current, entries)
+    check not loadPackageReleaseCache(Package(url: subdirUrl, originHead: current), current, entries)
 
   test "package release cache rejects old cache version":
     let oldCtx = context()

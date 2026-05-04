@@ -18,8 +18,6 @@ type
 
   Package* = ref object
     url*: PkgUrl
-    registryName*: string
-    registrySubdir*: Path
     state*: PackageState
     versions*: OrderedTable[PackageVersion, NimbleRelease]
     activeVersion*: PackageVersion
