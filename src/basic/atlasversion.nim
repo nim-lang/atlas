@@ -17,10 +17,15 @@ const
 const AtlasPackageVersion* =
   block:
     var ver = "0.0.0"
-    for line in staticRead(AtlasNimbleFile).splitLines():
-      if line.startsWith("version ="):
-        ver = line.split("=")[1].replace("\"", "").strip()
+    if fileExists(AtlasNimbleFile):
+      for line in staticRead(AtlasNimbleFile).splitLines():
+        if line.startsWith("version ="):
+          ver = line.split("=")[1].replace("\"", "").strip()
     ver
 
-const AtlasCommit* = staticExec("git -C " & quoteShell(AtlasRootDir) & " log -n 1 --format=%H")
+const AtlasCommit* =
+  if dirExists(AtlasRootDir / ".git"):
+    staticExec("git -C " & quoteShell(AtlasRootDir) & " log -n 1 --format=%H")
+  else:
+    "-"
 const AtlasVersion* = AtlasPackageVersion & " (sha: " & AtlasCommit & ")"

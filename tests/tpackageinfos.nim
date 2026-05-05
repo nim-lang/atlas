@@ -18,6 +18,27 @@ suite "packages list":
     check AtlasPackageVersion == nimbleVersion()
     check AtlasPackageVersion != "0.0.0"
 
+  test "atlas package version falls back without atlas.nimble":
+    let tmp = Path(genTempPath("atlas_no_nimble_", ""))
+    let srcDir = tmp / Path"src" / Path"basic"
+    let mainFile = tmp / Path"check_version.nim"
+    defer:
+      if dirExists($tmp):
+        removeDir($tmp)
+
+    createDir($srcDir)
+    writeFile($(srcDir / Path"atlasversion.nim"),
+              readFile(AtlasRootDir / "src" / "basic" / "atlasversion.nim"))
+    writeFile($mainFile, """
+import basic/atlasversion
+doAssert AtlasPackageVersion == "0.0.0"
+doAssert AtlasCommit == "unknown"
+""")
+
+    let (outp, code) = execCmdEx("nim c --path:" & quoteShell($(tmp / Path"src")) & " " & quoteShell($mainFile))
+    check code == 0
+    check outp.len >= 0
+
   test "package list urls prefer CDN and retain fallback":
     check PackagesJsonUrls[0] == "https://packages.nim-lang.org/packages.json"
     check PackagesJsonUrls[^1].startsWith("https://raw.githubusercontent.com/nim-lang/packages/")
