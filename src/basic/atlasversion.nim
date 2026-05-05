@@ -13,6 +13,13 @@ import std / [os, osproc, strutils]
 const
   AtlasRootDir = currentSourcePath().parentDir().parentDir().parentDir()
   AtlasNimbleFile = AtlasRootDir / "atlas.nimble"
+  AtlasGitDir = AtlasRootDir / ".git"
+
+const AtlasIsDirty* =
+  if dirExists(AtlasGitDir):
+    staticExec("git -C " & quoteShell(AtlasRootDir) & " status --porcelain").strip().len > 0
+  else:
+    false
 
 const AtlasPackageVersion* =
   block:
@@ -21,11 +28,13 @@ const AtlasPackageVersion* =
       for line in staticRead(AtlasNimbleFile).splitLines():
         if line.startsWith("version ="):
           ver = line.split("=")[1].replace("\"", "").strip()
+    if AtlasIsDirty:
+      ver.add "+dirty"
     ver
 
 const AtlasCommit* =
-  if dirExists(AtlasRootDir / ".git"):
+  if dirExists(AtlasGitDir):
     staticExec("git -C " & quoteShell(AtlasRootDir) & " log -n 1 --format=%H")
   else:
-    "-"
+    "unknown"
 const AtlasVersion* = AtlasPackageVersion & " (sha: " & AtlasCommit & ")"

@@ -13,9 +13,16 @@ proc nimbleVersion(): string =
       return line.split("=")[1].replace("\"", "").strip()
   "0.0.0"
 
+proc gitDirty(dir: string): bool =
+  let (outp, code) = execCmdEx("git -C " & quoteShell(dir) & " status --porcelain")
+  code == 0 and outp.strip().len > 0
+
 suite "packages list":
   test "atlas package version matches atlas.nimble":
-    check AtlasPackageVersion == nimbleVersion()
+    let expected =
+      if gitDirty(AtlasRootDir): nimbleVersion() & "+dirty"
+      else: nimbleVersion()
+    check AtlasPackageVersion == expected
     check AtlasPackageVersion != "0.0.0"
 
   test "atlas package version falls back without atlas.nimble":
@@ -34,6 +41,34 @@ import basic/atlasversion
 doAssert AtlasPackageVersion == "0.0.0"
 doAssert AtlasCommit == "unknown"
 """)
+
+    let (outp, code) = execCmdEx("nim c --path:" & quoteShell($(tmp / Path"src")) & " " & quoteShell($mainFile))
+    check code == 0
+    check outp.len >= 0
+
+  test "atlas package version marks dirty git checkout":
+    let tmp = Path(genTempPath("atlas_dirty_version_", ""))
+    let srcDir = tmp / Path"src" / Path"basic"
+    let mainFile = tmp / Path"check_version.nim"
+    defer:
+      if dirExists($tmp):
+        removeDir($tmp)
+
+    createDir($srcDir)
+    writeFile($(srcDir / Path"atlasversion.nim"),
+              readFile(AtlasRootDir / "src" / "basic" / "atlasversion.nim"))
+    writeFile($(tmp / Path"atlas.nimble"), "version = \"1.2.3\"\n")
+    writeFile($mainFile, """
+import basic/atlasversion
+doAssert AtlasPackageVersion == "1.2.3+dirty"
+doAssert AtlasIsDirty
+""")
+    discard execCmdEx("git -C " & quoteShell($tmp) & " init")
+    discard execCmdEx("git -C " & quoteShell($tmp) & " config user.name test-user")
+    discard execCmdEx("git -C " & quoteShell($tmp) & " config user.email test@example.com")
+    discard execCmdEx("git -C " & quoteShell($tmp) & " add .")
+    discard execCmdEx("git -C " & quoteShell($tmp) & " commit -m initial")
+    writeFile($(tmp / Path"dirty.txt"), "dirty")
 
     let (outp, code) = execCmdEx("nim c --path:" & quoteShell($(tmp / Path"src")) & " " & quoteShell($mainFile))
     check code == 0
