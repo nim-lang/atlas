@@ -118,7 +118,7 @@ proc patchNimbleFile*(nc: var NimbleContext;
     info(nimbleFile, "nimble file up to date")
     return
 
-  let name = if url.hasShortName: url.shortName() else: $url.url
+  let name = url.requiresName()
   debug nimbleFile, "patching nimble file using:", $name
 
   let line = genRequiresLine(name)

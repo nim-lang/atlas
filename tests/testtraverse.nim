@@ -538,7 +538,7 @@ suite "test forked dep selection":
       context().defaultAlgo = SemVer
 
       var nc = createNimbleContext()
-      nc.put("asynctools", toPkgUriRaw(parseUri "https://example.com/cheatfate/asynctools", true))
+      nc.put("asynctools", toPkgUriRaw(parseUri "https://example.com/cheatfate/asynctools"))
 
       let dir = paths.getCurrentDir().absolutePath
       let graph = dir.loadWorkspace(nc, AllReleases, onClone=DoClone, doSolve=true)

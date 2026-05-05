@@ -37,7 +37,12 @@ proc cleanupIntegrationTest() =
   for d in dirs:
     echo "Removing dir: ", d.absolutePath
     removeDir d
-  removeFile "nim.cfg"
+  for path in ["deps", "atlas.lock", "graph-solve-input.json", "graph-solved.json", "nim.cfg"]:
+    if dirExists(path):
+      echo "Removing dir: ", path.absolutePath
+      removeDir path
+    elif fileExists(path):
+      removeFile path
   echo "Removing configs"
 
 withDir "tests/ws_integration":

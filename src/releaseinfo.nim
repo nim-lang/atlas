@@ -131,7 +131,7 @@ proc loadPackageReleaseInfo*(
 
   var repo = loadRepoMetadata(
     pkg.ondisk,
-    expectedCanonicalUrl = if pkg.isLocalOnly: "" else: $pkg.url.toUri,
+    expectedCanonicalUrl = if pkg.isLocalOnly: "" else: $pkg.url.cloneUri(),
     errorReportLevel = Warning,
     isLocalOnly = pkg.isLocalOnly
   )

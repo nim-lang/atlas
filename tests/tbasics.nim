@@ -21,21 +21,20 @@ suite "urls and naming":
     let upkg = nc.createUrl("https://github.com/disruptek/balls.git")
     check upkg.url.hostname == "github.com"
     check $upkg.url == "https://github.com/disruptek/balls"
-    check $upkg.projectName == "balls.disruptek.github.com"
+    check $upkg.projectName == "balls"
     check upkg.toDirectoryPath() == ws / Path"deps" / Path("balls")
     check upkg.toLinkPath() == ws / Path"deps" / Path("balls.nimble-link")
-    expect ValueError:
-      discard nc.createUrl("balls")
+    check nc.createUrl("balls") == upkg
     check not upkg.isLinkPath()
 
   test "balls url using packageExtras":
-    nc.put("balls", toPkgUriRaw(parseUri "https://github.com/disruptek/balls.git", true))
+    nc.put("balls", toPkgUriRaw(parseUri "https://github.com/disruptek/balls.git"))
     check nc.lookup("balls").projectName == "balls"
-    check $nc.lookup("balls").url == "https://github.com/disruptek/balls"
+    check $nc.lookup("balls").cloneUri() == "https://github.com/disruptek/balls"
 
     let upkg = nc.createUrl("balls")
     check upkg.url.hostname == "github.com"
-    check $upkg.url == "https://github.com/disruptek/balls"
+    check $upkg.cloneUri() == "https://github.com/disruptek/balls"
     check $upkg.projectName == "balls"
     check upkg.toDirectoryPath() == ws / Path"deps" / Path("balls")
     check upkg.toLinkPath() == ws / Path"deps" / Path("balls.nimble-link")
@@ -44,8 +43,8 @@ suite "urls and naming":
     discard nc.nameOverrides.addPattern("balls", "https://github.com/disruptek/balls.git")
     let upkg = nc.createUrl("balls")
     check upkg.url.hostname == "github.com"
-    check $upkg.url == "https://github.com/disruptek/balls"
-    check $upkg.projectName == "balls.disruptek.github.com"
+    check $upkg.cloneUri() == "https://github.com/disruptek/balls"
+    check $upkg.projectName == "balls"
     check upkg.toDirectoryPath() == ws / Path"deps" / Path("balls")
     check upkg.toLinkPath() == ws / Path"deps" / Path("balls.nimble-link")
 
@@ -53,7 +52,7 @@ suite "urls and naming":
     let upkg = nc.createUrl("git://github.com:disruptek/cutelog")
     check upkg.url.hostname == "github.com"
     check $upkg.url == "ssh://github.com/disruptek/cutelog"
-    check $upkg.projectName == "cutelog.disruptek.github.com"
+    check $upkg.projectName == "cutelog"
     check upkg.toDirectoryPath() == ws / Path"deps" / Path("cutelog")
     check upkg.toLinkPath() == ws / Path"deps" / Path("cutelog.nimble-link")
 
@@ -61,7 +60,7 @@ suite "urls and naming":
     let upkg = nc.createUrl("git://github.com:1234/disruptek/cutelog")
     check upkg.url.hostname == "github.com"
     check $upkg.url == "ssh://github.com:1234/disruptek/cutelog"
-    check $upkg.projectName == "cutelog.disruptek.github.com"
+    check $upkg.projectName == "cutelog"
     check upkg.toDirectoryPath() == ws / Path"deps" / Path("cutelog")
     check upkg.toLinkPath() == ws / Path"deps" / Path("cutelog.nimble-link")
 
@@ -69,7 +68,7 @@ suite "urls and naming":
     let upkg = nc.createUrl("git://github.com/disruptek/cutelog")
     check upkg.url.hostname == "github.com"
     check $upkg.url == "ssh://github.com/disruptek/cutelog"
-    check $upkg.projectName == "cutelog.disruptek.github.com"
+    check $upkg.projectName == "cutelog"
     check upkg.toDirectoryPath() == ws / Path"deps" / Path("cutelog")
     check upkg.toLinkPath() == ws / Path"deps" / Path("cutelog.nimble-link")
 
@@ -77,41 +76,41 @@ suite "urls and naming":
     # setAtlasVerbosity(Trace)
     let upkg = nc.createUrl("https://github.com/zevv/npeg.git")
     check upkg.url.hostname == "github.com"
-    check $upkg.url == "https://github.com/zevv/npeg"
+    check $upkg.cloneUri() == "https://github.com/zevv/npeg"
     check $upkg.projectName == "npeg"
     check upkg.toDirectoryPath() == ws / Path"deps" / Path("npeg")
     check upkg.toLinkPath() == ws / Path"deps" / Path("npeg.nimble-link")
     let npkg = nc.createUrl("npeg")
     check npkg.url.hostname == "github.com"
-    check $npkg.url == "https://github.com/zevv/npeg"
+    check $npkg.cloneUri() == "https://github.com/zevv/npeg"
 
   test "npeg url fork":
     let upkg = nc.createUrl("https://github.com/elcritch/npeg.git")
     check upkg.url.hostname == "github.com"
     check $upkg.url == "https://github.com/elcritch/npeg"
-    check $upkg.projectName == "npeg.elcritch.github.com"
+    check $upkg.projectName == "npeg"
     check upkg.toDirectoryPath() == ws / Path"deps" / Path("npeg")
     check upkg.toLinkPath() == ws / Path"deps" / Path("npeg.nimble-link")
     let npkg = nc.createUrl("npeg")
     check npkg.url.hostname == "github.com"
-    check $npkg.url == "https://github.com/zevv/npeg"
+    check $npkg.cloneUri() == "https://github.com/zevv/npeg"
 
   test "sync url":
     let upkg = nc.createUrl("https://github.com/planetis-m/sync")
     check upkg.url.hostname == "github.com"
-    check $upkg.url == "https://github.com/planetis-m/sync"
+    check $upkg.cloneUri() == "https://github.com/planetis-m/sync"
     check $upkg.projectName == "sync"
     check upkg.toDirectoryPath() == ws / Path"deps" / Path("sync")
     check upkg.toLinkPath() == ws / Path"deps" / Path("sync.nimble-link")
     let npkg = nc.createUrl("sync")
     check npkg.url.hostname == "github.com"
-    check $npkg.url == "https://github.com/planetis-m/sync"
+    check $npkg.cloneUri() == "https://github.com/planetis-m/sync"
 
   test "bytes2human url":
     let upkg = nc.createUrl("https://github.com/juancarlospaco/nim-bytes2human")
     check upkg.url.hostname == "github.com"
     check $upkg.url == "https://github.com/juancarlospaco/nim-bytes2human"
-    check $upkg.projectName == "nim-bytes2human.juancarlospaco.github.com"
+    check $upkg.projectName == "nim-bytes2human"
     check upkg.toDirectoryPath() == ws / Path"deps" / Path("nim-bytes2human")
     check upkg.toLinkPath() == ws / Path"deps" / Path("nim-bytes2human.nimble-link")
     expect ValueError:
@@ -121,17 +120,16 @@ suite "urls and naming":
     let upkg = nc.createUrl("git@github.com:elcritch/atlas.git")
     check upkg.url.hostname == "github.com"
     check $upkg.url == "ssh://git@github.com/elcritch/atlas"
-    check $upkg.projectName == "atlas.elcritch.github.com"
+    check $upkg.projectName == "atlas"
     check upkg.toDirectoryPath() == ws / Path"deps" / Path("atlas")
     check upkg.toLinkPath() == ws / Path"deps" / Path("atlas.nimble-link")
-    expect ValueError:
-      discard nc.createUrl("atlas")
+    check nc.createUrl("atlas") == upkg
 
   test "atlas ssh url without .git":
     let upkg = nc.createUrl("git@github.com:elcritch/knutella")
     check upkg.url.hostname == "github.com"
     check $upkg.url == "ssh://git@github.com/elcritch/knutella"
-    check $upkg.projectName == "knutella.elcritch.github.com"
+    check $upkg.projectName == "knutella"
     check upkg.toDirectoryPath() == ws / Path"deps" / Path("knutella")
     check upkg.toLinkPath() == ws / Path"deps" / Path("knutella.nimble-link")
 
@@ -139,7 +137,7 @@ suite "urls and naming":
     let upkg = nc.createUrl("gh:disruptek/balls")
     check upkg.url.hostname == "github.com"
     check $upkg.url == "https://github.com/disruptek/balls"
-    check $upkg.projectName == "balls.disruptek.github.com"
+    check $upkg.projectName == "balls"
     check upkg.toDirectoryPath() == ws / Path"deps" / Path("balls")
     check upkg.toLinkPath() == ws / Path"deps" / Path("balls.nimble-link")
 
@@ -147,19 +145,19 @@ suite "urls and naming":
     let upkg = nc.createUrl("github:disruptek/balls")
     check upkg.url.hostname == "github.com"
     check $upkg.url == "https://github.com/disruptek/balls"
-    check $upkg.projectName == "balls.disruptek.github.com"
+    check $upkg.projectName == "balls"
 
   test "forge alias gitlab":
     let upkg = nc.createUrl("gl:someuser/somepkg")
     check upkg.url.hostname == "gitlab.com"
     check $upkg.url == "https://gitlab.com/someuser/somepkg"
-    check $upkg.projectName == "somepkg.someuser.gitlab.com"
+    check $upkg.projectName == "somepkg"
 
   test "forge alias sourcehut":
     let upkg = nc.createUrl("srht:~someuser/somepkg")
     check upkg.url.hostname == "git.sr.ht"
     check $upkg.url == "https://git.sr.ht/~someuser/somepkg"
-    check $upkg.projectName == "somepkg.~someuser.git.sr.ht"
+    check $upkg.projectName == "somepkg"
 
   test "forge alias sourcehut auto tilde":
     let upkg = nc.createUrl("srht:someuser/somepkg")

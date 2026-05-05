@@ -21,6 +21,7 @@ type
   PackageReleaseCache = object
     cacheVersion*: int
     url*: PkgUrl
+    subdir*: Path
     shortName*: string
     fullName*: string
     head*: CommitHash
@@ -35,19 +36,34 @@ type
 const
   PackageReleaseCacheVersion = 2
 
-proc packageCacheStem*(url: PkgUrl): string =
+proc sanitizeCacheStem(stem: var string) =
+  for c in mitems(stem):
+    if c notin {'a'..'z', 'A'..'Z', '0'..'9', '.', '_', '-'}:
+      c = '_'
+
+proc packageCacheStem*(url: PkgUrl; subdir = ""): string =
   result = url.fullName()
   if result.len == 0:
     result = url.projectName()
   if result.len == 0:
     result = $url
 
-  for c in mitems(result):
-    if c notin {'a'..'z', 'A'..'Z', '0'..'9', '.', '_', '-'}:
-      c = '_'
+  if subdir.len > 0:
+    var subdirStem = subdir
+    sanitizeCacheStem(subdirStem)
+    result.add "."
+    result.add subdirStem
+
+  sanitizeCacheStem(result)
+
+proc packageCacheStem*(pkg: Package): string =
+  let subdir =
+    if pkg.subdir.len > 0: pkg.subdir
+    else: pkg.url.subdir()
+  packageCacheStem(pkg.url, $subdir)
 
 proc packageReleaseCachePath*(pkg: Package): Path =
-  cachesDirectory() / Path(packageCacheStem(pkg.url) & ".json")
+  cachesDirectory() / Path(packageCacheStem(pkg) & ".json")
 
 proc includeTagsAndNimbleCommitsFlag*(): bool =
   IncludeTagsAndNimbleCommits in context().flags
@@ -68,8 +84,15 @@ proc canUsePackageReleaseCache*(
     not pkg.isLocalOnly
 
 proc findGitNimbleFiles*(pkg: Package; commit: CommitHash): seq[NimbleFileSource] =
+  let subdir =
+    if pkg.subdir.len > 0: pkg.subdir
+    else: pkg.url.subdir()
   let files = listFiles(pkg.ondisk, commit)
   for file in files:
+    if subdir.len > 0:
+      let prefix = subdir.string.strip(leading=false, trailing=true, {'/'}) & "/"
+      if not file.startsWith(prefix):
+        continue
     if file.endsWith(".nimble"):
       let source = NimbleFileSource(path: Path(file), fromGit: true)
       if source.path.splitPath().tail == Path(pkg.url.shortName() & ".nimble"):
@@ -83,7 +106,7 @@ proc materializeNimbleFile*(pkg: Package; commit: CommitHash; source: NimbleFile
   let tmpDir = cachesDirectory() / Path"_tmp"
   createDir(cachesDirectory())
   createDir(tmpDir)
-  result = tmpDir / Path(packageCacheStem(pkg.url) & "-" & commit.short() & "-" & $source.path.splitPath().tail)
+  result = tmpDir / Path(packageCacheStem(pkg) & "-" & commit.short() & "-" & $source.path.splitPath().tail)
   writeFile($result, showFile(pkg.ondisk, commit, $source.path))
 
 proc firstNonEmptyMetadata(
@@ -100,6 +123,8 @@ proc toPackageReleaseCacheJson(cache: PackageReleaseCache; opt: ToJsonOptions): 
   result = newJObject()
   result["cacheVersion"] = toJson(cache.cacheVersion, opt)
   result["url"] = toJson(cache.url, opt)
+  if cache.subdir.len > 0:
+    result["subdir"] = toJson(cache.subdir, opt)
   if cache.shortName.len > 0:
     result["shortName"] = toJson(cache.shortName, opt)
   if cache.fullName.len > 0:
@@ -167,6 +192,7 @@ proc loadPackageReleaseCache*(
 
   result =
     cache.url == pkg.url and
+    cache.subdir == (if pkg.subdir.len > 0: pkg.subdir else: pkg.url.subdir()) and
     cache.head == pkg.originHead and
     cache.current == currentCommit and
     cache.includeTagsAndNimbleCommits == includeTagsAndNimbleCommitsFlag() and
@@ -187,6 +213,7 @@ proc savePackageReleaseCache*(
   var cache = PackageReleaseCache(
     cacheVersion: PackageReleaseCacheVersion,
     url: pkg.url,
+    subdir: if pkg.subdir.len > 0: pkg.subdir else: pkg.url.subdir(),
     shortName: pkg.url.shortName(),
     fullName: pkg.url.fullName(),
     head: pkg.originHead,
@@ -203,5 +230,9 @@ proc savePackageReleaseCache*(
   createDir(cachesDirectory())
   let cachePath = packageReleaseCachePath(pkg)
   var cacheJson = toPackageReleaseCacheJson(cache, ToJsonOptions(enumMode: joptEnumString))
-  writeFile($cachePath, pretty(cacheJson))
+  let tmpPath = cachesDirectory() / Path(packageCacheStem(pkg) & ".json.tmp")
+  writeFile($tmpPath, pretty(cacheJson))
+  if fileExists($cachePath):
+    removeFile($cachePath)
+  moveFile($tmpPath, $cachePath)
   debug pkg.url.projectName, "wrote dependency cache:", $cachePath, "releases:", $cache.releases.len

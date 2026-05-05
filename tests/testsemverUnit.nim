@@ -52,12 +52,11 @@ suite "graph solve":
 
         expectedVersionWithGitTags()
         var nc = createNimbleContext()
-        nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a", true))
-        nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b", true))
-        nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c", true))
-        nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d", true))
+        nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a"))
+        nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b"))
+        nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c"))
+        nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d"))
 
-        check nc.lookup("proj_a").hasShortName
         check nc.lookup("proj_a").projectName == "proj_a"
 
         let dir = paths.getCurrentDir().absolutePath
@@ -160,10 +159,10 @@ suite "graph solve":
         check graph.validateDependencyGraph()
         let topo = graph.toposorted()
 
-        check topo[0].url.projectName == "proj_d.buildGraph.example.com"
-        check topo[1].url.projectName == "proj_c.buildGraph.example.com"
-        check topo[2].url.projectName == "proj_b.buildGraph.example.com"
-        check topo[3].url.projectName == "proj_a.buildGraph.example.com"
+        check topo[0].url.projectName == "proj_d"
+        check topo[1].url.projectName == "proj_c"
+        check topo[2].url.projectName == "proj_b"
+        check topo[3].url.projectName == "proj_a"
 
         for pkg in topo:
           echo "PKG: ", pkg.url.projectName
@@ -189,10 +188,10 @@ suite "test expand with no git tags":
         expectedVersionWithNoGitTags()
 
         var nc = createNimbleContext()
-        nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraphNoGitTags/proj_a", true))
-        nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraphNoGitTags/proj_b", true))
-        nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraphNoGitTags/proj_c", true))
-        nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraphNoGitTags/proj_d", true))
+        nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraphNoGitTags/proj_a"))
+        nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraphNoGitTags/proj_b"))
+        nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraphNoGitTags/proj_c"))
+        nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraphNoGitTags/proj_d"))
 
         let dir = paths.getCurrentDir().absolutePath
 

@@ -500,21 +500,19 @@ proc chooseDuplicatePackage(graph: DepGraph; name: string; dupePkgs: seq[Package
   for pkg in dupePkgs:
     if isRootRequested(pkg.url):
       rootMatches.add pkg
-      if not pkg.url.hasShortName:
-        explicitRootMatches.add pkg
 
-    if not pkg.url.hasShortName:
-      explicitMatches.add pkg
+    explicitMatches.add pkg
 
-    if pkg.url.url.scheme in ["file", "link", "atlas", "error"]:
+    if pkg.url.cloneUri().scheme in ["file", "link", "atlas", "error"]:
       allSameRemote = false
     else:
-      let remoteId = remoteNameFromGitUrl($pkg.url.url)
+      let remoteId = remoteNameFromGitUrl($pkg.url.cloneUri())
       if remoteId.len == 0:
         allSameRemote = false
       else:
         remoteIds.incl(remoteId)
 
+  explicitRootMatches = rootMatches.filterIt(it.isFork)
   if explicitRootMatches.len == 1:
     return explicitRootMatches[0]
   if rootMatches.len == 1:
@@ -537,7 +535,7 @@ proc checkDuplicateModules(graph: var DepGraph) =
   var moduleNames: Table[string, HashSet[Package]]
   for pkg in values(graph.pkgs):
     if pkg.active:
-      moduleNames.mgetOrPut(pkg.url.shortName(), initHashSet[Package]()).incl(pkg)
+      moduleNames.mgetOrPut(pkg.url.projectName(), initHashSet[Package]()).incl(pkg)
   moduleNames = moduleNames.pairs().toSeq().filterIt(it[1].len > 1).toTable()
 
   var unhandledDuplicates: seq[string]
@@ -556,7 +554,7 @@ proc checkDuplicateModules(graph: var DepGraph) =
       error "atlas:resolved", "duplicate module name:", name, "with pkgs:", dupePkgs.mapIt(it.url.projectName).join(", ")
       notice "atlas:resolved", "please add an entry to `pkgOverrides` to the current project config to select one of: "
       for pkg in dupePkgs:
-        notice "...", "   \"$1\": \"$2\", " % [$pkg.url.shortName(), $pkg.url]
+        notice "...", "   \"$1\": \"$2\", " % [$pkg.url.projectName(), $pkg.url]
     
       unhandledDuplicates.add name
     else:
@@ -792,7 +790,7 @@ proc activateGraph*(graph: DepGraph): tuple[paths: seq[CfgPath], features: seq[s
       else:
         if pkg.url.isNimbleLink():
           continue
-        let pkgUri = pkg.url.toUri
+        let pkgUri = pkg.url.cloneUri()
         if pkgUri.scheme notin ["file", "link", "atlas"]:
           discard gitops.ensureCanonicalOrigin(pkg.ondisk, pkgUri)
         notice pkg.url.projectName, "Checked out to:", $pkg.activeVersion.commit().short(), "at:", pkg.ondisk.relativeToWorkspace()

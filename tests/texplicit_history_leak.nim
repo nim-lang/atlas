@@ -280,8 +280,8 @@ suite "historical explicit transitive pins":
           let mummyCommit = gitHead()
           setRemoteTip(mummyUrlString, "main", mummyCommit)
 
-        createDir("nim-jwt")
-        withDir "nim-jwt":
+        createDir("jwt")
+        withDir "jwt":
           writePackage("jwt", "0.0.1")
           initGitRepo()
           addOrigin(jwtUrlString)
@@ -325,8 +325,6 @@ suite "historical explicit transitive pins":
       discard nc.put("mummy", createUrlSkipPatterns(mummyUrlString))
 
       var canonicalJwtUrl = createUrlSkipPatterns(jwtUrlString)
-      canonicalJwtUrl.hasShortName = true
-      canonicalJwtUrl.qualifiedName.name = "jwt"
       discard nc.put("jwt", canonicalJwtUrl)
 
       var graph = loadWorkspace(project(), nc, AllReleases, DoClone, doSolve = true)
@@ -349,3 +347,73 @@ suite "historical explicit transitive pins":
         if graph.pkgs[canonicalJwtUrl].active:
           check $graph.pkgs[canonicalJwtUrl].activeNimbleRelease.version == "0.3"
           check graph.pkgs[canonicalJwtUrl].activeVersion.commit.h == latestJwtCommit
+
+  test "unofficial packages with matching nimble names keep separate checkouts":
+    let ws = "tests/ws_explicit_history_leak"
+    removeDir(ws)
+    createDir(ws)
+
+    withDir ws:
+      project(paths.getCurrentDir())
+      context().flags = {KeepWorkspace, ListVersions}
+      context().defaultAlgo = SemVer
+
+      createDir("remotes/upstream/shared")
+      createDir("remotes/fork/shared")
+
+      withDir "remotes/upstream/shared":
+        writePackage("shared", "1.0.0")
+        initGitRepo()
+        commitAll("upstream shared")
+
+      withDir "remotes/fork/shared":
+        writePackage("shared", "2.0.0")
+        initGitRepo()
+        commitAll("fork shared")
+
+      let remotesUrl = "file://" & $(Path("remotes").absolutePath()) & "/"
+      putEnv("GIT_CONFIG_COUNT", "1")
+      putEnv("GIT_CONFIG_KEY_0", "url." & remotesUrl & ".insteadOf")
+      putEnv("GIT_CONFIG_VALUE_0", "https://example.invalid/")
+
+      let upstreamUrlString = "https://example.invalid/upstream/shared"
+      let forkUrlString = "https://example.invalid/fork/shared"
+      writeFile("ws_explicit_history_leak.nimble", [
+        "version = \"0.1.0\"",
+        "requires \"" & upstreamUrlString & "\"",
+        "requires \"" & forkUrlString & "\"",
+        ""
+      ].join("\n"))
+
+      var nc = createUnfilledNimbleContext()
+      let upstreamUrl = nc.createUrl(upstreamUrlString)
+      let forkUrl = nc.createUrl(forkUrlString)
+
+      var graph = loadWorkspace(project(), nc, AllReleases, DoClone, doSolve = false)
+
+      checkpoint "\tgraph:\n" & $graph.toJson()
+
+      check upstreamUrl in graph.pkgs
+      check forkUrl in graph.pkgs
+
+      if upstreamUrl in graph.pkgs and forkUrl in graph.pkgs:
+        let upstream = graph.pkgs[upstreamUrl]
+        let fork = graph.pkgs[forkUrl]
+
+        check upstream.state == Processed
+        check fork.state == Processed
+        check upstream.ondisk != fork.ondisk
+        check gitops.getCanonicalUrl(upstream.ondisk) == upstreamUrlString
+        check gitops.getCanonicalUrl(fork.ondisk) == forkUrlString
+
+        var nc2 = createUnfilledNimbleContext()
+        let upstreamUrl2 = nc2.createUrl(upstreamUrlString)
+        let forkUrl2 = nc2.createUrl(forkUrlString)
+        var graph2 = loadWorkspace(project(), nc2, AllReleases, DoClone, doSolve = false)
+
+        check upstreamUrl2 in graph2.pkgs
+        check forkUrl2 in graph2.pkgs
+        if upstreamUrl2 in graph2.pkgs and forkUrl2 in graph2.pkgs:
+          check graph2.pkgs[upstreamUrl2].ondisk == upstream.ondisk
+          check graph2.pkgs[forkUrl2].ondisk == fork.ondisk
+          check gitops.getCanonicalUrl(graph2.pkgs[forkUrl2].ondisk) == forkUrlString

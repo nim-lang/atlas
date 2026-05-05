@@ -257,14 +257,14 @@ proc replay*(lockFile: Path) =
     notice "atlas:replay", "Setting up repo:", $dir.relativePath(project()), "to commit:", $v.commit
     let pkgUrl = nc.createUrl(v.url)
     if not dirExists(dir):
-      let (status, err) = gitops.clone(pkgUrl.toUri, dir)
+      let (status, err) = gitops.clone(pkgUrl.cloneUri(), dir)
       if status != Ok:
         error lockFile, err
         continue
-    discard gitops.ensureCanonicalOrigin(dir, pkgUrl.toUri)
+    discard gitops.ensureCanonicalOrigin(dir, pkgUrl.cloneUri())
     
     let url = getCanonicalUrl(dir)
-    if $url.createUrlSkipPatterns() != url:
+    if $pkgUrl.cloneUri() != url:
       let lvl = if IgnoreGitRemoteUrls in context().flags: Info else: Error
       message lvl, v.dir, "remote URL differs from expected: got: " &
                   url & " but expected: " & v.url

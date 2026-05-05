@@ -45,6 +45,7 @@ type
       version*: string
       dvcsTag*: string
       web*: string # Info url for humans.
+      subdir*: string
 
 proc optionalField(obj: JsonNode, name: string, default = ""): string =
   if hasKey(obj, name) and obj[name].kind == JString:
@@ -76,6 +77,7 @@ proc fromJson*(obj: JsonNode): PackageInfo =
     for t in obj["tags"]: result.tags.add(t.str)
     result.description = obj.requiredField("description")
     result.web = obj.optionalField("web")
+    result.subdir = obj.optionalField("subdir")
 
 proc `$`*(pkg: PackageInfo): string =
   result = pkg.name & ":\n"
@@ -88,6 +90,8 @@ proc `$`*(pkg: PackageInfo): string =
   result &= "  license:     " & pkg.license & "\n"
   if pkg.web.len > 0:
     result &= "  website:     " & pkg.web & "\n"
+  if pkg.subdir.len > 0:
+    result &= "  subdir:      " & pkg.subdir & "\n"
 
 proc toTags*(j: JsonNode): seq[string] =
   result = @[]

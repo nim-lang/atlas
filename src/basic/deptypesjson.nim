@@ -27,7 +27,8 @@ proc fromJsonHook*(a: var VersionTag; b: JsonNode; opt = Joptions()) =
     raw = raw[0..^2]
   a = toVersionTag(raw)
   a.isTip = isTip
-proc toJsonHook*(v: PkgUrl): JsonNode = %($(v))
+proc toJsonHook*(v: PkgUrl): JsonNode =
+  %($(v))
 
 proc fromJsonHook*(a: var PkgUrl; b: JsonNode; opt = Joptions()) =
   a = toPkgUriRaw(parseUri(b.getStr()))
@@ -51,19 +52,6 @@ proc fromJsonHook*(a: var (PkgUrl, VersionInterval); b: JsonNode; opt = Joptions
   a[0].fromJson(b["url"])
   a[1].fromJson(b["version"])
 
-proc toJsonHook*(v: Table[PkgUrl, HashSet[string]], opt: ToJsonOptions): JsonNode =
-  result = newJObject()
-  for k, v in v:
-    result[$(k)] = toJson(v, opt)
-
-proc fromJsonHook*(a: var Table[PkgUrl, HashSet[string]]; b: JsonNode; opt = Joptions()) =
-  for k, v in b:
-    var url: PkgUrl
-    url.fromJson(toJson(k))
-    var flags: HashSet[string]
-    flags.fromJson(toJson(v))
-    a[url] = flags
-
 proc toJsonHook*(r: NimbleRelease, opt: ToJsonOptions): JsonNode
 proc fromJsonHook*(r: var NimbleRelease; b: JsonNode; opt = Joptions())
 
@@ -85,16 +73,19 @@ proc fromJsonHook*(t: var OrderedTable[PackageVersion, NimbleRelease]; b: JsonNo
     t[pv] = release
 
 proc toJsonHook*(t: OrderedTable[PkgUrl, Package], opt: ToJsonOptions): JsonNode =
-  result = newJObject()
+  result = newJArray()
   for k, v in t:
-    result[$(k)] = toJson(v, opt)
+    var item = newJObject()
+    item["url"] = toJsonHook(k)
+    item["package"] = toJson(v, opt)
+    result.add item
 
 proc fromJsonHook*(t: var OrderedTable[PkgUrl, Package]; b: JsonNode; opt = Joptions()) =
-  for k, v in b:
+  for item in b:
     var url: PkgUrl
-    url.fromJson(toJson(k))
+    url.fromJson(item["url"])
     var pkg: Package
-    pkg.fromJson(v)
+    pkg.fromJson(item["package"])
     t[url] = pkg
 
 proc nimbleReleaseToJson(r: NimbleRelease, opt: ToJsonOptions): JsonNode =
@@ -200,6 +191,8 @@ proc loadJson*(nc: var NimbleContext, json: JsonNode): DepGraph =
   for url, pkg in pkgs:
     let url2 = nc.createUrl($pkg.url)
     pkg.url = url2
+    if pkg.subdir.string.len == 0:
+      pkg.subdir = url2.subdir()
     result.pkgs[url2] = pkg
   
   let rootUrl = nc.createUrl($result.root.url)

@@ -14,11 +14,15 @@
 ## dependency deferral, explicit commit requirements, and root feature
 ## dependencies during traversal.
 
-import std / [os, strutils, uri, tables, sequtils, sets, hashes, paths, dirs]
+import std / [os, strutils, uri, tables, sequtils, sets, paths, dirs]
 import basic/[context, deptypes, versions, osutils, reporters, gitops, pkgurls, nimblecontext, deptypesjson, packageutils]
 import releaseinfo
 
-export deptypes, versions, deptypesjson, releaseinfo
+export deptypes, versions, deptypesjson, releaseinfo, packageutils
+
+type
+  PackageAction* = enum
+    DoNothing, DoClone
 
 proc childDependencyState(pkg: Package; deferChildDeps: bool): PackageState =
   ## Returns the initial state for newly discovered child dependencies.
@@ -45,7 +49,7 @@ proc registerReleaseDependencies(
     let state = childDependencyState(pkg, deferChildDeps)
     if pkgUrl notin nc.packageToDependency:
       debug pkg.url.projectName, "Found new pkg:", pkgUrl.projectName, "url:", $pkgUrl.url, "projectName:", $pkgUrl.projectName, "state:", $state
-      let pkgDep = Package(url: pkgUrl, state: state, isFork: isForkUrl(nc, pkgUrl))
+      let pkgDep = nc.initPackage(pkgUrl, state)
       nc.packageToDependency[pkgUrl] = pkgDep
     else:
       if nc.packageToDependency[pkgUrl].state == LazyDeferred and state != LazyDeferred:
@@ -62,7 +66,7 @@ proc registerReleaseDependencies(
           if feature notin context().features: LazyDeferred
           else: childDependencyState(pkg, deferChildDeps)
         debug pkg.url.projectName, "Found new feature pkg:", pkgUrl.projectName, "url:", $pkgUrl.url, "projectName:", $pkgUrl.projectName, "state:", $state
-        let pkgDep = Package(url: pkgUrl, state: state, isFork: isForkUrl(nc, pkgUrl))
+        let pkgDep = nc.initPackage(pkgUrl, state)
         nc.packageToDependency[pkgUrl] = pkgDep
       elif feature in context().features and nc.packageToDependency[pkgUrl].state == LazyDeferred and childDependencyState(pkg, deferChildDeps) != LazyDeferred:
         warn pkg.url.projectName, "Changing LazyDeferred feature pkg to DoLoad:", $pkgUrl.url
@@ -77,10 +81,6 @@ proc enrichPackageDependencies(
   ## This is intentionally separate from release parsing/cache loading.
   for _, release in pkg.versions:
     nc.registerReleaseDependencies(pkg, release, deferChildDeps)
-
-type
-  PackageAction* = enum
-    DoNothing, DoClone
 
 proc addFeatureDependencies(pkg: Package) =
   ## Marks root package feature requirements as active when requested by context flags.
@@ -108,33 +108,6 @@ proc addFeatureDependencies(pkg: Package) =
   if featuresAdded:
     warn pkg.url.projectName, "feature dependencies added"
     pkg.state = Found
-
-proc canonicalizeUrl(nc: var NimbleContext; url: PkgUrl): PkgUrl =
-  if url.url.scheme == "error":
-    return url
-  try:
-    result = nc.createUrl($url)
-  except CatchableError:
-    result = url
-
-proc canonicalizeReleaseUrls(nc: var NimbleContext; rel: NimbleRelease) =
-  for req in mitems(rel.requirements):
-    req[0] = canonicalizeUrl(nc, req[0])
-
-  if rel.reqsByFeatures.len > 0:
-    var reqsByFeatures = initTable[PkgUrl, HashSet[string]]()
-    for url, flags in rel.reqsByFeatures:
-      reqsByFeatures[canonicalizeUrl(nc, url)] = flags
-    rel.reqsByFeatures = reqsByFeatures
-
-  if rel.features.len > 0:
-    var features = initTable[string, seq[(PkgUrl, VersionInterval)]]()
-    for feature, reqs in rel.features:
-      var fixedReqs: seq[(PkgUrl, VersionInterval)]
-      for req in reqs:
-        fixedReqs.add (canonicalizeUrl(nc, req[0]), req[1])
-      features[feature] = fixedReqs
-    rel.features = features
 
 proc traverseDependency*(
     nc: var NimbleContext;
@@ -189,12 +162,12 @@ proc loadDependency*(
 
   doAssert pkg.ondisk.string == ""
 
-  let officialUrl = nc.lookup(pkg.url.shortName())
+  let officialUrl = nc.lookup(pkg.projectName())
   let isFork = pkg.isFork
 
   if isFork:
     info pkg.url.projectName, "package is unofficial or forked"
-    let canonicalDir = officialUrl.toDirectoryPath()
+    let canonicalDir = officialUrl.toDirectoryPath(pkg.projectName())
     let forkDir = pkg.url.toDirectoryPath()
     if dirExists(forkDir) and not dirExists(canonicalDir) and
         forkDir.isRelativeTo(depsDir()) and canonicalDir.isRelativeTo(depsDir()):
@@ -204,11 +177,11 @@ proc loadDependency*(
         discard
     pkg.ondisk = canonicalDir
   else:
-    pkg.ondisk = pkg.url.toDirectoryPath()
+    pkg.ondisk = pkg.url.toDirectoryPath(pkg.projectName())
 
-  var todo = if dirExists(pkg.ondisk): DoNothing else: DoClone
   pkg.isAtlasProject = pkg.url.isAtlasProject()
   pkg.isLocalOnly = pkg.url.isNimbleLink()
+  var todo = if pkg.resolveExistingPackageDir(): DoNothing else: DoClone
   if pkg.isLocalOnly:
     todo = DoNothing
   if pkg.state == LazyDeferred:
@@ -220,34 +193,20 @@ proc loadDependency*(
     if onClone == DoNothing:
       pkg.state = Error
       pkg.errors.add "Not found"
+      return
     else:
-      let (status, msg) =
-        if pkg.url.isFileProtocol:
-          pkg.isLocalOnly = true
-          copyFromDisk(pkg, pkg.ondisk)
-        else:
-          gitops.clone(pkg.url.toUri, pkg.ondisk)
-      if status == Ok:
-        if not pkg.isLocalOnly:
-          var repo = gitops.loadRepoMetadata(pkg.ondisk, expectedCanonicalUrl = $pkg.url.toUri)
-          if isFork:
-            discard gitops.ensureRemoteForUrl(pkg.ondisk, officialUrl.toUri)
-          discard gitops.fetchRemoteTags(repo)
-        pkg.state = Found
-      else:
-        pkg.state = Error
-        pkg.errors.add $status & ": " & msg
+      clonePackage(pkg, officialUrl, isFork)
   of DoNothing:
     if pkg.ondisk.dirExists():
       pkg.state = Found
       if not pkg.isLocalOnly:
-        discard gitops.loadRepoMetadata(pkg.ondisk, expectedCanonicalUrl = $pkg.url.toUri)
+        discard gitops.loadRepoMetadata(pkg.ondisk, expectedCanonicalUrl = $pkg.url.cloneUri())
         if isFork:
-          discard gitops.ensureRemoteForUrl(pkg.ondisk, officialUrl.toUri)
+          discard gitops.ensureRemoteForUrl(pkg.ondisk, officialUrl.cloneUri())
       if UpdateRepos in context().flags:
         gitops.updateRepo(pkg.ondisk)
         if not pkg.isLocalOnly:
-          var repo = gitops.loadRepoMetadata(pkg.ondisk, expectedCanonicalUrl = $pkg.url.toUri)
+          var repo = gitops.loadRepoMetadata(pkg.ondisk, expectedCanonicalUrl = $pkg.url.cloneUri())
           discard gitops.fetchRemoteTags(repo)
         
     else:

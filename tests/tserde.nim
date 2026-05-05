@@ -1,4 +1,4 @@
-import std/[unittest, json, jsonutils, sets, tables, os, times, paths]
+import std/[unittest, json, jsonutils, sets, tables, os, times, paths, strutils]
 import basic/[context, sattypes, pkgurls, deptypes, nimblecontext, dependencycache]
 import basic/[deptypesjson, versions]
 import confighandler
@@ -130,6 +130,58 @@ suite "json serde":
     check cache["fullName"].getStr() == "foobar.nimble-test.github.com"
     check "packageName" notin cache
     check "projectName" notin cache
+
+  test "package release cache uses url identity and subdir":
+    let oldCtx = context()
+    let ws = Path(getTempDir()) / Path("atlas_registry_release_cache_" & $int(epochTime()))
+    defer:
+      setContext(oldCtx)
+      if dirExists($ws):
+        removeDir($ws)
+
+    setContext(AtlasContext(projectDir: ws, depsDir: Path"deps"))
+    let repoUrl = toPkgUriRaw(parseUri "https://github.com/nimble-test/monorepo")
+    let rootUrl = repoUrl
+    let subdirUrl = repoUrl.withSubdir("bindings/nim")
+    let current = initCommitHash("24870f48c40da2146ce12ff1e675e6e7b9748355", FromNone)
+    let pkgRoot = Package(url: rootUrl, originHead: current)
+    let pkgSubdir = Package(
+      url: subdirUrl,
+      originHead: current,
+      subdir: subdirUrl.subdir()
+    )
+    let release = NimbleRelease(version: Version"1.0.0", requirements: @[], status: Normal)
+    let version = VersionTag(v: Version"1.0.0", c: current).toPkgVer
+
+    check rootUrl.cloneUri() == subdirUrl.cloneUri()
+    check rootUrl.projectName() == "monorepo"
+    check subdirUrl.projectName() == "nim"
+    check subdirUrl.shortName() == "monorepo"
+    savePackageReleaseCache(pkgRoot, current, @[(version, release)])
+    savePackageReleaseCache(pkgSubdir, current, @[(version, release)])
+
+    let rootPath = packageReleaseCachePath(pkgRoot)
+    let subdirPath = packageReleaseCachePath(pkgSubdir)
+    check rootPath != subdirPath
+    check fileExists($rootPath)
+    check fileExists($subdirPath)
+
+    let cache = parseFile($subdirPath)
+    check cache["shortName"].getStr() == "monorepo"
+    check cache["url"].getStr().contains("subdir=bindings%2Fnim")
+    check cache["subdir"].getStr() == "bindings/nim"
+    check "registryName" notin cache
+    check "registrySubdir" notin cache
+
+    var entries: seq[PackageReleaseCacheEntry]
+    check loadPackageReleaseCache(pkgSubdir, current, entries)
+    check entries.len == 1
+    entries.setLen(0)
+    check not loadPackageReleaseCache(
+      Package(url: repoUrl.withSubdir("bindings/other"), originHead: current),
+      current,
+      entries
+    )
 
   test "package release cache rejects old cache version":
     let oldCtx = context()

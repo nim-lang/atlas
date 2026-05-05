@@ -24,8 +24,11 @@ type
     activeFeatures*: seq[string]
     module*: string
     ondisk*: Path
+    subdir*: Path
     nimbleFile*: Path
     active*: bool
+    name*: string
+    isOfficial*: bool
     isAtlasProject*: bool # true if the package is an atlas project
     isFork*: bool
     isRoot*, isLocalOnly*: bool
@@ -94,10 +97,12 @@ proc sortVersionsAsc*(a, b: (PackageVersion, NimbleRelease)): int =
   sortVersionsAsc(a[0].vtag, b[0].vtag)
 
 proc `$`*(d: Package): string =
-  d.url.projectName()
+  if d.name.len > 0: d.name
+  else: d.url.projectName()
 
 proc projectName*(d: Package): string =
-  d.url.projectName()
+  if d.name.len > 0: d.name
+  else: d.url.projectName()
 
 proc remoteName*(d: Package): string =
   d.url.projectName()

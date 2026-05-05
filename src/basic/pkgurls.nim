@@ -17,7 +17,6 @@ const
 type
   PkgUrl* = object
     qualifiedName*: tuple[name: string, user: string, host: string]
-    hasShortName*: bool
     u: Uri
 
 proc isFileProtocol*(s: PkgUrl): bool = s.u.scheme == "file"
@@ -68,6 +67,8 @@ proc expandForgeAlias*(s: string): string =
 
 proc isUrl*(s: string): bool = s.startsWith("git@") or "://" in s or isForgeAlias(s)
 
+proc extractProjectName*(url: Uri): tuple[name: string, user: string, host: string]
+
 proc fullName*(u: PkgUrl): string =
   if u.qualifiedName.host.len() > 0 or u.qualifiedName.user.len() > 0:  
     result = u.qualifiedName.name & "." & u.qualifiedName.user & "." & u.qualifiedName.host
@@ -77,23 +78,62 @@ proc fullName*(u: PkgUrl): string =
 proc shortName*(u: PkgUrl): string =
   u.qualifiedName.name
 
+proc queryValue(u: PkgUrl; key: string): string =
+  for k, v in decodeQuery(u.u.query):
+    if k == key:
+      return v
+
+proc subdir*(u: PkgUrl): Path =
+  Path(u.queryValue("subdir"))
+
+proc cloneUri*(u: PkgUrl): Uri =
+  result = u.u
+  result.query = ""
+  result.anchor = ""
+
+proc withoutPackageNameQuery(u: Uri): Uri =
+  result = u
+  var query: seq[(string, string)]
+  for k, v in decodeQuery(result.query):
+    if k != "name":
+      query.add (k, v)
+  result.query = encodeQuery(query)
+
+proc withSubdir*(u: PkgUrl; subdir = ""): PkgUrl =
+  var uri = u.u
+  var query: seq[(string, string)]
+  for k, v in decodeQuery(uri.query):
+    if k notin ["name", "subdir"]:
+      query.add (k, v)
+  if subdir.len > 0:
+    query.add ("subdir", subdir)
+  uri.query = encodeQuery(query)
+  result = PkgUrl(qualifiedName: extractProjectName(uri), u: uri)
+
 proc projectName*(u: PkgUrl): string =
-  if u.hasShortName or u.qualifiedName.host == "":
+  let subdir = u.subdir()
+  if subdir.len > 0:
+    $subdir.splitPath().tail
+  elif u.qualifiedName.host == "":
     u.qualifiedName.name
   else:
-    u.qualifiedName.name & "." & u.qualifiedName.user & "." & u.qualifiedName.host
+    u.qualifiedName.name
 
 proc requiresName*(u: PkgUrl): string =
-  if u.hasShortName:
-    u.qualifiedName.name
+  if u.u.scheme in ["file", "link", "atlas"]:
+    u.shortName()
   else:
     $u.u
 
 proc toUri*(u: PkgUrl): Uri = result = u.u
 proc url*(p: PkgUrl): Uri = p.u
 proc `$`*(u: PkgUrl): string = $u.u
-proc hash*(a: PkgUrl): Hash {.inline.} = hash(a.u)
-proc `==`*(a, b: PkgUrl): bool {.inline.} = a.u == b.u
+
+proc hash*(a: PkgUrl): Hash {.inline.} =
+  hash(a.u)
+
+proc `==`*(a, b: PkgUrl): bool {.inline.} =
+  a.u == b.u
 
 proc toReporterName(u: PkgUrl): string = u.projectName()
 
@@ -115,8 +155,9 @@ proc extractProjectName*(url: Uri): tuple[name: string, user: string, host: stri
     result = (n & e, p, u.hostname)
 
 proc toOriginalPath*(pkgUrl: PkgUrl, isWindowsTest: bool = false): Path =
-  if pkgUrl.url.scheme in ["file", "link", "atlas"]:
-    result = Path(pkgUrl.url.hostname & pkgUrl.url.path)
+  let url = pkgUrl.cloneUri()
+  if url.scheme in ["file", "link", "atlas"]:
+    result = Path(url.hostname & url.path)
     if defined(windows) or isWindowsTest:
       var p = result.string.replace('/', '\\')
       p.removePrefix('\\')
@@ -127,20 +168,22 @@ proc toOriginalPath*(pkgUrl: PkgUrl, isWindowsTest: bool = false): Path =
 proc linkPath*(path: Path): Path =
   result = Path(path.string & ".nimble-link")
 
-proc toDirectoryPath(pkgUrl: PkgUrl, isLinkFile: bool): Path =
+proc toDirectoryPath(pkgUrl: PkgUrl, packageName: string, isLinkFile: bool): Path =
   trace pkgUrl, "directory path from:", $pkgUrl.url
 
-  if pkgUrl.url.scheme == "atlas":
+  let dirName =
+    if packageName.len > 0: packageName
+    else: pkgUrl.projectName()
+  let url = pkgUrl.cloneUri()
+  if url.scheme == "atlas":
     result = project()
-  elif pkgUrl.url.scheme == "link":
+  elif url.scheme == "link":
     result = pkgUrl.toOriginalPath().parentDir()
-  elif pkgUrl.url.scheme == "file":
+  elif url.scheme == "file":
     # file:// urls are used for local source paths, not dependency paths
-    result = depsDir() / Path(pkgUrl.projectName())
+    result = depsDir() / Path(dirName)
   else:
-    # Always clone git deps into shortName-based folders so switching remotes
-    # doesn't affect the on-disk location.
-    result = depsDir() / Path(pkgUrl.shortName())
+    result = depsDir() / Path(dirName)
   
   if not isLinkFile and not dirExists(result) and fileExists(result.linkPath()):
     # prefer the directory path if it exists (?)
@@ -161,24 +204,27 @@ proc toDirectoryPath(pkgUrl: PkgUrl, isLinkFile: bool): Path =
   doAssert result.len() > 0
 
 proc toDirectoryPath*(pkgUrl: PkgUrl): Path =
-  toDirectoryPath(pkgUrl, false)
+  toDirectoryPath(pkgUrl, "", false)
+
+proc toDirectoryPath*(pkgUrl: PkgUrl, packageName: string): Path =
+  toDirectoryPath(pkgUrl, packageName, false)
 
 proc toLinkPath*(pkgUrl: PkgUrl): Path =
-  if pkgUrl.url.scheme == "atlas":
+  if pkgUrl.cloneUri().scheme == "atlas":
     result = Path("")
-  elif pkgUrl.url.scheme == "link":
+  elif pkgUrl.cloneUri().scheme == "link":
     result = depsDir() / Path(pkgUrl.projectName() & ".nimble-link")
   else:
-    result = Path(toDirectoryPath(pkgUrl, true).string & ".nimble-link")
+    result = Path(toDirectoryPath(pkgUrl, "", true).string & ".nimble-link")
 
 proc isLinkPath*(pkgUrl: PkgUrl): bool =
   result = fileExists(toLinkPath(pkgUrl))
 
 proc isAtlasProject*(pkgUrl: PkgUrl): bool =
-  result = pkgUrl.url.scheme == "link"
+  result = pkgUrl.cloneUri().scheme == "link"
 
 proc isNimbleLink*(pkgUrl: PkgUrl): bool =
-  pkgUrl.url.scheme == "link" or pkgUrl.isLinkPath()
+  pkgUrl.cloneUri().scheme == "link" or pkgUrl.isLinkPath()
 
 proc createNimbleLink*(pkgUrl: PkgUrl, nimblePath: Path, cfgPath: CfgPath) =
   let nimbleLink = toLinkPath(pkgUrl)
@@ -246,16 +292,16 @@ proc createUrlSkipPatterns*(raw: string, skipDirTest = false, forceWindows: bool
         else:
           raw = "file://" & raw
       let u = parseUri(raw)
-      result = PkgUrl(qualifiedName: extractProjectName(u), u: u, hasShortName: true)
+      result = PkgUrl(qualifiedName: extractProjectName(u), u: u)
     else:
       raise newException(ValueError, "Invalid name or URL: " & raw)
   elif raw.startsWith("git@"): # special case git@server.com
     var u = parseUri("ssh://" & raw.replace(":", "/"))
     cleanupUrl(u)
-    result = PkgUrl(qualifiedName: extractProjectName(u), u: u, hasShortName: false)
+    u = withoutPackageNameQuery(u)
+    result = PkgUrl(qualifiedName: extractProjectName(u), u: u)
   else:
     var u = parseUri(raw)
-    var hasShortName = false
 
     if u.scheme == "git":
       if u.port.anyIt(not it.isDigit()):
@@ -267,12 +313,11 @@ proc createUrlSkipPatterns*(raw: string, skipDirTest = false, forceWindows: bool
     if u.scheme in ["file", "link", "atlas"]:
       # fix missing absolute paths
       u = fixFileRelativeUrl(u, isWindowsTest = forceWindows)
-      hasShortName = true
 
     cleanupUrl(u)
-    result = PkgUrl(qualifiedName: extractProjectName(u), u: u, hasShortName: hasShortName)
+    u = withoutPackageNameQuery(u)
+    result = PkgUrl(qualifiedName: extractProjectName(u), u: u)
   # trace result, "created url raw:", repr(raw), "url:", repr(result)
 
-proc toPkgUriRaw*(u: Uri, hasShortName: bool = false): PkgUrl =
+proc toPkgUriRaw*(u: Uri): PkgUrl =
   result = createUrlSkipPatterns($u, true)
-  result.hasShortName = hasShortName
