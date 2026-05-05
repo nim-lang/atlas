@@ -5,7 +5,19 @@ import basic/atlasversion
 import basic/httpclientutils
 import basic/packageinfos
 
+const AtlasRootDir = currentSourcePath().parentDir().parentDir()
+
+proc nimbleVersion(): string =
+  for line in readFile(AtlasRootDir / "atlas.nimble").splitLines():
+    if line.startsWith("version ="):
+      return line.split("=")[1].replace("\"", "").strip()
+  "0.0.0"
+
 suite "packages list":
+  test "atlas package version matches atlas.nimble":
+    check AtlasPackageVersion == nimbleVersion()
+    check AtlasPackageVersion != "0.0.0"
+
   test "package list urls prefer CDN and retain fallback":
     check PackagesJsonUrls[0] == "https://packages.nim-lang.org/packages.json"
     check PackagesJsonUrls[^1].startsWith("https://raw.githubusercontent.com/nim-lang/packages/")

@@ -8,17 +8,19 @@
 
 ## Atlas version information shared by CLI and library helpers.
 
-import std / strutils
-import std / os
+import std / [os, osproc, strutils]
+
+const
+  AtlasRootDir = currentSourcePath().parentDir().parentDir().parentDir()
+  AtlasNimbleFile = AtlasRootDir / "atlas.nimble"
 
 const AtlasPackageVersion* =
   block:
     var ver = "0.0.0"
-    if fileExists("../../atlas.nimble"):
-      for line in staticRead("../../atlas.nimble").splitLines():
-        if line.startsWith("version ="):
-          ver = line.split("=")[1].replace("\"", "").strip()
+    for line in staticRead(AtlasNimbleFile).splitLines():
+      if line.startsWith("version ="):
+        ver = line.split("=")[1].replace("\"", "").strip()
     ver
 
-const AtlasCommit* = staticExec("git log -n 1 --format=%H")
+const AtlasCommit* = staticExec("git -C " & quoteShell(AtlasRootDir) & " log -n 1 --format=%H")
 const AtlasVersion* = AtlasPackageVersion & " (sha: " & AtlasCommit & ")"
