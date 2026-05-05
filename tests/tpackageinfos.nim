@@ -1,5 +1,6 @@
-import std/[unittest, json, os, osproc, times, paths, strutils]
-import std/[streams, times, paths, httpclient, tempfiles]
+import std/[unittest, os, osproc, streams, times, paths, strutils, httpclient,
+            tempfiles]
+import std/json
 import basic/context
 import basic/atlasversion
 import basic/httpclientutils
