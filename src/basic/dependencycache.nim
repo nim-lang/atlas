@@ -21,7 +21,6 @@ type
   PackageReleaseCache = object
     cacheVersion*: int
     url*: PkgUrl
-    subdir*: Path
     shortName*: string
     fullName*: string
     head*: CommitHash
@@ -123,8 +122,6 @@ proc toPackageReleaseCacheJson(cache: PackageReleaseCache; opt: ToJsonOptions): 
   result = newJObject()
   result["cacheVersion"] = toJson(cache.cacheVersion, opt)
   result["url"] = toJson(cache.url, opt)
-  if cache.subdir.len > 0:
-    result["subdir"] = toJson(cache.subdir, opt)
   if cache.shortName.len > 0:
     result["shortName"] = toJson(cache.shortName, opt)
   if cache.fullName.len > 0:
@@ -213,7 +210,6 @@ proc savePackageReleaseCache*(
   var cache = PackageReleaseCache(
     cacheVersion: PackageReleaseCacheVersion,
     url: pkg.url,
-    subdir: if pkg.subdir.len > 0: pkg.subdir else: pkg.url.subdir(),
     shortName: pkg.url.shortName(),
     fullName: pkg.url.fullName(),
     head: pkg.originHead,
@@ -230,9 +226,5 @@ proc savePackageReleaseCache*(
   createDir(cachesDirectory())
   let cachePath = packageReleaseCachePath(pkg)
   var cacheJson = toPackageReleaseCacheJson(cache, ToJsonOptions(enumMode: joptEnumString))
-  let tmpPath = cachesDirectory() / Path(packageCacheStem(pkg) & ".json.tmp")
-  writeFile($tmpPath, pretty(cacheJson))
-  if fileExists($cachePath):
-    removeFile($cachePath)
-  moveFile($tmpPath, $cachePath)
+  writeFile($cachePath, pretty(cacheJson))
   debug pkg.url.projectName, "wrote dependency cache:", $cachePath, "releases:", $cache.releases.len
