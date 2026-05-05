@@ -1,5 +1,5 @@
-import std/[unittest, os, osproc, streams, times, paths, strutils, httpclient,
-            tempfiles]
+import std/[unittest, json, os, osproc, streams, times, paths, strutils,
+            httpclient, tempfiles]
 import basic/context
 import basic/atlasversion
 import basic/httpclientutils
@@ -37,6 +37,23 @@ suite "packages list":
 
       let headers = newHttpHeaders({"Content-Encoding": "gzip"})
       check decodePackageList(headers, compressed) == plain
+
+  test "package info parses registry subdir":
+    let pkg = fromJson(parseJson("""
+      {
+        "name": "proven",
+        "url": "https://github.com/hyperpolymath/proven",
+        "method": "git",
+        "tags": ["safety"],
+        "description": "Subdir package",
+        "license": "MIT",
+        "subdir": "bindings/nim"
+      }
+    """))
+    check pkg != nil
+    check pkg.kind == pkPackage
+    check pkg.name == "proven"
+    check pkg.subdir == "bindings/nim"
 
   test "updatePackages downloads packages.json":
     let pkgsDir = Path(getTempDir()) / Path("atlas_pkgs_" & $int(epochTime()))
