@@ -54,6 +54,11 @@ proc patchNimCfg*(deps: seq[CfgPath]; cfgPath: CfgPath; features: seq[string] = 
       writeFile($cfg, cfgContent)
       info(project(), "updated: " & $cfg.readableFile(project()))
 
+  let nimblePaths = Path(cfgPath.string / "nimble.paths")
+  if fileExists(nimblePaths):
+    warn(project(), "removing obsolete nimble.paths next to nim.cfg:", $nimblePaths.readableFile(project()))
+    removeFile($nimblePaths)
+
 proc parseNimCfgFeatures*(cfgPath: CfgPath): seq[string] =
   let cfg = Path(cfgPath.string / "nim.cfg")
   if not fileExists(cfg):

@@ -23,6 +23,8 @@ include $2
 """
   InstallHookTemplate* = """
 
+import std/tables
+
 var
   packageName* = ""    ## Set this to the package name. It
                        ## is usually not required to do that, nims' filename is
@@ -34,9 +36,11 @@ var
   srcDir*: string      ## The package's source directory.
   binDir*: string      ## The package's binary directory.
   backend*: string     ## The package's backend.
+  hasBin*: bool        ## Whether the package has binaries.
 
   skipDirs*, skipFiles*, skipExt*, installDirs*, installFiles*,
     installExt*, bin*: seq[string] = @[] ## Nimble metadata.
+  namedBin*: Table[string, string] ## Named package binaries.
   requiresData*: seq[string] = @[] ## The package's dependencies.
 
   foreignDeps*: seq[string] = @[] ## The foreign dependencies. Only
@@ -44,6 +48,9 @@ var
 
 proc requires*(deps: varargs[string]) =
   for d in deps: requiresData.add(d)
+
+template feature*(names: varargs[string]; body: untyped) =
+  discard
 
 template after(name, body: untyped) =
   when astToStr(name) == "install":

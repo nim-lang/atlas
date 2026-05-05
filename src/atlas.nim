@@ -12,22 +12,11 @@
 import std / [parseopt, files, dirs, strutils, os, options, osproc, tables, sets, json, uri, paths]
 import basic / [versions, context, osutils, configutils, reporters,
                 nimbleparser, gitops, pkgurls, nimblecontext,
-                compiledpatterns, packageinfos, sattypes]
+                compiledpatterns, packageinfos, sattypes, atlasversion]
 import depgraphs, nimenv, lockfiles, confighandler, dependencies, pkgsearch
 
 
 from std/terminal import isatty
-
-
-const
-  AtlasVersion =
-    block:
-      var ver = ""
-      for line in staticRead("../atlas.nimble").splitLines():
-        if line.startsWith("version ="):
-          ver = line.split("=")[1].replace("\"", "").replace(" ", "")
-      assert ver != ""
-      ver & " (sha: " & staticExec("git log -n 1 --format=%H") & ")"
 
 const
   LockFileName = Path "atlas.lock"
@@ -173,14 +162,20 @@ proc createWorkspace() =
 
 proc generateDepGraph(g: DepGraph) =
   proc repr(pkg: Package): string =
-    $(pkg.url.url / $pkg.activeVersion.commit)
+    let suffix =
+      if pkg.activeVersion.isNil:
+        "unresolved"
+      else:
+        $pkg.activeVersion.commit
+    $(pkg.url.url / suffix)
 
   var dotGraph = ""
   for n in allNodes(g):
     dotGraph.addf("\"$1\" [label=\"$2\"];\n", [n.repr, if n.active: "" else: "unused"])
   for n in allNodes(g):
-    for child in directDependencies(g, n):
-      dotGraph.addf("\"$1\" -> \"$2\";\n", [n.repr, child.repr])
+    if not n.activeVersion.isNil and n.activeNimbleRelease != nil:
+      for child in directDependencies(g, n):
+        dotGraph.addf("\"$1\" -> \"$2\";\n", [n.repr, child.repr])
   let dotFile = paths.getCurrentDir() / "deps.dot".Path
   writeFile($dotFile, "digraph deps {\n$1}\n" % dotGraph)
   let graphvizDotPath = findExe("dot")

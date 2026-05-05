@@ -21,13 +21,19 @@ type
   PackageReleaseCache = object
     cacheVersion*: int
     url*: PkgUrl
+    shortName*: string
+    fullName*: string
     head*: CommitHash
     current*: CommitHash
+    author*: string
+    description*: string
+    license*: string
     includeTagsAndNimbleCommits*: bool
     nimbleCommitsMax*: bool
     releases*: seq[PackageReleaseCacheEntry]
 
-const PackageReleaseCacheVersion = 1
+const
+  PackageReleaseCacheVersion = 2
 
 proc packageCacheStem*(url: PkgUrl): string =
   result = url.fullName()
@@ -80,6 +86,61 @@ proc materializeNimbleFile*(pkg: Package; commit: CommitHash; source: NimbleFile
   result = tmpDir / Path(packageCacheStem(pkg.url) & "-" & commit.short() & "-" & $source.path.splitPath().tail)
   writeFile($result, showFile(pkg.ondisk, commit, $source.path))
 
+proc firstNonEmptyMetadata(
+    versions: seq[(PackageVersion, NimbleRelease)];
+    field: proc (release: NimbleRelease): string
+): string =
+  for (_, release) in versions:
+    if not release.isNil:
+      result = field(release)
+      if result.len > 0:
+        return
+
+proc toPackageReleaseCacheJson(cache: PackageReleaseCache; opt: ToJsonOptions): JsonNode =
+  result = newJObject()
+  result["cacheVersion"] = toJson(cache.cacheVersion, opt)
+  result["url"] = toJson(cache.url, opt)
+  if cache.shortName.len > 0:
+    result["shortName"] = toJson(cache.shortName, opt)
+  if cache.fullName.len > 0:
+    result["fullName"] = toJson(cache.fullName, opt)
+  result["head"] = toJson(cache.head, opt)
+  result["current"] = toJson(cache.current, opt)
+  if cache.author.len > 0:
+    result["author"] = toJson(cache.author, opt)
+  if cache.description.len > 0:
+    result["description"] = toJson(cache.description, opt)
+  if cache.license.len > 0:
+    result["license"] = toJson(cache.license, opt)
+  result["includeTagsAndNimbleCommits"] = toJson(cache.includeTagsAndNimbleCommits, opt)
+  result["nimbleCommitsMax"] = toJson(cache.nimbleCommitsMax, opt)
+  result["releases"] = newJArray()
+
+  for entry in cache.releases:
+    var entryJson = newJObject()
+    entryJson["vtag"] = toJson(entry.vtag, opt)
+    let releaseJson = toJsonHook(entry.release, opt)
+    if not entry.release.isNil:
+      if entry.release.author == cache.author and releaseJson.hasKey("author"):
+        releaseJson.delete("author")
+      if entry.release.description == cache.description and releaseJson.hasKey("description"):
+        releaseJson.delete("description")
+      if entry.release.license == cache.license and releaseJson.hasKey("license"):
+        releaseJson.delete("license")
+    entryJson["release"] = releaseJson
+    result["releases"].add entryJson
+
+proc loadPackageReleaseCacheJson(cache: var PackageReleaseCache; jn: JsonNode) =
+  cache.fromJson(jn, Joptions(allowMissingKeys: true, allowExtraKeys: true))
+  for entry in mitems(cache.releases):
+    if not entry.release.isNil:
+      if entry.release.author.len == 0:
+        entry.release.author = cache.author
+      if entry.release.description.len == 0:
+        entry.release.description = cache.description
+      if entry.release.license.len == 0:
+        entry.release.license = cache.license
+
 proc loadPackageReleaseCache*(
     pkg: Package;
     currentCommit: CommitHash;
@@ -94,13 +155,17 @@ proc loadPackageReleaseCache*(
 
   var cache: PackageReleaseCache
   try:
-    cache.fromJson(parseFile($cachePath), Joptions(allowMissingKeys: true, allowExtraKeys: true))
+    cache.loadPackageReleaseCacheJson(parseFile($cachePath))
   except CatchableError as e:
     warn pkg.url.projectName, "ignoring invalid dependency cache:", $cachePath, "error:", e.msg
     return false
 
+  if cache.cacheVersion != PackageReleaseCacheVersion:
+    debug pkg.url.projectName, "ignoring stale dependency cache:", $cachePath,
+      "version:", $cache.cacheVersion, "expected:", $PackageReleaseCacheVersion
+    return false
+
   result =
-    cache.cacheVersion == PackageReleaseCacheVersion and
     cache.url == pkg.url and
     cache.head == pkg.originHead and
     cache.current == currentCommit and
@@ -122,8 +187,13 @@ proc savePackageReleaseCache*(
   var cache = PackageReleaseCache(
     cacheVersion: PackageReleaseCacheVersion,
     url: pkg.url,
+    shortName: pkg.url.shortName(),
+    fullName: pkg.url.fullName(),
     head: pkg.originHead,
     current: currentCommit,
+    author: firstNonEmptyMetadata(versions, proc (release: NimbleRelease): string = release.author),
+    description: firstNonEmptyMetadata(versions, proc (release: NimbleRelease): string = release.description),
+    license: firstNonEmptyMetadata(versions, proc (release: NimbleRelease): string = release.license),
     includeTagsAndNimbleCommits: includeTagsAndNimbleCommitsFlag(),
     nimbleCommitsMax: nimbleCommitsMaxFlag()
   )
@@ -132,5 +202,6 @@ proc savePackageReleaseCache*(
 
   createDir(cachesDirectory())
   let cachePath = packageReleaseCachePath(pkg)
-  writeFile($cachePath, pretty(toJson(cache, ToJsonOptions(enumMode: joptEnumString))))
+  var cacheJson = toPackageReleaseCacheJson(cache, ToJsonOptions(enumMode: joptEnumString))
+  writeFile($cachePath, pretty(cacheJson))
   debug pkg.url.projectName, "wrote dependency cache:", $cachePath, "releases:", $cache.releases.len

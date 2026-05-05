@@ -10,7 +10,16 @@ type
   NimbleFileInfo* = object
     requires*: seq[string]
     features*: Table[string, seq[string]]
+    name*: string
+    author*: string
+    description*: string
+    license*: string
     srcDir*: Path
+    binDir*: Path
+    bin*: seq[string]
+    namedBin*: Table[string, string]
+    backend*: string
+    hasBin*: bool
     version*: string
     tasks*: seq[(string, string)]
     hasInstallHooks*: bool
@@ -18,6 +27,71 @@ type
 
 proc eqIdent(a, b: string): bool {.inline.} =
   cmpIgnoreCase(a, b) == 0 and a[0] == b[0]
+
+proc isIdent(n: PNode; name: string): bool {.inline.} =
+  n.kind == nkIdent and eqIdent(n.ident.s, name)
+
+proc stringLit(n: PNode; value: var string): bool =
+  if n.kind in {nkStrLit..nkTripleStrLit}:
+    value = n.strVal
+    result = true
+
+proc boolLit(n: PNode; value: var bool): bool =
+  if n.kind == nkIdent:
+    if eqIdent(n.ident.s, "true"):
+      value = true
+      result = true
+    elif eqIdent(n.ident.s, "false"):
+      value = false
+      result = true
+
+proc extractStringSeq(n: PNode; values: var seq[string]): bool =
+  case n.kind
+  of nkPrefix:
+    if n.len == 2 and isIdent(n[0], "@"):
+      result = extractStringSeq(n[1], values)
+  of nkBracket:
+    result = true
+    for child in n:
+      var value = ""
+      if child.stringLit(value):
+        values.add value
+      else:
+        result = false
+        break
+  of nkStmtList, nkStmtListExpr:
+    if n.len > 0:
+      result = extractStringSeq(n.lastSon, values)
+  else:
+    discard
+
+proc extractStringTable(n: PNode; values: var Table[string, string]): bool =
+  case n.kind
+  of nkDotExpr:
+    if n.len == 2 and isIdent(n[1], "toTable"):
+      result = extractStringTable(n[0], values)
+  of nkCall:
+    if n.len == 1 and n[0].kind == nkDotExpr and n[0].len == 2 and
+        isIdent(n[0][1], "toTable"):
+      result = extractStringTable(n[0][0], values)
+  of nkTableConstr:
+    result = true
+    for child in n:
+      if child.kind == nkExprColonExpr and child.len == 2:
+        var key, value = ""
+        if child[0].stringLit(key) and child[1].stringLit(value):
+          values[key] = value
+        else:
+          result = false
+          break
+      else:
+        result = false
+        break
+  of nkStmtList, nkStmtListExpr:
+    if n.len > 0:
+      result = extractStringTable(n.lastSon, values)
+  else:
+    discard
 
 proc handleError(cfg: ConfigRef, li: TLineInfo, mk: TMsgKind, msg: string) =
   {.cast(gcsafe).}:
@@ -175,7 +249,32 @@ proc extract(n: PNode; conf: ConfigRef; currFeature: string; result: var NimbleF
       else:
         discard
   of nkAsgn, nkFastAsgn:
-    if n[0].kind == nkIdent and eqIdent(n[0].ident.s, "srcDir"):
+    if n[0].kind == nkIdent and (eqIdent(n[0].ident.s, "packageName") or
+        eqIdent(n[0].ident.s, "name")):
+      if n[1].kind in {nkStrLit..nkTripleStrLit}:
+        result.name = n[1].strVal
+      else:
+        handleError(conf, n[1].info, "assignments to 'packageName' must be string literals")
+        # result.hasErrors = true
+    elif n[0].kind == nkIdent and eqIdent(n[0].ident.s, "author"):
+      if n[1].kind in {nkStrLit..nkTripleStrLit}:
+        result.author = n[1].strVal
+      else:
+        handleError(conf, n[1].info, "assignments to 'author' must be string literals")
+        # result.hasErrors = true
+    elif n[0].kind == nkIdent and eqIdent(n[0].ident.s, "description"):
+      if n[1].kind in {nkStrLit..nkTripleStrLit}:
+        result.description = n[1].strVal
+      else:
+        handleError(conf, n[1].info, "assignments to 'description' must be string literals")
+        # result.hasErrors = true
+    elif n[0].kind == nkIdent and eqIdent(n[0].ident.s, "license"):
+      if n[1].kind in {nkStrLit..nkTripleStrLit}:
+        result.license = n[1].strVal
+      else:
+        handleError(conf, n[1].info, "assignments to 'license' must be string literals")
+        # result.hasErrors = true
+    elif n[0].kind == nkIdent and eqIdent(n[0].ident.s, "srcDir"):
       if n[1].kind in {nkStrLit..nkTripleStrLit}:
         result.srcDir = Path n[1].strVal
       else:
@@ -186,6 +285,51 @@ proc extract(n: PNode; conf: ConfigRef; currFeature: string; result: var NimbleF
         result.version = n[1].strVal
       else:
         handleError(conf, n[1].info, "assignments to 'version' must be string literals")
+        # result.hasErrors = true
+    elif n[0].kind == nkIdent and eqIdent(n[0].ident.s, "binDir"):
+      if n[1].kind in {nkStrLit..nkTripleStrLit}:
+        result.binDir = Path n[1].strVal
+      else:
+        handleError(conf, n[1].info, "assignments to 'binDir' must be string literals")
+        # result.hasErrors = true
+    elif n[0].kind == nkIdent and eqIdent(n[0].ident.s, "bin"):
+      var bin: seq[string]
+      if extractStringSeq(n[1], bin):
+        result.bin = bin
+        if bin.len > 0:
+          result.hasBin = true
+      else:
+        handleError(conf, n[1].info, "assignments to 'bin' must be string literal sequences")
+        # result.hasErrors = true
+    elif n[0].kind == nkIdent and eqIdent(n[0].ident.s, "namedBin"):
+      var namedBin: Table[string, string]
+      if extractStringTable(n[1], namedBin):
+        result.namedBin = namedBin
+        if namedBin.len > 0:
+          result.hasBin = true
+      else:
+        handleError(conf, n[1].info, "assignments to 'namedBin' must be string tables")
+        # result.hasErrors = true
+    elif n[0].kind == nkBracketExpr and n[0].len == 2 and isIdent(n[0][0], "namedBin"):
+      var key, value = ""
+      if n[0][1].stringLit(key) and n[1].stringLit(value):
+        result.namedBin[key] = value
+        result.hasBin = true
+      else:
+        handleError(conf, n.info, "assignments to 'namedBin[...]' must use string literals")
+        # result.hasErrors = true
+    elif n[0].kind == nkIdent and eqIdent(n[0].ident.s, "backend"):
+      if n[1].kind in {nkStrLit..nkTripleStrLit}:
+        result.backend = n[1].strVal
+      else:
+        handleError(conf, n[1].info, "assignments to 'backend' must be string literals")
+        # result.hasErrors = true
+    elif n[0].kind == nkIdent and eqIdent(n[0].ident.s, "hasBin"):
+      var hasBin = false
+      if boolLit(n[1], hasBin):
+        result.hasBin = hasBin
+      else:
+        handleError(conf, n[1].info, "assignments to 'hasBin' must be boolean literals")
         # result.hasErrors = true
   of nkWhenStmt:
     # Handle full when/elif/else chains.

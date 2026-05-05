@@ -1,6 +1,6 @@
 import std/[os, paths, strutils, unittest]
 
-import basic/[context, reporters]
+import basic/[configutils, context, reporters]
 import atlas
 
 template withDir(dir: Path; body: untyped) =
@@ -34,5 +34,26 @@ version "0.1.0"
         check "--noNimblePath" in cfg
         check "--path:" notin cfg
     finally:
+      if dirExists($dir):
+        removeDir($dir)
+
+  test "removes stale nimble.paths when writing nim.cfg":
+    let oldCtx = context()
+    let dir = getTempDir().Path / Path"atlas_install_stale_nimble_paths"
+    if dirExists($dir):
+      removeDir($dir)
+    createDir($dir)
+
+    try:
+      setAtlasVerbosity(Error)
+      project(dir)
+      writeFile($(dir / Path"nimble.paths"), "old nimble paths\n")
+
+      patchNimCfg(@[], CfgPath dir)
+
+      check fileExists($(dir / Path"nim.cfg"))
+      check not fileExists($(dir / Path"nimble.paths"))
+    finally:
+      setContext(oldCtx)
       if dirExists($dir):
         removeDir($dir)

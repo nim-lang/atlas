@@ -56,8 +56,17 @@ proc parseNimbleFile*(nc: var NimbleContext;
   # let nimbleHash = secureHashFile($nimbleFile)
 
   result = NimbleRelease(
+    name: nimbleInfo.name,
     hasInstallHooks: nimbleInfo.hasInstallHooks,
+    author: nimbleInfo.author,
+    description: nimbleInfo.description,
+    license: nimbleInfo.license,
     srcDir: nimbleInfo.srcDir,
+    binDir: nimbleInfo.binDir,
+    bin: nimbleInfo.bin,
+    namedBin: nimbleInfo.namedBin,
+    backend: nimbleInfo.backend,
+    hasBin: nimbleInfo.hasBin,
     status: if nimbleInfo.hasErrors: HasBrokenNimbleFile else: Normal,
     # nimbleHash: nimbleHash,
     version: parseExplicitVersion(nimbleInfo.version)

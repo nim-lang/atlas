@@ -28,11 +28,19 @@ type
 
   ActivatedPackage* = object
     url*: PkgUrl
+    name*: string
     version*: string
+    author*: string
+    description*: string
+    license*: string
     commit*: CommitHash
     features*: seq[string]
     ondisk*: Path
     srcDir*: Path
+    bin*: seq[string]
+    namedBin*: Table[string, string]
+    backend*: string
+    hasBin*: bool
     isRoot*: bool
 
   ActivationCache* = object
@@ -136,6 +144,36 @@ proc removeDepGraphCache*() =
     if fileExists($configFile):
       removeFile($configFile)
 
+proc toJsonHook*(pkg: ActivatedPackage, opt: ToJsonOptions): JsonNode =
+  result = newJObject()
+  result["url"] = toJson(pkg.url, opt)
+  if pkg.name != "":
+    result["name"] = toJson(pkg.name, opt)
+  result["version"] = toJson(pkg.version, opt)
+  if pkg.author != "":
+    result["author"] = toJson(pkg.author, opt)
+  if pkg.description != "":
+    result["description"] = toJson(pkg.description, opt)
+  if pkg.license != "":
+    result["license"] = toJson(pkg.license, opt)
+  result["commit"] = toJson(pkg.commit, opt)
+  result["features"] = toJson(pkg.features, opt)
+  result["ondisk"] = toJson(pkg.ondisk, opt)
+  result["srcDir"] = toJson(pkg.srcDir, opt)
+  if pkg.bin.len > 0:
+    result["bin"] = toJson(pkg.bin, opt)
+  if pkg.namedBin.len > 0:
+    result["namedBin"] = toJson(pkg.namedBin, opt)
+  if pkg.backend != "":
+    result["backend"] = toJson(pkg.backend, opt)
+  if pkg.hasBin:
+    result["hasBin"] = toJson(pkg.hasBin, opt)
+  result["isRoot"] = toJson(pkg.isRoot, opt)
+
+proc toJsonHook*(cache: ActivationCache, opt: ToJsonOptions): JsonNode =
+  result = newJObject()
+  result["packages"] = toJson(cache.packages, opt)
+
 proc toActivationCache*(g: DepGraph): ActivationCache =
   for pkg in values(g.pkgs):
     if not pkg.active or pkg.activeVersion.isNil:
@@ -147,11 +185,19 @@ proc toActivationCache*(g: DepGraph): ActivationCache =
 
     result.packages.add ActivatedPackage(
       url: pkg.url,
+      name: if rel.isNil: "" else: rel.name,
       version: repr(pkg.activeVersion.vtag),
+      author: if rel.isNil: "" else: rel.author,
+      description: if rel.isNil: "" else: rel.description,
+      license: if rel.isNil: "" else: rel.license,
       commit: pkg.activeVersion.commit(),
       features: features,
       ondisk: pkg.ondisk,
       srcDir: if rel.isNil: Path"" else: rel.srcDir,
+      bin: if rel.isNil: @[] else: rel.bin,
+      namedBin: if rel.isNil: initTable[string, string]() else: rel.namedBin,
+      backend: if rel.isNil: "" else: rel.backend,
+      hasBin: if rel.isNil: false else: rel.hasBin,
       isRoot: pkg.isRoot
     )
 

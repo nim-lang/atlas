@@ -1,0 +1,11 @@
+version = "1.0.0"
+packageName = "bin_metadata"
+author = "Atlas Tester"
+description = "Fixture for binary metadata parsing"
+license = "MIT"
+srcDir = "src"
+binDir = "bin"
+bin = @["main", "worker"]
+namedBin = {"main": "myfoo"}.toTable
+namedBin["tools/helper"] = "helper"
+backend = "c"

@@ -6,12 +6,16 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [json, os, sets, strutils, paths, dirs, httpclient, uri]
-import context, reporters, gitops, pkgurls
+import std / [json, os, osproc, sets, streams, strutils, paths, dirs,
+              httpclient, tempfiles, uri]
+import context, reporters, gitops, pkgurls, httpclientutils
 
 const
   UnitTests = defined(atlasUnitTests)
-  PackagesJsonUrl = "https://raw.githubusercontent.com/nim-lang/packages/refs/heads/master/packages.json"
+  PackagesJsonUrls* = [
+    "https://packages.nim-lang.org/packages.json",
+    "https://raw.githubusercontent.com/nim-lang/packages/refs/heads/master/packages.json"
+  ]
 
 when UnitTests:
   proc findAtlasDir*(): string =
@@ -115,6 +119,38 @@ proc getPackageInfos*(cacheDir = cachesDirectory()): seq[PackageInfo] =
     if pkg != nil and not uniqueNames.containsOrIncl(pkg.name):
       result.add(pkg)
 
+proc hasGzipEncoding(headers: HttpHeaders): bool =
+  for key, value in headers.pairs:
+    if key.cmpIgnoreCase("Content-Encoding") == 0:
+      for encoding in value.split(','):
+        if encoding.strip().cmpIgnoreCase("gzip") == 0:
+          return true
+
+proc gunzipContent(contents: string): string =
+  if findExe("gzip").len == 0:
+    raise newException(IOError,
+      "server returned gzip-compressed packages.json but gzip was not found in PATH")
+
+  let tempPath = genTempPath("atlas_packages_", ".json.gz")
+  writeFile(tempPath, contents)
+  defer:
+    if fileExists(tempPath):
+      removeFile(tempPath)
+
+  let process = startProcess("gzip", args = ["-cd", tempPath],
+                             options = {poUsePath, poStdErrToStdOut})
+  result = process.outputStream.readAll()
+  let exitCode = process.waitForExit()
+  process.close()
+  if exitCode != 0:
+    raise newException(IOError, "gzip failed to decompress packages.json: " & result)
+
+proc decodePackageList*(headers: HttpHeaders; contents: string): string =
+  if headers.hasGzipEncoding():
+    result = gunzipContent(contents)
+  else:
+    result = contents
+
 proc updatePackages*(cacheDir = cachesDirectory(); gitDir = packagesDirectory()) =
   if $cacheDir == $cachesDirectory():
     removeLegacyPackageCaches(gitDir)
@@ -133,11 +169,20 @@ proc updatePackages*(cacheDir = cachesDirectory(); gitDir = packagesDirectory())
         error DefaultPackagesSubDir, "cannot clone packages repo: " & res[1]
     copyFile($(gitDir / Path"packages.json"), $pkgsFile)
   else:
-    let client = newHttpClient()
-    try:
-      let contents = client.getContent(PackagesJsonUrl)
-      writeFile($pkgsFile, contents)
-    except CatchableError as e:
-      error DefaultCachesSubDir, "cannot download packages.json: " & e.msg
-    finally:
-      client.close()
+    var lastError = ""
+    for url in PackagesJsonUrls:
+      let client = newAtlasHttpClient()
+      try:
+        let response = client.get(url)
+        if response.code.is4xx or response.code.is5xx:
+          raise newException(HttpRequestError, response.status)
+        let contents = decodePackageList(response.headers,
+                                         response.bodyStream.readAll())
+        writeFile($pkgsFile, contents)
+        return
+      except CatchableError as e:
+        lastError = url & ": " & e.msg
+        warn DefaultCachesSubDir, "cannot download packages.json:", lastError
+      finally:
+        client.close()
+    error DefaultCachesSubDir, "cannot download packages.json: " & lastError

@@ -7,7 +7,7 @@
 #
 
 import std / [json, os, sets, strutils, httpclient, uri]
-import basic/[context, reporters, packageinfos]
+import basic/[context, reporters, packageinfos, httpclientutils]
 
 type PkgCandidates* = array[3, seq[PackageInfo]]
 
@@ -45,7 +45,7 @@ proc singleGithubSearch(term: string, fullSearch = false): JsonNode =
   else:
     # For example:
     # https://api.github.com/search/repositories?q=weave+language:nim
-    var client = newHttpClient()
+    var client = newAtlasHttpClient()
     try:
       var searchUrl = "https://api.github.com/search/repositories?q=" & encodeUrl(term)
       if not fullSearch:

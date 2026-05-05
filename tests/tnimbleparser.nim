@@ -1,7 +1,8 @@
-import std/[unittest, os, algorithm, strutils, importutils, terminal]
+import std/[unittest, os, algorithm, strutils, importutils, terminal, tables]
 import basic/[context, pkgurls, deptypes, nimblecontext, compiledpatterns, osutils, versions]
 import basic/nimbleparser
 import basic/parse_requires
+import runners
 
 import integration_test_utils
 
@@ -54,6 +55,39 @@ suite "nimbleparser":
     check res.features.hasKey("useOldAsyncTools")
     check res.features["useOldAsyncTools"].len == 1
     check res.features["useOldAsyncTools"][0] == "asynctools >= 0.1.0"
+
+  test "parse nimble file with bin metadata":
+    let nimbleFile = Path("tests" / "test_data" / "bin_metadata.nimble")
+    var res = extractRequiresInfo(nimbleFile)
+    check res.name == "bin_metadata"
+    check res.author == "Atlas Tester"
+    check res.description == "Fixture for binary metadata parsing"
+    check res.license == "MIT"
+    check res.srcDir == Path"src"
+    check res.binDir == Path"bin"
+    check res.bin == @["main", "worker"]
+    check res.namedBin["main"] == "myfoo"
+    check res.namedBin["tools/helper"] == "helper"
+    check res.backend == "c"
+    check res.hasBin
+
+    var nc = createUnfilledNimbleContext()
+    let release = nc.parseNimbleFile(nimbleFile)
+    check release.name == "bin_metadata"
+    check release.author == "Atlas Tester"
+    check release.description == "Fixture for binary metadata parsing"
+    check release.license == "MIT"
+    check release.srcDir == Path"src"
+    check release.binDir == Path"bin"
+    check release.bin == @["main", "worker"]
+    check release.namedBin["main"] == "myfoo"
+    check release.namedBin["tools/helper"] == "helper"
+    check release.backend == "c"
+    check release.hasBin
+
+  test "install hook template accepts feature blocks":
+    runNimScriptInstallHook Path("tests" / "test_data" / "install_hook_feature.nimble"),
+      "install_hook_feature"
 
   test "patch nimble file skips existing dependency by URL project name":
     let nimbleFile = Path("tests" / "test_data" / "use_duplicate.nimble")
