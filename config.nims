@@ -15,7 +15,9 @@ else:
 --d:ssl
 
 task installSat, "install sat if needed":
-  if not dirExists("../sat/src") and not defined(nimAtlasBootstrap):
+  if not dirExists("../sat/src") and
+      not dirExists("deps/sat") and
+      not defined(nimAtlasBootstrap):
     exec "git clone https://github.com/nim-lang/sat deps/sat"
 
 task build, "Build local atlas":
