@@ -15,6 +15,20 @@ nim build
 # copy bin/atlas[.exe] somewhere in your PATH
 ```
 
+Install with the bootstrap script:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | sh -
+```
+
+This clones and builds Atlas in `/tmp` and installs `atlas` into
+`~/.nimble/bin` by default. To install somewhere else:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
+  ATLAS_INSTALL_DIR="$HOME/.local/bin" sh -
+```
+
 If you're using Nimble you can install the latest Atlas with:
 
 ```sh
