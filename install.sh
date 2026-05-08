@@ -5,7 +5,7 @@ set -eu
 ATLAS_REPO_URL="${ATLAS_REPO_URL:-https://github.com/nim-lang/atlas.git}"
 ATLAS_INSTALL_DIR="${ATLAS_INSTALL_DIR:-$HOME/.nimble/bin}"
 ATLAS_REF="${ATLAS_REF:-}"
-ATLAS_TMP_ROOT="${TMP:-/tmp}"
+ATLAS_TMP_ROOT="${ATLAS_TMP_ROOT:-${TMP:-/tmp}}"
 
 need_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
