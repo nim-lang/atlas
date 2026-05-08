@@ -29,6 +29,9 @@ curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
   ATLAS_INSTALL_DIR="$HOME/.local/bin" sh -
 ```
 
+Supported installer environment variables: `ATLAS_INSTALL_DIR`, `ATLAS_REF`, `ATLAS_REPO_URL`, `ATLAS_TMP_ROOT`.
+
+
 If you're using Nimble you can install the latest Atlas with:
 
 ```sh
