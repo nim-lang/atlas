@@ -29,7 +29,7 @@ need_cmd mkdir
 ATLAS_TMP_DIR="$(mktemp -d "$ATLAS_TMP_ROOT/atlas-install.XXXXXX")"
 trap cleanup EXIT INT TERM
 
-echo "install.sh: cloning atlas into $ATLAS_TMP_DIR" >&2
+echo "install.sh: cloning atlas into $ATLAS_TMP_DIR from $ATLAS_REPO_URL" >&2
 if [ -n "$ATLAS_REF" ]; then
   git clone --depth 1 --branch "$ATLAS_REF" "$ATLAS_REPO_URL" "$ATLAS_TMP_DIR"
 else
