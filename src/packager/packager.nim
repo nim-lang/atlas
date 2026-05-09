@@ -9,8 +9,8 @@
 ## CLI for harvesting Atlas package release caches from a packages.json list.
 
 import std / [parseopt, os, paths, strutils]
-import basic / [context, packageinfos]
-import cacheharvest
+import ../basic / [context, packageinfos]
+import ./cacheharvest
 
 proc usage(versionString: string): string =
   "atlas-packager - Atlas Packager Version " & versionString & """
@@ -25,6 +25,7 @@ Options:
   --packages=path       use the given packages.json file
   --metadata=path       write copied cache files to the given directory
   --package=name        process only the named package from packages.json
+  --ephemeral           delete each cloned repo from pkgs/ after its metadata is produced
 """
 
 type
@@ -32,6 +33,7 @@ type
     packagesFile: Path
     metadataDir: Path
     packageName: string
+    ephemeral: bool
 
 proc writeHelp(versionString: string; code = 2) =
   stdout.write(usage(versionString))
@@ -68,6 +70,8 @@ proc parseAtlasPackagerOptions(
         if val.len == 0:
           writeHelp(versionString)
         result.packageName = val
+      of "ephemeral":
+        result.ephemeral = true
       else:
         writeHelp(versionString)
     of cmdArgument:
@@ -81,7 +85,7 @@ proc resolvePackagesFile(opts: PackagerCliOptions; args: seq[string]): Path =
   elif args.len >= 1:
     result = Path(args[0])
   else:
-    result = Path"pkgs" / Path"packages.json"
+    result = Path"pkgs-meta" / Path"packages.json"
 
 proc resolveMetadataDir(opts: PackagerCliOptions; args: seq[string]): Path =
   if opts.metadataDir.len > 0:
@@ -91,12 +95,19 @@ proc resolveMetadataDir(opts: PackagerCliOptions; args: seq[string]): Path =
   else:
     result = Path"pkgs-meta"
 
+proc initPackagerWorkspace() =
+  var ctx = AtlasContext()
+  ctx.depsDir = Path"pkgs"
+  createDir($ctx.depsDir)
+  setContext(ctx)
+
 proc main*(versionString = "unknown") =
-  setContext AtlasContext()
   var args: seq[string]
   let opts = parseAtlasPackagerOptions(commandLineParams(), versionString, args)
   if args.len > 2:
     writeHelp(versionString)
+
+  initPackagerWorkspace()
 
   let packagesFile = resolvePackagesFile(opts, args)
   let metadataDir = resolveMetadataDir(opts, args)
@@ -109,9 +120,9 @@ proc main*(versionString = "unknown") =
 
   let summary =
     if opts.packageName.len > 0:
-      harvestRegistryCacheForPackage(packagesFile, metadataDir, opts.packageName)
+      harvestRegistryCacheForPackage(packagesFile, metadataDir, opts.packageName, opts.ephemeral)
     else:
-      harvestRegistryCaches(packagesFile, metadataDir)
+      harvestRegistryCaches(packagesFile, metadataDir, opts.ephemeral)
   stdout.writeLine(
     "processed " & $summary.packagesProcessed &
     " packages, failed " & $summary.packagesFailed &

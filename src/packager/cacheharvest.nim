@@ -7,8 +7,8 @@
 
 import std/[json, os, paths, strutils, times]
 
-import basic/[context, dependencycache, nimblecontext, packageinfos, reporters]
-import registryreleaseinfo
+import ../basic/[context, dependencycache, nimblecontext, packageinfos, reporters]
+import ../registryreleaseinfo
 
 type
   HarvestSummary* = object
@@ -16,6 +16,13 @@ type
     aliasesSkipped*: int
     packagesProcessed*: int
     packagesFailed*: int
+
+proc cleanupClonedPackage(pkg: Package) =
+  if pkg.isNil or pkg.ondisk.len == 0:
+    return
+  let depsRoot = depsDir()
+  if pkg.ondisk != depsRoot and pkg.ondisk.isRelativeTo(depsRoot) and dirExists($pkg.ondisk):
+    removeDir($pkg.ondisk)
 
 proc loadPackageList*(packagesFile: Path): seq[PackageInfo] =
   let root = parseFile($packagesFile)
@@ -66,7 +73,8 @@ proc harvestOnePackage(
     info: PackageInfo;
     metadataDir: Path;
     summary: var HarvestSummary;
-    copiedFiles: JsonNode
+    copiedFiles: JsonNode;
+    ephemeral: bool
 ) =
   notice "atlas:pkger", "processing package:", info.name
   let releaseInfo = nc.loadRegistryPackageReleaseInfo(
@@ -83,10 +91,13 @@ proc harvestOnePackage(
   entry["releaseCount"] = %releaseInfo.releaseInfo.releases.len
   copiedFiles.add entry
   inc summary.packagesProcessed
+  if ephemeral:
+    cleanupClonedPackage(releaseInfo.package)
 
 proc harvestRegistryCaches*(
     packagesFile: Path;
-    metadataDir: Path
+    metadataDir: Path;
+    ephemeral = false
 ): HarvestSummary =
   createDir($metadataDir)
 
@@ -101,7 +112,7 @@ proc harvestRegistryCaches*(
       continue
 
     try:
-      nc.harvestOnePackage(info, metadataDir, result, copiedFiles)
+      nc.harvestOnePackage(info, metadataDir, result, copiedFiles, ephemeral)
     except CatchableError as e:
       error "atlas:pkger", "failed package:", info.name, "error:", e.msg
       inc result.packagesFailed
@@ -111,7 +122,8 @@ proc harvestRegistryCaches*(
 proc harvestRegistryCacheForPackage*(
     packagesFile: Path;
     metadataDir: Path;
-    packageName: string
+    packageName: string;
+    ephemeral = false
 ): HarvestSummary =
   createDir($metadataDir)
 
@@ -122,7 +134,7 @@ proc harvestRegistryCacheForPackage*(
 
   result.packagesSeen = packageList.len
   try:
-    nc.harvestOnePackage(info, metadataDir, result, copiedFiles)
+    nc.harvestOnePackage(info, metadataDir, result, copiedFiles, ephemeral)
   except CatchableError as e:
     error "atlas:pkger", "failed package:", info.name, "error:", e.msg
     inc result.packagesFailed
