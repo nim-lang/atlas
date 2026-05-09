@@ -124,7 +124,7 @@ proc toPackageReleaseCacheJson(cache: PackageReleaseCache; opt: ToJsonOptions): 
   result["cacheVersion"] = toJson(cache.cacheVersion, opt)
   if cache.name.len > 0:
     result["name"] = toJson(cache.name, opt)
-  result["url"] = toJson(cache.url, opt)
+  result["url"] = toJson($(cache.url))
   if cache.subdir.len > 0:
     result["subdir"] = toJson(cache.subdir, opt)
   if cache.fullName.len > 0:
