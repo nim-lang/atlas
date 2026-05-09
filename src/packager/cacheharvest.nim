@@ -5,7 +5,7 @@
 
 ## Harvest package release caches for packages in a packages.json list.
 
-import std/[json, os, paths, times]
+import std/[json, os, paths, strutils, times]
 
 import basic/[context, dependencycache, nimblecontext, packageinfos, reporters]
 import registryreleaseinfo

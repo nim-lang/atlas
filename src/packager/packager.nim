@@ -81,7 +81,7 @@ proc resolvePackagesFile(opts: PackagerCliOptions; args: seq[string]): Path =
   elif args.len >= 1:
     result = Path(args[0])
   else:
-    result = packageInfosFile()
+    result = Path"pkgs" / Path"packages.json"
 
 proc resolveMetadataDir(opts: PackagerCliOptions; args: seq[string]): Path =
   if opts.metadataDir.len > 0:
@@ -89,7 +89,7 @@ proc resolveMetadataDir(opts: PackagerCliOptions; args: seq[string]): Path =
   elif args.len >= 2:
     result = Path(args[1])
   else:
-    result = Path"metadata"
+    result = Path"pkgs-meta"
 
 proc main*(versionString = "unknown") =
   setContext AtlasContext()
@@ -102,7 +102,7 @@ proc main*(versionString = "unknown") =
   let metadataDir = resolveMetadataDir(opts, args)
 
   if not fileExists($packagesFile):
-    updatePackages()
+    updatePackages(cacheDir = packagesFile.parentDir())
   if not fileExists($packagesFile):
     stderr.writeLine("packages.json not found: " & $packagesFile)
     quit(1)
