@@ -17,23 +17,6 @@ type
     packagesProcessed*: int
     packagesFailed*: int
 
-proc metadataCachePath(pkg: Package; metadataDir: Path): Path =
-  metadataDir / packageReleaseCachePath(pkg).splitPath().tail
-
-proc cleanupWorkingCache(pkg: Package) =
-  if pkg.isNil:
-    return
-  let cachePath = packageReleaseCachePath(pkg)
-  if fileExists($cachePath):
-    removeFile($cachePath)
-
-proc cleanupPackagerJsonCacheFiles*() =
-  let cacheDir = cachesDirectory()
-  if not dirExists($cacheDir):
-    return
-  for file in walkFiles($cacheDir / "*.json"):
-    removeFile(file)
-
 proc cleanupClonedPackage(pkg: Package) =
   if pkg.isNil or pkg.ondisk.len == 0:
     return
@@ -61,17 +44,7 @@ proc copyReleaseCache(pkg: Package; metadataDir: Path): string =
   let cachePath = packageReleaseCachePath(pkg)
   if not fileExists($cachePath):
     raise newException(IOError, "missing release cache: " & $cachePath)
-
-  let targetPath = metadataCachePath(pkg, metadataDir)
-  copyFile($cachePath, $targetPath)
-  result = $targetPath.splitPath().tail
-
-proc stageExistingMetadataCache(pkg: Package; metadataDir: Path) =
-  let sourcePath = metadataCachePath(pkg, metadataDir)
-  let targetPath = packageReleaseCachePath(pkg)
-  if fileExists($sourcePath):
-    createDir($(targetPath.parentDir()))
-    copyFile($sourcePath, $targetPath)
+  result = $cachePath.splitPath().tail
 
 proc writeIndex(
     metadataDir: Path;
@@ -101,24 +74,12 @@ proc harvestOnePackage(
     ephemeral: bool
 ) =
   notice "atlas:pkger", "processing package:", info.name
-  var seededPkg = nc.initRegistryPackage(info)
-  stageExistingMetadataCache(seededPkg, metadataDir)
-
-  var releaseInfo: RegistryPackageReleaseInfo
-  let copiedFile =
-    try:
-      releaseInfo = nc.loadRegistryPackageReleaseInfo(
-        info,
-        mode = AllReleases,
-        onClone = DoClone
-      )
-      try:
-        copyReleaseCache(releaseInfo.package, metadataDir)
-      finally:
-        cleanupWorkingCache(releaseInfo.package)
-    except CatchableError:
-      cleanupWorkingCache(seededPkg)
-      raise
+  let releaseInfo = nc.loadRegistryPackageReleaseInfo(
+    info,
+    mode = AllReleases,
+    onClone = DoClone
+  )
+  let copiedFile = copyReleaseCache(releaseInfo.package, metadataDir)
 
   var entry = newJObject()
   entry["name"] = %info.name

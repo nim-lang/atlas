@@ -84,8 +84,6 @@ proc resolvePackagesFile(opts: PackagerCliOptions; args: seq[string]): Path =
     result = opts.packagesFile
   elif args.len >= 1:
     result = Path(args[0])
-  else:
-    result = Path"pkgs-meta" / Path"packages.json"
 
 proc resolveMetadataDir(opts: PackagerCliOptions; args: seq[string]): Path =
   if opts.metadataDir.len > 0:
@@ -95,10 +93,12 @@ proc resolveMetadataDir(opts: PackagerCliOptions; args: seq[string]): Path =
   else:
     result = Path"pkgs-meta"
 
-proc initPackagerWorkspace() =
+proc initPackagerWorkspace(metadataDir: Path) =
   var ctx = AtlasContext()
   ctx.depsDir = Path"pkgs"
+  ctx.cacheDir = metadataDir
   createDir($ctx.depsDir)
+  createDir($metadataDir)
   setContext(ctx)
 
 proc main*(versionString = "unknown") =
@@ -107,15 +107,16 @@ proc main*(versionString = "unknown") =
   if args.len > 2:
     writeHelp(versionString)
 
-  initPackagerWorkspace()
-  defer:
-    cleanupPackagerJsonCacheFiles()
-
-  let packagesFile = resolvePackagesFile(opts, args)
   let metadataDir = resolveMetadataDir(opts, args)
+  initPackagerWorkspace(metadataDir)
+  let packagesFile =
+    if opts.packagesFile.len == 0 and args.len == 0:
+      metadataDir / Path"packages.json"
+    else:
+      resolvePackagesFile(opts, args)
 
   if not fileExists($packagesFile):
-    updatePackages(cacheDir = packagesFile.parentDir())
+    updatePackages()
   if not fileExists($packagesFile):
     stderr.writeLine("packages.json not found: " & $packagesFile)
     quit(1)

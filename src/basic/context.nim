@@ -60,6 +60,7 @@ type
   AtlasContext* = object
     projectDir*: Path = Path"."
     depsDir*: Path = Path"deps"
+    cacheDir*: Path = Path""
     confDirOverride*: Path = Path""
     flags*: set[Flag] = {}
     nameOverrides*: Patterns
@@ -97,13 +98,22 @@ proc depsDir*(relative = false): Path =
   depsDir(atlasContext, relative)
 
 proc packagesDirectory*(): Path =
-  depsDir() / DefaultPackagesSubDir
+  if atlasContext.cacheDir == Path"":
+    depsDir() / DefaultPackagesSubDir
+  else:
+    atlasContext.cacheDir / DefaultPackagesSubDir
 
 proc cachesDirectory*(): Path =
-  depsDir() / DefaultCachesSubDir
+  if atlasContext.cacheDir == Path"":
+    depsDir() / DefaultCachesSubDir
+  else:
+    atlasContext.cacheDir
 
 proc nimbleCachesDirectory*(): Path =
-  depsDir() / DefaultNimbleCachesSubDir
+  if atlasContext.cacheDir == Path"":
+    depsDir() / DefaultNimbleCachesSubDir
+  else:
+    atlasContext.cacheDir / DefaultNimbleCachesSubDir
 
 proc depGraphCacheFile*(ctx: AtlasContext): Path =
   ctx.depsDir() / Path"atlas.cache.json"
