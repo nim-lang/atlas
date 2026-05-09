@@ -108,6 +108,8 @@ proc main*(versionString = "unknown") =
     writeHelp(versionString)
 
   initPackagerWorkspace()
+  defer:
+    cleanupPackagerJsonCacheFiles()
 
   let packagesFile = resolvePackagesFile(opts, args)
   let metadataDir = resolveMetadataDir(opts, args)
