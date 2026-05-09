@@ -26,7 +26,7 @@ This clones and builds Atlas in `/tmp` and installs `atlas` into
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
-  ATLAS_INSTALL_DIR="$HOME/.local/bin" sh -
+  ATLAS_INSTALL_DIR="$HOME/.local/bin" bash -
 ```
 
 Supported installer environment variables: `ATLAS_INSTALL_DIR`, `ATLAS_REF`, `ATLAS_REPO_URL`, `ATLAS_TMP_ROOT`.
