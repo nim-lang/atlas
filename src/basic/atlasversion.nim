@@ -14,9 +14,12 @@ const
   AtlasRootDir = currentSourcePath().parentDir().parentDir().parentDir()
   AtlasNimbleFile = AtlasRootDir / "atlas.nimble"
   AtlasGitDir = AtlasRootDir / ".git"
+  AtlasInstalledWithNimble = (DirSep & ".nimble" & DirSep) in AtlasRootDir
 
 const AtlasIsDirty* =
-  if dirExists(AtlasGitDir):
+  if AtlasInstalledWithNimble:
+    false
+  elif dirExists(AtlasGitDir):
     staticExec("git -C " & quoteShell(AtlasRootDir) & " status --porcelain").strip().len > 0
   else:
     false
