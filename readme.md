@@ -18,7 +18,7 @@ nim build
 Install with the bootstrap script:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | sh -
+curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | bash -
 ```
 
 This clones and builds Atlas in `/tmp` and installs `atlas` into
