@@ -14,38 +14,13 @@ const
   AtlasRootDir = currentSourcePath().parentDir().parentDir().parentDir()
   AtlasNimbleFile = AtlasRootDir / "atlas.nimble"
   AtlasGitDir = AtlasRootDir / ".git"
-  NimbleMetaFile = "nimblemeta.json"
-
-func changedPath(line: string): string =
-  if line.len <= 3:
-    return ""
-  let path = line[3..^1].strip()
-  let renameSep = path.rfind(" -> ")
-  if renameSep >= 0:
-    path[renameSep + 4 .. ^1]
-  else:
-    path
-
-func hasMeaningfulGitChanges(statusOutput: string): bool =
-  ## special case check for installing from nimble to keep a clean version 
-  ## e.g. ignores nimblemeta.json
-  for line in statusOutput.splitLines():
-    let cleanLine = line.strip()
-    if cleanLine.len == 0:
-      continue
-    if changedPath(cleanLine) != NimbleMetaFile:
-      return true
-  false
-
-const GitStatusRaw =
-      staticExec("git -C " & quoteShell(AtlasRootDir) & " status --porcelain")
-const GitDir =
-      staticExec("pwd")
+  AtlasInstalledWithNimble = (DirSep & ".nimble" & DirSep) in AtlasRootDir
 
 const AtlasIsDirty* =
-  if dirExists(AtlasGitDir):
-    hasMeaningfulGitChanges(
-      staticExec("git -C " & quoteShell(AtlasRootDir) & " status --porcelain"))
+  if AtlasInstalledWithNimble:
+    false
+  elif dirExists(AtlasGitDir):
+    staticExec("git -C " & quoteShell(AtlasRootDir) & " status --porcelain").strip().len > 0
   else:
     false
 
@@ -66,10 +41,3 @@ const AtlasCommit* =
   else:
     "unknown"
 const AtlasVersion* = AtlasPackageVersion & " (sha: " & AtlasCommit & ")"
-
-static:
-  echo "AtlasCommit: ", AtlasCommit
-  echo "AtlasIsDirty: ", AtlasIsDirty
-  echo "GitStatusRaw: ", GitStatusRaw
-  echo "GitDir: ", GitDir
-

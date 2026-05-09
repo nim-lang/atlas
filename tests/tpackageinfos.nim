@@ -13,27 +13,9 @@ proc nimbleVersion(): string =
       return line.split("=")[1].replace("\"", "").strip()
   "0.0.0"
 
-proc changedPath(line: string): string =
-  if line.len <= 3:
-    return ""
-  let path = line[3..^1].strip()
-  let renameSep = path.rfind(" -> ")
-  if renameSep >= 0:
-    path[renameSep + 4 .. ^1]
-  else:
-    path
-
 proc gitDirty(dir: string): bool =
   let (outp, code) = execCmdEx("git -C " & quoteShell(dir) & " status --porcelain")
-  if code != 0:
-    return false
-  for line in outp.splitLines():
-    let cleanLine = line.strip()
-    if cleanLine.len == 0:
-      continue
-    if changedPath(cleanLine) != "nimblemeta.json":
-      return true
-  false
+  code == 0 and outp.strip().len > 0
 
 suite "packages list":
   test "atlas package version matches atlas.nimble":
@@ -87,34 +69,6 @@ doAssert AtlasIsDirty
     discard execCmdEx("git -C " & quoteShell($tmp) & " add .")
     discard execCmdEx("git -C " & quoteShell($tmp) & " commit -m initial")
     writeFile($(tmp / Path"dirty.txt"), "dirty")
-
-    let (outp, code) = execCmdEx("nim c --path:" & quoteShell($(tmp / Path"src")) & " " & quoteShell($mainFile))
-    check code == 0
-    check outp.len >= 0
-
-  test "atlas package version ignores standalone nimblemeta change":
-    let tmp = Path(genTempPath("atlas_nimblemeta_version_", ""))
-    let srcDir = tmp / Path"src" / Path"basic"
-    let mainFile = tmp / Path"check_version.nim"
-    defer:
-      if dirExists($tmp):
-        removeDir($tmp)
-
-    createDir($srcDir)
-    writeFile($(srcDir / Path"atlasversion.nim"),
-              readFile(AtlasRootDir / "src" / "basic" / "atlasversion.nim"))
-    writeFile($(tmp / Path"atlas.nimble"), "version = \"1.2.3\"\n")
-    writeFile($mainFile, """
-import basic/atlasversion
-doAssert AtlasPackageVersion == "1.2.3"
-doAssert not AtlasIsDirty
-""")
-    discard execCmdEx("git -C " & quoteShell($tmp) & " init")
-    discard execCmdEx("git -C " & quoteShell($tmp) & " config user.name test-user")
-    discard execCmdEx("git -C " & quoteShell($tmp) & " config user.email test@example.com")
-    discard execCmdEx("git -C " & quoteShell($tmp) & " add .")
-    discard execCmdEx("git -C " & quoteShell($tmp) & " commit -m initial")
-    writeFile($(tmp / Path"nimblemeta.json"), "{}")
 
     let (outp, code) = execCmdEx("nim c --path:" & quoteShell($(tmp / Path"src")) & " " & quoteShell($mainFile))
     check code == 0
