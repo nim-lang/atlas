@@ -12,7 +12,7 @@ import std / [parseopt, os, strutils]
 import basic / [atlasversion]
 
 const
-  Usage = "atlas-pkger - Atlas Packager Version " & AtlasVersion & """
+  Usage = "atlas-packager - Atlas Packager Version " & AtlasVersion & """
 
   (c) 2021 Andreas Rumpf
 Usage:

@@ -6,8 +6,8 @@ license = "MIT"
 srcDir = "src"
 skipDirs = @["doc"]
 binDir = "bin"
-bin = @["atlas", "atlas_packager"]
-namedBin["atlas_packager"] = "atlas-packager"
+bin = @["atlas", "packager/packager"]
+namedBin["packager"] = "atlas-packager"
 
 # Dependencies
 

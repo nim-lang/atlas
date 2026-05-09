@@ -23,7 +23,7 @@ task installSat, "install sat if needed":
 task build, "Build local atlas":
   installSatTask()
   exec "nim c -d:debug -o:bin/atlas src/atlas.nim"
-  exec "nim c -d:debug -o:bin/atlas-pkger src/atlas_packager.nim"
+  exec "nim c -d:debug -o:bin/atlas-packager src/packager/packager.nim"
 
 task unitTests, "Runs unit tests":
   installSatTask()
