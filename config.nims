@@ -23,7 +23,7 @@ task installSat, "install sat if needed":
 task build, "Build local atlas":
   installSatTask()
   exec "nim c -d:debug -o:bin/atlas src/atlas.nim"
-  exec "nim c -d:debug -o:bin/atlas-packager src/packager/packager.nim"
+  exec "nim c -d:debug -o:bin/atlas-packager src/atlas_packager.nim"
 
 task unitTests, "Runs unit tests":
   installSatTask()
@@ -50,7 +50,7 @@ task buildRelease, "Build release":
     exec "nim c -d:release --passC:" & armArgs & " --passL:" & armArgs & " -o:./atlas_arm64 src/atlas.nim"
     exec "nim c -d:release --passC:" & armArgs & " --passL:" & armArgs & " -o:./atlas_pkger_arm64 src/atlas_packager.nim"
     exec "lipo -create -output bin/atlas atlas_x86_64 atlas_arm64"
-    exec "lipo -create -output bin/atlas-pkger atlas_pkger_x86_64 atlas_pkger_arm64"
+    exec "lipo -create -output bin/atlas-packager atlas_pkger_x86_64 atlas_pkger_arm64"
     rmFile("atlas_x86_64")
     rmFile("atlas_arm64")
     rmFile("atlas_pkger_x86_64")
@@ -61,19 +61,19 @@ task buildRelease, "Build release":
     if os != "" and arch != "":
       if os == "windows":
         exec "nim c -d:release -d:mingw -o:bin/atlas src/atlas.nim"
-        exec "nim c -d:release -d:mingw -o:bin/atlas-pkger src/atlas_packager.nim"
+        exec "nim c -d:release -d:mingw -o:bin/atlas-packager src/atlas_packager.nim"
       else:
         exec "nim c -d:release --cpu:" & arch & " --os:" & os & " -o:bin/atlas src/atlas.nim"
-        exec "nim c -d:release --cpu:" & arch & " --os:" & os & " -o:bin/atlas-pkger src/atlas_packager.nim"
+        exec "nim c -d:release --cpu:" & arch & " --os:" & os & " -o:bin/atlas-packager src/atlas_packager.nim"
     else:
       exec "nim c -d:release -o:bin/atlas src/atlas.nim"
-      exec "nim c -d:release -o:bin/atlas-pkger src/atlas_packager.nim"
+      exec "nim c -d:release -o:bin/atlas-packager src/atlas_packager.nim"
 
 task installNimbleDir, "Build and install atlas to $HOME/.nimble/bin":
   buildReleaseTask()
   let nimbleBin = getHomeDir() / ".nimble" / "bin"
   let installedAtlas = nimbleBin / "atlas"
-  let installedAtlasPkger = nimbleBin / "atlas-pkger"
+  let installedAtlasPkger = nimbleBin / "atlas-packager"
   if not dirExists(nimbleBin):
     mkDir(nimbleBin)
   if fileExists(installedAtlas):
@@ -81,10 +81,10 @@ task installNimbleDir, "Build and install atlas to $HOME/.nimble/bin":
   if fileExists(installedAtlasPkger):
     rmFile(installedAtlasPkger)
   cpFile("bin" / "atlas", installedAtlas)
-  cpFile("bin" / "atlas-pkger", installedAtlasPkger)
+  cpFile("bin" / "atlas-packager", installedAtlasPkger)
   echo "Installed Atlas to " & nimbleBin
   exec nimbleBin / "atlas" & " -v "
-  exec nimbleBin / "atlas-pkger" & " -v "
+  exec nimbleBin / "atlas-packager" & " -v "
 
 task cleanTests, "Clean tests":
   echo "Stashing any changes to tests"
