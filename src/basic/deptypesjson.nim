@@ -3,6 +3,15 @@ import sattypes, deptypes, pkgurls, versions, nimblecontext
 
 export json, jsonutils
 
+var pkgUrlJsonContext: NimbleContext
+var pkgUrlJsonContextLoaded = false
+
+proc jsonContext(): var NimbleContext =
+  if not pkgUrlJsonContextLoaded:
+    pkgUrlJsonContext = createNimbleContext()
+    pkgUrlJsonContextLoaded = true
+  result = pkgUrlJsonContext
+
 proc toJsonHook*(v: VersionInterval): JsonNode = toJson($(v))
 proc toJsonHook*(v: Version): JsonNode = toJson($v)
 proc toJsonHook*(v: CommitHash): JsonNode = toJson($v)
@@ -28,10 +37,19 @@ proc fromJsonHook*(a: var VersionTag; b: JsonNode; opt = Joptions()) =
   a = toVersionTag(raw)
   a.isTip = isTip
 proc toJsonHook*(v: PkgUrl): JsonNode =
-  %($(v))
+  let nc = jsonContext()
+  if nc.canRoundTripByRegistryName(v):
+    %(nc.registryName(v))
+  else:
+    %($(v))
 
 proc fromJsonHook*(a: var PkgUrl; b: JsonNode; opt = Joptions()) =
-  a = toPkgUriRaw(parseUri(b.getStr()))
+  let raw = b.getStr()
+  var nc = jsonContext()
+  try:
+    a = nc.createUrl(raw)
+  except CatchableError:
+    a = createUrlSkipPatterns(raw, skipDirTest = true)
 
 proc toJsonHook*(vid: VarId): JsonNode = toJson(int(vid))
 
@@ -45,11 +63,20 @@ proc fromJsonHook*(a: var Path; b: JsonNode; opt = Joptions()) =
 
 proc toJsonHook*(v: (PkgUrl, VersionInterval), opt: ToJsonOptions): JsonNode =
   result = newJObject()
-  result["url"] = toJsonHook(v[0])
+  let nc = jsonContext()
+  if nc.canRoundTripByRegistryName(v[0]):
+    result["name"] = toJson(nc.registryName(v[0]), opt)
+  else:
+    result["url"] = toJsonHook(v[0])
   result["version"] = toJsonHook(v[1])
 
 proc fromJsonHook*(a: var (PkgUrl, VersionInterval); b: JsonNode; opt = Joptions()) =
-  a[0].fromJson(b["url"])
+  if b.hasKey("url"):
+    a[0].fromJson(b["url"])
+  elif b.hasKey("name"):
+    a[0].fromJson(b["name"])
+  else:
+    raise newException(ValueError, "requirement entry is missing both 'url' and 'name'")
   a[1].fromJson(b["version"])
 
 proc toJsonHook*(r: NimbleRelease, opt: ToJsonOptions): JsonNode

@@ -158,12 +158,23 @@ proc hasPackageName(nc: NimbleContext; url: PkgUrl): bool =
   ## Returns true when `url` has an explicit package name in this context.
   url in nc.urlToName
 
+proc registryName*(nc: NimbleContext; url: PkgUrl): string =
+  ## Returns the registry package name for `url` when known.
+  if url in nc.urlToName:
+    result = nc.urlToName[url]
+
 proc name(nc: NimbleContext; url: PkgUrl): string =
   ## Returns the context package name for `url`, or a URL-derived fallback.
   if url in nc.urlToName:
     result = nc.urlToName[url]
   else:
     result = url.projectName()
+
+proc canRoundTripByRegistryName*(nc: NimbleContext; url: PkgUrl): bool =
+  ## Returns true when serializing `url` as its registry name will recover the
+  ## same canonical package URL on load.
+  let name = nc.registryName(url)
+  result = name.len > 0 and nc.lookup(name) == url
 
 proc initPackage*(nc: NimbleContext; url: PkgUrl; state = NotInitialized): Package =
   ## Creates a dependency package record for `url` in this context.
