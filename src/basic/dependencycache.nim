@@ -20,9 +20,9 @@ type
 
   PackageReleaseCache = object
     cacheVersion*: int
+    name*: string
     url*: PkgUrl
     subdir*: Path
-    shortName*: string
     fullName*: string
     head*: CommitHash
     current*: CommitHash
@@ -34,7 +34,7 @@ type
     releases*: seq[PackageReleaseCacheEntry]
 
 const
-  PackageReleaseCacheVersion = 3
+  PackageReleaseCacheVersion = 5
 
 proc sanitizeCacheStem(stem: var string) =
   for c in mitems(stem):
@@ -122,11 +122,11 @@ proc firstNonEmptyMetadata(
 proc toPackageReleaseCacheJson(cache: PackageReleaseCache; opt: ToJsonOptions): JsonNode =
   result = newJObject()
   result["cacheVersion"] = toJson(cache.cacheVersion, opt)
+  if cache.name.len > 0:
+    result["name"] = toJson(cache.name, opt)
   result["url"] = toJson(cache.url, opt)
   if cache.subdir.len > 0:
     result["subdir"] = toJson(cache.subdir, opt)
-  if cache.shortName.len > 0:
-    result["shortName"] = toJson(cache.shortName, opt)
   if cache.fullName.len > 0:
     result["fullName"] = toJson(cache.fullName, opt)
   result["head"] = toJson(cache.head, opt)
@@ -212,9 +212,9 @@ proc savePackageReleaseCache*(
 
   var cache = PackageReleaseCache(
     cacheVersion: PackageReleaseCacheVersion,
+    name: firstNonEmptyMetadata(versions, proc (release: NimbleRelease): string = release.name),
     url: pkg.url,
     subdir: if pkg.subdir.len > 0: pkg.subdir else: pkg.url.subdir(),
-    shortName: pkg.url.shortName(),
     fullName: pkg.url.fullName(),
     head: pkg.originHead,
     current: currentCommit,
@@ -224,6 +224,8 @@ proc savePackageReleaseCache*(
     includeTagsAndNimbleCommits: includeTagsAndNimbleCommitsFlag(),
     nimbleCommitsMax: nimbleCommitsMaxFlag()
   )
+  if cache.name.len == 0:
+    cache.name = pkg.url.shortName()
   for (ver, release) in versions:
     cache.releases.add PackageReleaseCacheEntry(vtag: ver.vtag, release: release)
 

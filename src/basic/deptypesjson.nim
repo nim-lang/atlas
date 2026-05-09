@@ -12,6 +12,13 @@ proc jsonContext(): var NimbleContext =
     pkgUrlJsonContextLoaded = true
   result = pkgUrlJsonContext
 
+proc compactPkgUrlName*(v: PkgUrl): string =
+  let nc = jsonContext()
+  if nc.canRoundTripByRegistryName(v):
+    nc.registryName(v)
+  else:
+    v.projectName()
+
 proc toJsonHook*(v: VersionInterval): JsonNode = toJson($(v))
 proc toJsonHook*(v: Version): JsonNode = toJson($v)
 proc toJsonHook*(v: CommitHash): JsonNode = toJson($v)
