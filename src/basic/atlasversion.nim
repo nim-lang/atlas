@@ -37,6 +37,11 @@ func hasMeaningfulGitChanges(statusOutput: string): bool =
       return true
   false
 
+const GitStatusRaw =
+      staticExec("git -C " & quoteShell(AtlasRootDir) & " status --porcelain")
+const GitDir =
+      staticExec("pwd")
+
 const AtlasIsDirty* =
   if dirExists(AtlasGitDir):
     hasMeaningfulGitChanges(
@@ -65,4 +70,6 @@ const AtlasVersion* = AtlasPackageVersion & " (sha: " & AtlasCommit & ")"
 static:
   echo "AtlasCommit: ", AtlasCommit
   echo "AtlasIsDirty: ", AtlasIsDirty
+  echo "GitStatusRaw: ", GitStatusRaw
+  echo "GitDir: ", GitDir
 
