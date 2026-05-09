@@ -17,12 +17,21 @@ proc usage(versionString: string): string =
 
   (c) 2021 Andreas Rumpf
 Usage:
-  atlas-packager [packages.json] [metadata-dir]
+  atlas-packager [options] [packages.json] [metadata-dir]
 
 Options:
   --help, -h            show this help
   --version, -v         show the version
+  --packages=path       use the given packages.json file
+  --metadata=path       write copied cache files to the given directory
+  --package=name        process only the named package from packages.json
 """
+
+type
+  PackagerCliOptions = object
+    packagesFile: Path
+    metadataDir: Path
+    packageName: string
 
 proc writeHelp(versionString: string; code = 2) =
   stdout.write(usage(versionString))
@@ -34,8 +43,12 @@ proc writeVersion(versionString: string) =
   stdout.flushFile()
   quit(0)
 
-proc parseAtlasPackagerOptions(params: seq[string]; versionString: string): seq[string] =
-  for kind, key, _ in getopt(params):
+proc parseAtlasPackagerOptions(
+    params: seq[string];
+    versionString: string;
+    positional: var seq[string]
+): PackagerCliOptions =
+  for kind, key, val in getopt(params):
     case kind
     of cmdLongOption, cmdShortOption:
       case normalize(key)
@@ -43,33 +56,50 @@ proc parseAtlasPackagerOptions(params: seq[string]; versionString: string): seq[
         writeHelp(versionString, 0)
       of "version", "v":
         writeVersion(versionString)
+      of "packages":
+        if val.len == 0:
+          writeHelp(versionString)
+        result.packagesFile = Path(val)
+      of "metadata":
+        if val.len == 0:
+          writeHelp(versionString)
+        result.metadataDir = Path(val)
+      of "package":
+        if val.len == 0:
+          writeHelp(versionString)
+        result.packageName = val
       else:
         writeHelp(versionString)
     of cmdArgument:
-      result.add key
+      positional.add key
     of cmdEnd:
       assert false, "cannot happen"
 
-proc resolvePackagesFile(args: seq[string]): Path =
-  if args.len >= 1:
+proc resolvePackagesFile(opts: PackagerCliOptions; args: seq[string]): Path =
+  if opts.packagesFile.len > 0:
+    result = opts.packagesFile
+  elif args.len >= 1:
     result = Path(args[0])
   else:
     result = packageInfosFile()
 
-proc resolveMetadataDir(args: seq[string]): Path =
-  if args.len >= 2:
+proc resolveMetadataDir(opts: PackagerCliOptions; args: seq[string]): Path =
+  if opts.metadataDir.len > 0:
+    result = opts.metadataDir
+  elif args.len >= 2:
     result = Path(args[1])
   else:
     result = Path"metadata"
 
 proc main*(versionString = "unknown") =
   setContext AtlasContext()
-  let args = parseAtlasPackagerOptions(commandLineParams(), versionString)
+  var args: seq[string]
+  let opts = parseAtlasPackagerOptions(commandLineParams(), versionString, args)
   if args.len > 2:
     writeHelp(versionString)
 
-  let packagesFile = resolvePackagesFile(args)
-  let metadataDir = resolveMetadataDir(args)
+  let packagesFile = resolvePackagesFile(opts, args)
+  let metadataDir = resolveMetadataDir(opts, args)
 
   if not fileExists($packagesFile):
     updatePackages()
@@ -77,7 +107,11 @@ proc main*(versionString = "unknown") =
     stderr.writeLine("packages.json not found: " & $packagesFile)
     quit(1)
 
-  let summary = harvestRegistryCaches(packagesFile, metadataDir)
+  let summary =
+    if opts.packageName.len > 0:
+      harvestRegistryCacheForPackage(packagesFile, metadataDir, opts.packageName)
+    else:
+      harvestRegistryCaches(packagesFile, metadataDir)
   stdout.writeLine(
     "processed " & $summary.packagesProcessed &
     " packages, failed " & $summary.packagesFailed &
