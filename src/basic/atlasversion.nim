@@ -65,5 +65,4 @@ const AtlasVersion* = AtlasPackageVersion & " (sha: " & AtlasCommit & ")"
 static:
   echo "AtlasCommit: ", AtlasCommit
   echo "AtlasIsDirty: ", AtlasIsDirty
-  
 
