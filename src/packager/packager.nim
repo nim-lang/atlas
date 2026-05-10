@@ -24,7 +24,7 @@ Options:
   --version, -v         show the version
   --packages=path       use the given packages.json file
   --metadata=path       write copied cache files to the given directory
-  --package=name        process only the named package from packages.json
+  --package=name[,name] process only the named package(s) from packages.json
   --ephemeral           delete each cloned repo from pkgs/ after its metadata is produced
 """
 
@@ -32,8 +32,19 @@ type
   PackagerCliOptions = object
     packagesFile: Path
     metadataDir: Path
-    packageName: string
+    packageNames: seq[string]
     ephemeral: bool
+
+proc parsePackageNames(value: string): seq[string] =
+  for rawName in value.split(','):
+    let packageName = rawName.strip()
+    if packageName.len > 0 and packageName notin result:
+      result.add packageName
+
+proc addPackageNames(dest: var seq[string]; value: string) =
+  for packageName in parsePackageNames(value):
+    if packageName notin dest:
+      dest.add packageName
 
 proc writeHelp(versionString: string; code = 2) =
   stdout.write(usage(versionString))
@@ -69,7 +80,7 @@ proc parseAtlasPackagerOptions(
       of "package":
         if val.len == 0:
           writeHelp(versionString)
-        result.packageName = val
+        result.packageNames.addPackageNames(val)
       of "ephemeral":
         result.ephemeral = true
       else:
@@ -121,8 +132,10 @@ proc main*(versionString = "unknown") =
     quit(1)
 
   let summary =
-    if opts.packageName.len > 0:
-      harvestRegistryCacheForPackage(packagesFile, metadataDir, opts.packageName, opts.ephemeral)
+    if opts.packageNames.len == 1:
+      harvestRegistryCacheForPackage(packagesFile, metadataDir, opts.packageNames[0], opts.ephemeral)
+    elif opts.packageNames.len > 1:
+      harvestRegistryCachesForPackages(packagesFile, metadataDir, opts.packageNames, opts.ephemeral)
     else:
       harvestRegistryCaches(packagesFile, metadataDir, opts.ephemeral)
   stdout.writeLine(

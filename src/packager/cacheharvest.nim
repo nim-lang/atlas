@@ -52,6 +52,13 @@ proc findPackageInfo(
       return info
   raise newException(ValueError, "package not found in packages list: " & packageName)
 
+proc findPackageInfos(
+    packageList: seq[PackageInfo];
+    packageNames: seq[string]
+): seq[PackageInfo] =
+  for packageName in packageNames:
+    result.add findPackageInfo(packageList, packageName)
+
 proc copyPackageReleaseMetadata(pkg: Package; workspaceRoot: Path) =
   let cachePath = packageReleaseCachePath(pkg)
   if not fileExists($cachePath):
@@ -219,13 +226,16 @@ proc writeIndex(
     packagesFile: Path;
     summary: HarvestSummary;
     copiedFiles: JsonNode;
-    packageName = ""
+    packageName = "";
+    packageNames: seq[string] = @[]
 ) =
   var index = newJObject()
   index["generatedAt"] = %now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
   index["packagesFile"] = %($packagesFile)
   if packageName.len > 0:
     index["package"] = %packageName
+  elif packageNames.len > 0:
+    index["packages"] = %(packageNames)
   index["packagesSeen"] = %summary.packagesSeen
   index["aliasesSkipped"] = %summary.aliasesSkipped
   index["packagesProcessed"] = %summary.packagesProcessed
@@ -322,3 +332,26 @@ proc harvestRegistryCacheForPackage*(
     inc result.packagesFailed
 
   writeIndex(metadataDir, packagesFile, result, copiedFiles, packageName = info.name)
+
+proc harvestRegistryCachesForPackages*(
+    packagesFile: Path;
+    metadataDir: Path;
+    packageNames: seq[string];
+    ephemeral = false
+): HarvestSummary =
+  createDir($metadataDir)
+
+  var nc = createNimbleContext()
+  let packageList = loadPackageList(packagesFile)
+  let infos = findPackageInfos(packageList, packageNames)
+  var copiedFiles = newJArray()
+
+  result.packagesSeen = packageList.len
+  for info in infos:
+    try:
+      nc.harvestOnePackage(info, metadataDir, result, copiedFiles, ephemeral)
+    except CatchableError as e:
+      error "atlas:pkger", "failed package:", info.name, "error:", e.msg
+      inc result.packagesFailed
+
+  writeIndex(metadataDir, packagesFile, result, copiedFiles, packageNames = packageNames)
