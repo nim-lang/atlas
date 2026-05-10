@@ -17,6 +17,15 @@ type
     packagesProcessed*: int
     packagesFailed*: int
 
+proc packageWorkspaceRoot(info: PackageInfo): Path =
+  (depsDir() / Path(info.name)).absolutePath()
+
+proc packageReleasesDir(workspaceRoot: Path): Path =
+  workspaceRoot / Path"releases"
+
+proc packageReleasesMetadataFile(workspaceRoot: Path): Path =
+  workspaceRoot / Path"releases.json"
+
 proc cleanupClonedPackage(pkg: Package) =
   if pkg.isNil or pkg.ondisk.len == 0:
     return
@@ -45,6 +54,14 @@ proc copyReleaseCache(pkg: Package; metadataDir: Path): string =
   if not fileExists($cachePath):
     raise newException(IOError, "missing release cache: " & $cachePath)
   result = $cachePath.splitPath().tail
+
+proc copyPackageReleaseMetadata(pkg: Package; workspaceRoot: Path) =
+  let cachePath = packageReleaseCachePath(pkg)
+  if not fileExists($cachePath):
+    raise newException(IOError, "missing release cache: " & $cachePath)
+  createDir($workspaceRoot)
+  let dest = packageReleasesMetadataFile(workspaceRoot)
+  writeFile($dest, readFile($cachePath))
 
 proc sanitizeArchiveComponent(value: string): string =
   result = value
@@ -79,9 +96,6 @@ proc archiveReleaseLabel(ver: PackageVersion; release: NimbleRelease): string =
   result = sanitizeArchiveComponent(result)
   if result.len == 0:
     result = "head"
-
-proc packageArchiveDir(pkg: Package): Path =
-  pkg.ondisk.parentDir() / Path($pkg.ondisk.splitPath().tail & "-pkgs")
 
 proc packageRootSubdir(pkg: Package): Path =
   let packageSubdir =
@@ -152,12 +166,14 @@ proc writeReleaseArchive(
 proc writeReleaseArchives(
     pkg: Package;
     info: PackageInfo;
-    releaseInfo: PackageReleaseInfo
+    releaseInfo: PackageReleaseInfo;
+    archiveDir: Path
 ): JsonNode =
   result = newJArray()
-  let archiveDir = packageArchiveDir(pkg)
-  if dirExists($archiveDir):
-    removeDir($archiveDir)
+  createDir($archiveDir)
+  for kind, path in walkDir($archiveDir):
+    if kind == pcFile and path.Path.splitFile().ext in [".gz", ".tar"]:
+      removeFile(path)
   var usedStems = initHashSet[string]()
   for (ver, release) in releaseInfo.releases:
     if ver.isNil or ver.vtag.commit.h.len == 0:
@@ -224,24 +240,39 @@ proc harvestOnePackage(
     ephemeral: bool
 ) =
   notice "atlas:pkger", "processing package:", info.name
-  let releaseInfo = nc.loadRegistryPackageReleaseInfo(
-    info,
-    mode = AllReleases,
-    onClone = DoClone
-  )
-  let copiedFile = copyReleaseCache(releaseInfo.package, metadataDir)
-  let archives = writeReleaseArchives(releaseInfo.package, info, releaseInfo.releaseInfo)
+  let workspaceRoot = packageWorkspaceRoot(info)
+  let previousContext = context()
+  var packageContext = previousContext
+  packageContext.depsDir = workspaceRoot
+  createDir($packageContext.depsDir)
+  setContext(packageContext)
+  try:
+    let releaseInfo = nc.loadRegistryPackageReleaseInfo(
+      info,
+      mode = AllReleases,
+      onClone = DoClone
+    )
+    let copiedFile = copyReleaseCache(releaseInfo.package, metadataDir)
+    copyPackageReleaseMetadata(releaseInfo.package, workspaceRoot)
+    let archives = writeReleaseArchives(
+      releaseInfo.package,
+      info,
+      releaseInfo.releaseInfo,
+      packageReleasesDir(workspaceRoot)
+    )
 
-  var entry = newJObject()
-  entry["name"] = %info.name
-  entry["cacheFile"] = %copiedFile
-  entry["loadedFromCache"] = %releaseInfo.releaseInfo.loadedFromCache
-  entry["releaseCount"] = %releaseInfo.releaseInfo.releases.len
-  entry["archives"] = archives
-  copiedFiles.add entry
-  inc summary.packagesProcessed
-  if ephemeral:
-    cleanupClonedPackage(releaseInfo.package)
+    var entry = newJObject()
+    entry["name"] = %info.name
+    entry["cacheFile"] = %copiedFile
+    entry["loadedFromCache"] = %releaseInfo.releaseInfo.loadedFromCache
+    entry["releaseCount"] = %releaseInfo.releaseInfo.releases.len
+    entry["archives"] = archives
+    copiedFiles.add entry
+    inc summary.packagesProcessed
+    if ephemeral:
+      cleanupClonedPackage(releaseInfo.package)
+  finally:
+    setContext(previousContext)
 
 proc harvestRegistryCaches*(
     packagesFile: Path;
