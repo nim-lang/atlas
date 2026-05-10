@@ -17,6 +17,10 @@ type
     packagesProcessed*: int
     packagesFailed*: int
 
+  ArchiveCompression* = enum
+    acGzip
+    acXz
+
 proc packageWorkspaceRoot(info: PackageInfo): Path =
   (depsDir() / Path(info.name)).absolutePath()
 
@@ -43,22 +47,6 @@ proc loadPackageList*(packagesFile: Path): seq[PackageInfo] =
     if info != nil:
       result.add info
 
-proc findPackageInfo(
-    packageList: seq[PackageInfo];
-    packageName: string
-): PackageInfo =
-  for info in packageList:
-    if info.kind == pkPackage and cmpIgnoreCase(info.name, packageName) == 0:
-      return info
-  raise newException(ValueError, "package not found in packages list: " & packageName)
-
-proc findPackageInfos(
-    packageList: seq[PackageInfo];
-    packageNames: seq[string]
-): seq[PackageInfo] =
-  for packageName in packageNames:
-    result.add findPackageInfo(packageList, packageName)
-
 proc copyPackageReleaseMetadata(pkg: Package; workspaceRoot: Path) =
   let cachePath = packageReleaseCachePath(pkg)
   if not fileExists($cachePath):
@@ -80,6 +68,16 @@ proc sanitizeArchiveComponent(value: string): string =
   while result.contains("--"):
     result = result.replace("--", "-")
   result = result.strip(chars = {'-', '.'})
+
+proc archiveCompressionExtension*(compression: ArchiveCompression): string =
+  case compression
+  of acGzip: ".tar.gz"
+  of acXz: ".tar.xz"
+
+proc archiveCompressionName*(compression: ArchiveCompression): string =
+  case compression
+  of acGzip: "gzip"
+  of acXz: "xz"
 
 proc archiveBaseName(pkg: Package; info: PackageInfo; release: NimbleRelease): string =
   result = info.name
@@ -134,13 +132,14 @@ proc writeReleaseArchive(
     release: NimbleRelease;
     archiveDir: Path;
     archiveStem: string;
-    archiveSubdir: Path
+    archiveSubdir: Path;
+    compression: ArchiveCompression
 ): string =
   if ver.isNil or ver.vtag.commit.h.len == 0:
     raise newException(ValueError, "release is missing a commit for archiving")
 
   createDir($archiveDir)
-  var archivePath = archiveDir / Path(archiveStem & ".tar.gz")
+  let archivePath = archiveDir / Path(archiveStem & archiveCompressionExtension(compression))
   if fileExists($archivePath):
     removeFile($archivePath)
 
@@ -161,27 +160,32 @@ proc writeReleaseArchive(
     if fileExists($tarPath):
       removeFile($tarPath)
     raise newException(IOError, "failed to archive release to " & $archivePath)
-  let (_, gzipExitCode) = execCmdEx(
-    "gzip " & ["-9", "-f", $tarPath].mapIt(quoteShell(it)).join(" ")
+  let (compressor, compressorArgs) =
+    case compression
+    of acGzip: ("gzip", @["-9", "-f", $tarPath])
+    of acXz: ("xz", @["-9", "-f", $tarPath])
+  let (_, compressExitCode) = execCmdEx(
+    compressor & " " & compressorArgs.mapIt(quoteShell(it)).join(" ")
   )
-  if gzipExitCode != 0 or not fileExists($archivePath):
+  if compressExitCode != 0 or not fileExists($archivePath):
     if fileExists($tarPath):
       removeFile($tarPath)
     if fileExists($archivePath):
       removeFile($archivePath)
-    raise newException(IOError, "failed to gzip release archive " & $archivePath)
+    raise newException(IOError, "failed to compress release archive " & $archivePath)
   result = $archivePath.splitPath().tail
 
 proc writeReleaseArchives(
     pkg: Package;
     info: PackageInfo;
     releaseInfo: PackageReleaseInfo;
-    archiveDir: Path
+    archiveDir: Path;
+    compression: ArchiveCompression
 ): JsonNode =
   result = newJArray()
   createDir($archiveDir)
   for kind, path in walkDir($archiveDir):
-    if kind == pcFile and path.Path.splitFile().ext in [".gz", ".tar"]:
+    if kind == pcFile and path.Path.splitFile().ext in [".gz", ".xz", ".tar"]:
       removeFile(path)
   var usedStems = initHashSet[string]()
   for (ver, release) in releaseInfo.releases:
@@ -203,8 +207,9 @@ proc writeReleaseArchives(
     if usedStems.containsOrIncl(rootStem):
       rootStem.add "-" & commitSuffix
       discard usedStems.containsOrIncl(rootStem)
-    archiveEntry["file"] = %writeReleaseArchive(pkg, info, ver, release, archiveDir, rootStem, rootSubdir)
+    archiveEntry["file"] = %writeReleaseArchive(pkg, info, ver, release, archiveDir, rootStem, rootSubdir, compression)
     archiveEntry["archiveRoot"] = %"package"
+    archiveEntry["compression"] = %archiveCompressionName(compression)
     if rootSubdir.len > 0:
       archiveEntry["packageSubdir"] = %($rootSubdir)
     if not release.isNil and release.name.len > 0:
@@ -216,7 +221,7 @@ proc writeReleaseArchives(
       if usedStems.containsOrIncl(srcStem):
         srcStem.add "-" & commitSuffix
         discard usedStems.containsOrIncl(srcStem)
-      archiveEntry["srcFile"] = %writeReleaseArchive(pkg, info, ver, release, archiveDir, srcStem, srcSubdir)
+      archiveEntry["srcFile"] = %writeReleaseArchive(pkg, info, ver, release, archiveDir, srcStem, srcSubdir, compression)
       archiveEntry["srcArchiveRoot"] = %"srcDir"
       archiveEntry["resolvedSrcDir"] = %($srcSubdir)
     result.add archiveEntry
@@ -249,7 +254,8 @@ proc harvestPackage(
     metadataDir: Path;
     summary: var HarvestSummary;
     copiedFiles: JsonNode;
-    ephemeral: bool
+    ephemeral: bool;
+    compression: ArchiveCompression
 ) =
   notice "atlas:pkger", "processing package:", info.name
   let workspaceRoot = packageWorkspaceRoot(info)
@@ -269,7 +275,8 @@ proc harvestPackage(
       releaseInfo.package,
       info,
       releaseInfo.releaseInfo,
-      packageReleasesDir(workspaceRoot)
+      packageReleasesDir(workspaceRoot),
+      compression
     )
 
     var entry = newJObject()
@@ -290,7 +297,8 @@ proc harvestRegistryCaches*(
     packagesFile: Path;
     metadataDir: Path;
     ephemeral: bool,
-    pkgNames: seq[string]
+    pkgNames: seq[string];
+    compression: ArchiveCompression
 ): HarvestSummary =
   createDir($metadataDir)
 
@@ -307,10 +315,9 @@ proc harvestRegistryCaches*(
       continue
 
     try:
-      nc.harvestPackage(info, metadataDir, result, copiedFiles, ephemeral)
+      nc.harvestPackage(info, metadataDir, result, copiedFiles, ephemeral, compression)
     except CatchableError as e:
       error "atlas:pkger", "failed package:", info.name, "error:", e.msg
       inc result.packagesFailed
 
   writeIndex(metadataDir, packagesFile, result, copiedFiles)
-

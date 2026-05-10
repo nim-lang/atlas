@@ -25,6 +25,7 @@ Options:
   --packages=path       use the given packages.json file
   --metadata=path       write copied cache files to the given directory
   --package=name[,name] process only the named package(s) from packages.json
+  --compression=type    archive compression: xz or gzip
   --ephemeral           delete each cloned repo from pkgs/ after its metadata is produced
 """
 
@@ -33,6 +34,7 @@ type
     packagesFile: Path
     metadataDir: Path
     packageNames: seq[string]
+    compression: ArchiveCompression = acXz
     ephemeral: bool
 
 proc parsePackageNames(value: string): seq[string] =
@@ -45,6 +47,15 @@ proc addPackageNames(dest: var seq[string]; value: string) =
   for packageName in parsePackageNames(value):
     if packageName notin dest:
       dest.add packageName
+
+proc parseArchiveCompression(value: string): ArchiveCompression =
+  case value.normalize()
+  of "xz":
+    acXz
+  of "gzip", "gz":
+    acGzip
+  else:
+    raise newException(ValueError, "unknown compression: " & value)
 
 proc writeHelp(versionString: string; code = 2) =
   stdout.write(usage(versionString))
@@ -61,6 +72,7 @@ proc parseAtlasPackagerOptions(
     versionString: string;
     positional: var seq[string]
 ): PackagerCliOptions =
+  result.compression = acXz
   for kind, key, val in getopt(params):
     case kind
     of cmdLongOption, cmdShortOption:
@@ -81,6 +93,13 @@ proc parseAtlasPackagerOptions(
         if val.len == 0:
           writeHelp(versionString)
         result.packageNames.addPackageNames(val)
+      of "compression":
+        if val.len == 0:
+          writeHelp(versionString)
+        try:
+          result.compression = parseArchiveCompression(val)
+        except ValueError:
+          writeHelp(versionString)
       of "ephemeral":
         result.ephemeral = true
       else:
@@ -131,7 +150,13 @@ proc main*(versionString = "unknown") =
     stderr.writeLine("packages.json not found: " & $packagesFile)
     quit(1)
 
-  let summary = harvestRegistryCaches(packagesFile, metadataDir, opts.ephemeral, opts.packageNames)
+  let summary = harvestRegistryCaches(
+    packagesFile,
+    metadataDir,
+    opts.ephemeral,
+    opts.packageNames,
+    opts.compression
+  )
   stdout.writeLine(
     "processed " & $summary.packagesProcessed &
     " packages, failed " & $summary.packagesFailed &
