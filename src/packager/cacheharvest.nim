@@ -221,7 +221,7 @@ proc writeReleaseArchives(
     var archiveEntry = newJObject()
     archiveEntry["version"] = %archiveReleaseLabel(ver, release)
     archiveEntry["commit"] = %ver.vtag.commit.h
-    var rootStem = baseName & "-" & label
+    var rootStem = baseName & "-" & label & "-full"
     if usedStems.containsOrIncl(rootStem):
       rootStem.add "-" & commitSuffix
       discard usedStems.containsOrIncl(rootStem)
