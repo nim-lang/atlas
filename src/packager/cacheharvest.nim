@@ -5,9 +5,9 @@
 
 ## Harvest package release caches for packages in a packages.json list.
 
-import std/[json, os, paths, strutils, times]
+import std/[json, os, osproc, paths, sequtils, sets, strutils, times]
 
-import ../basic/[context, dependencycache, nimblecontext, packageinfos, reporters]
+import ../basic/[context, dependencycache, nimblecontext, packageinfos, pkgurls, reporters]
 import ../registryreleaseinfo
 
 type
@@ -46,6 +46,124 @@ proc copyReleaseCache(pkg: Package; metadataDir: Path): string =
     raise newException(IOError, "missing release cache: " & $cachePath)
   result = $cachePath.splitPath().tail
 
+proc sanitizeArchiveComponent(value: string): string =
+  result = value
+  for c in mitems(result):
+    if c notin {'a'..'z', 'A'..'Z', '0'..'9', '.', '_', '-'}:
+      c = '-'
+  while result.contains("--"):
+    result = result.replace("--", "-")
+  result = result.strip(chars = {'-', '.'})
+
+proc archiveBaseName(pkg: Package; info: PackageInfo; release: NimbleRelease): string =
+  result = info.name
+  if not release.isNil and release.name.len > 0:
+    result = release.name
+  elif pkg.name.len > 0:
+    result = pkg.name
+  elif pkg.projectName.len > 0:
+    result = pkg.projectName
+  result = sanitizeArchiveComponent(result)
+  if result.len == 0:
+    result = "package"
+
+proc archiveReleaseLabel(ver: PackageVersion; release: NimbleRelease): string =
+  if not release.isNil and release.version.string.len > 0 and release.version.string != "#head":
+    result = release.version.string
+  elif ver.vtag.version.string.len > 0 and ver.vtag.version.string != "#head":
+    result = ver.vtag.version.string
+  elif ver.vtag.commit.h.len > 0:
+    result = ver.vtag.commit.short()
+  else:
+    result = "head"
+  result = sanitizeArchiveComponent(result)
+  if result.len == 0:
+    result = "head"
+
+proc packageArchiveDir(pkg: Package): Path =
+  pkg.ondisk.parentDir() / Path($pkg.ondisk.splitPath().tail & "-pkgs")
+
+proc archiveTreeish(pkg: Package; commit: CommitHash): string =
+  result = commit.h
+  let subdir =
+    if pkg.subdir.len > 0: $pkg.subdir
+    else: $pkg.url.subdir()
+  if subdir.len > 0:
+    result.add ":"
+    result.add subdir
+
+proc writeReleaseArchive(
+    pkg: Package;
+    info: PackageInfo;
+    ver: PackageVersion;
+    release: NimbleRelease;
+    archiveDir: Path;
+    archiveStem: string
+): string =
+  if ver.isNil or ver.vtag.commit.h.len == 0:
+    raise newException(ValueError, "release is missing a commit for archiving")
+
+  createDir($archiveDir)
+  var archivePath = archiveDir / Path(archiveStem & ".tar.gz")
+  if fileExists($archivePath):
+    removeFile($archivePath)
+
+  let prefix = archiveStem & "/"
+  let tarPath = archiveDir / Path(archiveStem & ".tar")
+  let args = [
+    "-C", $pkg.ondisk,
+    "archive",
+    "--format=tar",
+    "--prefix=" & prefix,
+    "-o", $tarPath,
+    archiveTreeish(pkg, ver.vtag.commit)
+  ]
+  if fileExists($tarPath):
+    removeFile($tarPath)
+  let (_, exitCode) = execCmdEx("git " & args.mapIt(quoteShell(it)).join(" "))
+  if exitCode != 0 or not fileExists($tarPath):
+    if fileExists($tarPath):
+      removeFile($tarPath)
+    raise newException(IOError, "failed to archive release to " & $archivePath)
+  let (_, gzipExitCode) = execCmdEx(
+    "gzip " & ["-9", "-f", $tarPath].mapIt(quoteShell(it)).join(" ")
+  )
+  if gzipExitCode != 0 or not fileExists($archivePath):
+    if fileExists($tarPath):
+      removeFile($tarPath)
+    if fileExists($archivePath):
+      removeFile($archivePath)
+    raise newException(IOError, "failed to gzip release archive " & $archivePath)
+  result = $archivePath.splitPath().tail
+
+proc writeReleaseArchives(
+    pkg: Package;
+    info: PackageInfo;
+    releaseInfo: PackageReleaseInfo
+): JsonNode =
+  result = newJArray()
+  let archiveDir = packageArchiveDir(pkg)
+  if dirExists($archiveDir):
+    removeDir($archiveDir)
+  var usedStems = initHashSet[string]()
+  for (ver, release) in releaseInfo.releases:
+    if ver.isNil or ver.vtag.commit.h.len == 0:
+      continue
+    let baseName = archiveBaseName(pkg, info, release)
+    let label = archiveReleaseLabel(ver, release)
+    let commitSuffix = sanitizeArchiveComponent(ver.vtag.commit.short())
+    var archiveStem = baseName & "-" & label
+    if usedStems.containsOrIncl(archiveStem):
+      archiveStem.add "-" & commitSuffix
+      discard usedStems.containsOrIncl(archiveStem)
+    var archiveEntry = newJObject()
+    archiveEntry["version"] = %archiveReleaseLabel(ver, release)
+    archiveEntry["commit"] = %ver.vtag.commit.h
+    archiveEntry["file"] = %writeReleaseArchive(pkg, info, ver, release, archiveDir, archiveStem)
+    if not release.isNil and release.name.len > 0:
+      archiveEntry["name"] = %release.name
+    result.add archiveEntry
+
 proc writeIndex(
     metadataDir: Path;
     packagesFile: Path;
@@ -80,12 +198,14 @@ proc harvestOnePackage(
     onClone = DoClone
   )
   let copiedFile = copyReleaseCache(releaseInfo.package, metadataDir)
+  let archives = writeReleaseArchives(releaseInfo.package, info, releaseInfo.releaseInfo)
 
   var entry = newJObject()
   entry["name"] = %info.name
   entry["cacheFile"] = %copiedFile
   entry["loadedFromCache"] = %releaseInfo.releaseInfo.loadedFromCache
   entry["releaseCount"] = %releaseInfo.releaseInfo.releases.len
+  entry["archives"] = archives
   copiedFiles.add entry
   inc summary.packagesProcessed
   if ephemeral:
