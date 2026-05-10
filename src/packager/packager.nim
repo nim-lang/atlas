@@ -25,7 +25,8 @@ Options:
   --packages=path       use the given packages.json file
   --metadata=path       write copied cache files to the given directory
   --package=name[,name] process only the named package(s) from packages.json
-  --compression=type    archive compression(s): xz, gzip, or comma-separated list
+  --compression=type    archive compression(s): gzip, xz, or comma-separated list
+                        default: gzip
   --ephemeral           delete each cloned repo from pkgs/ after its metadata is produced
 """
 
@@ -89,7 +90,7 @@ proc parseAtlasPackagerOptions(
     versionString: string;
     positional: var seq[string]
 ): PackagerCliOptions =
-  result.compressions = @[acXz]
+  result.compressions = @[acGzip]
   var compressionWasSet = false
   for kind, key, val in getopt(params):
     case kind
