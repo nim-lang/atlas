@@ -29,6 +29,12 @@ type
     author*: string
     description*: string
     license*: string
+    skipDirs*: seq[string]
+    skipFiles*: seq[string]
+    skipExt*: seq[string]
+    installDirs*: seq[string]
+    installFiles*: seq[string]
+    installExt*: seq[string]
     includeTagsAndNimbleCommits*: bool
     nimbleCommitsMax*: bool
     releases*: seq[PackageReleaseCacheEntry]
@@ -119,6 +125,16 @@ proc firstNonEmptyMetadata(
       if result.len > 0:
         return
 
+proc firstNonEmptyMetadata(
+    versions: seq[(PackageVersion, NimbleRelease)];
+    field: proc (release: NimbleRelease): seq[string]
+): seq[string] =
+  for (_, release) in versions:
+    if not release.isNil:
+      result = field(release)
+      if result.len > 0:
+        return
+
 proc toPackageReleaseCacheJson(cache: PackageReleaseCache; opt: ToJsonOptions): JsonNode =
   result = newJObject()
   result["cacheVersion"] = toJson(cache.cacheVersion, opt)
@@ -137,6 +153,18 @@ proc toPackageReleaseCacheJson(cache: PackageReleaseCache; opt: ToJsonOptions): 
     result["description"] = toJson(cache.description, opt)
   if cache.license.len > 0:
     result["license"] = toJson(cache.license, opt)
+  if cache.skipDirs.len > 0:
+    result["skipDirs"] = toJson(cache.skipDirs, opt)
+  if cache.skipFiles.len > 0:
+    result["skipFiles"] = toJson(cache.skipFiles, opt)
+  if cache.skipExt.len > 0:
+    result["skipExt"] = toJson(cache.skipExt, opt)
+  if cache.installDirs.len > 0:
+    result["installDirs"] = toJson(cache.installDirs, opt)
+  if cache.installFiles.len > 0:
+    result["installFiles"] = toJson(cache.installFiles, opt)
+  if cache.installExt.len > 0:
+    result["installExt"] = toJson(cache.installExt, opt)
   result["includeTagsAndNimbleCommits"] = toJson(cache.includeTagsAndNimbleCommits, opt)
   result["nimbleCommitsMax"] = toJson(cache.nimbleCommitsMax, opt)
   result["releases"] = newJArray()
@@ -152,19 +180,56 @@ proc toPackageReleaseCacheJson(cache: PackageReleaseCache; opt: ToJsonOptions): 
         releaseJson.delete("description")
       if entry.release.license == cache.license and releaseJson.hasKey("license"):
         releaseJson.delete("license")
+      if entry.release.skipDirs == cache.skipDirs and releaseJson.hasKey("skipDirs"):
+        releaseJson.delete("skipDirs")
+      elif entry.release.skipDirs.len == 0 and cache.skipDirs.len > 0:
+        releaseJson["skipDirs"] = toJson(entry.release.skipDirs, opt)
+      if entry.release.skipFiles == cache.skipFiles and releaseJson.hasKey("skipFiles"):
+        releaseJson.delete("skipFiles")
+      elif entry.release.skipFiles.len == 0 and cache.skipFiles.len > 0:
+        releaseJson["skipFiles"] = toJson(entry.release.skipFiles, opt)
+      if entry.release.skipExt == cache.skipExt and releaseJson.hasKey("skipExt"):
+        releaseJson.delete("skipExt")
+      elif entry.release.skipExt.len == 0 and cache.skipExt.len > 0:
+        releaseJson["skipExt"] = toJson(entry.release.skipExt, opt)
+      if entry.release.installDirs == cache.installDirs and releaseJson.hasKey("installDirs"):
+        releaseJson.delete("installDirs")
+      elif entry.release.installDirs.len == 0 and cache.installDirs.len > 0:
+        releaseJson["installDirs"] = toJson(entry.release.installDirs, opt)
+      if entry.release.installFiles == cache.installFiles and releaseJson.hasKey("installFiles"):
+        releaseJson.delete("installFiles")
+      elif entry.release.installFiles.len == 0 and cache.installFiles.len > 0:
+        releaseJson["installFiles"] = toJson(entry.release.installFiles, opt)
+      if entry.release.installExt == cache.installExt and releaseJson.hasKey("installExt"):
+        releaseJson.delete("installExt")
+      elif entry.release.installExt.len == 0 and cache.installExt.len > 0:
+        releaseJson["installExt"] = toJson(entry.release.installExt, opt)
     entryJson["release"] = releaseJson
     result["releases"].add entryJson
 
 proc loadPackageReleaseCacheJson(cache: var PackageReleaseCache; jn: JsonNode) =
   cache.fromJson(jn, Joptions(allowMissingKeys: true, allowExtraKeys: true))
-  for entry in mitems(cache.releases):
+  for i, entry in mpairs(cache.releases):
     if not entry.release.isNil:
+      let releaseJson = jn["releases"][i]["release"]
       if entry.release.author.len == 0:
         entry.release.author = cache.author
       if entry.release.description.len == 0:
         entry.release.description = cache.description
       if entry.release.license.len == 0:
         entry.release.license = cache.license
+      if not releaseJson.hasKey("skipDirs"):
+        entry.release.skipDirs = cache.skipDirs
+      if not releaseJson.hasKey("skipFiles"):
+        entry.release.skipFiles = cache.skipFiles
+      if not releaseJson.hasKey("skipExt"):
+        entry.release.skipExt = cache.skipExt
+      if not releaseJson.hasKey("installDirs"):
+        entry.release.installDirs = cache.installDirs
+      if not releaseJson.hasKey("installFiles"):
+        entry.release.installFiles = cache.installFiles
+      if not releaseJson.hasKey("installExt"):
+        entry.release.installExt = cache.installExt
 
 proc loadPackageReleaseCache*(
     pkg: Package;
@@ -221,6 +286,12 @@ proc savePackageReleaseCache*(
     author: firstNonEmptyMetadata(versions, proc (release: NimbleRelease): string = release.author),
     description: firstNonEmptyMetadata(versions, proc (release: NimbleRelease): string = release.description),
     license: firstNonEmptyMetadata(versions, proc (release: NimbleRelease): string = release.license),
+    skipDirs: firstNonEmptyMetadata(versions, proc (release: NimbleRelease): seq[string] = release.skipDirs),
+    skipFiles: firstNonEmptyMetadata(versions, proc (release: NimbleRelease): seq[string] = release.skipFiles),
+    skipExt: firstNonEmptyMetadata(versions, proc (release: NimbleRelease): seq[string] = release.skipExt),
+    installDirs: firstNonEmptyMetadata(versions, proc (release: NimbleRelease): seq[string] = release.installDirs),
+    installFiles: firstNonEmptyMetadata(versions, proc (release: NimbleRelease): seq[string] = release.installFiles),
+    installExt: firstNonEmptyMetadata(versions, proc (release: NimbleRelease): seq[string] = release.installExt),
     includeTagsAndNimbleCommits: includeTagsAndNimbleCommitsFlag(),
     nimbleCommitsMax: nimbleCommitsMaxFlag()
   )

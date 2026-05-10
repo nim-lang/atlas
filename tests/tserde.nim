@@ -77,6 +77,12 @@ suite "json serde":
     check "license" notin jnRelease
     check "srcDir" notin jnRelease
     check "binDir" notin jnRelease
+    check "skipDirs" notin jnRelease
+    check "skipFiles" notin jnRelease
+    check "skipExt" notin jnRelease
+    check "installDirs" notin jnRelease
+    check "installFiles" notin jnRelease
+    check "installExt" notin jnRelease
     check "bin" notin jnRelease
     check "namedBin" notin jnRelease
     check "backend" notin jnRelease
@@ -94,6 +100,12 @@ suite "json serde":
     check "license" notin jnVersions[0][1]
     check "srcDir" notin jnVersions[0][1]
     check "binDir" notin jnVersions[0][1]
+    check "skipDirs" notin jnVersions[0][1]
+    check "skipFiles" notin jnVersions[0][1]
+    check "skipExt" notin jnVersions[0][1]
+    check "installDirs" notin jnVersions[0][1]
+    check "installFiles" notin jnVersions[0][1]
+    check "installExt" notin jnVersions[0][1]
     check "bin" notin jnVersions[0][1]
     check "namedBin" notin jnVersions[0][1]
     check "backend" notin jnVersions[0][1]
@@ -232,7 +244,13 @@ suite "json serde":
       status: Normal,
       author: "Atlas Tester",
       description: "Test package",
-      license: "MIT"
+      license: "MIT",
+      skipDirs: @["tests"],
+      skipFiles: @["config.local"],
+      skipExt: @["tmp"],
+      installDirs: @["assets"],
+      installFiles: @["README.md"],
+      installExt: @["nim"]
     )
     let r2 = NimbleRelease(
       version: Version"2.0.0",
@@ -240,7 +258,13 @@ suite "json serde":
       status: Normal,
       author: "Atlas Tester",
       description: "Test package",
-      license: "MIT"
+      license: "MIT",
+      skipDirs: @["tests"],
+      skipFiles: @[],
+      skipExt: @["tmp"],
+      installDirs: @["assets"],
+      installFiles: @["README.md"],
+      installExt: @["nim"]
     )
     let r3 = NimbleRelease(
       version: Version"3.0.0",
@@ -248,7 +272,13 @@ suite "json serde":
       status: Normal,
       author: "Other Tester",
       description: "Test package",
-      license: "MIT"
+      license: "MIT",
+      skipDirs: @["docs"],
+      skipFiles: @["config.local"],
+      skipExt: @["tmp"],
+      installDirs: @["assets"],
+      installFiles: @[],
+      installExt: @["nim"]
     )
 
     savePackageReleaseCache(pkg, current, @[(v1, r1), (v2, r2), (v3, r3)])
@@ -256,11 +286,26 @@ suite "json serde":
     check cache["author"].getStr() == "Atlas Tester"
     check cache["description"].getStr() == "Test package"
     check cache["license"].getStr() == "MIT"
+    check cache["skipDirs"][0].getStr() == "tests"
+    check cache["skipFiles"][0].getStr() == "config.local"
+    check cache["skipExt"][0].getStr() == "tmp"
+    check cache["installDirs"][0].getStr() == "assets"
+    check cache["installFiles"][0].getStr() == "README.md"
+    check cache["installExt"][0].getStr() == "nim"
     check "author" notin cache["releases"][0]["release"]
     check "description" notin cache["releases"][0]["release"]
     check "license" notin cache["releases"][0]["release"]
+    check "skipDirs" notin cache["releases"][0]["release"]
+    check "skipFiles" notin cache["releases"][0]["release"]
+    check "skipExt" notin cache["releases"][0]["release"]
+    check "installDirs" notin cache["releases"][0]["release"]
+    check "installFiles" notin cache["releases"][0]["release"]
+    check "installExt" notin cache["releases"][0]["release"]
     check "author" notin cache["releases"][1]["release"]
+    check cache["releases"][1]["release"]["skipFiles"].len == 0
     check cache["releases"][2]["release"]["author"].getStr() == "Other Tester"
+    check cache["releases"][2]["release"]["skipDirs"][0].getStr() == "docs"
+    check cache["releases"][2]["release"]["installFiles"].len == 0
     check "description" notin cache["releases"][2]["release"]
     check "license" notin cache["releases"][2]["release"]
 
@@ -274,6 +319,13 @@ suite "json serde":
     check entries[2].release.description == "Test package"
     check entries[0].release.license == "MIT"
     check entries[2].release.license == "MIT"
+    check entries[0].release.skipDirs == @["tests"]
+    check entries[1].release.skipDirs == @["tests"]
+    check entries[2].release.skipDirs == @["docs"]
+    check entries[0].release.skipFiles == @["config.local"]
+    check entries[1].release.skipFiles.len == 0
+    check entries[2].release.installFiles.len == 0
+    check entries[0].release.installExt == @["nim"]
 
   test "activation cache writes bin metadata":
     let url = nc.createUrl("foobar")
@@ -286,6 +338,12 @@ suite "json serde":
       description: "Test package",
       license: "MIT",
       srcDir: Path"src",
+      skipDirs: @["tests"],
+      skipFiles: @["config.local"],
+      skipExt: @["tmp"],
+      installDirs: @["assets"],
+      installFiles: @["README.md"],
+      installExt: @["nim"],
       bin: @["main", "worker"],
       namedBin: {"main": "myfoo"}.toTable,
       backend: "c",
@@ -350,6 +408,12 @@ suite "json serde":
       requirements: @[(nc.createUrl("foobar"), p"1.0.0")],
       srcDir: Path"src",
       binDir: Path"bin",
+      skipDirs: @["tests"],
+      skipFiles: @["config.local"],
+      skipExt: @["tmp"],
+      installDirs: @["assets"],
+      installFiles: @["README.md"],
+      installExt: @["nim"],
       bin: @["main", "worker"],
       namedBin: {"main": "myfoo"}.toTable,
       backend: "c",
@@ -366,6 +430,12 @@ suite "json serde":
     check jnRelease["license"].getStr() == "MIT"
     check jnRelease["srcDir"].getStr() == "src"
     check jnRelease["binDir"].getStr() == "bin"
+    check jnRelease["skipDirs"][0].getStr() == "tests"
+    check jnRelease["skipFiles"][0].getStr() == "config.local"
+    check jnRelease["skipExt"][0].getStr() == "tmp"
+    check jnRelease["installDirs"][0].getStr() == "assets"
+    check jnRelease["installFiles"][0].getStr() == "README.md"
+    check jnRelease["installExt"][0].getStr() == "nim"
     check jnRelease["bin"].len == 2
     check jnRelease["namedBin"]["main"].getStr() == "myfoo"
     check jnRelease["backend"].getStr() == "c"
@@ -386,6 +456,12 @@ suite "json serde":
     check release2.requirements == release.requirements
     check release2.srcDir == release.srcDir
     check release2.binDir == release.binDir
+    check release2.skipDirs == release.skipDirs
+    check release2.skipFiles == release.skipFiles
+    check release2.skipExt == release.skipExt
+    check release2.installDirs == release.installDirs
+    check release2.installFiles == release.installFiles
+    check release2.installExt == release.installExt
     check release2.bin == release.bin
     check release2.namedBin == release.namedBin
     check release2.backend == release.backend

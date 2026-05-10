@@ -141,6 +141,18 @@ proc nimbleReleaseToJson(r: NimbleRelease, opt: ToJsonOptions): JsonNode =
     result["srcDir"] = toJson(r.srcDir, opt)
   if r.binDir != Path "":
     result["binDir"] = toJson(r.binDir, opt)
+  if r.skipDirs.len > 0:
+    result["skipDirs"] = toJson(r.skipDirs, opt)
+  if r.skipFiles.len > 0:
+    result["skipFiles"] = toJson(r.skipFiles, opt)
+  if r.skipExt.len > 0:
+    result["skipExt"] = toJson(r.skipExt, opt)
+  if r.installDirs.len > 0:
+    result["installDirs"] = toJson(r.installDirs, opt)
+  if r.installFiles.len > 0:
+    result["installFiles"] = toJson(r.installFiles, opt)
+  if r.installExt.len > 0:
+    result["installExt"] = toJson(r.installExt, opt)
   if r.bin.len > 0:
     result["bin"] = toJson(r.bin, opt)
   if r.namedBin.len > 0:
@@ -190,6 +202,18 @@ proc fromJsonHook*(r: var NimbleRelease; b: JsonNode; opt = Joptions()) =
     r.srcDir.fromJson(b["srcDir"])
   if b.hasKey("binDir"):
     r.binDir.fromJson(b["binDir"])
+  if b.hasKey("skipDirs"):
+    r.skipDirs.fromJson(b["skipDirs"])
+  if b.hasKey("skipFiles"):
+    r.skipFiles.fromJson(b["skipFiles"])
+  if b.hasKey("skipExt"):
+    r.skipExt.fromJson(b["skipExt"])
+  if b.hasKey("installDirs"):
+    r.installDirs.fromJson(b["installDirs"])
+  if b.hasKey("installFiles"):
+    r.installFiles.fromJson(b["installFiles"])
+  if b.hasKey("installExt"):
+    r.installExt.fromJson(b["installExt"])
   if b.hasKey("bin"):
     r.bin.fromJson(b["bin"])
   if b.hasKey("namedBin"):
