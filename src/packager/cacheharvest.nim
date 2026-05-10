@@ -28,7 +28,10 @@ type
 
   PackageHarvestResult = object
     ok: bool
-    status: JsonNode
+    packageName: string
+    latestCommit: string
+    releaseCount: int
+    digest: JsonNode
 
   HarvestFailure = object
     packageName: string
@@ -37,7 +40,7 @@ type
   HarvestWorkerResult = object
     packagesProcessed: int
     packagesFailed: int
-    packageStatuses: seq[JsonNode]
+    packageResults: seq[PackageHarvestResult]
     failures: seq[HarvestFailure]
 
 proc popPackage(queue: ptr PackageQueue; info: var PackageInfo): bool {.gcsafe.} =
@@ -61,6 +64,12 @@ proc packageReleasesMetadataFile(workspaceRoot: Path): Path =
 
 proc packageReleasesMetadataRelPath(info: PackageInfo): string =
   $Path(info.name) / "releases.json"
+
+proc packageDigestFile(workspaceRoot: Path): Path =
+  workspaceRoot / Path"digest.json"
+
+proc packageDigestRelPath(info: PackageInfo): string =
+  $Path(info.name) / "digest.json"
 
 proc siblingTempPath(dest: Path): Path =
   let destDir = dest.parentDir()
@@ -180,15 +189,6 @@ proc archiveContentHash(
     entries[i] = (file, contents)
   result = nimbleChecksumForEntries(entries)
 
-proc archiveContentHashLabel(
-    pkg: Package;
-    commit: CommitHash;
-    archiveFiles: openArray[string]
-): string =
-  result = sanitizeArchiveComponent(archiveContentHash(pkg, commit, archiveFiles)[0 .. 7])
-  if result.len == 0:
-    result = "unknown"
-
 proc packageRootSubdir(pkg: Package): Path =
   let packageSubdir =
     if pkg.subdir.len > 0: pkg.subdir
@@ -264,7 +264,7 @@ proc writeTrackedReleaseArchive(
   moveFile($tmpArchivePath, $archivePath)
   result = $archivePath.splitPath().tail
 
-proc writeReleaseArchives(
+proc collectReleaseArchives(
     pkg: Package;
     info: PackageInfo;
     releaseInfo: PackageReleaseInfo;
@@ -285,35 +285,60 @@ proc writeReleaseArchives(
     let commitSuffix = archiveCommitLabel(ver)
     let rootSubdir = packageRootSubdir(pkg)
     let rootArchiveFiles = archiveTrackedFiles(pkg, ver.vtag.commit, rootSubdir)
-    let contentHashSuffix = archiveContentHashLabel(pkg, ver.vtag.commit, rootArchiveFiles)
+    let contentHash = archiveContentHash(pkg, ver.vtag.commit, rootArchiveFiles)
+    let contentHashSuffix = sanitizeArchiveComponent(contentHash[0 .. 7])
     var rootStem = baseName & "-" & label & "-" & commitSuffix & "-" & contentHashSuffix
     if usedStems.containsOrIncl(rootStem):
       rootStem.add "-" & commitSuffix
       discard usedStems.containsOrIncl(rootStem)
 
     for compression in compressions:
+      let archiveFile = writeTrackedReleaseArchive(
+        pkg, ver, archiveDir, rootStem, rootArchiveFiles, compression
+      )
+      let archivePath = archiveDir / Path(archiveFile)
       var archiveEntry = newJObject()
-      archiveEntry["version"] = %archiveReleaseLabel(ver, release)
-      archiveEntry["commit"] = %ver.vtag.commit.h
+      archiveEntry["version"] = %label
+      archiveEntry["createdAt"] = %now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
+      archiveEntry["gitSha"] = %ver.vtag.commit.h
+      archiveEntry["gitShortSha"] = %commitSuffix
+      archiveEntry["contentSha"] = %contentHash
+      archiveEntry["contentShortSha"] = %contentHashSuffix
       archiveEntry["archiveRoot"] = %"package"
       archiveEntry["compression"] = %archiveCompressionName(compression)
+      archiveEntry["file"] = %archiveFile
+      archiveEntry["size"] = %getFileSize($archivePath)
       if rootSubdir.len > 0:
         archiveEntry["packageSubdir"] = %($rootSubdir)
       if not release.isNil and release.name.len > 0:
         archiveEntry["name"] = %release.name
       if not release.isNil and release.srcDir.len > 0:
         archiveEntry["srcDir"] = %($release.srcDir)
-      archiveEntry["file"] = %writeTrackedReleaseArchive(
-        pkg, ver, archiveDir, rootStem, rootArchiveFiles, compression
-      )
       archiveEntry["archiveRoot"] = %"package"
       result.add archiveEntry
+
+proc writePackageDigest(
+    workspaceRoot: Path;
+    info: PackageInfo;
+    latestCommit: string;
+    releaseCount: int;
+    digestEntries: JsonNode
+) =
+  var digest = newJObject()
+  digest["generatedAt"] = %now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
+  digest["name"] = %info.name
+  digest["latestCommit"] = %latestCommit
+  digest["releaseCount"] = %releaseCount
+  digest["releasesPath"] = %"releases"
+  digest["releasesMetadata"] = %"releases.json"
+  digest["tarballs"] = digestEntries
+  writeTextFileAtomic(packageDigestFile(workspaceRoot), pretty(digest))
 
 proc writeIndex(
     metadataDir: Path;
     packagesFile: Path;
     summary: HarvestSummary;
-    packageStatuses: JsonNode;
+    packages: JsonNode;
     ephemeral: bool;
     compressions: openArray[ArchiveCompression];
     packageName = "";
@@ -333,7 +358,7 @@ proc writeIndex(
   index["aliasesSkipped"] = %summary.aliasesSkipped
   index["packagesProcessed"] = %summary.packagesProcessed
   index["packagesFailed"] = %summary.packagesFailed
-  index["packagesStatus"] = packageStatuses
+  index["packages"] = packages
   writeTextFileAtomic(metadataDir / Path("index.json"), pretty(index))
 
 proc harvestPackage(
@@ -357,22 +382,18 @@ proc harvestPackage(
       onClone = DoClone
     )
     copyPackageReleaseMetadata(releaseInfo.package, workspaceRoot)
-    discard writeReleaseArchives(
+    let digestEntries = collectReleaseArchives(
       releaseInfo.package,
       info,
       releaseInfo.releaseInfo,
       packageReleasesDir(workspaceRoot),
       compressions
     )
-
-    var entry = newJObject()
-    entry["name"] = %info.name
-    entry["latestCommit"] = %releaseInfo.releaseInfo.currentCommit.h
-    entry["releasesPath"] = %relativeIndexPath(metadataDir, packageReleasesDir(workspaceRoot))
-    entry["releasesMetadata"] = %packageReleasesMetadataRelPath(info)
-    entry["processedAt"] = %now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
-    result.status = entry
     result.ok = true
+    result.packageName = info.name
+    result.latestCommit = releaseInfo.releaseInfo.currentCommit.h
+    result.releaseCount = releaseInfo.releaseInfo.releases.len
+    result.digest = digestEntries
     cleanupTransientReleaseCache(releaseInfo.package)
     if ephemeral:
       cleanupClonedPackage(releaseInfo.package)
@@ -397,7 +418,7 @@ proc harvestWorker(
         {.cast(gcsafe).}:
           nc.harvestPackage(info, metadataDir, ephemeral, compressions)
       if packageResult.ok:
-        result.packageStatuses.add packageResult.status
+        result.packageResults.add packageResult
         inc result.packagesProcessed
     except CatchableError as e:
       result.failures.add HarvestFailure(packageName: info.name, errorMessage: e.msg)
@@ -414,12 +435,14 @@ proc harvestRegistryCaches*(
   createDir($metadataDir)
 
   let packageList = loadPackageList(packagesFile)
+  var packageInfoByName = initTable[string, PackageInfo]()
   var queue: PackageQueue
   initLock(queue.lock)
-  var packageStatuses = newJArray()
+  var packagesIndex = newJArray()
 
   result.packagesSeen = packageList.len
   for info in packageList:
+    packageInfoByName[info.name] = info
     if info.kind == pkAlias:
       inc result.aliasesSkipped
       continue
@@ -437,8 +460,24 @@ proc harvestRegistryCaches*(
     result.packagesFailed += workerResult.packagesFailed
     for failure in workerResult.failures:
       error "atlas:pkger", "failed package:", failure.packageName, "error:", failure.errorMessage
-    for status in workerResult.packageStatuses:
-      packageStatuses.add status
+    for packageResult in workerResult.packageResults:
+      let info = packageInfoByName[packageResult.packageName]
+      let workspaceRoot = packageWorkspaceRoot(info)
+      writePackageDigest(
+        workspaceRoot,
+        info,
+        packageResult.latestCommit,
+        packageResult.releaseCount,
+        packageResult.digest
+      )
+      var entry = newJObject()
+      entry["name"] = %packageResult.packageName
+      entry["latestCommit"] = %packageResult.latestCommit
+      entry["releaseCount"] = %packageResult.releaseCount
+      entry["digest"] = %packageDigestRelPath(info)
+      entry["releasesMetadata"] = %packageReleasesMetadataRelPath(info)
+      entry["processedAt"] = %now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
+      packagesIndex.add entry
   else:
     setMaxPoolSize(workerCount)
     var workers: seq[FlowVar[HarvestWorkerResult]]
@@ -457,15 +496,31 @@ proc harvestRegistryCaches*(
       result.packagesFailed += workerResult.packagesFailed
       for failure in workerResult.failures:
         error "atlas:pkger", "failed package:", failure.packageName, "error:", failure.errorMessage
-      for status in workerResult.packageStatuses:
-        packageStatuses.add status
+      for packageResult in workerResult.packageResults:
+        let info = packageInfoByName[packageResult.packageName]
+        let workspaceRoot = packageWorkspaceRoot(info)
+        writePackageDigest(
+          workspaceRoot,
+          info,
+          packageResult.latestCommit,
+          packageResult.releaseCount,
+          packageResult.digest
+        )
+        var entry = newJObject()
+        entry["name"] = %packageResult.packageName
+        entry["latestCommit"] = %packageResult.latestCommit
+        entry["releaseCount"] = %packageResult.releaseCount
+        entry["digest"] = %packageDigestRelPath(info)
+        entry["releasesMetadata"] = %packageReleasesMetadataRelPath(info)
+        entry["processedAt"] = %now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
+        packagesIndex.add entry
   deinitLock(queue.lock)
 
   writeIndex(
     metadataDir,
     packagesFile,
     result,
-    packageStatuses,
+    packagesIndex,
     ephemeral,
     compressions,
     packageNames = pkgNames
