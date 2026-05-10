@@ -33,6 +33,20 @@ proc packageReleasesMetadataFile(workspaceRoot: Path): Path =
 proc packageReleasesMetadataRelPath(info: PackageInfo): string =
   $Path(info.name) / "releases.json"
 
+proc writeTextFileAtomic(dest: Path; contents: string) =
+  let destDir = dest.parentDir()
+  if destDir.len > 0:
+    createDir($destDir)
+
+  let tmpPath = destDir / Path(dest.splitPath().tail.string & ".tmp")
+  try:
+    writeFile($tmpPath, contents)
+    moveFile($tmpPath, $dest)
+  except:
+    if fileExists($tmpPath):
+      removeFile($tmpPath)
+    raise
+
 proc relativeIndexPath(baseDir: Path; path: Path): string =
   if path.isRelativeTo(baseDir):
     $(path.relativePath(baseDir))
@@ -59,7 +73,7 @@ proc copyPackageReleaseMetadata(pkg: Package; workspaceRoot: Path) =
     raise newException(IOError, "missing release cache: " & $cachePath)
   createDir($workspaceRoot)
   let dest = packageReleasesMetadataFile(workspaceRoot)
-  writeFile($dest, readFile($cachePath))
+  writeTextFileAtomic(dest, readFile($cachePath))
 
 proc cleanupTransientReleaseCache(pkg: Package) =
   let cachePath = packageReleaseCachePath(pkg)
@@ -294,7 +308,7 @@ proc writeIndex(
   index["packagesProcessed"] = %summary.packagesProcessed
   index["packagesFailed"] = %summary.packagesFailed
   index["packagesStatus"] = packageStatuses
-  writeFile($(metadataDir / Path("index.json")), pretty(index))
+  writeTextFileAtomic(metadataDir / Path("index.json"), pretty(index))
 
 proc harvestPackage(
     nc: var NimbleContext;
