@@ -79,6 +79,13 @@ proc archiveCompressionName*(compression: ArchiveCompression): string =
   of acGzip: "gzip"
   of acXz: "xz"
 
+proc needsFullArchive(release: NimbleRelease): bool =
+  not release.isNil and (
+    release.hasInstallHooks or
+    release.bin.len > 0 or
+    release.namedBin.len > 0
+  )
+
 proc archiveBaseName(pkg: Package; info: PackageInfo; release: NimbleRelease): string =
   result = info.name
   if not release.isNil and release.name.len > 0:
@@ -207,13 +214,10 @@ proc writeReleaseArchives(
     let label = archiveReleaseLabel(ver, release)
     let commitSuffix = sanitizeArchiveComponent(ver.vtag.commit.short())
     let rootSubdir = packageRootSubdir(pkg)
-    let hasSrcArchive =
-      not release.isNil and release.srcDir.len > 0
+    let hasFullArchive = needsFullArchive(release)
     let srcMatchesPackageRoot =
       not release.isNil and release.srcDir == Path"."
-    let srcSubdir =
-      if hasSrcArchive: archiveSrcSubdir(pkg, release)
-      else: rootSubdir
+    let srcSubdir = archiveSrcSubdir(pkg, release)
     var archiveEntry = newJObject()
     archiveEntry["version"] = %archiveReleaseLabel(ver, release)
     archiveEntry["commit"] = %ver.vtag.commit.h
@@ -229,23 +233,24 @@ proc writeReleaseArchives(
       archiveEntry["name"] = %release.name
     if not release.isNil and release.srcDir.len > 0:
       archiveEntry["srcDir"] = %($release.srcDir)
-    if hasSrcArchive:
-      var srcStem = baseName & "-" & label & "-src"
-      if usedStems.containsOrIncl(srcStem):
-        srcStem.add "-" & commitSuffix
-        discard usedStems.containsOrIncl(srcStem)
-      let srcFile =
-        writeReleaseArchive(pkg, info, ver, release, archiveDir, srcStem, srcSubdir, compression)
-      archiveEntry["srcFile"] = %srcFile
-      archiveEntry["srcArchiveRoot"] = %"srcDir"
-      archiveEntry["resolvedSrcDir"] = %($srcSubdir)
+    var srcStem = baseName & "-" & label & "-src"
+    if usedStems.containsOrIncl(srcStem):
+      srcStem.add "-" & commitSuffix
+      discard usedStems.containsOrIncl(srcStem)
+    let srcFile =
+      writeReleaseArchive(pkg, info, ver, release, archiveDir, srcStem, srcSubdir, compression)
+    archiveEntry["srcFile"] = %srcFile
+    archiveEntry["srcArchiveRoot"] =
+      if not release.isNil and release.srcDir.len > 0: %"srcDir"
+      else: %"package"
+    archiveEntry["resolvedSrcDir"] = %($srcSubdir)
+    if hasFullArchive:
       if srcMatchesPackageRoot:
         archiveEntry["file"] = %writeArchiveSymlink(archiveDir, rootStem, srcFile, compression)
         archiveEntry["fileIsSymlink"] = %true
       else:
         archiveEntry["file"] = %writeReleaseArchive(pkg, info, ver, release, archiveDir, rootStem, rootSubdir, compression)
-    else:
-      archiveEntry["file"] = %writeReleaseArchive(pkg, info, ver, release, archiveDir, rootStem, rootSubdir, compression)
+      archiveEntry["archiveRoot"] = %"package"
     result.add archiveEntry
 
 proc writeIndex(
