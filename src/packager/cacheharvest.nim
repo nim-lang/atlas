@@ -83,14 +83,26 @@ proc archiveReleaseLabel(ver: PackageVersion; release: NimbleRelease): string =
 proc packageArchiveDir(pkg: Package): Path =
   pkg.ondisk.parentDir() / Path($pkg.ondisk.splitPath().tail & "-pkgs")
 
-proc archiveTreeish(pkg: Package; commit: CommitHash): string =
+proc packageRootSubdir(pkg: Package): Path =
+  let packageSubdir =
+    if pkg.subdir.len > 0: pkg.subdir
+    else: pkg.url.subdir()
+  result = packageSubdir
+
+proc archiveSrcSubdir(pkg: Package; release: NimbleRelease): Path =
+  let packageSubdir = packageRootSubdir(pkg)
+  if release.isNil or release.srcDir.len == 0 or release.srcDir == Path".":
+    result = packageSubdir
+  elif packageSubdir.len > 0:
+    result = packageSubdir / release.srcDir
+  else:
+    result = release.srcDir
+
+proc archiveTreeish(commit: CommitHash; subdir: Path): string =
   result = commit.h
-  let subdir =
-    if pkg.subdir.len > 0: $pkg.subdir
-    else: $pkg.url.subdir()
   if subdir.len > 0:
     result.add ":"
-    result.add subdir
+    result.add $subdir
 
 proc writeReleaseArchive(
     pkg: Package;
@@ -98,7 +110,8 @@ proc writeReleaseArchive(
     ver: PackageVersion;
     release: NimbleRelease;
     archiveDir: Path;
-    archiveStem: string
+    archiveStem: string;
+    archiveSubdir: Path
 ): string =
   if ver.isNil or ver.vtag.commit.h.len == 0:
     raise newException(ValueError, "release is missing a commit for archiving")
@@ -116,7 +129,7 @@ proc writeReleaseArchive(
     "--format=tar",
     "--prefix=" & prefix,
     "-o", $tarPath,
-    archiveTreeish(pkg, ver.vtag.commit)
+    archiveTreeish(ver.vtag.commit, archiveSubdir)
   ]
   if fileExists($tarPath):
     removeFile($tarPath)
@@ -152,16 +165,35 @@ proc writeReleaseArchives(
     let baseName = archiveBaseName(pkg, info, release)
     let label = archiveReleaseLabel(ver, release)
     let commitSuffix = sanitizeArchiveComponent(ver.vtag.commit.short())
-    var archiveStem = baseName & "-" & label
-    if usedStems.containsOrIncl(archiveStem):
-      archiveStem.add "-" & commitSuffix
-      discard usedStems.containsOrIncl(archiveStem)
+    let rootSubdir = packageRootSubdir(pkg)
+    let hasDedicatedSrcArchive =
+      not release.isNil and release.srcDir.len > 0 and release.srcDir != Path"."
+    let srcSubdir =
+      if hasDedicatedSrcArchive: archiveSrcSubdir(pkg, release)
+      else: rootSubdir
     var archiveEntry = newJObject()
     archiveEntry["version"] = %archiveReleaseLabel(ver, release)
     archiveEntry["commit"] = %ver.vtag.commit.h
-    archiveEntry["file"] = %writeReleaseArchive(pkg, info, ver, release, archiveDir, archiveStem)
+    var rootStem = baseName & "-" & label
+    if usedStems.containsOrIncl(rootStem):
+      rootStem.add "-" & commitSuffix
+      discard usedStems.containsOrIncl(rootStem)
+    archiveEntry["file"] = %writeReleaseArchive(pkg, info, ver, release, archiveDir, rootStem, rootSubdir)
+    archiveEntry["archiveRoot"] = %"package"
+    if rootSubdir.len > 0:
+      archiveEntry["packageSubdir"] = %($rootSubdir)
     if not release.isNil and release.name.len > 0:
       archiveEntry["name"] = %release.name
+    if not release.isNil and release.srcDir.len > 0:
+      archiveEntry["srcDir"] = %($release.srcDir)
+    if hasDedicatedSrcArchive:
+      var srcStem = baseName & "-" & label & "-src"
+      if usedStems.containsOrIncl(srcStem):
+        srcStem.add "-" & commitSuffix
+        discard usedStems.containsOrIncl(srcStem)
+      archiveEntry["srcFile"] = %writeReleaseArchive(pkg, info, ver, release, archiveDir, srcStem, srcSubdir)
+      archiveEntry["srcArchiveRoot"] = %"srcDir"
+      archiveEntry["resolvedSrcDir"] = %($srcSubdir)
     result.add archiveEntry
 
 proc writeIndex(
