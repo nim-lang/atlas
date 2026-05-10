@@ -72,7 +72,7 @@ proc parseAtlasPackagerOptions(
     versionString: string;
     positional: var seq[string]
 ): PackagerCliOptions =
-  result.compression = acXz
+  result.compression = acGzip
   for kind, key, val in getopt(params):
     case kind
     of cmdLongOption, cmdShortOption:
