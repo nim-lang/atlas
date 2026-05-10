@@ -81,23 +81,22 @@ proc parseAtlasPackagerOptions(
 
 proc resolvePackagesFile(opts: PackagerCliOptions; args: seq[string]): Path =
   if opts.packagesFile.len > 0:
-    result = opts.packagesFile
+    result = opts.packagesFile.absolutePath()
   elif args.len >= 1:
-    result = Path(args[0])
+    result = Path(args[0]).absolutePath()
 
 proc resolveMetadataDir(opts: PackagerCliOptions; args: seq[string]): Path =
   if opts.metadataDir.len > 0:
-    result = opts.metadataDir
+    result = opts.metadataDir.absolutePath()
   elif args.len >= 2:
-    result = Path(args[1])
+    result = Path(args[1]).absolutePath()
   else:
-    result = Path"pkgs-meta"
+    result = Path"pkgs".absolutePath()
 
 proc initPackagerWorkspace(metadataDir: Path) =
   var ctx = AtlasContext()
-  ctx.depsDir = Path"pkgs"
+  ctx.depsDir = metadataDir
   ctx.cacheDir = metadataDir
-  createDir($ctx.depsDir)
   createDir($metadataDir)
   setContext(ctx)
 

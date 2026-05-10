@@ -26,6 +26,9 @@ proc packageReleasesDir(workspaceRoot: Path): Path =
 proc packageReleasesMetadataFile(workspaceRoot: Path): Path =
   workspaceRoot / Path"releases.json"
 
+proc packageReleasesMetadataRelPath(info: PackageInfo): string =
+  $Path(info.name) / "releases.json"
+
 proc cleanupClonedPackage(pkg: Package) =
   if pkg.isNil or pkg.ondisk.len == 0:
     return
@@ -49,12 +52,6 @@ proc findPackageInfo(
       return info
   raise newException(ValueError, "package not found in packages list: " & packageName)
 
-proc copyReleaseCache(pkg: Package; metadataDir: Path): string =
-  let cachePath = packageReleaseCachePath(pkg)
-  if not fileExists($cachePath):
-    raise newException(IOError, "missing release cache: " & $cachePath)
-  result = $cachePath.splitPath().tail
-
 proc copyPackageReleaseMetadata(pkg: Package; workspaceRoot: Path) =
   let cachePath = packageReleaseCachePath(pkg)
   if not fileExists($cachePath):
@@ -62,6 +59,11 @@ proc copyPackageReleaseMetadata(pkg: Package; workspaceRoot: Path) =
   createDir($workspaceRoot)
   let dest = packageReleasesMetadataFile(workspaceRoot)
   writeFile($dest, readFile($cachePath))
+
+proc cleanupTransientReleaseCache(pkg: Package) =
+  let cachePath = packageReleaseCachePath(pkg)
+  if fileExists($cachePath):
+    removeFile($cachePath)
 
 proc sanitizeArchiveComponent(value: string): string =
   result = value
@@ -252,7 +254,6 @@ proc harvestOnePackage(
       mode = AllReleases,
       onClone = DoClone
     )
-    let copiedFile = copyReleaseCache(releaseInfo.package, metadataDir)
     copyPackageReleaseMetadata(releaseInfo.package, workspaceRoot)
     let archives = writeReleaseArchives(
       releaseInfo.package,
@@ -263,12 +264,13 @@ proc harvestOnePackage(
 
     var entry = newJObject()
     entry["name"] = %info.name
-    entry["cacheFile"] = %copiedFile
+    entry["cacheFile"] = %packageReleasesMetadataRelPath(info)
     entry["loadedFromCache"] = %releaseInfo.releaseInfo.loadedFromCache
     entry["releaseCount"] = %releaseInfo.releaseInfo.releases.len
     entry["archives"] = archives
     copiedFiles.add entry
     inc summary.packagesProcessed
+    cleanupTransientReleaseCache(releaseInfo.package)
     if ephemeral:
       cleanupClonedPackage(releaseInfo.package)
   finally:
