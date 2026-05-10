@@ -8,7 +8,7 @@ when defined(nimAtlasBootstrap):
 elif dirExists("../sat/src"):
   --path:"../sat/src"
 else:
-  --path:"deps/sat"
+  --path:"deps/sat/src"
 
 --path:"$nim"
 --nimcache:".nimcache"
