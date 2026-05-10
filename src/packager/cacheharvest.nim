@@ -33,12 +33,16 @@ proc packageReleasesMetadataFile(workspaceRoot: Path): Path =
 proc packageReleasesMetadataRelPath(info: PackageInfo): string =
   $Path(info.name) / "releases.json"
 
+proc siblingTempPath(dest: Path): Path =
+  let destDir = dest.parentDir()
+  destDir / Path(".tmp." & dest.splitPath().tail.string)
+
 proc writeTextFileAtomic(dest: Path; contents: string) =
   let destDir = dest.parentDir()
   if destDir.len > 0:
     createDir($destDir)
 
-  let tmpPath = destDir / Path(dest.splitPath().tail.string & ".tmp")
+  let tmpPath = siblingTempPath(dest)
   try:
     writeFile($tmpPath, contents)
     moveFile($tmpPath, $dest)
@@ -171,11 +175,10 @@ proc writeReleaseArchive(
 
   createDir($archiveDir)
   let archivePath = archiveDir / Path(archiveStem & archiveCompressionExtension(compression))
-  if fileExists($archivePath):
-    removeFile($archivePath)
+  let tmpArchivePath = siblingTempPath(archivePath)
 
   let prefix = archiveStem & "/"
-  let tarPath = archiveDir / Path(archiveStem & ".tar")
+  let tarPath = siblingTempPath(archiveDir / Path(archiveStem & ".tar"))
   let args = [
     "-C", $pkg.ondisk,
     "archive",
@@ -186,24 +189,30 @@ proc writeReleaseArchive(
   ]
   if fileExists($tarPath):
     removeFile($tarPath)
+  if fileExists($tmpArchivePath):
+    removeFile($tmpArchivePath)
   let (_, exitCode) = execCmdEx("git " & args.mapIt(quoteShell(it)).join(" "))
   if exitCode != 0 or not fileExists($tarPath):
     if fileExists($tarPath):
       removeFile($tarPath)
     raise newException(IOError, "failed to archive release to " & $archivePath)
-  let (compressor, compressorArgs) =
+  let compressor =
     case compression
-    of acGzip: ("gzip", @["-9", "-f", $tarPath])
-    of acXz: ("xz", @["-9", "-f", $tarPath])
-  let (_, compressExitCode) = execCmdEx(
-    compressor & " " & compressorArgs.mapIt(quoteShell(it)).join(" ")
+    of acGzip: "gzip"
+    of acXz: "xz"
+  let compressCmd = (
+    compressor & " -9 -c " & quoteShell($tarPath) & " > " & quoteShell($tmpArchivePath)
   )
-  if compressExitCode != 0 or not fileExists($archivePath):
+  let (_, compressExitCode) = execCmdEx(compressCmd)
+  if fileExists($tarPath):
+    removeFile($tarPath)
+  if compressExitCode != 0 or not fileExists($tmpArchivePath):
     if fileExists($tarPath):
       removeFile($tarPath)
-    if fileExists($archivePath):
-      removeFile($archivePath)
+    if fileExists($tmpArchivePath):
+      removeFile($tmpArchivePath)
     raise newException(IOError, "failed to compress release archive " & $archivePath)
+  moveFile($tmpArchivePath, $archivePath)
   result = $archivePath.splitPath().tail
 
 proc writeArchiveSymlink(
@@ -213,9 +222,11 @@ proc writeArchiveSymlink(
     compression: ArchiveCompression
 ): string =
   let linkPath = archiveDir / Path(linkStem & archiveCompressionExtension(compression))
-  if fileExists($linkPath) or symlinkExists(linkPath):
-    removeFile($linkPath)
-  createSymlink(Path(targetFile), linkPath)
+  let tmpLinkPath = siblingTempPath(linkPath)
+  if fileExists($tmpLinkPath) or symlinkExists(tmpLinkPath):
+    removeFile($tmpLinkPath)
+  createSymlink(Path(targetFile), tmpLinkPath)
+  moveFile($tmpLinkPath, $linkPath)
   result = $linkPath.splitPath().tail
 
 proc writeReleaseArchives(
