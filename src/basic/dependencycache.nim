@@ -47,7 +47,6 @@ type
 
 const
   PackageReleaseCacheVersion = 5
-  PackageReleaseCacheVersion = 4
 
 proc sanitizeCacheStem(stem: var string) =
   for c in mitems(stem):

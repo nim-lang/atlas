@@ -137,7 +137,7 @@ suite "json serde":
       @[(VersionTag(v: Version"1.0.0", c: current).toPkgVer, release)]
     )
     let cache = parseFile($packageReleaseCachePath(pkg))
-    check cache["cacheVersion"].getInt() == 4
+    check cache["cacheVersion"].getInt() == 5
     check cache["shortName"].getStr() == "foobar"
     check cache["fullName"].getStr() == "foobar.nimble-test.github.com"
     check "shortName" notin cache
