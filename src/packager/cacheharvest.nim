@@ -301,7 +301,7 @@ proc harvestPackage(
       onClone = DoClone
     )
     copyPackageReleaseMetadata(releaseInfo.package, workspaceRoot)
-    let archives = writeReleaseArchives(
+    discard writeReleaseArchives(
       releaseInfo.package,
       info,
       releaseInfo.releaseInfo,
@@ -314,7 +314,6 @@ proc harvestPackage(
     entry["latestCommit"] = %releaseInfo.releaseInfo.currentCommit.h
     entry["releasesPath"] = %relativeIndexPath(metadataDir, packageReleasesDir(workspaceRoot))
     entry["releasesMetadata"] = %packageReleasesMetadataRelPath(info)
-    entry["archives"] = archives
     entry["processedAt"] = %now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
     packageStatuses.add entry
     inc summary.packagesProcessed
