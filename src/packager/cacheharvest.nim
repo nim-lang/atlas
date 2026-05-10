@@ -289,7 +289,8 @@ proc harvestOnePackage(
 proc harvestRegistryCaches*(
     packagesFile: Path;
     metadataDir: Path;
-    ephemeral = false
+    ephemeral: bool,
+    pkgNames: seq[string]
 ): HarvestSummary =
   createDir($metadataDir)
 
@@ -302,6 +303,8 @@ proc harvestRegistryCaches*(
     if info.kind == pkAlias:
       inc result.aliasesSkipped
       continue
+    elif pkgNames.len() > 0 and info.name notin pkgNames:
+      continue
 
     try:
       nc.harvestOnePackage(info, metadataDir, result, copiedFiles, ephemeral)
@@ -311,29 +314,7 @@ proc harvestRegistryCaches*(
 
   writeIndex(metadataDir, packagesFile, result, copiedFiles)
 
-proc harvestRegistryCacheForPackage*(
-    packagesFile: Path;
-    metadataDir: Path;
-    packageName: string;
-    ephemeral = false
-): HarvestSummary =
-  createDir($metadataDir)
-
-  var nc = createNimbleContext()
-  let packageList = loadPackageList(packagesFile)
-  let info = findPackageInfo(packageList, packageName)
-  var copiedFiles = newJArray()
-
-  result.packagesSeen = packageList.len
-  try:
-    nc.harvestOnePackage(info, metadataDir, result, copiedFiles, ephemeral)
-  except CatchableError as e:
-    error "atlas:pkger", "failed package:", info.name, "error:", e.msg
-    inc result.packagesFailed
-
-  writeIndex(metadataDir, packagesFile, result, copiedFiles, packageName = info.name)
-
-proc harvestRegistryCachesForPackages*(
+proc harvestgistryCachesForPackages*(
     packagesFile: Path;
     metadataDir: Path;
     packageNames: seq[string];

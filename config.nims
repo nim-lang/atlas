@@ -34,6 +34,12 @@ task unitTests, "Runs unit tests":
       echo fmt"[sigils] Running {path}"
       exec fmt"nim c -r {path}"
 
+task testPackager, "Runs packager smoke tests":
+  installSatTask()
+  exec "nim c -d:debug -o:bin/atlas-packager src/atlas_packager.nim"
+  exec "rm -rf pkgs"
+  exec "bin/atlas-packager --package=atlas,parsetoml"
+
 task tester, "Runs integration tests":
   installSatTask()
   exec "nim c -d:debug -r tests/run_tester.nim"

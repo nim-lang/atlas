@@ -131,13 +131,7 @@ proc main*(versionString = "unknown") =
     stderr.writeLine("packages.json not found: " & $packagesFile)
     quit(1)
 
-  let summary =
-    if opts.packageNames.len == 1:
-      harvestRegistryCacheForPackage(packagesFile, metadataDir, opts.packageNames[0], opts.ephemeral)
-    elif opts.packageNames.len > 1:
-      harvestRegistryCachesForPackages(packagesFile, metadataDir, opts.packageNames, opts.ephemeral)
-    else:
-      harvestRegistryCaches(packagesFile, metadataDir, opts.ephemeral)
+  let summary = harvestRegistryCaches(packagesFile, metadataDir, opts.ephemeral, opts.packageNames)
   stdout.writeLine(
     "processed " & $summary.packagesProcessed &
     " packages, failed " & $summary.packagesFailed &
