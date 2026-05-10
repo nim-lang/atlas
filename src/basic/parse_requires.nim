@@ -16,6 +16,12 @@ type
     license*: string
     srcDir*: Path
     binDir*: Path
+    skipDirs*: seq[string]
+    skipFiles*: seq[string]
+    skipExt*: seq[string]
+    installDirs*: seq[string]
+    installFiles*: seq[string]
+    installExt*: seq[string]
     bin*: seq[string]
     namedBin*: Table[string, string]
     backend*: string
@@ -131,11 +137,25 @@ proc compileDefines(): Table[string, bool] =
 
 var definedSymbols: Table[string, bool] = compileDefines()
 
+proc compileIntegerDefines(): Table[string, int] =
+  result = initTable[string, int]()
+  result["NimMajor"] = NimMajor
+  result["NimMinor"] = NimMinor
+  result["NimPatch"] = NimPatch
+
+var definedIntegerSymbols: Table[string, int] = compileIntegerDefines()
+
 proc getBasicDefines*(): Table[string, bool] =
   return definedSymbols
 
 proc setBasicDefines*(sym: string, value: bool) {.inline.} =
   definedSymbols[sym] = value
+
+proc getBasicIntegerDefines*(): Table[string, int] =
+  return definedIntegerSymbols
+
+proc setBasicIntegerDefines*(sym: string, value: int) {.inline.} =
+  definedIntegerSymbols[sym] = value
 
 proc evalBasicDefines(sym: string; conf: ConfigRef; n: PNode): Option[bool] =
   if sym in definedSymbols:
@@ -143,6 +163,65 @@ proc evalBasicDefines(sym: string; conf: ConfigRef; n: PNode): Option[bool] =
   else:
     handleError(conf, n.info, "undefined symbol: " & sym)
     return none(bool)
+
+proc evalIntegerSymbol(sym: string; conf: ConfigRef; n: PNode): Option[int] =
+  if sym in definedIntegerSymbols:
+    return some(definedIntegerSymbols[sym])
+  else:
+    handleError(conf, n.info, "undefined integer symbol: " & sym)
+    return none(int)
+
+proc evalIntegerExpression(n: PNode; conf: ConfigRef): Option[int] =
+  case n.kind
+  of nkIntLit..nkUInt64Lit:
+    return some(int(n.intVal))
+  of nkIdent:
+    return evalIntegerSymbol(n.ident.s, conf, n)
+  of nkPar:
+    if n.len == 1:
+      return evalIntegerExpression(n[0], conf)
+  else:
+    discard
+  return none(int)
+
+proc evalIntegerTupleExpression(n: PNode; conf: ConfigRef): Option[seq[int]] =
+  case n.kind
+  of nkPar, nkTupleConstr:
+    if n.len == 1:
+      let value = evalIntegerExpression(n[0], conf)
+      if value.isSome:
+        return some(@[value.get])
+    else:
+      var values: seq[int]
+      for child in n:
+        let value = evalIntegerExpression(child, conf)
+        if value.isNone:
+          return none(seq[int])
+        values.add value.get
+      return some(values)
+  else:
+    let value = evalIntegerExpression(n, conf)
+    if value.isSome:
+      return some(@[value.get])
+  return none(seq[int])
+
+proc cmpIntegerTuple(a, b: seq[int]): int =
+  for i in 0 ..< min(a.len, b.len):
+    result = cmp(a[i], b[i])
+    if result != 0:
+      return
+  result = cmp(a.len, b.len)
+
+proc evalIntegerComparison(op: string; left, right: seq[int]): Option[bool] =
+  let c = cmpIntegerTuple(left, right)
+  case op
+  of "==": some(c == 0)
+  of "!=": some(c != 0)
+  of "<": some(c < 0)
+  of "<=": some(c <= 0)
+  of ">": some(c > 0)
+  of ">=": some(c >= 0)
+  else: none(bool)
 
 proc evalBooleanCondition(n: PNode; conf: ConfigRef): Option[bool] =
   ## Recursively evaluate boolean conditions in when statements
@@ -176,6 +255,13 @@ proc evalBooleanCondition(n: PNode; conf: ConfigRef): Option[bool] =
         let right = evalBooleanCondition(n[2], conf)
         if left.isSome and right.isSome:
           return some(left.get xor right.get)
+        else:
+          return none(bool)
+      of "==", "!=", "<", "<=", ">", ">=":
+        let left = evalIntegerTupleExpression(n[1], conf)
+        let right = evalIntegerTupleExpression(n[2], conf)
+        if left.isSome and right.isSome:
+          return evalIntegerComparison(n[0].ident.s, left.get, right.get)
         else:
           return none(bool)
     return none(bool)
@@ -291,6 +377,30 @@ proc extract(n: PNode; conf: ConfigRef; currFeature: string; result: var NimbleF
         result.binDir = Path n[1].strVal
       else:
         handleError(conf, n[1].info, "assignments to 'binDir' must be string literals")
+        # result.hasErrors = true
+    elif n[0].kind == nkIdent and eqIdent(n[0].ident.s, "skipDirs"):
+      if not extractStringSeq(n[1], result.skipDirs):
+        handleError(conf, n[1].info, "assignments to 'skipDirs' must be string literal sequences")
+        # result.hasErrors = true
+    elif n[0].kind == nkIdent and eqIdent(n[0].ident.s, "skipFiles"):
+      if not extractStringSeq(n[1], result.skipFiles):
+        handleError(conf, n[1].info, "assignments to 'skipFiles' must be string literal sequences")
+        # result.hasErrors = true
+    elif n[0].kind == nkIdent and eqIdent(n[0].ident.s, "skipExt"):
+      if not extractStringSeq(n[1], result.skipExt):
+        handleError(conf, n[1].info, "assignments to 'skipExt' must be string literal sequences")
+        # result.hasErrors = true
+    elif n[0].kind == nkIdent and eqIdent(n[0].ident.s, "installDirs"):
+      if not extractStringSeq(n[1], result.installDirs):
+        handleError(conf, n[1].info, "assignments to 'installDirs' must be string literal sequences")
+        # result.hasErrors = true
+    elif n[0].kind == nkIdent and eqIdent(n[0].ident.s, "installFiles"):
+      if not extractStringSeq(n[1], result.installFiles):
+        handleError(conf, n[1].info, "assignments to 'installFiles' must be string literal sequences")
+        # result.hasErrors = true
+    elif n[0].kind == nkIdent and eqIdent(n[0].ident.s, "installExt"):
+      if not extractStringSeq(n[1], result.installExt):
+        handleError(conf, n[1].info, "assignments to 'installExt' must be string literal sequences")
         # result.hasErrors = true
     elif n[0].kind == nkIdent and eqIdent(n[0].ident.s, "bin"):
       var bin: seq[string]

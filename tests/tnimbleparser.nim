@@ -65,6 +65,12 @@ suite "nimbleparser":
     check res.license == "MIT"
     check res.srcDir == Path"src"
     check res.binDir == Path"bin"
+    check res.skipDirs == @["tests", "examples"]
+    check res.skipFiles == @["config.local"]
+    check res.skipExt == @["tmp", "bak"]
+    check res.installDirs == @["assets"]
+    check res.installFiles == @["README.md", "LICENSE"]
+    check res.installExt == @["nim", "nims"]
     check res.bin == @["main", "worker"]
     check res.namedBin["main"] == "myfoo"
     check res.namedBin["tools/helper"] == "helper"
@@ -79,6 +85,12 @@ suite "nimbleparser":
     check release.license == "MIT"
     check release.srcDir == Path"src"
     check release.binDir == Path"bin"
+    check release.skipDirs == @["tests", "examples"]
+    check release.skipFiles == @["config.local"]
+    check release.skipExt == @["tmp", "bak"]
+    check release.installDirs == @["assets"]
+    check release.installFiles == @["README.md", "LICENSE"]
+    check release.installExt == @["nim", "nims"]
     check release.bin == @["main", "worker"]
     check release.namedBin["main"] == "myfoo"
     check release.namedBin["tools/helper"] == "helper"
@@ -185,3 +197,27 @@ suite "nimbleparser":
     echo "Expected httpbeast count: ", expectedHttpbeastCount
     echo "Actual httpbeast count: ", actualHttpbeastCount
     check actualHttpbeastCount == expectedHttpbeastCount
+
+  test "parse nimble file with NimMajor and NimMinor when statements":
+    let nimbleFile = Path("tests" / "test_data" / "nim_version_when.nimble")
+    setBasicIntegerDefines("NimMajor", 2)
+    setBasicIntegerDefines("NimMinor", 0)
+    setBasicIntegerDefines("NimPatch", 0)
+
+    var res = extractRequiresInfo(nimbleFile)
+    check doesContain(res, "nim >= 1.0.0")
+    check doesContain(res, "db_connector >= 0.1.0")
+    check doesContain(res, "tuple_ge >= 1.0.0")
+    check not doesContain(res, "impossible")
+
+    setBasicIntegerDefines("NimMajor", 1)
+    setBasicIntegerDefines("NimMinor", 8)
+    res = extractRequiresInfo(nimbleFile)
+    check doesContain(res, "nim >= 1.0.0")
+    check not doesContain(res, "db_connector")
+    check not doesContain(res, "tuple_ge")
+    check not doesContain(res, "impossible")
+
+    setBasicIntegerDefines("NimMajor", NimMajor)
+    setBasicIntegerDefines("NimMinor", NimMinor)
+    setBasicIntegerDefines("NimPatch", NimPatch)

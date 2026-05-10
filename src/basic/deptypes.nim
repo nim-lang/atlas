@@ -48,6 +48,12 @@ type
     hasInstallHooks*: bool
     srcDir*: Path
     binDir*: Path
+    skipDirs*: seq[string]
+    skipFiles*: seq[string]
+    skipExt*: seq[string]
+    installDirs*: seq[string]
+    installFiles*: seq[string]
+    installExt*: seq[string]
     bin*: seq[string]
     namedBin*: Table[string, string]
     backend*: string
@@ -125,6 +131,12 @@ proc hash*(r: NimbleRelease): Hash =
   h = h !& hash(r.hasInstallHooks)
   h = h !& hash($r.srcDir)
   h = h !& hash($r.binDir)
+  h = h !& hash(r.skipDirs)
+  h = h !& hash(r.skipFiles)
+  h = h !& hash(r.skipExt)
+  h = h !& hash(r.installDirs)
+  h = h !& hash(r.installFiles)
+  h = h !& hash(r.installExt)
   h = h !& hash(r.bin)
   h = h !& hash(r.namedBin)
   h = h !& hash(r.backend)
@@ -145,6 +157,12 @@ proc `==`*(a, b: NimbleRelease): bool =
   result = result and a.hasInstallHooks == b.hasInstallHooks
   result = result and a.srcDir == b.srcDir
   result = result and a.binDir == b.binDir
+  result = result and a.skipDirs == b.skipDirs
+  result = result and a.skipFiles == b.skipFiles
+  result = result and a.skipExt == b.skipExt
+  result = result and a.installDirs == b.installDirs
+  result = result and a.installFiles == b.installFiles
+  result = result and a.installExt == b.installExt
   result = result and a.bin == b.bin
   result = result and a.namedBin == b.namedBin
   result = result and a.backend == b.backend
