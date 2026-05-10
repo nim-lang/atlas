@@ -7,7 +7,7 @@
 
 import std/[json, locks, os, osproc, paths, sequtils, sets, strutils, threadpool, times]
 
-import ../basic/[context, dependencycache, gitops, nimblecontext, packageinfos, pkgurls, reporters]
+import ../basic/[context, dependencycache, gitops, nimblechecksums, nimblecontext, osutils, packageinfos, pkgurls, reporters]
 import ../registryreleaseinfo
 
 type
@@ -161,6 +161,34 @@ proc archiveReleaseLabel(ver: PackageVersion; release: NimbleRelease): string =
   if result.len == 0:
     result = "head"
 
+proc archiveCommitLabel(ver: PackageVersion): string =
+  result = sanitizeArchiveComponent(ver.vtag.commit.short())
+  if result.len == 0:
+    result = "unknown"
+
+proc archiveContentHash(
+    pkg: Package;
+    commit: CommitHash;
+    archiveFiles: openArray[string]
+): string =
+  var entries: seq[(string, string)] = @[]
+  entries.setLen(archiveFiles.len)
+  for i, file in archiveFiles:
+    let (contents, status) = exec(GitShowFiles, pkg.ondisk, [commit.h & ":" & file], Debug)
+    if status != RES_OK:
+      raise newException(IOError, "failed to read archived file for checksum: " & file)
+    entries[i] = (file, contents)
+  result = nimbleChecksumForEntries(entries)
+
+proc archiveContentHashLabel(
+    pkg: Package;
+    commit: CommitHash;
+    archiveFiles: openArray[string]
+): string =
+  result = sanitizeArchiveComponent(archiveContentHash(pkg, commit, archiveFiles)[0 .. 7])
+  if result.len == 0:
+    result = "unknown"
+
 proc packageRootSubdir(pkg: Package): Path =
   let packageSubdir =
     if pkg.subdir.len > 0: pkg.subdir
@@ -254,10 +282,11 @@ proc writeReleaseArchives(
       continue
     let baseName = archiveBaseName(pkg, info, release)
     let label = archiveReleaseLabel(ver, release)
-    let commitSuffix = sanitizeArchiveComponent(ver.vtag.commit.short())
+    let commitSuffix = archiveCommitLabel(ver)
     let rootSubdir = packageRootSubdir(pkg)
     let rootArchiveFiles = archiveTrackedFiles(pkg, ver.vtag.commit, rootSubdir)
-    var rootStem = baseName & "-" & label
+    let contentHashSuffix = archiveContentHashLabel(pkg, ver.vtag.commit, rootArchiveFiles)
+    var rootStem = baseName & "-" & label & "-" & commitSuffix & "-" & contentHashSuffix
     if usedStems.containsOrIncl(rootStem):
       rootStem.add "-" & commitSuffix
       discard usedStems.containsOrIncl(rootStem)

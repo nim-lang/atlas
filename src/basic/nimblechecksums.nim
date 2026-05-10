@@ -72,3 +72,16 @@ proc nimbleChecksum*(name: string, path: Path): string =
   for file in files:
     checksum.updateSecureHash(file, $path / file)
   result = toLowerAscii($SecureHash(checksum.finalize()))
+
+proc nimbleChecksumForEntries*(entries: openArray[(string, string)]): string =
+  ## Calculate a Nimble-style checksum from an explicit `(path, contents)` list.
+  ##
+  ## This preserves Nimble's filename-then-contents hashing order while allowing
+  ## callers to define the exact packaged file set.
+  var sortedEntries = @entries
+  sort(sortedEntries, proc(a, b: (string, string)): int = cmp(a[0], b[0]))
+  var checksum = newSha1State()
+  for (fileName, contents) in sortedEntries:
+    checksum.update(fileName)
+    checksum.update(contents)
+  result = toLowerAscii($SecureHash(checksum.finalize()))
