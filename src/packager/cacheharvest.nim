@@ -5,7 +5,7 @@
 
 ## Harvest package release caches for packages in a packages.json list.
 
-import std/[json, os, osproc, paths, sequtils, sets, strutils, times]
+import std/[json, os, osproc, paths, sequtils, sets, strutils, symlinks, times]
 
 import ../basic/[context, dependencycache, nimblecontext, packageinfos, pkgurls, reporters]
 import ../registryreleaseinfo
@@ -175,6 +175,18 @@ proc writeReleaseArchive(
     raise newException(IOError, "failed to compress release archive " & $archivePath)
   result = $archivePath.splitPath().tail
 
+proc writeArchiveSymlink(
+    archiveDir: Path;
+    linkStem: string;
+    targetFile: string;
+    compression: ArchiveCompression
+): string =
+  let linkPath = archiveDir / Path(linkStem & archiveCompressionExtension(compression))
+  if fileExists($linkPath) or symlinkExists(linkPath):
+    removeFile($linkPath)
+  createSymlink(Path(targetFile), linkPath)
+  result = $linkPath.splitPath().tail
+
 proc writeReleaseArchives(
     pkg: Package;
     info: PackageInfo;
@@ -195,10 +207,12 @@ proc writeReleaseArchives(
     let label = archiveReleaseLabel(ver, release)
     let commitSuffix = sanitizeArchiveComponent(ver.vtag.commit.short())
     let rootSubdir = packageRootSubdir(pkg)
-    let hasDedicatedSrcArchive =
-      not release.isNil and release.srcDir.len > 0 and release.srcDir != Path"."
+    let hasSrcArchive =
+      not release.isNil and release.srcDir.len > 0
+    let srcMatchesPackageRoot =
+      not release.isNil and release.srcDir == Path"."
     let srcSubdir =
-      if hasDedicatedSrcArchive: archiveSrcSubdir(pkg, release)
+      if hasSrcArchive: archiveSrcSubdir(pkg, release)
       else: rootSubdir
     var archiveEntry = newJObject()
     archiveEntry["version"] = %archiveReleaseLabel(ver, release)
@@ -207,7 +221,6 @@ proc writeReleaseArchives(
     if usedStems.containsOrIncl(rootStem):
       rootStem.add "-" & commitSuffix
       discard usedStems.containsOrIncl(rootStem)
-    archiveEntry["file"] = %writeReleaseArchive(pkg, info, ver, release, archiveDir, rootStem, rootSubdir, compression)
     archiveEntry["archiveRoot"] = %"package"
     archiveEntry["compression"] = %archiveCompressionName(compression)
     if rootSubdir.len > 0:
@@ -216,14 +229,23 @@ proc writeReleaseArchives(
       archiveEntry["name"] = %release.name
     if not release.isNil and release.srcDir.len > 0:
       archiveEntry["srcDir"] = %($release.srcDir)
-    if hasDedicatedSrcArchive:
+    if hasSrcArchive:
       var srcStem = baseName & "-" & label & "-src"
       if usedStems.containsOrIncl(srcStem):
         srcStem.add "-" & commitSuffix
         discard usedStems.containsOrIncl(srcStem)
-      archiveEntry["srcFile"] = %writeReleaseArchive(pkg, info, ver, release, archiveDir, srcStem, srcSubdir, compression)
+      let srcFile =
+        writeReleaseArchive(pkg, info, ver, release, archiveDir, srcStem, srcSubdir, compression)
+      archiveEntry["srcFile"] = %srcFile
       archiveEntry["srcArchiveRoot"] = %"srcDir"
       archiveEntry["resolvedSrcDir"] = %($srcSubdir)
+      if srcMatchesPackageRoot:
+        archiveEntry["file"] = %writeArchiveSymlink(archiveDir, rootStem, srcFile, compression)
+        archiveEntry["fileIsSymlink"] = %true
+      else:
+        archiveEntry["file"] = %writeReleaseArchive(pkg, info, ver, release, archiveDir, rootStem, rootSubdir, compression)
+    else:
+      archiveEntry["file"] = %writeReleaseArchive(pkg, info, ver, release, archiveDir, rootStem, rootSubdir, compression)
     result.add archiveEntry
 
 proc writeIndex(
