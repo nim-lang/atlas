@@ -25,7 +25,7 @@ Options:
   --packages=path       use the given packages.json file
   --metadata=path       write copied cache files to the given directory
   --package=name[,name] process only the named package(s) from packages.json
-  --compression=type    archive compression: xz or gzip
+  --compression=type    archive compression(s): xz, gzip, or comma-separated list
   --ephemeral           delete each cloned repo from pkgs/ after its metadata is produced
 """
 
@@ -34,7 +34,7 @@ type
     packagesFile: Path
     metadataDir: Path
     packageNames: seq[string]
-    compression: ArchiveCompression = acXz
+    compressions: seq[ArchiveCompression]
     ephemeral: bool
 
 proc parsePackageNames(value: string): seq[string] =
@@ -57,6 +57,23 @@ proc parseArchiveCompression(value: string): ArchiveCompression =
   else:
     raise newException(ValueError, "unknown compression: " & value)
 
+proc parseArchiveCompressions(value: string): seq[ArchiveCompression] =
+  for rawName in value.split(','):
+    let name = rawName.strip()
+    if name.len == 0:
+      continue
+    let compression = parseArchiveCompression(name)
+    if compression notin result:
+      result.add compression
+
+  if result.len == 0:
+    raise newException(ValueError, "missing compression")
+
+proc addArchiveCompressions(dest: var seq[ArchiveCompression]; value: string) =
+  for compression in parseArchiveCompressions(value):
+    if compression notin dest:
+      dest.add compression
+
 proc writeHelp(versionString: string; code = 2) =
   stdout.write(usage(versionString))
   stdout.flushFile()
@@ -72,7 +89,8 @@ proc parseAtlasPackagerOptions(
     versionString: string;
     positional: var seq[string]
 ): PackagerCliOptions =
-  result.compression = acXz
+  result.compressions = @[acXz]
+  var compressionWasSet = false
   for kind, key, val in getopt(params):
     case kind
     of cmdLongOption, cmdShortOption:
@@ -97,7 +115,10 @@ proc parseAtlasPackagerOptions(
         if val.len == 0:
           writeHelp(versionString)
         try:
-          result.compression = parseArchiveCompression(val)
+          if not compressionWasSet:
+            result.compressions.setLen(0)
+            compressionWasSet = true
+          result.compressions.addArchiveCompressions(val)
         except ValueError:
           writeHelp(versionString)
       of "ephemeral":
@@ -155,7 +176,7 @@ proc main*(versionString = "unknown") =
     metadataDir,
     opts.ephemeral,
     opts.packageNames,
-    opts.compression
+    opts.compressions
   )
   stdout.writeLine(
     "processed " & $summary.packagesProcessed &

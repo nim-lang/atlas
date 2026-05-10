@@ -85,6 +85,10 @@ proc archiveCompressionName*(compression: ArchiveCompression): string =
   of acGzip: "gzip"
   of acXz: "xz"
 
+proc archiveCompressionNames*(compressions: openArray[ArchiveCompression]): seq[string] =
+  for compression in compressions:
+    result.add archiveCompressionName(compression)
+
 proc needsFullArchive(release: NimbleRelease): bool =
   not release.isNil and (
     release.hasInstallHooks or
@@ -205,7 +209,7 @@ proc writeReleaseArchives(
     info: PackageInfo;
     releaseInfo: PackageReleaseInfo;
     archiveDir: Path;
-    compression: ArchiveCompression
+    compressions: openArray[ArchiveCompression]
 ): JsonNode =
   result = newJArray()
   createDir($archiveDir)
@@ -224,52 +228,63 @@ proc writeReleaseArchives(
     let srcMatchesPackageRoot =
       not release.isNil and release.srcDir == Path"."
     let srcSubdir = archiveSrcSubdir(pkg, release)
-    var archiveEntry = newJObject()
-    archiveEntry["version"] = %archiveReleaseLabel(ver, release)
-    archiveEntry["commit"] = %ver.vtag.commit.h
     var rootStem = baseName & "-" & label & "-full"
     if usedStems.containsOrIncl(rootStem):
       rootStem.add "-" & commitSuffix
       discard usedStems.containsOrIncl(rootStem)
-    archiveEntry["archiveRoot"] = %"package"
-    archiveEntry["compression"] = %archiveCompressionName(compression)
-    if rootSubdir.len > 0:
-      archiveEntry["packageSubdir"] = %($rootSubdir)
-    if not release.isNil and release.name.len > 0:
-      archiveEntry["name"] = %release.name
-    if not release.isNil and release.srcDir.len > 0:
-      archiveEntry["srcDir"] = %($release.srcDir)
     var srcStem = baseName & "-" & label & "-src"
     if usedStems.containsOrIncl(srcStem):
       srcStem.add "-" & commitSuffix
       discard usedStems.containsOrIncl(srcStem)
-    let srcFile =
-      writeReleaseArchive(pkg, info, ver, release, archiveDir, srcStem, srcSubdir, compression)
-    archiveEntry["srcFile"] = %srcFile
-    archiveEntry["srcArchiveRoot"] =
-      if not release.isNil and release.srcDir.len > 0: %"srcDir"
-      else: %"package"
-    archiveEntry["resolvedSrcDir"] = %($srcSubdir)
-    if hasFullArchive:
-      if srcMatchesPackageRoot:
-        archiveEntry["file"] = %writeArchiveSymlink(archiveDir, rootStem, srcFile, compression)
-        archiveEntry["fileIsSymlink"] = %true
-      else:
-        archiveEntry["file"] = %writeReleaseArchive(pkg, info, ver, release, archiveDir, rootStem, rootSubdir, compression)
+
+    for compression in compressions:
+      var archiveEntry = newJObject()
+      archiveEntry["version"] = %archiveReleaseLabel(ver, release)
+      archiveEntry["commit"] = %ver.vtag.commit.h
       archiveEntry["archiveRoot"] = %"package"
-    result.add archiveEntry
+      archiveEntry["compression"] = %archiveCompressionName(compression)
+      if rootSubdir.len > 0:
+        archiveEntry["packageSubdir"] = %($rootSubdir)
+      if not release.isNil and release.name.len > 0:
+        archiveEntry["name"] = %release.name
+      if not release.isNil and release.srcDir.len > 0:
+        archiveEntry["srcDir"] = %($release.srcDir)
+      let srcFile =
+        writeReleaseArchive(pkg, info, ver, release, archiveDir, srcStem, srcSubdir, compression)
+      archiveEntry["srcFile"] = %srcFile
+      archiveEntry["srcArchiveRoot"] =
+        if not release.isNil and release.srcDir.len > 0: %"srcDir"
+        else: %"package"
+      archiveEntry["resolvedSrcDir"] = %($srcSubdir)
+      if hasFullArchive:
+        if srcMatchesPackageRoot:
+          archiveEntry["file"] = %writeArchiveSymlink(
+            archiveDir, rootStem, srcFile, compression
+          )
+          archiveEntry["fileIsSymlink"] = %true
+        else:
+          archiveEntry["file"] = %writeReleaseArchive(
+            pkg, info, ver, release, archiveDir, rootStem, rootSubdir, compression
+          )
+      archiveEntry["archiveRoot"] = %"package"
+      result.add archiveEntry
 
 proc writeIndex(
     metadataDir: Path;
     packagesFile: Path;
     summary: HarvestSummary;
     packageStatuses: JsonNode;
+    ephemeral: bool;
+    compressions: openArray[ArchiveCompression];
     packageName = "";
     packageNames: seq[string] = @[]
 ) =
   var index = newJObject()
   index["generatedAt"] = %now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
   index["packagesFile"] = %relativeIndexPath(metadataDir, packagesFile)
+  index["releasesPath"] = %"{package}/releases"
+  index["ephemeral"] = %ephemeral
+  index["compressions"] = %archiveCompressionNames(compressions)
   if packageName.len > 0:
     index["package"] = %packageName
   elif packageNames.len > 0:
@@ -288,7 +303,7 @@ proc harvestPackage(
     summary: var HarvestSummary;
     packageStatuses: JsonNode;
     ephemeral: bool;
-    compression: ArchiveCompression
+    compressions: openArray[ArchiveCompression]
 ) =
   notice "atlas:pkger", "processing package:", info.name
   let workspaceRoot = packageWorkspaceRoot(info)
@@ -309,12 +324,15 @@ proc harvestPackage(
       info,
       releaseInfo.releaseInfo,
       packageReleasesDir(workspaceRoot),
-      compression
+      compressions
     )
 
     var entry = newJObject()
     entry["name"] = %info.name
     entry["latestCommit"] = %releaseInfo.releaseInfo.currentCommit.h
+    entry["releasesPath"] = %relativeIndexPath(metadataDir, packageReleasesDir(workspaceRoot))
+    entry["releasesMetadata"] = %packageReleasesMetadataRelPath(info)
+    entry["archives"] = archives
     entry["processedAt"] = %now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
     packageStatuses.add entry
     inc summary.packagesProcessed
@@ -329,7 +347,7 @@ proc harvestRegistryCaches*(
     metadataDir: Path;
     ephemeral: bool,
     pkgNames: seq[string];
-    compression: ArchiveCompression
+    compressions: openArray[ArchiveCompression]
 ): HarvestSummary =
   createDir($metadataDir)
 
@@ -346,9 +364,17 @@ proc harvestRegistryCaches*(
       continue
 
     try:
-      nc.harvestPackage(info, metadataDir, result, packageStatuses, ephemeral, compression)
+      nc.harvestPackage(info, metadataDir, result, packageStatuses, ephemeral, compressions)
     except CatchableError as e:
       error "atlas:pkger", "failed package:", info.name, "error:", e.msg
       inc result.packagesFailed
 
-  writeIndex(metadataDir, packagesFile, result, packageStatuses)
+  writeIndex(
+    metadataDir,
+    packagesFile,
+    result,
+    packageStatuses,
+    ephemeral,
+    compressions,
+    packageNames = pkgNames
+  )
