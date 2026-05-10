@@ -5,7 +5,7 @@
 
 ## Harvest package release caches for packages in a packages.json list.
 
-import std/[json, os, osproc, paths, sequtils, sets, strutils, times]
+import std/[json, locks, os, osproc, paths, sequtils, sets, strutils, threadpool, times]
 
 import ../basic/[context, dependencycache, gitops, nimblecontext, packageinfos, pkgurls, reporters]
 import ../registryreleaseinfo
@@ -20,6 +20,35 @@ type
   ArchiveCompression* = enum
     acGzip
     acXz
+
+  PackageQueue = object
+    lock: Lock
+    packages: seq[PackageInfo]
+    next: int
+
+  PackageHarvestResult = object
+    ok: bool
+    status: JsonNode
+
+  HarvestFailure = object
+    packageName: string
+    errorMessage: string
+
+  HarvestWorkerResult = object
+    packagesProcessed: int
+    packagesFailed: int
+    packageStatuses: seq[JsonNode]
+    failures: seq[HarvestFailure]
+
+proc popPackage(queue: ptr PackageQueue; info: var PackageInfo): bool {.gcsafe.} =
+  acquire(queue.lock)
+  try:
+    if queue.next < queue.packages.len:
+      info = queue.packages[queue.next]
+      inc queue.next
+      result = true
+  finally:
+    release(queue.lock)
 
 proc packageWorkspaceRoot(info: PackageInfo): Path =
   (depsDir() / Path(info.name)).absolutePath()
@@ -282,11 +311,9 @@ proc harvestPackage(
     nc: var NimbleContext;
     info: PackageInfo;
     metadataDir: Path;
-    summary: var HarvestSummary;
-    packageStatuses: JsonNode;
     ephemeral: bool;
     compressions: openArray[ArchiveCompression]
-) =
+): PackageHarvestResult =
   notice "atlas:pkger", "processing package:", info.name
   let workspaceRoot = packageWorkspaceRoot(info)
   let previousContext = context()
@@ -315,25 +342,51 @@ proc harvestPackage(
     entry["releasesPath"] = %relativeIndexPath(metadataDir, packageReleasesDir(workspaceRoot))
     entry["releasesMetadata"] = %packageReleasesMetadataRelPath(info)
     entry["processedAt"] = %now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
-    packageStatuses.add entry
-    inc summary.packagesProcessed
+    result.status = entry
+    result.ok = true
     cleanupTransientReleaseCache(releaseInfo.package)
     if ephemeral:
       cleanupClonedPackage(releaseInfo.package)
   finally:
     setContext(previousContext)
 
+proc harvestWorker(
+    queue: ptr PackageQueue;
+    baseContext: AtlasContext;
+    metadataDir: Path;
+    ephemeral: bool;
+    compressions: seq[ArchiveCompression]
+): HarvestWorkerResult {.gcsafe.} =
+  setContext(baseContext)
+  var nc = block:
+    {.cast(gcsafe).}:
+      createNimbleContext()
+  var info: PackageInfo
+  while popPackage(queue, info):
+    try:
+      let packageResult = block:
+        {.cast(gcsafe).}:
+          nc.harvestPackage(info, metadataDir, ephemeral, compressions)
+      if packageResult.ok:
+        result.packageStatuses.add packageResult.status
+        inc result.packagesProcessed
+    except CatchableError as e:
+      result.failures.add HarvestFailure(packageName: info.name, errorMessage: e.msg)
+      inc result.packagesFailed
+
 proc harvestRegistryCaches*(
     packagesFile: Path;
     metadataDir: Path;
     ephemeral: bool,
     pkgNames: seq[string];
-    compressions: openArray[ArchiveCompression]
+    compressions: openArray[ArchiveCompression];
+    threadCount: int
 ): HarvestSummary =
   createDir($metadataDir)
 
-  var nc = createNimbleContext()
   let packageList = loadPackageList(packagesFile)
+  var queue: PackageQueue
+  initLock(queue.lock)
   var packageStatuses = newJArray()
 
   result.packagesSeen = packageList.len
@@ -344,11 +397,40 @@ proc harvestRegistryCaches*(
     elif pkgNames.len() > 0 and info.name notin pkgNames:
       continue
 
-    try:
-      nc.harvestPackage(info, metadataDir, result, packageStatuses, ephemeral, compressions)
-    except CatchableError as e:
-      error "atlas:pkger", "failed package:", info.name, "error:", e.msg
-      inc result.packagesFailed
+    queue.packages.add info
+
+  let workerCount = max(1, min(threadCount, max(1, queue.packages.len)))
+  let baseContext = context()
+  let compressionList = @compressions
+  if workerCount == 1:
+    let workerResult = harvestWorker(addr queue, baseContext, metadataDir, ephemeral, compressionList)
+    result.packagesProcessed += workerResult.packagesProcessed
+    result.packagesFailed += workerResult.packagesFailed
+    for failure in workerResult.failures:
+      error "atlas:pkger", "failed package:", failure.packageName, "error:", failure.errorMessage
+    for status in workerResult.packageStatuses:
+      packageStatuses.add status
+  else:
+    setMaxPoolSize(workerCount)
+    var workers: seq[FlowVar[HarvestWorkerResult]]
+    for _ in 0..<workerCount:
+      workers.add spawn harvestWorker(
+        addr queue,
+        baseContext,
+        metadataDir,
+        ephemeral,
+        compressionList
+      )
+    sync()
+    for worker in workers:
+      let workerResult = ^worker
+      result.packagesProcessed += workerResult.packagesProcessed
+      result.packagesFailed += workerResult.packagesFailed
+      for failure in workerResult.failures:
+        error "atlas:pkger", "failed package:", failure.packageName, "error:", failure.errorMessage
+      for status in workerResult.packageStatuses:
+        packageStatuses.add status
+  deinitLock(queue.lock)
 
   writeIndex(
     metadataDir,

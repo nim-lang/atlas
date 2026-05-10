@@ -73,17 +73,28 @@ type
     proxy*: Uri
     features*: HashSet[string]
 
-var atlasContext = AtlasContext()
+var
+  atlasContext {.threadvar.}: AtlasContext
+  atlasContextInitialized {.threadvar.}: bool
+
+proc ensureContextInitialized() =
+  if not atlasContextInitialized:
+    atlasContext = AtlasContext()
+    atlasContextInitialized = true
 
 proc setContext*(ctx: AtlasContext) =
   atlasContext = ctx
+  atlasContextInitialized = true
 proc context*(): var AtlasContext =
+  ensureContextInitialized()
   atlasContext
 
 proc project*(): Path =
+  ensureContextInitialized()
   atlasContext.projectDir
 
 proc project*(ws: Path) =
+  ensureContextInitialized()
   atlasContext.projectDir = ws
 
 proc depsDir*(ctx: AtlasContext, relative = false): Path =
@@ -95,6 +106,7 @@ proc depsDir*(ctx: AtlasContext, relative = false): Path =
     result = ctx.projectDir / ctx.depsDir
 
 proc depsDir*(relative = false): Path =
+  ensureContextInitialized()
   depsDir(atlasContext, relative)
 
 proc packagesDirectory*(): Path =

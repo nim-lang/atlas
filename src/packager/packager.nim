@@ -8,7 +8,7 @@
 
 ## CLI for harvesting Atlas package release caches from a packages.json list.
 
-import std / [parseopt, os, paths, strutils]
+import std / [cpuinfo, parseopt, os, paths, strutils]
 import ../basic / [context, packageinfos]
 import ./cacheharvest
 
@@ -27,6 +27,8 @@ Options:
   --package=name[,name] process only the named package(s) from packages.json
   --compression=type    archive compression(s): gzip, xz, or comma-separated list
                         default: gzip
+  --threads=count, -j   number of package processing threads
+                        default: number of processors
   --ephemeral           delete each cloned repo from pkgs/ after its metadata is produced
 """
 
@@ -36,6 +38,7 @@ type
     metadataDir: Path
     packageNames: seq[string]
     compressions: seq[ArchiveCompression]
+    threadCount: int
     ephemeral: bool
 
 proc parsePackageNames(value: string): seq[string] =
@@ -75,6 +78,14 @@ proc addArchiveCompressions(dest: var seq[ArchiveCompression]; value: string) =
     if compression notin dest:
       dest.add compression
 
+proc parseThreadCount(value: string): int =
+  try:
+    result = parseInt(value)
+  except ValueError:
+    raise newException(ValueError, "invalid thread count: " & value)
+  if result < 1:
+    raise newException(ValueError, "thread count must be at least 1")
+
 proc writeHelp(versionString: string; code = 2) =
   stdout.write(usage(versionString))
   stdout.flushFile()
@@ -91,6 +102,7 @@ proc parseAtlasPackagerOptions(
     positional: var seq[string]
 ): PackagerCliOptions =
   result.compressions = @[acGzip]
+  result.threadCount = max(1, countProcessors())
   var compressionWasSet = false
   for kind, key, val in getopt(params):
     case kind
@@ -120,6 +132,13 @@ proc parseAtlasPackagerOptions(
             result.compressions.setLen(0)
             compressionWasSet = true
           result.compressions.addArchiveCompressions(val)
+        except ValueError:
+          writeHelp(versionString)
+      of "threads", "j":
+        if val.len == 0:
+          writeHelp(versionString)
+        try:
+          result.threadCount = parseThreadCount(val)
         except ValueError:
           writeHelp(versionString)
       of "ephemeral":
@@ -177,7 +196,8 @@ proc main*(versionString = "unknown") =
     metadataDir,
     opts.ephemeral,
     opts.packageNames,
-    opts.compressions
+    opts.compressions,
+    opts.threadCount
   )
   stdout.writeLine(
     "processed " & $summary.packagesProcessed &
