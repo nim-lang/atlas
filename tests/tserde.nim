@@ -137,8 +137,8 @@ suite "json serde":
       @[(VersionTag(v: Version"1.0.0", c: current).toPkgVer, release)]
     )
     let cache = parseFile($packageReleaseCachePath(pkg))
-    check cache["cacheVersion"].getInt() == 5
-    check cache["name"].getStr() == "foobar"
+    check cache["cacheVersion"].getInt() == 4
+    check cache["shortName"].getStr() == "foobar"
     check cache["fullName"].getStr() == "foobar.nimble-test.github.com"
     check "shortName" notin cache
 
@@ -245,12 +245,18 @@ suite "json serde":
       author: "Atlas Tester",
       description: "Test package",
       license: "MIT",
+      srcDir: Path"src",
+      binDir: Path"bin",
       skipDirs: @["tests"],
       skipFiles: @["config.local"],
       skipExt: @["tmp"],
       installDirs: @["assets"],
       installFiles: @["README.md"],
       installExt: @["nim"]
+      bin: @["main", "worker"],
+      namedBin: {"main": "myfoo"}.toTable,
+      backend: "c",
+      hasBin: true
     )
     let r2 = NimbleRelease(
       version: Version"2.0.0",
@@ -259,12 +265,18 @@ suite "json serde":
       author: "Atlas Tester",
       description: "Test package",
       license: "MIT",
+      srcDir: Path"",
+      binDir: Path"",
       skipDirs: @["tests"],
       skipFiles: @[],
       skipExt: @["tmp"],
       installDirs: @["assets"],
       installFiles: @["README.md"],
-      installExt: @["nim"]
+      installExt: @["nim"],
+      bin: @[],
+      namedBin: initTable[string, string](),
+      backend: "",
+      hasBin: false
     )
     let r3 = NimbleRelease(
       version: Version"3.0.0",
@@ -273,12 +285,18 @@ suite "json serde":
       author: "Other Tester",
       description: "Test package",
       license: "MIT",
+      srcDir: Path"lib",
+      binDir: Path"dist",
       skipDirs: @["docs"],
       skipFiles: @["config.local"],
       skipExt: @["tmp"],
       installDirs: @["assets"],
       installFiles: @[],
       installExt: @["nim"]
+      bin: @["tool"],
+      namedBin: {"tool": "other"}.toTable,
+      backend: "cpp",
+      hasBin: true
     )
 
     savePackageReleaseCache(pkg, current, @[(v1, r1), (v2, r2), (v3, r3)])
@@ -286,26 +304,49 @@ suite "json serde":
     check cache["author"].getStr() == "Atlas Tester"
     check cache["description"].getStr() == "Test package"
     check cache["license"].getStr() == "MIT"
+    check cache["srcDir"].getStr() == "src"
+    check cache["binDir"].getStr() == "bin"
     check cache["skipDirs"][0].getStr() == "tests"
     check cache["skipFiles"][0].getStr() == "config.local"
     check cache["skipExt"][0].getStr() == "tmp"
     check cache["installDirs"][0].getStr() == "assets"
     check cache["installFiles"][0].getStr() == "README.md"
     check cache["installExt"][0].getStr() == "nim"
+    check cache["bin"].len == 2
+    check cache["namedBin"]["main"].getStr() == "myfoo"
+    check cache["backend"].getStr() == "c"
+    check cache["hasBin"].getBool()
     check "author" notin cache["releases"][0]["release"]
     check "description" notin cache["releases"][0]["release"]
     check "license" notin cache["releases"][0]["release"]
+    check "srcDir" notin cache["releases"][0]["release"]
+    check "binDir" notin cache["releases"][0]["release"]
     check "skipDirs" notin cache["releases"][0]["release"]
     check "skipFiles" notin cache["releases"][0]["release"]
     check "skipExt" notin cache["releases"][0]["release"]
     check "installDirs" notin cache["releases"][0]["release"]
     check "installFiles" notin cache["releases"][0]["release"]
     check "installExt" notin cache["releases"][0]["release"]
+    check "bin" notin cache["releases"][0]["release"]
+    check "namedBin" notin cache["releases"][0]["release"]
+    check "backend" notin cache["releases"][0]["release"]
+    check "hasBin" notin cache["releases"][0]["release"]
     check "author" notin cache["releases"][1]["release"]
+    check cache["releases"][1]["release"]["srcDir"].getStr() == ""
+    check cache["releases"][1]["release"]["binDir"].getStr() == ""
     check cache["releases"][1]["release"]["skipFiles"].len == 0
+    check cache["releases"][1]["release"]["bin"].len == 0
+    check cache["releases"][1]["release"]["namedBin"].len == 0
+    check cache["releases"][1]["release"]["backend"].getStr() == ""
+    check cache["releases"][1]["release"]["hasBin"].getBool() == false
     check cache["releases"][2]["release"]["author"].getStr() == "Other Tester"
+    check cache["releases"][2]["release"]["srcDir"].getStr() == "lib"
+    check cache["releases"][2]["release"]["binDir"].getStr() == "dist"
     check cache["releases"][2]["release"]["skipDirs"][0].getStr() == "docs"
     check cache["releases"][2]["release"]["installFiles"].len == 0
+    check cache["releases"][2]["release"]["bin"][0].getStr() == "tool"
+    check cache["releases"][2]["release"]["namedBin"]["tool"].getStr() == "other"
+    check cache["releases"][2]["release"]["backend"].getStr() == "cpp"
     check "description" notin cache["releases"][2]["release"]
     check "license" notin cache["releases"][2]["release"]
 
@@ -319,6 +360,12 @@ suite "json serde":
     check entries[2].release.description == "Test package"
     check entries[0].release.license == "MIT"
     check entries[2].release.license == "MIT"
+    check entries[0].release.srcDir == Path"src"
+    check entries[1].release.srcDir == Path""
+    check entries[2].release.srcDir == Path"lib"
+    check entries[0].release.binDir == Path"bin"
+    check entries[1].release.binDir == Path""
+    check entries[2].release.binDir == Path"dist"
     check entries[0].release.skipDirs == @["tests"]
     check entries[1].release.skipDirs == @["tests"]
     check entries[2].release.skipDirs == @["docs"]
@@ -326,6 +373,18 @@ suite "json serde":
     check entries[1].release.skipFiles.len == 0
     check entries[2].release.installFiles.len == 0
     check entries[0].release.installExt == @["nim"]
+    check entries[0].release.bin == @["main", "worker"]
+    check entries[1].release.bin.len == 0
+    check entries[2].release.bin == @["tool"]
+    check entries[0].release.namedBin["main"] == "myfoo"
+    check entries[1].release.namedBin.len == 0
+    check entries[2].release.namedBin["tool"] == "other"
+    check entries[0].release.backend == "c"
+    check entries[1].release.backend == ""
+    check entries[2].release.backend == "cpp"
+    check entries[0].release.hasBin
+    check not entries[1].release.hasBin
+    check entries[2].release.hasBin
 
   test "activation cache writes bin metadata":
     let url = nc.createUrl("foobar")
