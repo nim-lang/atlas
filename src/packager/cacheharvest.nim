@@ -5,7 +5,7 @@
 
 ## Harvest package release caches for packages in a packages.json list.
 
-import std/[json, locks, os, osproc, paths, sequtils, sets, strutils, threadpool, times]
+import std/[json, locks, os, osproc, paths, sequtils, sets, streams, strutils, threadpool, times]
 
 import ../basic/[context, dependencycache, gitops, nimblechecksums, nimblecontext, osutils, packageinfos, pkgurls, reporters]
 import ../registryreleaseinfo
@@ -42,6 +42,15 @@ type
     packagesFailed: int
     packageResults: seq[PackageHarvestResult]
     failures: seq[HarvestFailure]
+
+var archiveSubprocessLock: Lock
+
+template withArchiveSubprocessLock(body: untyped) =
+  acquire(archiveSubprocessLock)
+  try:
+    body
+  finally:
+    release(archiveSubprocessLock)
 
 proc popPackage(queue: ptr PackageQueue; info: var PackageInfo): bool {.gcsafe.} =
   acquire(queue.lock)
@@ -180,13 +189,27 @@ proc archiveContentHash(
     commit: CommitHash;
     archiveFiles: openArray[string]
 ): string =
+  proc readGitFile(path: Path; commit: CommitHash; file: string): string =
+    withArchiveSubprocessLock:
+      let process = startProcess(
+        "git",
+        args = @["-C", $path, "show", commit.h & ":" & file],
+        options = {poUsePath, poStdErrToStdOut}
+      )
+      defer:
+        close(process)
+      result = process.outputStream.readAll()
+      let exitCode = waitForExit(process)
+      if exitCode != 0:
+        raise newException(
+          IOError,
+          "failed to read archived file for checksum: " & file & " at " & commit.short()
+        )
+
   var entries: seq[(string, string)] = @[]
   entries.setLen(archiveFiles.len)
   for i, file in archiveFiles:
-    let (contents, status) = exec(GitShowFiles, pkg.ondisk, [commit.h & ":" & file], Debug)
-    if status != RES_OK:
-      raise newException(IOError, "failed to read archived file for checksum: " & file)
-    entries[i] = (file, contents)
+    entries[i] = (file, readGitFile(pkg.ondisk, commit, file))
   result = nimbleChecksumForEntries(entries)
 
 proc packageRootSubdir(pkg: Package): Path =
@@ -200,11 +223,12 @@ proc archiveTrackedFiles(pkg: Package; commit: CommitHash; subdir: Path): seq[st
     if subdir.len > 0: $subdir & "/"
     else: ""
 
-  for file in listFiles(pkg.ondisk, commit):
-    if file.len == 0:
-      continue
-    if subdirPrefix.len == 0 or file == $subdir or file.startsWith(subdirPrefix):
-      result.add file
+  withArchiveSubprocessLock:
+    for file in listFiles(pkg.ondisk, commit):
+      if file.len == 0:
+        continue
+      if subdirPrefix.len == 0 or file == $subdir or file.startsWith(subdirPrefix):
+        result.add file
 
 proc writeTrackedReleaseArchive(
     pkg: Package;
@@ -240,7 +264,10 @@ proc writeTrackedReleaseArchive(
     removeFile($tarPath)
   if fileExists($tmpArchivePath):
     removeFile($tmpArchivePath)
-  let (_, exitCode) = execCmdEx("git " & args.mapIt(quoteShell(it)).join(" "))
+  var exitCode = 0
+  withArchiveSubprocessLock:
+    let (_, code) = execCmdEx("git " & args.mapIt(quoteShell(it)).join(" "))
+    exitCode = code
   if exitCode != 0 or not fileExists($tarPath):
     if fileExists($tarPath):
       removeFile($tarPath)
@@ -252,7 +279,10 @@ proc writeTrackedReleaseArchive(
   let compressCmd = (
     compressor & " -9 -c " & quoteShell($tarPath) & " > " & quoteShell($tmpArchivePath)
   )
-  let (_, compressExitCode) = execCmdEx(compressCmd)
+  var compressExitCode = 0
+  withArchiveSubprocessLock:
+    let (_, code) = execCmdEx(compressCmd)
+    compressExitCode = code
   if fileExists($tarPath):
     removeFile($tarPath)
   if compressExitCode != 0 or not fileExists($tmpArchivePath):
@@ -433,6 +463,7 @@ proc harvestRegistryCaches*(
     threadCount: int
 ): HarvestSummary =
   createDir($metadataDir)
+  initLock(archiveSubprocessLock)
 
   let packageList = loadPackageList(packagesFile)
   var packageInfoByName = initTable[string, PackageInfo]()
@@ -515,6 +546,7 @@ proc harvestRegistryCaches*(
         entry["processedAt"] = %now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
         packagesIndex.add entry
   deinitLock(queue.lock)
+  deinitLock(archiveSubprocessLock)
 
   writeIndex(
     metadataDir,
