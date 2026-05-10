@@ -7,7 +7,7 @@
 
 import std/[json, os, osproc, paths, sequtils, sets, strutils, symlinks, times]
 
-import ../basic/[context, dependencycache, nimblecontext, packageinfos, pkgurls, reporters]
+import ../basic/[context, dependencycache, gitops, nimblecontext, packageinfos, pkgurls, reporters]
 import ../registryreleaseinfo
 
 type
@@ -160,6 +160,75 @@ proc archiveTreeish(commit: CommitHash; subdir: Path): string =
     result.add ":"
     result.add $subdir
 
+proc archiveTrackedFiles(pkg: Package; commit: CommitHash; subdir: Path): seq[string] =
+  let subdirPrefix =
+    if subdir.len > 0: $subdir & "/"
+    else: ""
+
+  for file in listFiles(pkg.ondisk, commit):
+    if file.len == 0:
+      continue
+    if subdirPrefix.len == 0 or file == $subdir or file.startsWith(subdirPrefix):
+      result.add file
+
+proc writeTrackedReleaseArchive(
+    pkg: Package;
+    ver: PackageVersion;
+    archiveDir: Path;
+    archiveStem: string;
+    archiveFiles: openArray[string];
+    compression: ArchiveCompression
+): string =
+  if ver.isNil or ver.vtag.commit.h.len == 0:
+    raise newException(ValueError, "release is missing a commit for archiving")
+  if archiveFiles.len == 0:
+    raise newException(IOError, "release archive has no tracked files to package")
+
+  createDir($archiveDir)
+  let archivePath = archiveDir / Path(archiveStem & archiveCompressionExtension(compression))
+  let tmpArchivePath = siblingTempPath(archivePath)
+
+  let prefix = archiveStem & "/"
+  let tarPath = siblingTempPath(archiveDir / Path(archiveStem & ".tar"))
+  var args = @[
+    "-C", $pkg.ondisk,
+    "archive",
+    "--format=tar",
+    "--prefix=" & prefix,
+    "-o", $tarPath,
+    ver.vtag.commit.h
+  ]
+  for file in archiveFiles:
+    args.add file
+
+  if fileExists($tarPath):
+    removeFile($tarPath)
+  if fileExists($tmpArchivePath):
+    removeFile($tmpArchivePath)
+  let (_, exitCode) = execCmdEx("git " & args.mapIt(quoteShell(it)).join(" "))
+  if exitCode != 0 or not fileExists($tarPath):
+    if fileExists($tarPath):
+      removeFile($tarPath)
+    raise newException(IOError, "failed to archive release to " & $archivePath)
+  let compressor =
+    case compression
+    of acGzip: "gzip"
+    of acXz: "xz"
+  let compressCmd = (
+    compressor & " -9 -c " & quoteShell($tarPath) & " > " & quoteShell($tmpArchivePath)
+  )
+  let (_, compressExitCode) = execCmdEx(compressCmd)
+  if fileExists($tarPath):
+    removeFile($tarPath)
+  if compressExitCode != 0 or not fileExists($tmpArchivePath):
+    if fileExists($tarPath):
+      removeFile($tarPath)
+    if fileExists($tmpArchivePath):
+      removeFile($tmpArchivePath)
+    raise newException(IOError, "failed to compress release archive " & $archivePath)
+  moveFile($tmpArchivePath, $archivePath)
+  result = $archivePath.splitPath().tail
+
 proc writeReleaseArchive(
     pkg: Package;
     info: PackageInfo;
@@ -249,6 +318,7 @@ proc writeReleaseArchives(
     let label = archiveReleaseLabel(ver, release)
     let commitSuffix = sanitizeArchiveComponent(ver.vtag.commit.short())
     let rootSubdir = packageRootSubdir(pkg)
+    let rootArchiveFiles = archiveTrackedFiles(pkg, ver.vtag.commit, rootSubdir)
     let hasFullArchive = needsFullArchive(release)
     let srcMatchesPackageRoot =
       not release.isNil and release.srcDir == Path"."
@@ -288,8 +358,8 @@ proc writeReleaseArchives(
           )
           archiveEntry["fileIsSymlink"] = %true
         else:
-          archiveEntry["file"] = %writeReleaseArchive(
-            pkg, info, ver, release, archiveDir, rootStem, rootSubdir, compression
+          archiveEntry["file"] = %writeTrackedReleaseArchive(
+            pkg, ver, archiveDir, rootStem, rootArchiveFiles, compression
           )
       archiveEntry["archiveRoot"] = %"package"
       result.add archiveEntry
