@@ -33,6 +33,12 @@ proc packageReleasesMetadataFile(workspaceRoot: Path): Path =
 proc packageReleasesMetadataRelPath(info: PackageInfo): string =
   $Path(info.name) / "releases.json"
 
+proc relativeIndexPath(baseDir: Path; path: Path): string =
+  if path.isRelativeTo(baseDir):
+    $(path.relativePath(baseDir))
+  else:
+    $path
+
 proc cleanupClonedPackage(pkg: Package) =
   if pkg.isNil or pkg.ondisk.len == 0:
     return
@@ -257,13 +263,13 @@ proc writeIndex(
     metadataDir: Path;
     packagesFile: Path;
     summary: HarvestSummary;
-    copiedFiles: JsonNode;
+    packageStatuses: JsonNode;
     packageName = "";
     packageNames: seq[string] = @[]
 ) =
   var index = newJObject()
   index["generatedAt"] = %now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
-  index["packagesFile"] = %($packagesFile)
+  index["packagesFile"] = %relativeIndexPath(metadataDir, packagesFile)
   if packageName.len > 0:
     index["package"] = %packageName
   elif packageNames.len > 0:
@@ -272,7 +278,7 @@ proc writeIndex(
   index["aliasesSkipped"] = %summary.aliasesSkipped
   index["packagesProcessed"] = %summary.packagesProcessed
   index["packagesFailed"] = %summary.packagesFailed
-  index["files"] = copiedFiles
+  index["packagesStatus"] = packageStatuses
   writeFile($(metadataDir / Path("index.json")), pretty(index))
 
 proc harvestPackage(
@@ -280,7 +286,7 @@ proc harvestPackage(
     info: PackageInfo;
     metadataDir: Path;
     summary: var HarvestSummary;
-    copiedFiles: JsonNode;
+    packageStatuses: JsonNode;
     ephemeral: bool;
     compression: ArchiveCompression
 ) =
@@ -308,11 +314,9 @@ proc harvestPackage(
 
     var entry = newJObject()
     entry["name"] = %info.name
-    entry["cacheFile"] = %packageReleasesMetadataRelPath(info)
-    entry["loadedFromCache"] = %releaseInfo.releaseInfo.loadedFromCache
-    entry["releaseCount"] = %releaseInfo.releaseInfo.releases.len
-    entry["archives"] = archives
-    copiedFiles.add entry
+    entry["latestCommit"] = %releaseInfo.releaseInfo.currentCommit.h
+    entry["processedAt"] = %now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
+    packageStatuses.add entry
     inc summary.packagesProcessed
     cleanupTransientReleaseCache(releaseInfo.package)
     if ephemeral:
@@ -331,7 +335,7 @@ proc harvestRegistryCaches*(
 
   var nc = createNimbleContext()
   let packageList = loadPackageList(packagesFile)
-  var copiedFiles = newJArray()
+  var packageStatuses = newJArray()
 
   result.packagesSeen = packageList.len
   for info in packageList:
@@ -342,9 +346,9 @@ proc harvestRegistryCaches*(
       continue
 
     try:
-      nc.harvestPackage(info, metadataDir, result, copiedFiles, ephemeral, compression)
+      nc.harvestPackage(info, metadataDir, result, packageStatuses, ephemeral, compression)
     except CatchableError as e:
       error "atlas:pkger", "failed package:", info.name, "error:", e.msg
       inc result.packagesFailed
 
-  writeIndex(metadataDir, packagesFile, result, copiedFiles)
+  writeIndex(metadataDir, packagesFile, result, packageStatuses)
