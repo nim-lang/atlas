@@ -1,0 +1,2 @@
+--threads:on
+--mm:atomicArc
