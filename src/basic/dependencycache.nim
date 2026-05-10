@@ -143,6 +143,16 @@ proc firstNonEmptyMetadata(
 
 proc firstNonEmptyMetadata(
     versions: seq[(PackageVersion, NimbleRelease)];
+    field: proc (release: NimbleRelease): Path
+): Path =
+  for (_, release) in versions:
+    if not release.isNil:
+      result = field(release)
+      if result.len > 0:
+        return
+
+proc firstNonEmptyMetadata(
+    versions: seq[(PackageVersion, NimbleRelease)];
     field: proc (release: NimbleRelease): Table[string, string]
 ): Table[string, string] =
   for (_, release) in versions:

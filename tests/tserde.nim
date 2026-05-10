@@ -138,7 +138,7 @@ suite "json serde":
     )
     let cache = parseFile($packageReleaseCachePath(pkg))
     check cache["cacheVersion"].getInt() == 5
-    check cache["shortName"].getStr() == "foobar"
+    check cache["name"].getStr() == "foobar"
     check cache["fullName"].getStr() == "foobar.nimble-test.github.com"
     check "shortName" notin cache
 
@@ -252,7 +252,7 @@ suite "json serde":
       skipExt: @["tmp"],
       installDirs: @["assets"],
       installFiles: @["README.md"],
-      installExt: @["nim"]
+      installExt: @["nim"],
       bin: @["main", "worker"],
       namedBin: {"main": "myfoo"}.toTable,
       backend: "c",
@@ -292,7 +292,7 @@ suite "json serde":
       skipExt: @["tmp"],
       installDirs: @["assets"],
       installFiles: @[],
-      installExt: @["nim"]
+      installExt: @["nim"],
       bin: @["tool"],
       namedBin: {"tool": "other"}.toTable,
       backend: "cpp",
