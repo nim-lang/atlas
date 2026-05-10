@@ -5,7 +5,7 @@
 
 ## Harvest package release caches for packages in a packages.json list.
 
-import std/[json, os, osproc, paths, sequtils, sets, strutils, symlinks, times]
+import std/[json, os, osproc, paths, sequtils, sets, strutils, times]
 
 import ../basic/[context, dependencycache, gitops, nimblecontext, packageinfos, pkgurls, reporters]
 import ../registryreleaseinfo
@@ -107,13 +107,6 @@ proc archiveCompressionNames*(compressions: openArray[ArchiveCompression]): seq[
   for compression in compressions:
     result.add archiveCompressionName(compression)
 
-proc needsFullArchive(release: NimbleRelease): bool =
-  not release.isNil and (
-    release.hasInstallHooks or
-    release.bin.len > 0 or
-    release.namedBin.len > 0
-  )
-
 proc archiveBaseName(pkg: Package; info: PackageInfo; release: NimbleRelease): string =
   result = info.name
   if not release.isNil and release.name.len > 0:
@@ -144,21 +137,6 @@ proc packageRootSubdir(pkg: Package): Path =
     if pkg.subdir.len > 0: pkg.subdir
     else: pkg.url.subdir()
   result = packageSubdir
-
-proc archiveSrcSubdir(pkg: Package; release: NimbleRelease): Path =
-  let packageSubdir = packageRootSubdir(pkg)
-  if release.isNil or release.srcDir.len == 0 or release.srcDir == Path".":
-    result = packageSubdir
-  elif packageSubdir.len > 0:
-    result = packageSubdir / release.srcDir
-  else:
-    result = release.srcDir
-
-proc archiveTreeish(commit: CommitHash; subdir: Path): string =
-  result = commit.h
-  if subdir.len > 0:
-    result.add ":"
-    result.add $subdir
 
 proc archiveTrackedFiles(pkg: Package; commit: CommitHash; subdir: Path): seq[string] =
   let subdirPrefix =
@@ -229,75 +207,6 @@ proc writeTrackedReleaseArchive(
   moveFile($tmpArchivePath, $archivePath)
   result = $archivePath.splitPath().tail
 
-proc writeReleaseArchive(
-    pkg: Package;
-    info: PackageInfo;
-    ver: PackageVersion;
-    release: NimbleRelease;
-    archiveDir: Path;
-    archiveStem: string;
-    archiveSubdir: Path;
-    compression: ArchiveCompression
-): string =
-  if ver.isNil or ver.vtag.commit.h.len == 0:
-    raise newException(ValueError, "release is missing a commit for archiving")
-
-  createDir($archiveDir)
-  let archivePath = archiveDir / Path(archiveStem & archiveCompressionExtension(compression))
-  let tmpArchivePath = siblingTempPath(archivePath)
-
-  let prefix = archiveStem & "/"
-  let tarPath = siblingTempPath(archiveDir / Path(archiveStem & ".tar"))
-  let args = [
-    "-C", $pkg.ondisk,
-    "archive",
-    "--format=tar",
-    "--prefix=" & prefix,
-    "-o", $tarPath,
-    archiveTreeish(ver.vtag.commit, archiveSubdir)
-  ]
-  if fileExists($tarPath):
-    removeFile($tarPath)
-  if fileExists($tmpArchivePath):
-    removeFile($tmpArchivePath)
-  let (_, exitCode) = execCmdEx("git " & args.mapIt(quoteShell(it)).join(" "))
-  if exitCode != 0 or not fileExists($tarPath):
-    if fileExists($tarPath):
-      removeFile($tarPath)
-    raise newException(IOError, "failed to archive release to " & $archivePath)
-  let compressor =
-    case compression
-    of acGzip: "gzip"
-    of acXz: "xz"
-  let compressCmd = (
-    compressor & " -9 -c " & quoteShell($tarPath) & " > " & quoteShell($tmpArchivePath)
-  )
-  let (_, compressExitCode) = execCmdEx(compressCmd)
-  if fileExists($tarPath):
-    removeFile($tarPath)
-  if compressExitCode != 0 or not fileExists($tmpArchivePath):
-    if fileExists($tarPath):
-      removeFile($tarPath)
-    if fileExists($tmpArchivePath):
-      removeFile($tmpArchivePath)
-    raise newException(IOError, "failed to compress release archive " & $archivePath)
-  moveFile($tmpArchivePath, $archivePath)
-  result = $archivePath.splitPath().tail
-
-proc writeArchiveSymlink(
-    archiveDir: Path;
-    linkStem: string;
-    targetFile: string;
-    compression: ArchiveCompression
-): string =
-  let linkPath = archiveDir / Path(linkStem & archiveCompressionExtension(compression))
-  let tmpLinkPath = siblingTempPath(linkPath)
-  if fileExists($tmpLinkPath) or symlinkExists(tmpLinkPath):
-    removeFile($tmpLinkPath)
-  createSymlink(Path(targetFile), tmpLinkPath)
-  moveFile($tmpLinkPath, $linkPath)
-  result = $linkPath.splitPath().tail
-
 proc writeReleaseArchives(
     pkg: Package;
     info: PackageInfo;
@@ -319,18 +228,10 @@ proc writeReleaseArchives(
     let commitSuffix = sanitizeArchiveComponent(ver.vtag.commit.short())
     let rootSubdir = packageRootSubdir(pkg)
     let rootArchiveFiles = archiveTrackedFiles(pkg, ver.vtag.commit, rootSubdir)
-    let hasFullArchive = needsFullArchive(release)
-    let srcMatchesPackageRoot =
-      not release.isNil and release.srcDir == Path"."
-    let srcSubdir = archiveSrcSubdir(pkg, release)
-    var rootStem = baseName & "-" & label & "-full"
+    var rootStem = baseName & "-" & label
     if usedStems.containsOrIncl(rootStem):
       rootStem.add "-" & commitSuffix
       discard usedStems.containsOrIncl(rootStem)
-    var srcStem = baseName & "-" & label & "-src"
-    if usedStems.containsOrIncl(srcStem):
-      srcStem.add "-" & commitSuffix
-      discard usedStems.containsOrIncl(srcStem)
 
     for compression in compressions:
       var archiveEntry = newJObject()
@@ -344,23 +245,9 @@ proc writeReleaseArchives(
         archiveEntry["name"] = %release.name
       if not release.isNil and release.srcDir.len > 0:
         archiveEntry["srcDir"] = %($release.srcDir)
-      let srcFile =
-        writeReleaseArchive(pkg, info, ver, release, archiveDir, srcStem, srcSubdir, compression)
-      archiveEntry["srcFile"] = %srcFile
-      archiveEntry["srcArchiveRoot"] =
-        if not release.isNil and release.srcDir.len > 0: %"srcDir"
-        else: %"package"
-      archiveEntry["resolvedSrcDir"] = %($srcSubdir)
-      if hasFullArchive:
-        if srcMatchesPackageRoot:
-          archiveEntry["file"] = %writeArchiveSymlink(
-            archiveDir, rootStem, srcFile, compression
-          )
-          archiveEntry["fileIsSymlink"] = %true
-        else:
-          archiveEntry["file"] = %writeTrackedReleaseArchive(
-            pkg, ver, archiveDir, rootStem, rootArchiveFiles, compression
-          )
+      archiveEntry["file"] = %writeTrackedReleaseArchive(
+        pkg, ver, archiveDir, rootStem, rootArchiveFiles, compression
+      )
       archiveEntry["archiveRoot"] = %"package"
       result.add archiveEntry
 
