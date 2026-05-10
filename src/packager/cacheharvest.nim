@@ -243,7 +243,7 @@ proc writeIndex(
   index["files"] = copiedFiles
   writeFile($(metadataDir / Path("index.json")), pretty(index))
 
-proc harvestOnePackage(
+proc harvestPackage(
     nc: var NimbleContext;
     info: PackageInfo;
     metadataDir: Path;
@@ -307,32 +307,10 @@ proc harvestRegistryCaches*(
       continue
 
     try:
-      nc.harvestOnePackage(info, metadataDir, result, copiedFiles, ephemeral)
+      nc.harvestPackage(info, metadataDir, result, copiedFiles, ephemeral)
     except CatchableError as e:
       error "atlas:pkger", "failed package:", info.name, "error:", e.msg
       inc result.packagesFailed
 
   writeIndex(metadataDir, packagesFile, result, copiedFiles)
 
-proc harvestgistryCachesForPackages*(
-    packagesFile: Path;
-    metadataDir: Path;
-    packageNames: seq[string];
-    ephemeral = false
-): HarvestSummary =
-  createDir($metadataDir)
-
-  var nc = createNimbleContext()
-  let packageList = loadPackageList(packagesFile)
-  let infos = findPackageInfos(packageList, packageNames)
-  var copiedFiles = newJArray()
-
-  result.packagesSeen = packageList.len
-  for info in infos:
-    try:
-      nc.harvestOnePackage(info, metadataDir, result, copiedFiles, ephemeral)
-    except CatchableError as e:
-      error "atlas:pkger", "failed package:", info.name, "error:", e.msg
-      inc result.packagesFailed
-
-  writeIndex(metadataDir, packagesFile, result, copiedFiles, packageNames = packageNames)
