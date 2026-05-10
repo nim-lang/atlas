@@ -13,14 +13,10 @@ proc nimbleVersion(): string =
       return line.split("=")[1].replace("\"", "").strip()
   "0.0.0"
 
-proc gitDirty(dir: string): bool =
-  let (outp, code) = execCmdEx("git -C " & quoteShell(dir) & " status --porcelain")
-  code == 0 and outp.strip().len > 0
-
 suite "packages list":
   test "atlas package version matches atlas.nimble":
     let expected =
-      if gitDirty(AtlasRootDir): nimbleVersion() & "+dirty"
+      if AtlasIsDirty: nimbleVersion() & "+dirty"
       else: nimbleVersion()
     check AtlasPackageVersion == expected
     check AtlasPackageVersion != "0.0.0"
