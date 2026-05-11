@@ -16,8 +16,9 @@ import ./cacheharvest
 
 proc usage(versionString: string): string =
   "atlas-packager - Atlas Packager Version " & versionString & """
+Experimental packager based on Atlas package parser.
 
-  (c) 2021 Andreas Rumpf
+  (c) 2026 Atlas Contributors
 Usage:
   atlas-packager [options] [packages.json] [metadata-dir]
 
