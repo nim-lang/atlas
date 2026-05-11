@@ -5,9 +5,9 @@
 
 ## Harvest package release caches for packages in a packages.json list.
 
-import std/[json, locks, os, osproc, paths, sequtils, sets, streams, strutils, threadpool, times]
+import std/[json, locks, os, osproc, paths, sequtils, sets, strutils, threadpool, times]
 
-import ../basic/[context, dependencycache, gitops, nimblechecksums, nimblecontext, osutils, packageinfos, pkgurls, reporters]
+import ../basic/[context, dependencycache, gitops, nimblechecksums, nimblecontext, packageinfos, pkgurls, reporters]
 import ../registryreleaseinfo
 
 type
@@ -42,15 +42,6 @@ type
     packagesFailed: int
     packageResults: seq[PackageHarvestResult]
     failures: seq[HarvestFailure]
-
-var archiveSubprocessLock: Lock
-
-template withArchiveSubprocessLock(body: untyped) =
-  acquire(archiveSubprocessLock)
-  try:
-    body
-  finally:
-    release(archiveSubprocessLock)
 
 proc popPackage(queue: ptr PackageQueue; info: var PackageInfo): bool {.gcsafe.} =
   acquire(queue.lock)
@@ -145,6 +136,11 @@ proc archiveCompressionExtension*(compression: ArchiveCompression): string =
   of acGzip: ".tar.gz"
   of acXz: ".tar.xz"
 
+proc compressionTempPath(tarPath: Path; compression: ArchiveCompression): Path =
+  case compression
+  of acGzip: tarPath.parentDir() / Path(tarPath.splitPath().tail.string & ".gz")
+  of acXz: tarPath.parentDir() / Path(tarPath.splitPath().tail.string & ".xz")
+
 proc archiveCompressionName*(compression: ArchiveCompression): string =
   case compression
   of acGzip: "gzip"
@@ -184,32 +180,41 @@ proc archiveCommitLabel(ver: PackageVersion): string =
   if result.len == 0:
     result = "unknown"
 
-proc archiveContentHash(
-    pkg: Package;
-    commit: CommitHash;
-    archiveFiles: openArray[string]
-): string =
-  proc readGitFile(path: Path; commit: CommitHash; file: string): string =
-    withArchiveSubprocessLock:
-      let process = startProcess(
-        "git",
-        args = @["-C", $path, "show", commit.h & ":" & file],
-        options = {poUsePath, poStdErrToStdOut}
-      )
-      defer:
-        close(process)
-      result = process.outputStream.readAll()
-      let exitCode = waitForExit(process)
-      if exitCode != 0:
-        raise newException(
-          IOError,
-          "failed to read archived file for checksum: " & file & " at " & commit.short()
-        )
+proc octalField(value: string): int =
+  for c in value:
+    if c in {'0'..'7'}:
+      result = result * 8 + ord(c) - ord('0')
 
+proc tarEntryName(header: string): string =
+  result = header[0 ..< 100].strip(chars = {'\0'})
+  let prefix = header[345 ..< 500].strip(chars = {'\0'})
+  if prefix.len > 0:
+    result = prefix & "/" & result
+
+proc archiveContentHash(tarPath: Path; archivePrefix: string): string =
+  let tar = readFile($tarPath)
+  var offset = 0
   var entries: seq[(string, string)] = @[]
-  entries.setLen(archiveFiles.len)
-  for i, file in archiveFiles:
-    entries[i] = (file, readGitFile(pkg.ondisk, commit, file))
+  while offset + 512 <= tar.len:
+    let header = tar[offset ..< offset + 512]
+    if header.allIt(it == '\0'):
+      break
+
+    var name = tarEntryName(header)
+    if name.startsWith(archivePrefix):
+      name = name[archivePrefix.len .. ^1]
+    let size = octalField(header[124 ..< 136])
+    let kind = header[156]
+    let dataOffset = offset + 512
+    case kind
+    of '\0', '0':
+      entries.add((name, tar[dataOffset ..< dataOffset + size]))
+    of '2':
+      entries.add((name, header[157 ..< 257].strip(chars = {'\0'})))
+    else:
+      discard
+
+    offset = dataOffset + ((size + 511) div 512) * 512
   result = nimbleChecksumForEntries(entries)
 
 proc packageRootSubdir(pkg: Package): Path =
@@ -223,12 +228,48 @@ proc archiveTrackedFiles(pkg: Package; commit: CommitHash; subdir: Path): seq[st
     if subdir.len > 0: $subdir & "/"
     else: ""
 
-  withArchiveSubprocessLock:
-    for file in listFiles(pkg.ondisk, commit):
-      if file.len == 0:
-        continue
-      if subdirPrefix.len == 0 or file == $subdir or file.startsWith(subdirPrefix):
-        result.add file
+  for file in listFiles(pkg.ondisk, commit):
+    if file.len == 0:
+      continue
+    if subdirPrefix.len == 0 or file == $subdir or file.startsWith(subdirPrefix):
+      result.add file
+
+proc runArchiveCommand(command: string): int =
+  var process = startProcess(command, options = {poParentStreams, poUsePath, poEvalCommand})
+  result = waitForExit(process)
+  close(process)
+
+proc runArchiveCommand(command: string; args: openArray[string]): int =
+  var process = startProcess(command, args = args, options = {poParentStreams, poUsePath})
+  result = waitForExit(process)
+  close(process)
+
+proc writeTrackedReleaseTar(
+    pkg: Package;
+    ver: PackageVersion;
+    tarPath: Path;
+    archiveStem: string;
+    archiveFiles: openArray[string]
+) =
+  let prefix = archiveStem & "/"
+  var args = @[
+    "-C", $pkg.ondisk,
+    "archive",
+    "--format=tar",
+    "--prefix=" & prefix,
+    "-o", $tarPath,
+    ver.vtag.commit.h
+  ]
+  for file in archiveFiles:
+    args.add file
+
+  if fileExists($tarPath):
+    removeFile($tarPath)
+  let exitCode = runArchiveCommand("git " & args.mapIt(quoteShell(it)).join(" "))
+  if exitCode != 0 or not fileExists($tarPath):
+    if fileExists($tarPath):
+      removeFile($tarPath)
+    raise newException(IOError, "failed to archive release to " & $tarPath)
 
 proc writeTrackedReleaseArchive(
     pkg: Package;
@@ -247,47 +288,27 @@ proc writeTrackedReleaseArchive(
   let archivePath = archiveDir / Path(archiveStem & archiveCompressionExtension(compression))
   let tmpArchivePath = siblingTempPath(archivePath)
 
-  let prefix = archiveStem & "/"
   let tarPath = siblingTempPath(archiveDir / Path(archiveStem & ".tar"))
-  var args = @[
-    "-C", $pkg.ondisk,
-    "archive",
-    "--format=tar",
-    "--prefix=" & prefix,
-    "-o", $tarPath,
-    ver.vtag.commit.h
-  ]
-  for file in archiveFiles:
-    args.add file
-
-  if fileExists($tarPath):
-    removeFile($tarPath)
   if fileExists($tmpArchivePath):
     removeFile($tmpArchivePath)
-  var exitCode = 0
-  withArchiveSubprocessLock:
-    let (_, code) = execCmdEx("git " & args.mapIt(quoteShell(it)).join(" "))
-    exitCode = code
-  if exitCode != 0 or not fileExists($tarPath):
-    if fileExists($tarPath):
-      removeFile($tarPath)
-    raise newException(IOError, "failed to archive release to " & $archivePath)
+  writeTrackedReleaseTar(pkg, ver, tarPath, archiveStem, archiveFiles)
   let compressor =
     case compression
     of acGzip: "gzip"
     of acXz: "xz"
-  let compressCmd = (
-    compressor & " -9 -c " & quoteShell($tarPath) & " > " & quoteShell($tmpArchivePath)
-  )
-  var compressExitCode = 0
-  withArchiveSubprocessLock:
-    let (_, code) = execCmdEx(compressCmd)
-    compressExitCode = code
+  let compressedTarPath = compressionTempPath(tarPath, compression)
+  if fileExists($compressedTarPath):
+    removeFile($compressedTarPath)
+  let compressExitCode = runArchiveCommand(compressor, ["-9", "-f", $tarPath])
   if fileExists($tarPath):
     removeFile($tarPath)
+  if compressExitCode == 0 and fileExists($compressedTarPath):
+    moveFile($compressedTarPath, $tmpArchivePath)
   if compressExitCode != 0 or not fileExists($tmpArchivePath):
     if fileExists($tarPath):
       removeFile($tarPath)
+    if fileExists($compressedTarPath):
+      removeFile($compressedTarPath)
     if fileExists($tmpArchivePath):
       removeFile($tmpArchivePath)
     raise newException(IOError, "failed to compress release archive " & $archivePath)
@@ -315,7 +336,15 @@ proc collectReleaseArchives(
     let commitSuffix = archiveCommitLabel(ver)
     let rootSubdir = packageRootSubdir(pkg)
     let rootArchiveFiles = archiveTrackedFiles(pkg, ver.vtag.commit, rootSubdir)
-    let contentHash = archiveContentHash(pkg, ver.vtag.commit, rootArchiveFiles)
+    let hashStem = baseName & "-" & label & "-" & commitSuffix
+    let hashTarPath = siblingTempPath(archiveDir / Path(hashStem & ".hash.tar"))
+    var contentHash = ""
+    try:
+      writeTrackedReleaseTar(pkg, ver, hashTarPath, hashStem, rootArchiveFiles)
+      contentHash = archiveContentHash(hashTarPath, hashStem & "/")
+    finally:
+      if fileExists($hashTarPath):
+        removeFile($hashTarPath)
     let contentHashSuffix = sanitizeArchiveComponent(contentHash[0 .. 7])
     var rootStem = baseName & "-" & label & "-" & commitSuffix & "-" & contentHashSuffix
     if usedStems.containsOrIncl(rootStem):
@@ -463,7 +492,6 @@ proc harvestRegistryCaches*(
     threadCount: int
 ): HarvestSummary =
   createDir($metadataDir)
-  initLock(archiveSubprocessLock)
 
   let packageList = loadPackageList(packagesFile)
   var packageInfoByName = initTable[string, PackageInfo]()
@@ -520,7 +548,6 @@ proc harvestRegistryCaches*(
         ephemeral,
         compressionList
       )
-    sync()
     for worker in workers:
       let workerResult = ^worker
       result.packagesProcessed += workerResult.packagesProcessed
@@ -546,7 +573,6 @@ proc harvestRegistryCaches*(
         entry["processedAt"] = %now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
         packagesIndex.add entry
   deinitLock(queue.lock)
-  deinitLock(archiveSubprocessLock)
 
   writeIndex(
     metadataDir,
