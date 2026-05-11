@@ -9,7 +9,7 @@
 ## CLI for harvesting Atlas package release caches from a packages.json list.
 
 import std / [cpuinfo, parseopt, os, paths, strutils]
-import ../basic / [context, packageinfos]
+import ../basic / [context, packageinfos, reporters]
 import ./cacheharvest
 
 proc usage(versionString: string): string =
@@ -171,6 +171,22 @@ proc initPackagerWorkspace(metadataDir: Path) =
   createDir($metadataDir)
   setContext(ctx)
 
+proc writeSettings(
+    packagesFile: Path;
+    metadataDir: Path;
+    opts: PackagerCliOptions
+) =
+  notice "atlas:pkger", "settings"
+  notice "atlas:pkger", "packages:", $packagesFile
+  notice "atlas:pkger", "metadata:", $metadataDir
+  notice "atlas:pkger", "threads:", $opts.threadCount
+  notice "atlas:pkger", "compressions:", archiveCompressionNames(opts.compressions).join(",")
+  notice "atlas:pkger", "ephemeral:", $opts.ephemeral
+  if opts.packageNames.len > 0:
+    notice "atlas:pkger", "package filter:", opts.packageNames.join(",")
+  else:
+    notice "atlas:pkger", "package filter:", "all"
+
 proc main*(versionString = "unknown") =
   var args: seq[string]
   let opts = parseAtlasPackagerOptions(commandLineParams(), versionString, args)
@@ -191,6 +207,7 @@ proc main*(versionString = "unknown") =
     stderr.writeLine("packages.json not found: " & $packagesFile)
     quit(1)
 
+  writeSettings(packagesFile, metadataDir, opts)
   let summary = harvestRegistryCaches(
     packagesFile,
     metadataDir,
