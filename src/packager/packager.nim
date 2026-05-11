@@ -171,6 +171,13 @@ proc initPackagerWorkspace(metadataDir: Path) =
   createDir($metadataDir)
   setContext(ctx)
 
+proc configureNonInteractiveGit() =
+  putEnv("GIT_TERMINAL_PROMPT", "0")
+  putEnv("GIT_ASKPASS", "/bin/false")
+  putEnv("SSH_ASKPASS", "/bin/false")
+  putEnv("GCM_INTERACTIVE", "never")
+  putEnv("GIT_SSH_COMMAND", "ssh -oBatchMode=yes -oNumberOfPasswordPrompts=0")
+
 proc writeSettings(
     packagesFile: Path;
     metadataDir: Path;
@@ -195,6 +202,7 @@ proc main*(versionString = "unknown") =
 
   let metadataDir = resolveMetadataDir(opts, args)
   initPackagerWorkspace(metadataDir)
+  configureNonInteractiveGit()
   let packagesFile =
     if opts.packagesFile.len == 0 and args.len == 0:
       metadataDir / Path"packages.json"
