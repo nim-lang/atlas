@@ -9,6 +9,8 @@
 ## CLI for harvesting Atlas package release caches from a packages.json list.
 
 import std / [cpuinfo, parseopt, os, paths, strutils]
+when defined(posix):
+  import std / posix
 import ../basic / [context, packageinfos, reporters]
 import ./cacheharvest
 
@@ -178,6 +180,15 @@ proc configureNonInteractiveGit() =
   putEnv("GCM_INTERACTIVE", "never")
   putEnv("GIT_SSH_COMMAND", "ssh -oBatchMode=yes -oNumberOfPasswordPrompts=0")
 
+proc exitImmediatelyOnCtrlC() {.noconv.} =
+  when defined(posix):
+    exitnow(130)
+  else:
+    quit(130)
+
+proc installControlCHandler() =
+  setControlCHook(exitImmediatelyOnCtrlC)
+
 proc writeSettings(
     packagesFile: Path;
     metadataDir: Path;
@@ -195,6 +206,7 @@ proc writeSettings(
     notice "atlas:pkger", "package filter:", "all"
 
 proc main*(versionString = "unknown") =
+  installControlCHandler()
   var args: seq[string]
   let opts = parseAtlasPackagerOptions(commandLineParams(), versionString, args)
   if args.len > 2:
