@@ -315,6 +315,35 @@ proc writeTrackedReleaseArchive(
   moveFile($tmpArchivePath, $archivePath)
   result = $archivePath.splitPath().tail
 
+proc loadExistingDigestEntries(workspaceRoot: Path): JsonNode =
+  let digestPath = packageDigestFile(workspaceRoot)
+  if not fileExists($digestPath):
+    return newJArray()
+  try:
+    let digest = parseFile($digestPath)
+    if "tarballs" in digest and digest["tarballs"].kind == JArray:
+      return digest["tarballs"]
+  except CatchableError:
+    discard
+  newJArray()
+
+proc matchingDigestEntry(
+    entries: JsonNode;
+    versionLabel: string;
+    gitSha: string;
+    compression: string
+): JsonNode =
+  if entries.kind != JArray:
+    return nil
+  for entry in entries:
+    if entry.kind != JObject:
+      continue
+    if entry{"version"}.getStr() == versionLabel and
+        entry{"gitSha"}.getStr() == gitSha and
+        entry{"compression"}.getStr() == compression:
+      return entry
+  nil
+
 proc collectReleaseArchives(
     pkg: Package;
     info: PackageInfo;
@@ -323,11 +352,11 @@ proc collectReleaseArchives(
     compressions: openArray[ArchiveCompression]
 ): JsonNode =
   result = newJArray()
+  let workspaceRoot = archiveDir.parentDir()
+  let existingEntries = loadExistingDigestEntries(workspaceRoot)
   createDir($archiveDir)
-  for kind, path in walkDir($archiveDir):
-    if kind == pcFile and path.Path.splitFile().ext in [".gz", ".xz", ".tar"]:
-      removeFile(path)
   var usedStems = initHashSet[string]()
+  var referencedFiles = initHashSet[string]()
   for (ver, release) in releaseInfo.releases:
     if ver.isNil or ver.vtag.commit.h.len == 0:
       continue
@@ -352,10 +381,26 @@ proc collectReleaseArchives(
       discard usedStems.containsOrIncl(rootStem)
 
     for compression in compressions:
+      let compressionName = archiveCompressionName(compression)
+      let existingEntry = matchingDigestEntry(
+        existingEntries,
+        label,
+        ver.vtag.commit.h,
+        compressionName
+      )
+      if existingEntry != nil and "file" in existingEntry:
+        let archiveFile = existingEntry["file"].getStr()
+        let archivePath = archiveDir / Path(archiveFile)
+        if fileExists($archivePath):
+          referencedFiles.incl(archiveFile)
+          result.add existingEntry
+          continue
+
       let archiveFile = writeTrackedReleaseArchive(
         pkg, ver, archiveDir, rootStem, rootArchiveFiles, compression
       )
       let archivePath = archiveDir / Path(archiveFile)
+      referencedFiles.incl(archiveFile)
       var archiveEntry = newJObject()
       archiveEntry["version"] = %label
       archiveEntry["createdAt"] = %now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
@@ -364,7 +409,7 @@ proc collectReleaseArchives(
       archiveEntry["contentSha"] = %contentHash
       archiveEntry["contentShortSha"] = %contentHashSuffix
       archiveEntry["archiveRoot"] = %"package"
-      archiveEntry["compression"] = %archiveCompressionName(compression)
+      archiveEntry["compression"] = %compressionName
       archiveEntry["file"] = %archiveFile
       archiveEntry["size"] = %getFileSize($archivePath)
       if rootSubdir.len > 0:
@@ -375,6 +420,13 @@ proc collectReleaseArchives(
         archiveEntry["srcDir"] = %($release.srcDir)
       archiveEntry["archiveRoot"] = %"package"
       result.add archiveEntry
+
+  for kind, path in walkDir($archiveDir):
+    if kind != pcFile:
+      continue
+    let filename = $path.Path.splitPath().tail
+    if path.Path.splitFile().ext in [".gz", ".xz", ".tar"] and filename notin referencedFiles:
+      removeFile(path)
 
 proc writePackageDigest(
     workspaceRoot: Path;
