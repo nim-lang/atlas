@@ -181,6 +181,7 @@ proc configureNonInteractiveGit() =
   putEnv("GIT_SSH_COMMAND", "ssh -oBatchMode=yes -oNumberOfPasswordPrompts=0")
 
 proc exitImmediatelyOnCtrlC() {.noconv.} =
+  echo "Quitting.."
   when defined(posix):
     exitnow(130)
   else:
