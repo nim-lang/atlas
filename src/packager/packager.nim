@@ -1,6 +1,6 @@
 #
-#           Atlas Package Cloner
-#        (c) Copyright 2021 Andreas Rumpf
+#           Atlas Packager
+#        (c) Copyright 2026 Atlas Contributors
 #
 #    See the file "copying.txt", included in this
 #    distribution, for details about the copyright.
