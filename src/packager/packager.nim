@@ -29,6 +29,7 @@ Options:
   --metadata=path       write copied cache files to the given directory
   --package=name[,name] process only the named package(s) from packages.json
   --ignore=name[,name]  skip the named package(s) from packages.json
+  --update-repos        run `gitops.updateRepo` for existing repos before harvest
   --compression=type    archive compression(s): gzip, xz, or comma-separated list
                         default: gzip
   --threads=count, -j   number of package processing threads
@@ -44,6 +45,7 @@ type
     ignoredPackageNames: seq[string]
     compressions: seq[ArchiveCompression]
     threadCount: int
+    updateRepos: bool
     ephemeral: bool
 
 proc parsePackageNames(value: string): seq[string] =
@@ -133,6 +135,8 @@ proc parseAtlasPackagerOptions(
         if val.len == 0:
           writeHelp(versionString)
         result.ignoredPackageNames.addPackageNames(val)
+      of "update-repos":
+        result.updateRepos = true
       of "compression":
         if val.len == 0:
           writeHelp(versionString)
@@ -180,6 +184,10 @@ proc initPackagerWorkspace(metadataDir: Path) =
   createDir($metadataDir)
   setContext(ctx)
 
+proc configurePackagerContext(opts: PackagerCliOptions) =
+  if opts.updateRepos:
+    context().flags.incl UpdateRepos
+
 proc configureNonInteractiveGit() =
   putEnv("GIT_TERMINAL_PROMPT", "0")
   putEnv("GIT_ASKPASS", "/bin/false")
@@ -207,6 +215,7 @@ proc writeSettings(
   notice "atlas:pkger", "metadata:", $metadataDir
   notice "atlas:pkger", "threads:", $opts.threadCount
   notice "atlas:pkger", "compressions:", archiveCompressionNames(opts.compressions).join(",")
+  notice "atlas:pkger", "update repos:", $opts.updateRepos
   notice "atlas:pkger", "ephemeral:", $opts.ephemeral
   if opts.packageNames.len > 0:
     notice "atlas:pkger", "package filter:", opts.packageNames.join(",")
@@ -226,6 +235,7 @@ proc main*(versionString = "unknown") =
 
   let metadataDir = resolveMetadataDir(opts, args)
   initPackagerWorkspace(metadataDir)
+  configurePackagerContext(opts)
   configureNonInteractiveGit()
   let packagesFile =
     if opts.packagesFile.len == 0 and args.len == 0:
