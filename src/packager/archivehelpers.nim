@@ -5,7 +5,7 @@
 
 ## Helpers for selecting and building package archives using Nimble-like rules.
 
-import std/[json, os, osproc, paths, sequtils, sets, strutils]
+import std/[json, os, osproc, paths, sequtils, sets, strutils, times]
 
 import ../basic/[deptypes, gitops, nimblechecksums, packageinfos, pkgurls, versions]
 
@@ -432,3 +432,33 @@ proc matchingDigestEntry*(
         entry{"compression"}.getStr() == compression:
       return entry
   nil
+
+proc initArchiveEntry*(
+    versionLabel: string;
+    gitSha: string;
+    gitShortSha: string;
+    contentSha: string;
+    contentShortSha: string;
+    compression: string;
+    archiveFile: string;
+    archiveSize: BiggestInt;
+    packageSubdir: Path;
+    release: NimbleRelease
+): JsonNode =
+  result = newJObject()
+  result["version"] = %versionLabel
+  result["createdAt"] = %now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
+  result["gitSha"] = %gitSha
+  result["gitShortSha"] = %gitShortSha
+  result["contentSha"] = %contentSha
+  result["contentShortSha"] = %contentShortSha
+  result["archiveRoot"] = %"package"
+  result["compression"] = %compression
+  result["file"] = %archiveFile
+  result["size"] = %archiveSize
+  if $packageSubdir != "":
+    result["packageSubdir"] = %($packageSubdir)
+  if not release.isNil and release.name.len > 0:
+    result["name"] = %release.name
+  if not release.isNil and $release.srcDir != "":
+    result["srcDir"] = %($release.srcDir)

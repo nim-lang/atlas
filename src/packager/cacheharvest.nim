@@ -214,25 +214,18 @@ proc collectReleaseArchives(
       )
       let archivePath = archiveDir / Path(archiveFile)
       referencedFiles.incl(archiveFile)
-      var archiveEntry = newJObject()
-      archiveEntry["version"] = %label
-      archiveEntry["createdAt"] = %now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
-      archiveEntry["gitSha"] = %ver.vtag.commit.h
-      archiveEntry["gitShortSha"] = %commitSuffix
-      archiveEntry["contentSha"] = %contentHash
-      archiveEntry["contentShortSha"] = %contentHashSuffix
-      archiveEntry["archiveRoot"] = %"package"
-      archiveEntry["compression"] = %compressionName
-      archiveEntry["file"] = %archiveFile
-      archiveEntry["size"] = %getFileSize($archivePath)
-      if rootSubdir.len > 0:
-        archiveEntry["packageSubdir"] = %($rootSubdir)
-      if not release.isNil and release.name.len > 0:
-        archiveEntry["name"] = %release.name
-      if not release.isNil and release.srcDir.len > 0:
-        archiveEntry["srcDir"] = %($release.srcDir)
-      archiveEntry["archiveRoot"] = %"package"
-      result.add archiveEntry
+      result.add initArchiveEntry(
+        label,
+        ver.vtag.commit.h,
+        commitSuffix,
+        contentHash,
+        contentHashSuffix,
+        compressionName,
+        archiveFile,
+        getFileSize($archivePath),
+        rootSubdir,
+        release
+      )
 
   for kind, path in walkDir($archiveDir):
     if kind != pcFile:
