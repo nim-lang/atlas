@@ -14,7 +14,7 @@ when defined(posix):
 import ../basic / [context, packageinfos, reporters]
 import ./cacheharvest
 
-proc usage(versionString: string): string =
+proc usage*(versionString: string): string =
   "atlas-packager - Atlas Packager Version " & versionString & """
 Experimental packager based on Atlas package parser.
 
@@ -38,7 +38,7 @@ Options:
 """
 
 type
-  PackagerCliOptions = object
+  PackagerCliOptions* = object
     packagesFile: Path
     metadataDir: Path
     packageNames: seq[string]
@@ -48,18 +48,18 @@ type
     updateRepos: bool
     ephemeral: bool
 
-proc parsePackageNames(value: string): seq[string] =
+proc parsePackageNames*(value: string): seq[string] =
   for rawName in value.split(','):
     let packageName = rawName.strip()
     if packageName.len > 0 and packageName notin result:
       result.add packageName
 
-proc addPackageNames(dest: var seq[string]; value: string) =
+proc addPackageNames*(dest: var seq[string]; value: string) =
   for packageName in parsePackageNames(value):
     if packageName notin dest:
       dest.add packageName
 
-proc parseArchiveCompression(value: string): ArchiveCompression =
+proc parseArchiveCompression*(value: string): ArchiveCompression =
   case value.normalize()
   of "xz":
     acXz
@@ -68,7 +68,7 @@ proc parseArchiveCompression(value: string): ArchiveCompression =
   else:
     raise newException(ValueError, "unknown compression: " & value)
 
-proc parseArchiveCompressions(value: string): seq[ArchiveCompression] =
+proc parseArchiveCompressions*(value: string): seq[ArchiveCompression] =
   for rawName in value.split(','):
     let name = rawName.strip()
     if name.len == 0:
@@ -80,12 +80,12 @@ proc parseArchiveCompressions(value: string): seq[ArchiveCompression] =
   if result.len == 0:
     raise newException(ValueError, "missing compression")
 
-proc addArchiveCompressions(dest: var seq[ArchiveCompression]; value: string) =
+proc addArchiveCompressions*(dest: var seq[ArchiveCompression]; value: string) =
   for compression in parseArchiveCompressions(value):
     if compression notin dest:
       dest.add compression
 
-proc parseThreadCount(value: string): int =
+proc parseThreadCount*(value: string): int =
   try:
     result = parseInt(value)
   except ValueError:
@@ -93,17 +93,17 @@ proc parseThreadCount(value: string): int =
   if result < 1:
     raise newException(ValueError, "thread count must be at least 1")
 
-proc writeHelp(versionString: string; code = 2) =
+proc writeHelp*(versionString: string; code = 2) =
   stdout.write(usage(versionString))
   stdout.flushFile()
   quit(code)
 
-proc writeVersion(versionString: string) =
+proc writeVersion*(versionString: string) =
   stdout.write("version: " & versionString & "\n")
   stdout.flushFile()
   quit(0)
 
-proc parseAtlasPackagerOptions(
+proc parseAtlasPackagerOptions*(
     params: seq[string];
     versionString: string;
     positional: var seq[string]
@@ -163,13 +163,13 @@ proc parseAtlasPackagerOptions(
     of cmdEnd:
       assert false, "cannot happen"
 
-proc resolvePackagesFile(opts: PackagerCliOptions; args: seq[string]): Path =
+proc resolvePackagesFile*(opts: PackagerCliOptions; args: seq[string]): Path =
   if opts.packagesFile.len > 0:
     result = opts.packagesFile.absolutePath()
   elif args.len >= 1:
     result = Path(args[0]).absolutePath()
 
-proc resolveMetadataDir(opts: PackagerCliOptions; args: seq[string]): Path =
+proc resolveMetadataDir*(opts: PackagerCliOptions; args: seq[string]): Path =
   if opts.metadataDir.len > 0:
     result = opts.metadataDir.absolutePath()
   elif args.len >= 2:
@@ -177,35 +177,35 @@ proc resolveMetadataDir(opts: PackagerCliOptions; args: seq[string]): Path =
   else:
     result = Path"pkgs".absolutePath()
 
-proc initPackagerWorkspace(metadataDir: Path) =
+proc initPackagerWorkspace*(metadataDir: Path) =
   var ctx = AtlasContext()
   ctx.depsDir = metadataDir
   ctx.cacheDir = metadataDir
   createDir($metadataDir)
   setContext(ctx)
 
-proc configurePackagerContext(opts: PackagerCliOptions) =
+proc configurePackagerContext*(opts: PackagerCliOptions) =
   if opts.updateRepos:
     context().flags.incl UpdateRepos
 
-proc configureNonInteractiveGit() =
+proc configureNonInteractiveGit*() =
   putEnv("GIT_TERMINAL_PROMPT", "0")
   putEnv("GIT_ASKPASS", "/bin/false")
   putEnv("SSH_ASKPASS", "/bin/false")
   putEnv("GCM_INTERACTIVE", "never")
   putEnv("GIT_SSH_COMMAND", "ssh -oBatchMode=yes -oNumberOfPasswordPrompts=0")
 
-proc exitImmediatelyOnCtrlC() {.noconv.} =
+proc exitImmediatelyOnCtrlC*() {.noconv.} =
   echo "Quitting.."
   when defined(posix):
     exitnow(130)
   else:
     quit(130)
 
-proc installControlCHandler() =
+proc installControlCHandler*() =
   setControlCHook(exitImmediatelyOnCtrlC)
 
-proc writeSettings(
+proc writeSettings*(
     packagesFile: Path;
     metadataDir: Path;
     opts: PackagerCliOptions

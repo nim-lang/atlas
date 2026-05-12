@@ -7,7 +7,7 @@
 
 import std/[json, locks, os, osproc, paths, sequtils, sets, strutils, threadpool, times]
 
-import ../basic/[context, dependencycache, gitops, nimblechecksums, nimblecontext, packageinfos, pkgurls, reporters]
+import ../basic/[context, dependencycache, gitops, nimblechecksums, nimblecontext, packageinfos, pkgurls, reporters, versions]
 import ../registryreleaseinfo
 
 type
@@ -42,6 +42,11 @@ type
     packagesFailed: int
     packageResults: seq[PackageHarvestResult]
     failures: seq[HarvestFailure]
+
+  ArchiveReleaseEntry = object
+    ver: PackageVersion
+    release: NimbleRelease
+    isHead: bool
 
 proc popPackage(queue: ptr PackageQueue; info: var PackageInfo): bool {.gcsafe.} =
   acquire(queue.lock)
@@ -162,8 +167,10 @@ proc archiveBaseName(pkg: Package; info: PackageInfo; release: NimbleRelease): s
   if result.len == 0:
     result = "package"
 
-proc archiveReleaseLabel(ver: PackageVersion; release: NimbleRelease): string =
-  if not release.isNil and release.version.string.len > 0 and release.version.string != "#head":
+proc archiveReleaseLabel(ver: PackageVersion; release: NimbleRelease; isHead: bool): string =
+  if isHead:
+    result = "head"
+  elif not release.isNil and release.version.string.len > 0 and release.version.string != "#head":
     result = release.version.string
   elif ver.vtag.version.string.len > 0 and ver.vtag.version.string != "#head":
     result = ver.vtag.version.string
@@ -344,6 +351,33 @@ proc matchingDigestEntry(
       return entry
   nil
 
+proc headReleaseEntry(releaseInfo: PackageReleaseInfo): ArchiveReleaseEntry =
+  let vtag = VersionTag(
+    v: Version"#head",
+    c: initCommitHash(releaseInfo.currentCommit, FromHead)
+  )
+  result.ver = vtag.toPkgVer()
+  result.isHead = true
+
+  for (ver, release) in releaseInfo.releases:
+    if not ver.isNil and ver.vtag.commit == releaseInfo.currentCommit:
+      result.release = release
+      return
+
+  result.release = NimbleRelease(version: Version"#head", status: Normal)
+
+proc archiveReleaseEntries(releaseInfo: PackageReleaseInfo): seq[ArchiveReleaseEntry] =
+  for (ver, release) in releaseInfo.releases:
+    result.add ArchiveReleaseEntry(ver: ver, release: release)
+  if releaseInfo.currentCommit.isEmpty():
+    return
+
+  for entry in result:
+    if entry.isHead:
+      return
+
+  result.add headReleaseEntry(releaseInfo)
+
 proc collectReleaseArchives(
     pkg: Package;
     info: PackageInfo;
@@ -357,11 +391,13 @@ proc collectReleaseArchives(
   createDir($archiveDir)
   var usedStems = initHashSet[string]()
   var referencedFiles = initHashSet[string]()
-  for (ver, release) in releaseInfo.releases:
+  for releaseEntry in archiveReleaseEntries(releaseInfo):
+    let ver = releaseEntry.ver
+    let release = releaseEntry.release
     if ver.isNil or ver.vtag.commit.h.len == 0:
       continue
     let baseName = archiveBaseName(pkg, info, release)
-    let label = archiveReleaseLabel(ver, release)
+    let label = archiveReleaseLabel(ver, release, releaseEntry.isHead)
     let commitSuffix = archiveCommitLabel(ver)
     let rootSubdir = packageRootSubdir(pkg)
     let rootArchiveFiles = archiveTrackedFiles(pkg, ver.vtag.commit, rootSubdir)
