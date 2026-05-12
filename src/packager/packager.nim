@@ -8,7 +8,7 @@
 
 ## CLI for harvesting Atlas package release caches from a packages.json list.
 
-import std / [cpuinfo, parseopt, os, paths, strutils]
+import std / [cpuinfo, monotimes, parseopt, os, paths, strutils]
 when defined(posix):
   import std / posix
 import ../basic / [context, packageinfos, reporters]
@@ -233,6 +233,7 @@ proc writeSettings*(
 
 proc main*(versionString = "unknown") =
   installControlCHandler()
+  let startedAt = getMonoTime()
   var args: seq[string]
   let opts = parseAtlasPackagerOptions(commandLineParams(), versionString, args)
   if args.len > 2:
@@ -271,6 +272,7 @@ proc main*(versionString = "unknown") =
     ", skipped " & $summary.aliasesSkipped &
     " aliases"
   )
+  notice "atlas:pkger", "elapsed:", $(getMonoTime() - startedAt)
 
 when isMainModule:
   main()
