@@ -5,11 +5,13 @@
 
 ## Harvest package release caches for packages in a packages.json list.
 
-import std/[json, locks, os, osproc, paths, sequtils, sets, strutils, threadpool, times]
+import std/[json, locks, os, paths, sets, threadpool, times]
 
-import ../basic/[context, dependencycache, nimblechecksums, nimblecontext, packageinfos, reporters, versions]
+import ../basic/[context, dependencycache, nimblecontext, packageinfos, reporters, versions]
 import ../registryreleaseinfo
 import ./archivehelpers
+
+export archivehelpers
 
 type
   HarvestSummary* = object
@@ -17,10 +19,6 @@ type
     aliasesSkipped*: int
     packagesProcessed*: int
     packagesFailed*: int
-
-  ArchiveCompression* = enum
-    acGzip
-    acXz
 
   PackageQueue = object
     lock: Lock
@@ -128,213 +126,6 @@ proc cleanupTransientReleaseCache(pkg: Package) =
   if fileExists($cachePath):
     removeFile($cachePath)
 
-proc sanitizeArchiveComponent(value: string): string =
-  result = value
-  for c in mitems(result):
-    if c notin {'a'..'z', 'A'..'Z', '0'..'9', '.', '_', '-'}:
-      c = '-'
-  while result.contains("--"):
-    result = result.replace("--", "-")
-  result = result.strip(chars = {'-', '.'})
-
-proc archiveCompressionExtension*(compression: ArchiveCompression): string =
-  case compression
-  of acGzip: ".tar.gz"
-  of acXz: ".tar.xz"
-
-proc compressionTempPath(tarPath: Path; compression: ArchiveCompression): Path =
-  case compression
-  of acGzip: tarPath.parentDir() / Path(tarPath.splitPath().tail.string & ".gz")
-  of acXz: tarPath.parentDir() / Path(tarPath.splitPath().tail.string & ".xz")
-
-proc archiveCompressionName*(compression: ArchiveCompression): string =
-  case compression
-  of acGzip: "gzip"
-  of acXz: "xz"
-
-proc archiveCompressionNames*(compressions: openArray[ArchiveCompression]): seq[string] =
-  for compression in compressions:
-    result.add archiveCompressionName(compression)
-
-proc archiveBaseName(pkg: Package; info: PackageInfo; release: NimbleRelease): string =
-  result = info.name
-  if not release.isNil and release.name.len > 0:
-    result = release.name
-  elif pkg.name.len > 0:
-    result = pkg.name
-  elif pkg.projectName.len > 0:
-    result = pkg.projectName
-  result = sanitizeArchiveComponent(result)
-  if result.len == 0:
-    result = "package"
-
-proc archiveReleaseLabel(ver: PackageVersion; release: NimbleRelease; isHead: bool): string =
-  if isHead:
-    result = "head"
-  elif not release.isNil and release.version.string.len > 0 and release.version.string != "#head":
-    result = release.version.string
-  elif ver.vtag.version.string.len > 0 and ver.vtag.version.string != "#head":
-    result = ver.vtag.version.string
-  elif ver.vtag.commit.h.len > 0:
-    result = ver.vtag.commit.short()
-  else:
-    result = "head"
-  result = sanitizeArchiveComponent(result)
-  if result.len == 0:
-    result = "head"
-
-proc archiveCommitLabel(ver: PackageVersion): string =
-  result = sanitizeArchiveComponent(ver.vtag.commit.short())
-  if result.len == 0:
-    result = "unknown"
-
-proc octalField(value: string): int =
-  for c in value:
-    if c in {'0'..'7'}:
-      result = result * 8 + ord(c) - ord('0')
-
-proc tarEntryName(header: string): string =
-  result = header[0 ..< 100].strip(chars = {'\0'})
-  let prefix = header[345 ..< 500].strip(chars = {'\0'})
-  if prefix.len > 0:
-    result = prefix & "/" & result
-
-proc archiveContentHash(tarPath: Path; archivePrefix: string): string =
-  let tar = readFile($tarPath)
-  var offset = 0
-  var entries: seq[(string, string)] = @[]
-  while offset + 512 <= tar.len:
-    let header = tar[offset ..< offset + 512]
-    if header.allIt(it == '\0'):
-      break
-
-    var name = tarEntryName(header)
-    if name.startsWith(archivePrefix):
-      name = name[archivePrefix.len .. ^1]
-    let size = octalField(header[124 ..< 136])
-    let kind = header[156]
-    let dataOffset = offset + 512
-    case kind
-    of '\0', '0':
-      entries.add((name, tar[dataOffset ..< dataOffset + size]))
-    of '2':
-      entries.add((name, header[157 ..< 257].strip(chars = {'\0'})))
-    else:
-      discard
-
-    offset = dataOffset + ((size + 511) div 512) * 512
-  result = nimbleChecksumForEntries(entries)
-
-proc runArchiveCommand(command: string): int =
-  var process = startProcess(command, options = {poParentStreams, poUsePath, poEvalCommand})
-  result = waitForExit(process)
-  close(process)
-
-proc runArchiveCommand(command: string; args: openArray[string]): int =
-  var process = startProcess(command, args = args, options = {poParentStreams, poUsePath})
-  result = waitForExit(process)
-  close(process)
-
-proc writeTrackedReleaseTar(
-    pkg: Package;
-    ver: PackageVersion;
-    tarPath: Path;
-    archiveStem: string;
-    archiveFiles: openArray[string]
-) =
-  let prefix = archiveStem & "/"
-  var args = @[
-    "-C", $pkg.ondisk,
-    "archive",
-    "--format=tar",
-    "--prefix=" & prefix,
-    "-o", $tarPath,
-    ver.vtag.commit.h
-  ]
-  for file in archiveFiles:
-    args.add file
-
-  if fileExists($tarPath):
-    removeFile($tarPath)
-  let exitCode = runArchiveCommand("git " & args.mapIt(quoteShell(it)).join(" "))
-  if exitCode != 0 or not fileExists($tarPath):
-    if fileExists($tarPath):
-      removeFile($tarPath)
-    raise newException(IOError, "failed to archive release to " & $tarPath)
-
-proc writeTrackedReleaseArchive(
-    pkg: Package;
-    ver: PackageVersion;
-    archiveDir: Path;
-    archiveStem: string;
-    archiveFiles: openArray[string];
-    compression: ArchiveCompression
-): string =
-  if ver.isNil or ver.vtag.commit.h.len == 0:
-    raise newException(ValueError, "release is missing a commit for archiving")
-  if archiveFiles.len == 0:
-    raise newException(IOError, "release archive has no tracked files to package")
-
-  createDir($archiveDir)
-  let archivePath = archiveDir / Path(archiveStem & archiveCompressionExtension(compression))
-  let tmpArchivePath = siblingTempPath(archivePath)
-
-  let tarPath = siblingTempPath(archiveDir / Path(archiveStem & ".tar"))
-  if fileExists($tmpArchivePath):
-    removeFile($tmpArchivePath)
-  writeTrackedReleaseTar(pkg, ver, tarPath, archiveStem, archiveFiles)
-  let compressor =
-    case compression
-    of acGzip: "gzip"
-    of acXz: "xz"
-  let compressedTarPath = compressionTempPath(tarPath, compression)
-  if fileExists($compressedTarPath):
-    removeFile($compressedTarPath)
-  let compressExitCode = runArchiveCommand(compressor, ["-9", "-f", $tarPath])
-  if fileExists($tarPath):
-    removeFile($tarPath)
-  if compressExitCode == 0 and fileExists($compressedTarPath):
-    moveFile($compressedTarPath, $tmpArchivePath)
-  if compressExitCode != 0 or not fileExists($tmpArchivePath):
-    if fileExists($tarPath):
-      removeFile($tarPath)
-    if fileExists($compressedTarPath):
-      removeFile($compressedTarPath)
-    if fileExists($tmpArchivePath):
-      removeFile($tmpArchivePath)
-    raise newException(IOError, "failed to compress release archive " & $archivePath)
-  moveFile($tmpArchivePath, $archivePath)
-  result = $archivePath.splitPath().tail
-
-proc loadExistingDigestEntries(workspaceRoot: Path): JsonNode =
-  let digestPath = packageDigestFile(workspaceRoot)
-  if not fileExists($digestPath):
-    return newJArray()
-  try:
-    let digest = parseFile($digestPath)
-    if "tarballs" in digest and digest["tarballs"].kind == JArray:
-      return digest["tarballs"]
-  except CatchableError:
-    discard
-  newJArray()
-
-proc matchingDigestEntry(
-    entries: JsonNode;
-    versionLabel: string;
-    gitSha: string;
-    compression: string
-): JsonNode =
-  if entries.kind != JArray:
-    return nil
-  for entry in entries:
-    if entry.kind != JObject:
-      continue
-    if entry{"version"}.getStr() == versionLabel and
-        entry{"gitSha"}.getStr() == gitSha and
-        entry{"compression"}.getStr() == compression:
-      return entry
-  nil
-
 proc headReleaseEntry(releaseInfo: PackageReleaseInfo): ArchiveReleaseEntry =
   let vtag = VersionTag(
     v: Version"#head",
@@ -372,7 +163,7 @@ proc collectReleaseArchives(
 ): JsonNode =
   result = newJArray()
   let workspaceRoot = archiveDir.parentDir()
-  let existingEntries = loadExistingDigestEntries(workspaceRoot)
+  let existingEntries = loadExistingDigestEntries(packageDigestFile(workspaceRoot))
   createDir($archiveDir)
   var usedStems = initHashSet[string]()
   var referencedFiles = initHashSet[string]()
@@ -419,7 +210,7 @@ proc collectReleaseArchives(
             continue
 
       let archiveFile = writeTrackedReleaseArchive(
-        pkg, ver, archiveDir, rootStem, rootArchiveFiles, compression
+        pkg, ver, archiveDir, rootStem, rootArchiveFiles, compression, siblingTempPath
       )
       let archivePath = archiveDir / Path(archiveFile)
       referencedFiles.incl(archiveFile)
