@@ -30,6 +30,7 @@ Options:
   --package=name[,name] process only the named package(s) from packages.json
   --ignore=name[,name]  skip the named package(s) from packages.json
   --update-repos        run `gitops.updateRepo` for existing repos before harvest
+  --regenerate-tarballs rebuild all tarballs instead of reusing matching archives
   --compression=type    archive compression(s): gzip, xz, or comma-separated list
                         default: gzip
   --threads=count, -j   number of package processing threads
@@ -46,6 +47,7 @@ type
     compressions: seq[ArchiveCompression]
     threadCount: int
     updateRepos: bool
+    regenerateTarballs: bool
     ephemeral: bool
 
 proc parsePackageNames*(value: string): seq[string] =
@@ -137,6 +139,8 @@ proc parseAtlasPackagerOptions*(
         result.ignoredPackageNames.addPackageNames(val)
       of "update-repos":
         result.updateRepos = true
+      of "regenerate-tarballs":
+        result.regenerateTarballs = true
       of "compression":
         if val.len == 0:
           writeHelp(versionString)
@@ -216,6 +220,7 @@ proc writeSettings*(
   notice "atlas:pkger", "threads:", $opts.threadCount
   notice "atlas:pkger", "compressions:", archiveCompressionNames(opts.compressions).join(",")
   notice "atlas:pkger", "update repos:", $opts.updateRepos
+  notice "atlas:pkger", "regenerate tarballs:", $opts.regenerateTarballs
   notice "atlas:pkger", "ephemeral:", $opts.ephemeral
   if opts.packageNames.len > 0:
     notice "atlas:pkger", "package filter:", opts.packageNames.join(",")
@@ -257,7 +262,8 @@ proc main*(versionString = "unknown") =
     opts.packageNames,
     opts.ignoredPackageNames,
     opts.compressions,
-    opts.threadCount
+    opts.threadCount,
+    opts.regenerateTarballs
   )
   stdout.writeLine(
     "processed " & $summary.packagesProcessed &

@@ -7,8 +7,9 @@
 
 import std/[json, locks, os, osproc, paths, sequtils, sets, strutils, threadpool, times]
 
-import ../basic/[context, dependencycache, gitops, nimblechecksums, nimblecontext, packageinfos, pkgurls, reporters, versions]
+import ../basic/[context, dependencycache, nimblechecksums, nimblecontext, packageinfos, reporters, versions]
 import ../registryreleaseinfo
+import ./archivehelpers
 
 type
   HarvestSummary* = object
@@ -224,23 +225,6 @@ proc archiveContentHash(tarPath: Path; archivePrefix: string): string =
     offset = dataOffset + ((size + 511) div 512) * 512
   result = nimbleChecksumForEntries(entries)
 
-proc packageRootSubdir(pkg: Package): Path =
-  let packageSubdir =
-    if pkg.subdir.len > 0: pkg.subdir
-    else: pkg.url.subdir()
-  result = packageSubdir
-
-proc archiveTrackedFiles(pkg: Package; commit: CommitHash; subdir: Path): seq[string] =
-  let subdirPrefix =
-    if subdir.len > 0: $subdir & "/"
-    else: ""
-
-  for file in listFiles(pkg.ondisk, commit):
-    if file.len == 0:
-      continue
-    if subdirPrefix.len == 0 or file == $subdir or file.startsWith(subdirPrefix):
-      result.add file
-
 proc runArchiveCommand(command: string): int =
   var process = startProcess(command, options = {poParentStreams, poUsePath, poEvalCommand})
   result = waitForExit(process)
@@ -383,7 +367,8 @@ proc collectReleaseArchives(
     info: PackageInfo;
     releaseInfo: PackageReleaseInfo;
     archiveDir: Path;
-    compressions: openArray[ArchiveCompression]
+    compressions: openArray[ArchiveCompression];
+    regenerateTarballs: bool
 ): JsonNode =
   result = newJArray()
   let workspaceRoot = archiveDir.parentDir()
@@ -400,7 +385,7 @@ proc collectReleaseArchives(
     let label = archiveReleaseLabel(ver, release, releaseEntry.isHead)
     let commitSuffix = archiveCommitLabel(ver)
     let rootSubdir = packageRootSubdir(pkg)
-    let rootArchiveFiles = archiveTrackedFiles(pkg, ver.vtag.commit, rootSubdir)
+    let rootArchiveFiles = collectArchiveFiles(pkg, ver, info, release, rootSubdir)
     let hashStem = baseName & "-" & label & "-" & commitSuffix
     let hashTarPath = siblingTempPath(archiveDir / Path(hashStem & ".hash.tar"))
     var contentHash = ""
@@ -418,19 +403,20 @@ proc collectReleaseArchives(
 
     for compression in compressions:
       let compressionName = archiveCompressionName(compression)
-      let existingEntry = matchingDigestEntry(
-        existingEntries,
-        label,
-        ver.vtag.commit.h,
-        compressionName
-      )
-      if existingEntry != nil and "file" in existingEntry:
-        let archiveFile = existingEntry["file"].getStr()
-        let archivePath = archiveDir / Path(archiveFile)
-        if fileExists($archivePath):
-          referencedFiles.incl(archiveFile)
-          result.add existingEntry
-          continue
+      if not regenerateTarballs:
+        let existingEntry = matchingDigestEntry(
+          existingEntries,
+          label,
+          ver.vtag.commit.h,
+          compressionName
+        )
+        if existingEntry != nil and "file" in existingEntry:
+          let archiveFile = existingEntry["file"].getStr()
+          let archivePath = archiveDir / Path(archiveFile)
+          if fileExists($archivePath):
+            referencedFiles.incl(archiveFile)
+            result.add existingEntry
+            continue
 
       let archiveFile = writeTrackedReleaseArchive(
         pkg, ver, archiveDir, rootStem, rootArchiveFiles, compression
@@ -513,7 +499,8 @@ proc harvestPackage(
     info: PackageInfo;
     metadataDir: Path;
     ephemeral: bool;
-    compressions: openArray[ArchiveCompression]
+    compressions: openArray[ArchiveCompression];
+    regenerateTarballs: bool
 ): PackageHarvestResult =
   notice "atlas:pkger", "processing package:", info.name
   let workspaceRoot = packageWorkspaceRoot(info)
@@ -534,7 +521,8 @@ proc harvestPackage(
       info,
       releaseInfo.releaseInfo,
       packageReleasesDir(workspaceRoot),
-      compressions
+      compressions,
+      regenerateTarballs
     )
     result.ok = true
     result.packageName = info.name
@@ -552,7 +540,8 @@ proc harvestWorker(
     baseContext: AtlasContext;
     metadataDir: Path;
     ephemeral: bool;
-    compressions: seq[ArchiveCompression]
+    compressions: seq[ArchiveCompression];
+    regenerateTarballs: bool
 ): HarvestWorkerResult {.gcsafe.} =
   setContext(baseContext)
   var nc = block:
@@ -563,7 +552,7 @@ proc harvestWorker(
     try:
       let packageResult = block:
         {.cast(gcsafe).}:
-          nc.harvestPackage(info, metadataDir, ephemeral, compressions)
+          nc.harvestPackage(info, metadataDir, ephemeral, compressions, regenerateTarballs)
       if packageResult.ok:
         result.packageResults.add packageResult
         inc result.packagesProcessed
@@ -578,7 +567,8 @@ proc harvestRegistryCaches*(
     pkgNames: seq[string];
     ignoredPkgNames: seq[string];
     compressions: openArray[ArchiveCompression];
-    threadCount: int
+    threadCount: int;
+    regenerateTarballs: bool = false
 ): HarvestSummary =
   createDir($metadataDir)
 
@@ -605,7 +595,14 @@ proc harvestRegistryCaches*(
   let baseContext = context()
   let compressionList = @compressions
   if workerCount == 1:
-    let workerResult = harvestWorker(addr queue, baseContext, metadataDir, ephemeral, compressionList)
+    let workerResult = harvestWorker(
+      addr queue,
+      baseContext,
+      metadataDir,
+      ephemeral,
+      compressionList,
+      regenerateTarballs
+    )
     result.packagesProcessed += workerResult.packagesProcessed
     result.packagesFailed += workerResult.packagesFailed
     for failure in workerResult.failures:
@@ -637,7 +634,8 @@ proc harvestRegistryCaches*(
         baseContext,
         metadataDir,
         ephemeral,
-        compressionList
+        compressionList,
+        regenerateTarballs
       )
     for worker in workers:
       let workerResult = ^worker
