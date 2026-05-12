@@ -131,6 +131,39 @@ proc effectiveInstallFiles(
     if cmpIgnoreCase(normalizeArchivePath(relFile), packageMain) == 0 and packageMain notin result:
       result.add packageMain
 
+proc isSimpleLibraryPackage(release: NimbleRelease): bool =
+  not release.isNil and
+    $release.srcDir != "" and
+    not release.hasInstallHooks and
+    release.installDirs.len == 0 and
+    release.installFiles.len == 0 and
+    release.installExt.len == 0 and
+    release.bin.len == 0 and
+    release.namedBin.len == 0 and
+    not release.hasBin
+
+proc selectPrimaryNimbleFile(
+    trackedRelFiles: openArray[string];
+    candidateNames: openArray[string]
+): string =
+  var nimbleFiles: seq[string]
+  for relFile in trackedRelFiles:
+    let normalized = normalizeArchivePath(relFile)
+    if normalized.splitFile().ext == ".nimble":
+      nimbleFiles.add normalized
+
+  for candidateName in candidateNames:
+    if candidateName.len == 0:
+      continue
+    let candidateFile = normalizeArchivePath(candidateName) & ".nimble"
+    for nimbleFile in nimbleFiles:
+      if cmpIgnoreCase(nimbleFile, candidateFile) == 0:
+        return nimbleFile
+
+  if nimbleFiles.len == 1:
+    return nimbleFiles[0]
+  ""
+
 proc shouldSkipArchiveDir(relDir: string; release: NimbleRelease; installDirs: openArray[string]): bool =
   let parts = pathParts(relDir)
   if parts.len == 0:
@@ -180,11 +213,29 @@ proc collectArchiveFiles*(
       packageSubdir
   let realDirPrefix = normalizeArchivePath($realDir)
   let trackedFiles = archiveTrackedFiles(pkg, ver.vtag.commit, packageSubdir)
+  var packageRelFiles: seq[string]
   var realDirFiles: seq[string]
   for file in trackedFiles:
+    let packageRelFile = archivePathRelativeTo(file, normalizeArchivePath($packageSubdir))
+    if packageRelFile.len > 0:
+      packageRelFiles.add packageRelFile
     let relFile = archivePathRelativeTo(file, realDirPrefix)
     if relFile.len > 0 or normalizeArchivePath(file) == realDirPrefix:
       realDirFiles.add relFile
+
+  if isSimpleLibraryPackage(release):
+    let primaryNimbleFile = selectPrimaryNimbleFile(
+      packageRelFiles,
+      [release.name, info.name, pkg.name, pkg.projectName]
+    )
+    for file in trackedFiles:
+      let relFile = archivePathRelativeTo(file, realDirPrefix)
+      if relFile.len > 0:
+        result.add file
+      elif primaryNimbleFile.len > 0 and
+          cmpIgnoreCase(archivePathRelativeTo(file, normalizeArchivePath($packageSubdir)), primaryNimbleFile) == 0:
+        result.add file
+    return
 
   let installDirs = effectiveInstallDirs(release, info.name, realDirFiles)
   let installFiles = effectiveInstallFiles(release, info.name, realDirFiles)
