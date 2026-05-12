@@ -28,6 +28,7 @@ Options:
   --packages=path       use the given packages.json file
   --metadata=path       write copied cache files to the given directory
   --package=name[,name] process only the named package(s) from packages.json
+  --ignore=name[,name]  skip the named package(s) from packages.json
   --compression=type    archive compression(s): gzip, xz, or comma-separated list
                         default: gzip
   --threads=count, -j   number of package processing threads
@@ -40,6 +41,7 @@ type
     packagesFile: Path
     metadataDir: Path
     packageNames: seq[string]
+    ignoredPackageNames: seq[string]
     compressions: seq[ArchiveCompression]
     threadCount: int
     ephemeral: bool
@@ -127,6 +129,10 @@ proc parseAtlasPackagerOptions(
         if val.len == 0:
           writeHelp(versionString)
         result.packageNames.addPackageNames(val)
+      of "ignore":
+        if val.len == 0:
+          writeHelp(versionString)
+        result.ignoredPackageNames.addPackageNames(val)
       of "compression":
         if val.len == 0:
           writeHelp(versionString)
@@ -206,6 +212,10 @@ proc writeSettings(
     notice "atlas:pkger", "package filter:", opts.packageNames.join(",")
   else:
     notice "atlas:pkger", "package filter:", "all"
+  if opts.ignoredPackageNames.len > 0:
+    notice "atlas:pkger", "ignore filter:", opts.ignoredPackageNames.join(",")
+  else:
+    notice "atlas:pkger", "ignore filter:", "none"
 
 proc main*(versionString = "unknown") =
   installControlCHandler()
@@ -235,6 +245,7 @@ proc main*(versionString = "unknown") =
     metadataDir,
     opts.ephemeral,
     opts.packageNames,
+    opts.ignoredPackageNames,
     opts.compressions,
     opts.threadCount
   )

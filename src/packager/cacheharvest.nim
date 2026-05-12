@@ -540,6 +540,7 @@ proc harvestRegistryCaches*(
     metadataDir: Path;
     ephemeral: bool,
     pkgNames: seq[string];
+    ignoredPkgNames: seq[string];
     compressions: openArray[ArchiveCompression];
     threadCount: int
 ): HarvestSummary =
@@ -558,6 +559,8 @@ proc harvestRegistryCaches*(
       inc result.aliasesSkipped
       continue
     elif pkgNames.len() > 0 and info.name notin pkgNames:
+      continue
+    elif info.name in ignoredPkgNames:
       continue
 
     queue.packages.add info
