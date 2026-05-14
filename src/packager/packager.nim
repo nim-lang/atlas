@@ -8,7 +8,7 @@
 
 ## CLI for harvesting Atlas package release caches from a packages.json list.
 
-import std / [cpuinfo, monotimes, parseopt, os, paths, strutils]
+import std / [cpuinfo, monotimes, parseopt, os, paths, strutils, times]
 when defined(posix):
   import std / posix
 import ../basic / [context, packageinfos, reporters]
@@ -282,7 +282,8 @@ proc main*(versionString = "unknown") =
     notice "atlas:pkger", "failed packages summary:"
     for failure in summary.failures:
       notice "atlas:pkger", failure.packageName & ":", summarizeErrorLine(failure.errorMessage)
-  notice "atlas:pkger", "elapsed:", $(getMonoTime() - startedAt)
+  let elapsed = getMonoTime() - startedAt
+  notice "atlas:pkger", "elapsed:", $initDuration(milliseconds = int(elapsed.inMilliseconds))
 
 when isMainModule:
   main()
