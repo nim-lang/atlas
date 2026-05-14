@@ -5,7 +5,7 @@
 
 ## Harvest package release caches for packages in a packages.json list.
 
-import std/[json, locks, os, paths, sets, threadpool, times]
+import std/[json, locks, os, paths, sets, strutils, tables, threadpool, times]
 
 import ../basic/[context, dependencycache, nimblecontext, packageinfos, reporters, versions]
 import ../registryreleaseinfo
@@ -256,6 +256,51 @@ proc writePackageDigest(
   digest["tarballs"] = digestEntries
   writeTextFileAtomic(packageDigestFile(workspaceRoot), pretty(digest))
 
+proc summarizeErrorLine(message: string): string =
+  result = message.replace('\n', ' ').replace('\r', ' ')
+  while "  " in result:
+    result = result.replace("  ", " ")
+  result = result.strip()
+
+proc classifyHarvestError(message: string): string =
+  let normalized = summarizeErrorLine(message).toLowerAscii()
+  if "clone" in normalized:
+    return "clone"
+  if "archive" in normalized or "tarball" in normalized or "compress" in normalized:
+    return "archive"
+  if "checksum" in normalized or "hash" in normalized:
+    return "checksum"
+  if "release cache" in normalized or "releases.json" in normalized:
+    return "release"
+  if "nimble" in normalized:
+    return "nimble"
+  if "fetch" in normalized or "remote" in normalized or "git" in normalized:
+    return "git"
+  if "permission" in normalized or "access" in normalized:
+    return "access"
+  if "timeout" in normalized:
+    return "timeout"
+  if "not found" in normalized or "missing" in normalized:
+    return "missing"
+  "unknown"
+
+proc buildErrorsIndex(failures: openArray[HarvestFailure]): JsonNode =
+  result = newJObject()
+  var detailCounts = initCountTable[string]()
+  var summarizedDetails: seq[string] = @[]
+  for failure in failures:
+    let detail = summarizeErrorLine(failure.errorMessage)
+    summarizedDetails.add detail
+    detailCounts.inc(detail)
+
+  for i, failure in failures:
+    let detail = summarizedDetails[i]
+    var entry = newJObject()
+    entry["type"] = %classifyHarvestError(detail)
+    if detail.len > 0 and detailCounts[detail] == 1:
+      entry["details"] = %detail
+    result[failure.packageName] = entry
+
 proc writeIndex(
     metadataDir: Path;
     packagesFile: Path;
@@ -280,6 +325,7 @@ proc writeIndex(
   index["aliasesSkipped"] = %summary.aliasesSkipped
   index["packagesProcessed"] = %summary.packagesProcessed
   index["packagesFailed"] = %summary.packagesFailed
+  index["errors"] = buildErrorsIndex(summary.failures)
   index["packages"] = packages
   writeTextFileAtomic(metadataDir / Path("index.json"), pretty(index))
 
