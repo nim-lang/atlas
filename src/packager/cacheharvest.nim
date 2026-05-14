@@ -130,9 +130,25 @@ proc primeReleaseCacheFromRetainedMetadata(pkg: Package; workspaceRoot: Path) =
   writeTextFileAtomic(cachePath, readFile($retainedPath))
 
 proc cleanupTransientReleaseCache(pkg: Package) =
+  if pkg.isNil:
+    return
   let cachePath = packageReleaseCachePath(pkg)
   if fileExists($cachePath):
     removeFile($cachePath)
+
+proc cleanupDanglingReleaseCaches(metadataDir: Path) =
+  var removed = 0
+  for kind, path in walkDir($metadataDir):
+    if kind != pcFile:
+      continue
+    let tail = $path.Path.splitPath().tail
+    if tail in ["packages.json", "index.json"]:
+      continue
+    if path.Path.splitFile().ext == ".json":
+      removeFile(path)
+      inc removed
+  if removed > 0:
+    notice "atlas:pkger", "cleaned dangling release caches:", $removed
 
 proc headReleaseEntry(releaseInfo: PackageReleaseInfo): ArchiveReleaseEntry =
   let vtag = VersionTag(
@@ -348,11 +364,12 @@ proc harvestPackage(
   let workspaceRoot = packageWorkspaceRoot(info)
   let previousContext = context()
   var packageContext = previousContext
+  var pkg: Package
   packageContext.depsDir = workspaceRoot
   createDir($packageContext.depsDir)
   setContext(packageContext)
   try:
-    var pkg = nc.initRegistryPackage(info)
+    pkg = nc.initRegistryPackage(info)
     primeReleaseCacheFromRetainedMetadata(pkg, workspaceRoot)
     nc.loadDependency(pkg, DoClone)
     if pkg.state == Error:
@@ -376,10 +393,10 @@ proc harvestPackage(
     result.latestCommit = releaseInfo.currentCommit.h
     result.releaseCount = releaseInfo.releases.len
     result.digest = digestEntries
-    cleanupTransientReleaseCache(pkg)
     if ephemeral:
       cleanupClonedPackage(pkg)
   finally:
+    cleanupTransientReleaseCache(pkg)
     setContext(previousContext)
 
 proc harvestWorker(
@@ -418,6 +435,7 @@ proc harvestRegistryCaches*(
     regenerateTarballs: bool = false
 ): HarvestSummary =
   createDir($metadataDir)
+  cleanupDanglingReleaseCaches(metadataDir)
 
   let packageList = loadPackageList(packagesFile)
   var packageInfoByName = initTable[string, PackageInfo]()
@@ -521,3 +539,4 @@ proc harvestRegistryCaches*(
     compressions,
     packageNames = pkgNames
   )
+  cleanupDanglingReleaseCaches(metadataDir)
