@@ -7,6 +7,8 @@ when defined(nimAtlasBootstrap):
   --path:"../dist/sat/src"
 elif dirExists("../sat/src"):
   --path:"../sat/src"
+elif dirExists("deps/sat/src"):
+  --path:"deps/sat/src"
 else:
   --path:"deps/sat"
 
@@ -16,7 +18,7 @@ else:
 
 task installSat, "install sat if needed":
   if not dirExists("../sat/src") and
-      not dirExists("deps/sat") and
+      not dirExists("deps/sat/src") and
       not defined(nimAtlasBootstrap):
     exec "git clone https://github.com/nim-lang/sat deps/sat"
 

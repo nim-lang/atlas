@@ -138,3 +138,14 @@ jobs:
           cd atlas
           nimble install -y
 
+      - name: Test install.sh
+        if: runner.os == 'Linux' || runner.os == 'macOS'
+        shell: bash
+        run: |
+          INSTALL_DIR="$(mktemp -d)"
+          export ATLAS_REPO_URL="file://${GITHUB_WORKSPACE}/atlas"
+          export ATLAS_INSTALL_DIR="$INSTALL_DIR"
+          export ATLAS_REF=""
+          "${GITHUB_WORKSPACE}/atlas/install.sh"
+          test -x "$INSTALL_DIR/atlas"
+          "$INSTALL_DIR/atlas" --version
