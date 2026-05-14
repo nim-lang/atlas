@@ -188,7 +188,11 @@ proc collectReleaseArchives(
       if fileExists($hashTarPath):
         removeFile($hashTarPath)
     let contentHashSuffix = sanitizeArchiveComponent(contentHash[0 .. 7])
-    var rootStem = baseName & "-" & label & "-" & commitSuffix & "-" & contentHashSuffix
+    var rootStem =
+      if releaseEntry.isHead:
+        baseName & "-head-" & commitSuffix
+      else:
+        baseName & "-" & label & "-" & commitSuffix & "-" & contentHashSuffix
     if usedStems.containsOrIncl(rootStem):
       rootStem.add "-" & commitSuffix
       discard usedStems.containsOrIncl(rootStem)
