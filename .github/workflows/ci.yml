@@ -139,7 +139,7 @@ jobs:
           nimble install -y
 
       - name: Test install.sh
-        if: runner.os == 'Linux' && matrix.target.cpu == 'amd64' && matrix.nim_branch == 'version-2-2'
+        if: runner.os == 'Linux' || runner.os == 'macOS'
         shell: bash
         run: |
           INSTALL_DIR="$(mktemp -d)"
