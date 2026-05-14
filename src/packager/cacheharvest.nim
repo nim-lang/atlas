@@ -122,6 +122,13 @@ proc copyPackageReleaseMetadata(pkg: Package; workspaceRoot: Path) =
   let dest = packageReleasesMetadataFile(workspaceRoot)
   writeTextFileAtomic(dest, readFile($cachePath))
 
+proc primeReleaseCacheFromRetainedMetadata(pkg: Package; workspaceRoot: Path) =
+  let retainedPath = packageReleasesMetadataFile(workspaceRoot)
+  if not fileExists($retainedPath):
+    return
+  let cachePath = packageReleaseCachePath(pkg)
+  writeTextFileAtomic(cachePath, readFile($retainedPath))
+
 proc cleanupTransientReleaseCache(pkg: Package) =
   let cachePath = packageReleaseCachePath(pkg)
   if fileExists($cachePath):
@@ -345,28 +352,33 @@ proc harvestPackage(
   createDir($packageContext.depsDir)
   setContext(packageContext)
   try:
-    let releaseInfo = nc.loadRegistryPackageReleaseInfo(
-      info,
-      mode = AllReleases,
-      onClone = DoClone
-    )
-    copyPackageReleaseMetadata(releaseInfo.package, workspaceRoot)
+    var pkg = nc.initRegistryPackage(info)
+    primeReleaseCacheFromRetainedMetadata(pkg, workspaceRoot)
+    nc.loadDependency(pkg, DoClone)
+    if pkg.state == Error:
+      let msg =
+        if pkg.errors.len > 0: pkg.errors.join("; ")
+        else: "unknown package load error"
+      raise newException(ValueError, "cannot load registry package " & info.name & ": " & msg)
+
+    let releaseInfo = nc.loadPackageReleaseInfo(pkg, AllReleases, @[])
+    copyPackageReleaseMetadata(pkg, workspaceRoot)
     let digestEntries = collectReleaseArchives(
-      releaseInfo.package,
+      pkg,
       info,
-      releaseInfo.releaseInfo,
+      releaseInfo,
       packageReleasesDir(workspaceRoot),
       compressions,
       regenerateTarballs
     )
     result.ok = true
     result.packageName = info.name
-    result.latestCommit = releaseInfo.releaseInfo.currentCommit.h
-    result.releaseCount = releaseInfo.releaseInfo.releases.len
+    result.latestCommit = releaseInfo.currentCommit.h
+    result.releaseCount = releaseInfo.releases.len
     result.digest = digestEntries
-    cleanupTransientReleaseCache(releaseInfo.package)
+    cleanupTransientReleaseCache(pkg)
     if ephemeral:
-      cleanupClonedPackage(releaseInfo.package)
+      cleanupClonedPackage(pkg)
   finally:
     setContext(previousContext)
 
