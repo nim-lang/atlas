@@ -304,10 +304,20 @@ proc remoteNameFromGitUrl*(rawUrl: string): string =
 
   let user = parts[^2]
   let repo = parts[^1]
-  if user.len == 0:
-    repo
-  else:
-    repo & "." & user & "." & u.hostname
+  result =
+    if user.len == 0:
+      repo
+    else:
+      repo & "." & user & "." & u.hostname
+
+  for c in mitems(result):
+    if c notin {'a'..'z', 'A'..'Z', '0'..'9', '.', '_', '-'}:
+      c = '-'
+  while ".." in result:
+    result = result.replace("..", ".")
+  while "--" in result:
+    result = result.replace("--", "-")
+  result = result.strip(chars = {'-', '.'})
 
 proc getRemoteUrlFor(path: Path; remote: string): string =
   result = configRemoteUrl(path, remote)
