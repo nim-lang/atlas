@@ -19,6 +19,7 @@ type
     aliasesSkipped*: int
     packagesProcessed*: int
     packagesFailed*: int
+    failures*: seq[HarvestFailure]
 
   PackageQueue = object
     lock: Lock
@@ -32,9 +33,9 @@ type
     releaseCount: int
     digest: JsonNode
 
-  HarvestFailure = object
-    packageName: string
-    errorMessage: string
+  HarvestFailure* = object
+    packageName*: string
+    errorMessage*: string
 
   HarvestWorkerResult = object
     packagesProcessed: int
@@ -390,6 +391,7 @@ proc harvestRegistryCaches*(
     result.packagesProcessed += workerResult.packagesProcessed
     result.packagesFailed += workerResult.packagesFailed
     for failure in workerResult.failures:
+      result.failures.add failure
       error "atlas:pkger", "failed package:", failure.packageName, "error:", failure.errorMessage
     for packageResult in workerResult.packageResults:
       let info = packageInfoByName[packageResult.packageName]
@@ -426,6 +428,7 @@ proc harvestRegistryCaches*(
       result.packagesProcessed += workerResult.packagesProcessed
       result.packagesFailed += workerResult.packagesFailed
       for failure in workerResult.failures:
+        result.failures.add failure
         error "atlas:pkger", "failed package:", failure.packageName, "error:", failure.errorMessage
       for packageResult in workerResult.packageResults:
         let info = packageInfoByName[packageResult.packageName]

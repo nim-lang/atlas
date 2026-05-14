@@ -231,6 +231,12 @@ proc writeSettings*(
   else:
     notice "atlas:pkger", "ignore filter:", "none"
 
+proc summarizeErrorLine(message: string): string =
+  result = message.replace('\n', ' ').replace('\r', ' ')
+  while "  " in result:
+    result = result.replace("  ", " ")
+  result = result.strip()
+
 proc main*(versionString = "unknown") =
   installControlCHandler()
   let startedAt = getMonoTime()
@@ -272,6 +278,10 @@ proc main*(versionString = "unknown") =
     ", skipped " & $summary.aliasesSkipped &
     " aliases"
   )
+  if summary.failures.len > 0:
+    notice "atlas:pkger", "failed packages summary:"
+    for failure in summary.failures:
+      notice "atlas:pkger", failure.packageName & ":", summarizeErrorLine(failure.errorMessage)
   notice "atlas:pkger", "elapsed:", $(getMonoTime() - startedAt)
 
 when isMainModule:
