@@ -5,7 +5,7 @@
 
 ## Harvest package release caches for packages in a packages.json list.
 
-import std/[json, locks, os, paths, sets, strutils, tables, threadpool, times]
+import std/[algorithm, json, locks, os, paths, sets, strutils, tables, threadpool, times]
 
 import ../basic/[context, dependencycache, nimblecontext, packageinfos, reporters, versions]
 import ../registryreleaseinfo
@@ -478,6 +478,7 @@ proc harvestRegistryCaches*(
       continue
 
     queue.packages.add info
+  queue.packages.sort(proc (a, b: PackageInfo): int = cmp(a.name, b.name))
 
   let workerCount = max(1, min(threadCount, max(1, queue.packages.len)))
   let baseContext = context()
