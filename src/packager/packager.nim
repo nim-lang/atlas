@@ -8,7 +8,7 @@
 
 ## CLI for harvesting Atlas package release caches from a packages.json list.
 
-import std / [cpuinfo, monotimes, parseopt, os, paths, strutils, times]
+import std / [cpuinfo, json, monotimes, parseopt, os, paths, strutils, times]
 when defined(posix):
   import std / posix
 import ../basic / [context, packageinfos, reporters]
@@ -49,6 +49,57 @@ type
     updateRepos: bool
     regenerateTarballs: bool
     ephemeral: bool
+
+proc summarizeErrorLine(message: string): string =
+  result = message.replace('\n', ' ').replace('\r', ' ')
+  while "  " in result:
+    result = result.replace("  ", " ")
+  result = result.strip()
+
+proc shouldSkipRetriedRepo(errorType: string; details: string): bool =
+  let kind = errorType.toLowerAscii()
+  let normalized = summarizeErrorLine(details).toLowerAscii()
+  let looksInaccessible =
+    "terminal prompts disabled" in normalized or
+    "could not read username" in normalized or
+    "repository not found" in normalized or
+    "unable to access" in normalized or
+    "failed to connect" in normalized or
+    "could not resolve host" in normalized or
+    "permission denied" in normalized or
+    "access denied" in normalized or
+    "authentication failed" in normalized or
+    "not a valid remote name" in normalized or
+    "fatal: cannot exec '/bin/false'" in normalized
+
+  let looksMissing =
+    "notfound:" in normalized or
+    " not found" in normalized or
+    "missing canonical remote" in normalized
+
+  (kind in ["git", "access"] and (looksInaccessible or looksMissing)) or
+    (kind == "unknown" and looksInaccessible)
+
+proc loadAutoIgnoredPackages(metadataDir: Path): seq[string] =
+  let indexPath = metadataDir / Path"index.json"
+  if not fileExists($indexPath):
+    return
+
+  try:
+    let index = parseFile($indexPath)
+    let errors = index{"errors"}
+    if errors.isNil or errors.kind != JObject:
+      return
+
+    for packageName, errInfo in errors:
+      if errInfo.kind != JObject:
+        continue
+      let errorType = errInfo{"type"}.getStr()
+      let details = errInfo{"details"}.getStr()
+      if shouldSkipRetriedRepo(errorType, details) and packageName notin result:
+        result.add packageName
+  except CatchableError:
+    discard
 
 proc parsePackageNames*(value: string): seq[string] =
   for rawName in value.split(','):
@@ -231,12 +282,6 @@ proc writeSettings*(
   else:
     notice "atlas:pkger", "ignore filter:", "none"
 
-proc summarizeErrorLine(message: string): string =
-  result = message.replace('\n', ' ').replace('\r', ' ')
-  while "  " in result:
-    result = result.replace("  ", " ")
-  result = result.strip()
-
 proc main*(versionString = "unknown") =
   installControlCHandler()
   let startedAt = getMonoTime()
@@ -262,12 +307,22 @@ proc main*(versionString = "unknown") =
     quit(1)
 
   writeSettings(packagesFile, metadataDir, opts)
+  var ignoredPackages = opts.ignoredPackageNames
+  for packageName in loadAutoIgnoredPackages(metadataDir):
+    if packageName notin ignoredPackages:
+      ignoredPackages.add packageName
+  if ignoredPackages.len > opts.ignoredPackageNames.len:
+    var autoIgnored: seq[string]
+    for packageName in ignoredPackages:
+      if packageName notin opts.ignoredPackageNames:
+        autoIgnored.add packageName
+    notice "atlas:pkger", "auto-skipping inaccessible packages:", autoIgnored.join(",")
   let summary = harvestRegistryCaches(
     packagesFile,
     metadataDir,
     opts.ephemeral,
     opts.packageNames,
-    opts.ignoredPackageNames,
+    ignoredPackages,
     opts.compressions,
     opts.threadCount,
     opts.regenerateTarballs
