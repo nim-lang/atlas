@@ -216,21 +216,65 @@ proc fetchGitHubHeadChunk(
   finally:
     client.close()
 
+proc mergeGitHubRepoStates(
+    dest: var Table[string, GitHubRepoState];
+    src: Table[string, GitHubRepoState]
+) =
+  for packageName, state in src.pairs:
+    dest[packageName] = state
+
+proc fetchGitHubHeadChunkAdaptive(
+    targets: seq[GitHubRepoTarget];
+    token: string;
+    chunkLabel: string
+): Table[string, GitHubRepoState] =
+  try:
+    return fetchGitHubHeadChunk(targets, token)
+  except CatchableError as e:
+    if targets.len <= 1:
+      warn "atlas:pkger",
+        "github api check package probe failed:",
+        chunkLabel,
+        "package:", targets[0].packageName,
+        "error:", e.msg
+      return
+
+    let mid = targets.len div 2
+    let left = targets[0 ..< mid]
+    let right = targets[mid .. ^1]
+    warn "atlas:pkger",
+      "github api check chunk split:",
+      chunkLabel,
+      "packages:", targets[0].packageName, "->", targets[^1].packageName,
+      "error:", e.msg
+    result.mergeGitHubRepoStates(
+      fetchGitHubHeadChunkAdaptive(left, token, chunkLabel & ".1")
+    )
+    result.mergeGitHubRepoStates(
+      fetchGitHubHeadChunkAdaptive(right, token, chunkLabel & ".2")
+    )
+
 proc batchedGitHubHeads(
     targets: openArray[GitHubRepoTarget];
     token: string;
     chunkSize = DefaultGitHubGraphqlChunkSize
 ): Table[string, GitHubRepoState] =
   var i = 0
+  let totalChunks =
+    if targets.len == 0: 0
+    else: (targets.len + max(1, chunkSize) - 1) div max(1, chunkSize)
+  var chunkIndex = 0
   while i < targets.len:
     let j = min(targets.len, i + max(1, chunkSize))
-    notice "atlas:pkger", "github api check chunk:", $(i + 1), "-", $j, "of", $targets.len
-    let chunkHeads =
-      try:
-        fetchGitHubHeadChunk(targets[i ..< j], token)
-      except CatchableError as e:
-        warn "atlas:pkger", "github api check chunk failed:", $(i + 1), "-", $j, "error:", e.msg
-        initTable[string, GitHubRepoState]()
+    inc chunkIndex
+    notice "atlas:pkger",
+      "github api check chunk:", $chunkIndex, "of", $totalChunks,
+      "packages:", targets[i].packageName, "->", targets[j - 1].packageName
+    let chunkHeads = fetchGitHubHeadChunkAdaptive(
+      targets[i ..< j],
+      token,
+      $chunkIndex & "/" & $totalChunks
+    )
     for packageName, oid in chunkHeads.pairs:
       result[packageName] = oid
     i = j
