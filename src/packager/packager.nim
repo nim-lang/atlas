@@ -32,6 +32,9 @@ Options:
   --ignore=name[,name]  skip the named package(s) from packages.json
   --update-repos        run `gitops.updateRepo` for existing repos before harvest
   --regenerate-tarballs rebuild all tarballs instead of reusing matching archives
+  --github-api-chunk-size=count
+                        github api batch size for precheck
+                        default: 64
   --compression=type    archive compression(s): gzip, xz, or comma-separated list
                         default: gzip
   --threads=count, -j   number of package processing threads
@@ -46,6 +49,7 @@ type
     packageNames: seq[string]
     ignoredPackageNames: seq[string]
     compressions: seq[ArchiveCompression]
+    githubApiChunkSize: int
     threadCount: int
     updateRepos: bool
     regenerateTarballs: bool
@@ -147,6 +151,14 @@ proc parseThreadCount*(value: string): int =
   if result < 1:
     raise newException(ValueError, "thread count must be at least 1")
 
+proc parsePositiveCount*(value: string; label: string): int =
+  try:
+    result = parseInt(value)
+  except ValueError:
+    raise newException(ValueError, "invalid " & label & ": " & value)
+  if result < 1:
+    raise newException(ValueError, label & " must be at least 1")
+
 proc writeHelp*(versionString: string; code = 2) =
   stdout.write(usage(versionString))
   stdout.flushFile()
@@ -163,6 +175,7 @@ proc parseAtlasPackagerOptions*(
     positional: var seq[string]
 ): PackagerCliOptions =
   result.compressions = @[acGzip]
+  result.githubApiChunkSize = DefaultGitHubGraphqlChunkSize
   result.threadCount = max(1, countProcessors())
   var compressionWasSet = false
   for kind, key, val in getopt(params):
@@ -193,6 +206,13 @@ proc parseAtlasPackagerOptions*(
         result.updateRepos = true
       of "regenerate-tarballs":
         result.regenerateTarballs = true
+      of "github-api-chunk-size":
+        if val.len == 0:
+          writeHelp(versionString)
+        try:
+          result.githubApiChunkSize = parsePositiveCount(val, "github api chunk size")
+        except ValueError:
+          writeHelp(versionString)
       of "compression":
         if val.len == 0:
           writeHelp(versionString)
@@ -270,6 +290,7 @@ proc writeSettings*(
   notice "atlas:pkger", "packages:", $packagesFile
   notice "atlas:pkger", "metadata:", $metadataDir
   notice "atlas:pkger", "threads:", $opts.threadCount
+  notice "atlas:pkger", "github api chunk size:", $opts.githubApiChunkSize
   notice "atlas:pkger", "compressions:", archiveCompressionNames(opts.compressions).join(",")
   notice "atlas:pkger", "update repos:", $opts.updateRepos
   notice "atlas:pkger", "regenerate tarballs:", $opts.regenerateTarballs
@@ -325,7 +346,8 @@ proc main*(versionString = "unknown") =
       metadataDir,
       opts.packageNames,
       ignoredPackages,
-      archiveCompressionNames(opts.compressions)
+      archiveCompressionNames(opts.compressions),
+      opts.githubApiChunkSize
     )
     if githubSkipped.len > 0:
       for packageName in githubSkipped:

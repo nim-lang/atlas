@@ -299,7 +299,8 @@ proc findUnchangedGitHubPackages*(
     metadataDir: Path;
     packageNames: seq[string];
     ignoredPackageNames: seq[string];
-    currentCompressions: openArray[string]
+    currentCompressions: openArray[string];
+    chunkSize = DefaultGitHubGraphqlChunkSize
 ): seq[string] =
   let token = getEnv("GITHUB_API_KEY")
   if token.len == 0:
@@ -337,7 +338,7 @@ proc findUnchangedGitHubPackages*(
     return
 
   notice "atlas:pkger", "github api check: probing", $targets.len, "package(s)"
-  let heads = batchedGitHubHeads(targets, token)
+  let heads = batchedGitHubHeads(targets, token, chunkSize)
   for target in targets:
     if not heads.hasKey(target.packageName):
       info "atlas:pkger",
