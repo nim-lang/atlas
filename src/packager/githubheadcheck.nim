@@ -335,6 +335,8 @@ proc findUnchangedGitHubPackages*(
     if target.packageName.len > 0:
       targets.add target
 
+  targets.sort(proc (a, b: GitHubRepoTarget): int = cmp(a.packageName, b.packageName))
+
   if targets.len == 0:
     info "atlas:pkger", "github api check skipped: no eligible github packages"
     return
