@@ -5,13 +5,13 @@
 
 ## Batch-check GitHub default-branch HEAD commits for retained package metadata.
 
-import std/[algorithm, httpclient, json, os, paths, sets, strutils, tables]
+import std/[algorithm, httpclient, json, os, paths, sets, streams, strutils, tables]
 
 import ../basic/[httpclientutils, packageinfos, pkgurls, reporters]
 
 const
   GitHubGraphqlEndpoint* = "https://api.github.com/graphql"
-  DefaultGitHubGraphqlChunkSize* = 40
+  DefaultGitHubGraphqlChunkSize* = 256
   DefaultGitHubTagProbeCount* = 100
 
 type
@@ -154,7 +154,6 @@ proc fetchGitHubHeadChunk(
 
   let client = newHttpClient(headers = newHttpHeaders({
     "User-Agent": AtlasUserAgent,
-    "Accept-Encoding": "gzip",
     "Authorization": "Bearer " & token,
     "Content-Type": "application/json",
     "Accept": "application/json"
@@ -166,10 +165,36 @@ proc fetchGitHubHeadChunk(
       httpMethod = HttpPost,
       body = $body
     )
+    let responseBody = response.bodyStream.readAll()
     if response.code.is4xx or response.code.is5xx:
-      raise newException(IOError, "GitHub GraphQL returned " & response.status)
+      raise newException(
+        IOError,
+        "GitHub GraphQL returned " & response.status & ": " &
+          responseBody.replace('\n', ' ').replace('\r', ' ').strip()
+      )
+    if responseBody.strip().len == 0:
+      raise newException(IOError, "GitHub GraphQL returned an empty response body")
 
-    let root = parseJson(response.body)
+    let root =
+      try:
+        parseJson(responseBody)
+      except JsonParsingError as e:
+        let snippet = responseBody.replace('\n', ' ').replace('\r', ' ').strip()
+        raise newException(
+          IOError,
+          "GitHub GraphQL returned non-JSON response: " &
+            (if snippet.len > 200: snippet[0 .. 199] & "..." else: snippet) &
+            " (" & e.msg & ")"
+        )
+    let errors = root{"errors"}
+    if not errors.isNil and errors.kind == JArray and errors.len > 0:
+      var summaries: seq[string]
+      for err in errors:
+        let msg = err{"message"}.getStr()
+        if msg.len > 0:
+          summaries.add msg
+      if summaries.len > 0:
+        warn "atlas:pkger", "github api check graphql errors:", summaries.join(" | ")
     let data = root{"data"}
     if data.isNil or data.kind != JObject:
       return
@@ -199,7 +224,13 @@ proc batchedGitHubHeads(
   var i = 0
   while i < targets.len:
     let j = min(targets.len, i + max(1, chunkSize))
-    let chunkHeads = fetchGitHubHeadChunk(targets[i ..< j], token)
+    notice "atlas:pkger", "github api check chunk:", $(i + 1), "-", $j, "of", $targets.len
+    let chunkHeads =
+      try:
+        fetchGitHubHeadChunk(targets[i ..< j], token)
+      except CatchableError as e:
+        warn "atlas:pkger", "github api check chunk failed:", $(i + 1), "-", $j, "error:", e.msg
+        initTable[string, GitHubRepoState]()
     for packageName, oid in chunkHeads.pairs:
       result[packageName] = oid
     i = j
