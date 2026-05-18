@@ -237,6 +237,20 @@ proc loadPackageReleaseInfo*(
         info pkg.url.projectName, "traverseDependency error loading versions reverting to ", $result.currentCommit
 
   result.releases = deduplicateReleases(pkg, result.releases)
+  if not result.currentCommit.isEmpty():
+    var hasHead = false
+    var headRelease: NimbleRelease
+    for (ver, release) in result.releases:
+      if not ver.isNil and ver.vtag.version == Version"#head":
+        hasHead = true
+        break
+      if headRelease.isNil and not ver.isNil and ver.vtag.commit == result.currentCommit:
+        headRelease = release
+    if not hasHead:
+      let headTag = VersionTag(v: Version"#head", c: initCommitHash(result.currentCommit, FromHead))
+      if headRelease.isNil:
+        headRelease = NimbleRelease(version: Version"#head", status: Normal)
+      result.releases.add((headTag.toPkgVer(), headRelease))
 
   if canUsePackageReleaseCache(pkg, mode, result.expandedExplicitVersions):
     savePackageReleaseCache(pkg, result.currentCommit, result.releases)
