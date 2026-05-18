@@ -8,7 +8,7 @@
 
 ## CLI for harvesting Atlas package release caches from a packages.json list.
 
-import std / [cpuinfo, json, monotimes, parseopt, os, paths, strutils, times]
+import std / [algorithm, cpuinfo, json, monotimes, parseopt, os, paths, strutils, times]
 when defined(posix):
   import std / posix
 import ../basic / [context, packageinfos, reporters]
@@ -306,6 +306,33 @@ proc writeSettings*(
   else:
     notice "atlas:pkger", "ignore filter:", "none"
 
+proc writeStats*(summary: HarvestSummary) =
+  if summary.releaseCounts.len == 0:
+    notice "atlas:pkger", "stats:", "no processed package release stats"
+    return
+
+  var counts = summary.releaseCounts
+  counts.sort()
+  var totalReleases = 0
+  for count in counts:
+    totalReleases += count
+  let average = totalReleases.float / counts.len.float
+  let median =
+    if counts.len mod 2 == 1:
+      counts[counts.len div 2].float
+    else:
+      (counts[counts.len div 2 - 1].float + counts[counts.len div 2].float) / 2.0
+
+  notice "atlas:pkger",
+    "stats tagged repos:", $summary.taggedPackages,
+    "releases:", $summary.taggedReleases
+  notice "atlas:pkger",
+    "stats untagged repos:", $summary.untaggedPackages,
+    "releases:", $summary.untaggedReleases
+  notice "atlas:pkger",
+    "stats releases per package avg:", formatFloat(average, ffDecimal, 2),
+    "median:", formatFloat(median, ffDecimal, 2)
+
 proc main*(versionString = "unknown") =
   setAtlasVerbosity(Notice)
   enableManagedSubprocessGroups()
@@ -377,6 +404,7 @@ proc main*(versionString = "unknown") =
     notice "atlas:pkger", "failed packages summary:"
     for failure in summary.failures:
       notice "atlas:pkger", failure.packageName & ":", summarizeErrorLine(failure.errorMessage)
+  writeStats(summary)
   let elapsed = getMonoTime() - startedAt
   notice "atlas:pkger", "elapsed:", $initDuration(milliseconds = int(elapsed.inMilliseconds))
 

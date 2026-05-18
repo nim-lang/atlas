@@ -19,6 +19,11 @@ type
     aliasesSkipped*: int
     packagesProcessed*: int
     packagesFailed*: int
+    taggedPackages*: int
+    untaggedPackages*: int
+    taggedReleases*: int
+    untaggedReleases*: int
+    releaseCounts*: seq[int]
     failures*: seq[HarvestFailure]
 
   PackageQueue = object
@@ -31,6 +36,7 @@ type
     packageName: string
     latestCommit: string
     releaseCount: int
+    hasGitTags: bool
     digest: JsonNode
 
   HarvestFailure* = object
@@ -40,6 +46,11 @@ type
   HarvestWorkerResult = object
     packagesProcessed: int
     packagesFailed: int
+    taggedPackages: int
+    untaggedPackages: int
+    taggedReleases: int
+    untaggedReleases: int
+    releaseCounts: seq[int]
     packageResults: seq[PackageHarvestResult]
     failures: seq[HarvestFailure]
 
@@ -391,7 +402,12 @@ proc harvestPackage(
     result.ok = true
     result.packageName = info.name
     result.latestCommit = releaseInfo.currentCommit.h
-    result.releaseCount = releaseInfo.releases.len
+    for (ver, _) in releaseInfo.releases:
+      if ver.isNil or ver.vtag.version == Version"#head":
+        continue
+      inc result.releaseCount
+      if ver.vtag.commit.orig == FromGitTag:
+        result.hasGitTags = true
     result.digest = digestEntries
     if ephemeral:
       cleanupClonedPackage(pkg)
@@ -420,6 +436,13 @@ proc harvestWorker(
       if packageResult.ok:
         result.packageResults.add packageResult
         inc result.packagesProcessed
+        result.releaseCounts.add packageResult.releaseCount
+        if packageResult.hasGitTags:
+          inc result.taggedPackages
+          result.taggedReleases += packageResult.releaseCount
+        else:
+          inc result.untaggedPackages
+          result.untaggedReleases += packageResult.releaseCount
     except CatchableError as e:
       result.failures.add HarvestFailure(packageName: info.name, errorMessage: e.msg)
       inc result.packagesFailed
@@ -470,6 +493,11 @@ proc harvestRegistryCaches*(
     )
     result.packagesProcessed += workerResult.packagesProcessed
     result.packagesFailed += workerResult.packagesFailed
+    result.taggedPackages += workerResult.taggedPackages
+    result.untaggedPackages += workerResult.untaggedPackages
+    result.taggedReleases += workerResult.taggedReleases
+    result.untaggedReleases += workerResult.untaggedReleases
+    result.releaseCounts.add workerResult.releaseCounts
     for failure in workerResult.failures:
       result.failures.add failure
       error "atlas:pkger", "failed package:", failure.packageName, "error:", failure.errorMessage
@@ -507,6 +535,11 @@ proc harvestRegistryCaches*(
       let workerResult = ^worker
       result.packagesProcessed += workerResult.packagesProcessed
       result.packagesFailed += workerResult.packagesFailed
+      result.taggedPackages += workerResult.taggedPackages
+      result.untaggedPackages += workerResult.untaggedPackages
+      result.taggedReleases += workerResult.taggedReleases
+      result.untaggedReleases += workerResult.untaggedReleases
+      result.releaseCounts.add workerResult.releaseCounts
       for failure in workerResult.failures:
         result.failures.add failure
         error "atlas:pkger", "failed package:", failure.packageName, "error:", failure.errorMessage
