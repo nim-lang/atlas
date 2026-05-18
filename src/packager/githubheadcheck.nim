@@ -213,13 +213,15 @@ proc findUnchangedGitHubPackages*(
 ): seq[string] =
   let token = getEnv("GITHUB_API_KEY")
   if token.len == 0:
+    info "atlas:pkger", "github api check skipped: missing GITHUB_API_KEY"
     return
 
   let retainedIndex = loadRetainedIndexState(metadataDir)
   if retainedIndex.packages.len == 0:
+    info "atlas:pkger", "github api check skipped: missing retained index package state"
     return
   if not sameCompressions(retainedIndex.compressions, currentCompressions):
-    info "atlas:pkger", "skipping GitHub HEAD check because compressions changed"
+    info "atlas:pkger", "github api check skipped: compressions changed"
     return
 
   let ignored = ignoredPackageNames.toHashSet()
@@ -241,17 +243,38 @@ proc findUnchangedGitHubPackages*(
       targets.add target
 
   if targets.len == 0:
+    info "atlas:pkger", "github api check skipped: no eligible github packages"
     return
 
+  notice "atlas:pkger", "github api check: probing", $targets.len, "package(s)"
   let heads = batchedGitHubHeads(targets, token)
   for target in targets:
     let remoteState = heads.getOrDefault(target.packageName)
     if remoteState.headOid != target.latestCommit:
+      info "atlas:pkger",
+        "github api check refresh:",
+        target.packageName,
+        "head changed",
+        "cached:", target.latestCommit,
+        "remote:", remoteState.headOid
       continue
     var hasUnseenTag = false
+    var unseenTag = ""
     for tagName in remoteState.tagNames:
       if tagName notin target.retainedVersions:
         hasUnseenTag = true
+        unseenTag = tagName
         break
     if not hasUnseenTag:
+      notice "atlas:pkger",
+        "github api check up to date:",
+        target.packageName,
+        "head:", remoteState.headOid,
+        "tags checked:", $remoteState.tagNames.len
       result.add target.packageName
+    else:
+      info "atlas:pkger",
+        "github api check refresh:",
+        target.packageName,
+        "new tag:", unseenTag,
+        "cached head:", target.latestCommit
