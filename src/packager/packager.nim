@@ -284,6 +284,7 @@ proc writeSettings*(
     notice "atlas:pkger", "ignore filter:", "none"
 
 proc main*(versionString = "unknown") =
+  setAtlasVerbosity(Info)
   installControlCHandler()
   let startedAt = getMonoTime()
   var args: seq[string]
