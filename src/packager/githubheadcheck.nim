@@ -11,7 +11,7 @@ import ../basic/[httpclientutils, packageinfos, pkgurls, reporters]
 
 const
   GitHubGraphqlEndpoint* = "https://api.github.com/graphql"
-  DefaultGitHubGraphqlChunkSize* = 512
+  DefaultGitHubGraphqlBatchSize* = 512
   DefaultGitHubTagProbeCount* = 100
 
 type
@@ -147,7 +147,7 @@ proc buildGitHubHeadQuery(targets: openArray[GitHubRepoTarget]): string =
     )
   result.add("}")
 
-proc fetchGitHubHeadChunk(
+proc fetchGitHubHeadBatch(
     targets: openArray[GitHubRepoTarget];
     token: string
 ): Table[string, GitHubRepoState] =
@@ -231,20 +231,20 @@ proc isFatalGitHubProbeError(message: string): bool =
     "bad credentials" in normalized or
     "403 forbidden" in normalized
 
-proc fetchGitHubHeadChunkAdaptive(
+proc fetchGitHubHeadBatchAdaptive(
     targets: seq[GitHubRepoTarget];
     token: string;
-    chunkLabel: string
+    batchLabel: string
 ): Table[string, GitHubRepoState] =
   try:
-    return fetchGitHubHeadChunk(targets, token)
+    return fetchGitHubHeadBatch(targets, token)
   except CatchableError as e:
     if isFatalGitHubProbeError(e.msg):
       raise newException(GitHubProbeFatalError, e.msg)
     if targets.len <= 1:
       warn "atlas:pkger",
         "github api check package probe failed:",
-        chunkLabel,
+        batchLabel,
         "package:", targets[0].packageName,
         "error:", e.msg
       return
@@ -253,44 +253,44 @@ proc fetchGitHubHeadChunkAdaptive(
     let left = targets[0 ..< mid]
     let right = targets[mid .. ^1]
     warn "atlas:pkger",
-      "github api check chunk split:",
-      chunkLabel,
+      "github api check batch split:",
+      batchLabel,
       "packages:", targets[0].packageName, "->", targets[^1].packageName,
       "error:", e.msg
     result.mergeGitHubRepoStates(
-      fetchGitHubHeadChunkAdaptive(left, token, chunkLabel & ".1")
+      fetchGitHubHeadBatchAdaptive(left, token, batchLabel & ".1")
     )
     result.mergeGitHubRepoStates(
-      fetchGitHubHeadChunkAdaptive(right, token, chunkLabel & ".2")
+      fetchGitHubHeadBatchAdaptive(right, token, batchLabel & ".2")
     )
 
 proc batchedGitHubHeads(
     targets: openArray[GitHubRepoTarget];
     token: string;
-    chunkSize = DefaultGitHubGraphqlChunkSize
+    batchSize = DefaultGitHubGraphqlBatchSize
 ): Table[string, GitHubRepoState] =
   var i = 0
-  let totalChunks =
+  let totalBatchs =
     if targets.len == 0: 0
-    else: (targets.len + max(1, chunkSize) - 1) div max(1, chunkSize)
-  var chunkIndex = 0
+    else: (targets.len + max(1, batchSize) - 1) div max(1, batchSize)
+  var batchIndex = 0
   while i < targets.len:
-    let j = min(targets.len, i + max(1, chunkSize))
-    inc chunkIndex
+    let j = min(targets.len, i + max(1, batchSize))
+    inc batchIndex
     notice "atlas:pkger",
-      "github api check chunk:", $chunkIndex, "of", $totalChunks,
+      "github api check batch:", $batchIndex, "of", $totalBatchs,
       "packages:", targets[i].packageName, "->", targets[j - 1].packageName
-    let chunkHeads =
+    let batchHeads =
       try:
-        fetchGitHubHeadChunkAdaptive(
+        fetchGitHubHeadBatchAdaptive(
           targets[i ..< j],
           token,
-          $chunkIndex & "/" & $totalChunks
+          $batchIndex & "/" & $totalBatchs
         )
       except GitHubProbeFatalError as e:
         warn "atlas:pkger", "github api check disabled:", e.msg
         return
-    for packageName, oid in chunkHeads.pairs:
+    for packageName, oid in batchHeads.pairs:
       result[packageName] = oid
     i = j
 
@@ -300,7 +300,7 @@ proc findUnchangedGitHubPackages*(
     packageNames: seq[string];
     ignoredPackageNames: seq[string];
     currentCompressions: openArray[string];
-    chunkSize = DefaultGitHubGraphqlChunkSize
+    batchSize = DefaultGitHubGraphqlBatchSize
 ): seq[string] =
   let token = getEnv("GITHUB_API_KEY")
   if token.len == 0:
@@ -338,7 +338,7 @@ proc findUnchangedGitHubPackages*(
     return
 
   notice "atlas:pkger", "github api check: probing", $targets.len, "package(s)"
-  let heads = batchedGitHubHeads(targets, token, chunkSize)
+  let heads = batchedGitHubHeads(targets, token, batchSize)
   for target in targets:
     if not heads.hasKey(target.packageName):
       info "atlas:pkger",
