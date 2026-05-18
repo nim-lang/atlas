@@ -34,7 +34,7 @@ Options:
   --regenerate-tarballs rebuild all tarballs instead of reusing matching archives
   --github-api-chunk-size=count
                         github api batch size for precheck
-                        default: 64
+                        default: 100
   --compression=type    archive compression(s): gzip, xz, or comma-separated list
                         default: gzip
   --threads=count, -j   number of package processing threads

@@ -11,7 +11,7 @@ import ../basic/[httpclientutils, packageinfos, pkgurls, reporters]
 
 const
   GitHubGraphqlEndpoint* = "https://api.github.com/graphql"
-  DefaultGitHubGraphqlBatchSize* = 512
+  DefaultGitHubGraphqlBatchSize* = 100
   DefaultGitHubTagProbeCount* = 100
 
 type
