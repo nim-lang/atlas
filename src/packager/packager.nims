@@ -1,2 +1,3 @@
 --threads:on
 --mm:atomicArc
+--define:ssl

@@ -13,6 +13,7 @@ when defined(posix):
   import std / posix
 import ../basic / [context, packageinfos, reporters]
 import ./cacheharvest
+import ./githubheadcheck
 
 proc usage*(versionString: string): string =
   "atlas-packager - Atlas Packager Version " & versionString & """
@@ -317,6 +318,19 @@ proc main*(versionString = "unknown") =
       if packageName notin opts.ignoredPackageNames:
         autoIgnored.add packageName
     notice "atlas:pkger", "auto-skipping inaccessible packages:", autoIgnored.join(",")
+  if not opts.regenerateTarballs:
+    let githubSkipped = findUnchangedGitHubPackages(
+      packagesFile,
+      metadataDir,
+      opts.packageNames,
+      ignoredPackages,
+      archiveCompressionNames(opts.compressions)
+    )
+    if githubSkipped.len > 0:
+      for packageName in githubSkipped:
+        if packageName notin ignoredPackages:
+          ignoredPackages.add packageName
+      notice "atlas:pkger", "auto-skipping unchanged github packages:", githubSkipped.join(",")
   let summary = harvestRegistryCaches(
     packagesFile,
     metadataDir,
