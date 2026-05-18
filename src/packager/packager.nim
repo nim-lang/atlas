@@ -307,7 +307,7 @@ proc writeSettings*(
     notice "atlas:pkger", "ignore filter:", "none"
 
 proc main*(versionString = "unknown") =
-  setAtlasVerbosity(Info)
+  setAtlasVerbosity(Notice)
   enableManagedSubprocessGroups()
   installControlCHandler()
   let startedAt = getMonoTime()
