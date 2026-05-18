@@ -7,7 +7,7 @@
 #
 
 import std/[os, files, paths, osproc, options, sequtils, strutils, uri, sets, tables]
-import reporters, osutils, versions, context
+import reporters, osutils, versions, context, subprocessgroups
 
 type
   Command* = enum
@@ -143,7 +143,14 @@ proc exec*(gitCmd: Command;
       cmdLine.add ' '
       if args[i].len > 0:
         cmdLine.add quoteShell(args[i])
-    result = ("", ResultCode(execShellCmd(cmdLine)))
+    var process = startManagedProcess(
+      cmdLine,
+      options = {poParentStreams, poUsePath, poEvalCommand}
+    )
+    try:
+      result = ("", ResultCode(waitForManagedExit(process)))
+    finally:
+      closeManagedProcess(process)
   else:
     result = silentExec(cmd, args)
   if result[1] != RES_OK:

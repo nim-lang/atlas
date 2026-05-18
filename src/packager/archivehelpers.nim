@@ -7,7 +7,7 @@
 
 import std/[json, os, osproc, paths, sequtils, sets, strutils, times]
 
-import ../basic/[deptypes, gitops, nimblechecksums, packageinfos, pkgurls, versions]
+import ../basic/[deptypes, gitops, nimblechecksums, packageinfos, pkgurls, subprocessgroups, versions]
 
 type
   ArchiveCompression* = enum
@@ -375,14 +375,18 @@ proc archiveContentHash*(tarPath: Path; archivePrefix: string): string =
   result = nimbleChecksumForEntries(entries)
 
 proc runArchiveCommand*(command: string): int =
-  var process = startProcess(command, options = {poParentStreams, poUsePath, poEvalCommand})
-  result = waitForExit(process)
-  close(process)
+  var process = startManagedProcess(command, options = {poParentStreams, poUsePath, poEvalCommand})
+  try:
+    result = waitForManagedExit(process)
+  finally:
+    closeManagedProcess(process)
 
 proc runArchiveCommand*(command: string; args: openArray[string]): int =
-  var process = startProcess(command, args = args, options = {poParentStreams, poUsePath})
-  result = waitForExit(process)
-  close(process)
+  var process = startManagedProcess(command, args = args, options = {poParentStreams, poUsePath})
+  try:
+    result = waitForManagedExit(process)
+  finally:
+    closeManagedProcess(process)
 
 proc writeTrackedReleaseTar*(
     pkg: Package;

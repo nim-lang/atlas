@@ -12,6 +12,7 @@ import std / [cpuinfo, json, monotimes, parseopt, os, paths, strutils, times]
 when defined(posix):
   import std / posix
 import ../basic / [context, packageinfos, reporters]
+import ../basic/subprocessgroups
 import ./cacheharvest
 import ./githubheadcheck
 
@@ -274,6 +275,7 @@ proc configureNonInteractiveGit*() =
 proc exitImmediatelyOnCtrlC*() {.noconv.} =
   echo "Quitting.."
   when defined(posix):
+    terminateManagedSubprocessGroups()
     exitnow(130)
   else:
     quit(130)
@@ -305,7 +307,8 @@ proc writeSettings*(
     notice "atlas:pkger", "ignore filter:", "none"
 
 proc main*(versionString = "unknown") =
-  setAtlasVerbosity(Debug)
+  setAtlasVerbosity(Info)
+  enableManagedSubprocessGroups()
   installControlCHandler()
   let startedAt = getMonoTime()
   var args: seq[string]

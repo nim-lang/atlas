@@ -1,8 +1,8 @@
 ## OS utilities like 'withDir'.
 ## (c) 2021 Andreas Rumpf
 
-import std / [os, paths, strutils, osproc, uri, dirs]
-import reporters
+import std / [os, paths, strutils, osproc, streams, uri, dirs]
+import reporters, subprocessgroups
 
 export paths
 
@@ -62,8 +62,16 @@ proc silentExec*(cmd: string; args: openArray[string]): (string, ResultCode) =
     cmdLine.add ' '
     if args[i].len > 0:
       cmdLine.add quoteShell(args[i])
-  let (res, code) = osproc.execCmdEx(cmdLine)
-  result = (res, ResultCode(code))
+  var process = startManagedProcess(
+    cmdLine,
+    options = {poStdErrToStdOut, poUsePath, poEvalCommand}
+  )
+  try:
+    let res = process.outputStream.readAll()
+    let code = waitForManagedExit(process)
+    result = (res, ResultCode(code))
+  finally:
+    closeManagedProcess(process)
 
 proc nimbleExec*(cmd: string; args: openArray[string]) =
   var cmdLine = "nimble " & cmd
