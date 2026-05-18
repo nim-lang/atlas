@@ -11,8 +11,9 @@ import ../basic/[httpclientutils, packageinfos, pkgurls, reporters]
 
 const
   GitHubGraphqlEndpoint* = "https://api.github.com/graphql"
-  DefaultGitHubGraphqlBatchSize* = 100
-  DefaultGitHubTagProbeCount* = 100
+  DefaultGitHubGraphqlBatchSize* = 64
+  DefaultGitHubTagProbeCount* = 64
+  DefaultGitHubGraphqlRetries* = 3
 
 type
   RetainedPackageState* = object
@@ -218,51 +219,52 @@ proc fetchGitHubHeadBatch(
   finally:
     client.close()
 
-proc mergeGitHubRepoStates(
-    dest: var Table[string, GitHubRepoState];
-    src: Table[string, GitHubRepoState]
-) =
-  for packageName, state in src.pairs:
-    dest[packageName] = state
-
 proc isFatalGitHubProbeError(message: string): bool =
   let normalized = message.toLowerAscii()
   "401 unauthorized" in normalized or
     "bad credentials" in normalized or
     "403 forbidden" in normalized
 
-proc fetchGitHubHeadBatchAdaptive(
-    targets: seq[GitHubRepoTarget];
+proc isTransientGitHubProbeError(message: string): bool =
+  let normalized = message.toLowerAscii()
+  "502 bad gateway" in normalized or
+    "503 service unavailable" in normalized or
+    "504 gateway timeout" in normalized or
+    "timeout" in normalized or
+    "timed out" in normalized or
+    "connection reset" in normalized or
+    "connection refused" in normalized or
+    "temporarily unavailable" in normalized or
+    "unexpected eof" in normalized
+
+proc fetchGitHubHeadBatchWithRetries(
+    targets: openArray[GitHubRepoTarget];
     token: string;
     batchLabel: string
 ): Table[string, GitHubRepoState] =
-  try:
-    return fetchGitHubHeadBatch(targets, token)
-  except CatchableError as e:
-    if isFatalGitHubProbeError(e.msg):
-      raise newException(GitHubProbeFatalError, e.msg)
-    if targets.len <= 1:
-      warn "atlas:pkger",
-        "github api check package probe failed:",
-        batchLabel,
-        "package:", targets[0].packageName,
-        "error:", e.msg
-      return
-
-    let mid = targets.len div 2
-    let left = targets[0 ..< mid]
-    let right = targets[mid .. ^1]
-    warn "atlas:pkger",
-      "github api check batch split:",
-      batchLabel,
-      "packages:", targets[0].packageName, "->", targets[^1].packageName,
-      "error:", e.msg
-    result.mergeGitHubRepoStates(
-      fetchGitHubHeadBatchAdaptive(left, token, batchLabel & ".1")
-    )
-    result.mergeGitHubRepoStates(
-      fetchGitHubHeadBatchAdaptive(right, token, batchLabel & ".2")
-    )
+  var lastError = ""
+  for attempt in 1..DefaultGitHubGraphqlRetries:
+    try:
+      return fetchGitHubHeadBatch(targets, token)
+    except CatchableError as e:
+      lastError = e.msg
+      if isFatalGitHubProbeError(e.msg):
+        raise newException(GitHubProbeFatalError, e.msg)
+      if not isTransientGitHubProbeError(e.msg):
+        break
+      if attempt < DefaultGitHubGraphqlRetries:
+        warn "atlas:pkger",
+          "github api check retry:",
+          batchLabel,
+          "attempt:", $attempt, "of", $DefaultGitHubGraphqlRetries,
+          "packages:", targets[0].packageName, "->", targets[^1].packageName,
+          "error:", e.msg
+        sleep(attempt * 1000)
+  warn "atlas:pkger",
+    "github api check batch failed:",
+    batchLabel,
+    "packages:", targets[0].packageName, "->", targets[^1].packageName,
+    "error:", lastError
 
 proc batchedGitHubHeads(
     targets: openArray[GitHubRepoTarget];
@@ -282,7 +284,7 @@ proc batchedGitHubHeads(
       "packages:", targets[i].packageName, "->", targets[j - 1].packageName
     let batchHeads =
       try:
-        fetchGitHubHeadBatchAdaptive(
+        fetchGitHubHeadBatchWithRetries(
           targets[i ..< j],
           token,
           $batchIndex & "/" & $totalBatchs

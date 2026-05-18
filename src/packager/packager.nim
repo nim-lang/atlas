@@ -34,7 +34,7 @@ Options:
   --regenerate-tarballs rebuild all tarballs instead of reusing matching archives
   --github-api-chunk-size=count
                         github api batch size for precheck
-                        default: 100
+                        default: 64
   --compression=type    archive compression(s): gzip, xz, or comma-separated list
                         default: gzip
   --threads=count, -j   number of package processing threads
@@ -305,7 +305,7 @@ proc writeSettings*(
     notice "atlas:pkger", "ignore filter:", "none"
 
 proc main*(versionString = "unknown") =
-  setAtlasVerbosity(Info)
+  setAtlasVerbosity(Debug)
   installControlCHandler()
   let startedAt = getMonoTime()
   var args: seq[string]
