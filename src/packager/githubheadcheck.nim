@@ -11,7 +11,7 @@ import ../basic/[httpclientutils, packageinfos, pkgurls, reporters]
 
 const
   GitHubGraphqlEndpoint* = "https://api.github.com/graphql"
-  DefaultGitHubGraphqlChunkSize* = 256
+  DefaultGitHubGraphqlChunkSize* = 64
   DefaultGitHubTagProbeCount* = 100
 
 type
@@ -34,6 +34,8 @@ type
   GitHubRepoState = object
     headOid: string
     tagNames: seq[string]
+
+  GitHubProbeFatalError = object of CatchableError
 
 proc loadPackageList(packagesFile: Path): seq[PackageInfo] =
   let root = parseFile($packagesFile)
@@ -223,6 +225,12 @@ proc mergeGitHubRepoStates(
   for packageName, state in src.pairs:
     dest[packageName] = state
 
+proc isFatalGitHubProbeError(message: string): bool =
+  let normalized = message.toLowerAscii()
+  "401 unauthorized" in normalized or
+    "bad credentials" in normalized or
+    "403 forbidden" in normalized
+
 proc fetchGitHubHeadChunkAdaptive(
     targets: seq[GitHubRepoTarget];
     token: string;
@@ -231,6 +239,8 @@ proc fetchGitHubHeadChunkAdaptive(
   try:
     return fetchGitHubHeadChunk(targets, token)
   except CatchableError as e:
+    if isFatalGitHubProbeError(e.msg):
+      raise newException(GitHubProbeFatalError, e.msg)
     if targets.len <= 1:
       warn "atlas:pkger",
         "github api check package probe failed:",
@@ -270,11 +280,16 @@ proc batchedGitHubHeads(
     notice "atlas:pkger",
       "github api check chunk:", $chunkIndex, "of", $totalChunks,
       "packages:", targets[i].packageName, "->", targets[j - 1].packageName
-    let chunkHeads = fetchGitHubHeadChunkAdaptive(
-      targets[i ..< j],
-      token,
-      $chunkIndex & "/" & $totalChunks
-    )
+    let chunkHeads =
+      try:
+        fetchGitHubHeadChunkAdaptive(
+          targets[i ..< j],
+          token,
+          $chunkIndex & "/" & $totalChunks
+        )
+      except GitHubProbeFatalError as e:
+        warn "atlas:pkger", "github api check disabled:", e.msg
+        return
     for packageName, oid in chunkHeads.pairs:
       result[packageName] = oid
     i = j
@@ -324,6 +339,11 @@ proc findUnchangedGitHubPackages*(
   notice "atlas:pkger", "github api check: probing", $targets.len, "package(s)"
   let heads = batchedGitHubHeads(targets, token)
   for target in targets:
+    if not heads.hasKey(target.packageName):
+      info "atlas:pkger",
+        "github api check unavailable:",
+        target.packageName
+      continue
     let remoteState = heads.getOrDefault(target.packageName)
     if remoteState.headOid != target.latestCommit:
       info "atlas:pkger",
