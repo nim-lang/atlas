@@ -46,7 +46,7 @@ type
     releases*: seq[PackageReleaseCacheEntry]
 
 const
-  PackageReleaseCacheVersion = 5
+  PackageReleaseCacheVersion = 6
 
 proc sanitizeCacheStem(stem: var string) =
   for c in mitems(stem):
