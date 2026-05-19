@@ -37,7 +37,7 @@ type
     latestCommit: string
     releaseCount: int
     hasGitTags: bool
-    digest: JsonNode
+    tarballs: JsonNode
 
   HarvestFailure* = object
     packageName*: string
@@ -83,9 +83,6 @@ proc packageReleasesMetadataRelPath(info: PackageInfo): string =
 
 proc packageDigestFile(workspaceRoot: Path): Path =
   workspaceRoot / Path"digest.json"
-
-proc packageDigestRelPath(info: PackageInfo): string =
-  $Path(info.name) / "digest.json"
 
 proc siblingTempPath(dest: Path): Path =
   let destDir = dest.parentDir()
@@ -241,7 +238,7 @@ proc collectReleaseArchives(
 ): JsonNode =
   result = newJArray()
   let workspaceRoot = archiveDir.parentDir()
-  let existingEntries = loadExistingDigestEntries(packageDigestFile(workspaceRoot))
+  let existingEntries = loadExistingArchiveEntries(packageReleasesMetadataFile(workspaceRoot))
   createDir($archiveDir)
   var usedStems = initHashSet[string]()
   var referencedFiles = initHashSet[string]()
@@ -316,22 +313,31 @@ proc collectReleaseArchives(
     if path.Path.splitFile().ext in [".gz", ".xz", ".tar"] and filename notin referencedFiles:
       removeFile(path)
 
-proc writePackageDigest(
+proc mergePackageReleaseMetadata(
     workspaceRoot: Path;
     info: PackageInfo;
     latestCommit: string;
     releaseCount: int;
-    digestEntries: JsonNode
+    tarballEntries: JsonNode
 ) =
-  var digest = newJObject()
-  digest["generatedAt"] = %now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
-  digest["name"] = %info.name
-  digest["latestCommit"] = %latestCommit
-  digest["releaseCount"] = %releaseCount
-  digest["releasesPath"] = %"releases"
-  digest["releasesMetadata"] = %"releases.json"
-  digest["tarballs"] = digestEntries
-  writeTextFileAtomic(packageDigestFile(workspaceRoot), pretty(digest))
+  let releasesMetadataPath = packageReleasesMetadataFile(workspaceRoot)
+  var metadata =
+    try:
+      parseFile($releasesMetadataPath)
+    except CatchableError:
+      newJObject()
+  if metadata.isNil or metadata.kind != JObject:
+    metadata = newJObject()
+  metadata["generatedAt"] = %now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
+  metadata["name"] = %info.name
+  metadata["latestCommit"] = %latestCommit
+  metadata["releaseCount"] = %releaseCount
+  metadata["releasesPath"] = %"releases"
+  metadata["tarballs"] = tarballEntries
+  writeTextFileAtomic(releasesMetadataPath, pretty(metadata))
+  let digestPath = packageDigestFile(workspaceRoot)
+  if fileExists($digestPath):
+    removeFile($digestPath)
 
 proc summarizeErrorLine(message: string): string =
   result = message.replace('\n', ' ').replace('\r', ' ')
@@ -434,7 +440,7 @@ proc harvestPackage(
 
     let releaseInfo = nc.loadPackageReleaseInfo(pkg, AllReleases, @[])
     copyPackageReleaseMetadata(pkg, workspaceRoot, releaseInfo)
-    let digestEntries = collectReleaseArchives(
+    let tarballEntries = collectReleaseArchives(
       pkg,
       info,
       releaseInfo,
@@ -451,7 +457,7 @@ proc harvestPackage(
       inc result.releaseCount
       if ver.vtag.commit.orig == FromGitTag:
         result.hasGitTags = true
-    result.digest = digestEntries
+    result.tarballs = tarballEntries
     if ephemeral:
       cleanupClonedPackage(pkg)
   finally:
@@ -548,18 +554,17 @@ proc harvestRegistryCaches*(
     for packageResult in workerResult.packageResults:
       let info = packageInfoByName[packageResult.packageName]
       let workspaceRoot = packageWorkspaceRoot(info)
-      writePackageDigest(
+      mergePackageReleaseMetadata(
         workspaceRoot,
         info,
         packageResult.latestCommit,
         packageResult.releaseCount,
-        packageResult.digest
+        packageResult.tarballs
       )
       var entry = newJObject()
       entry["name"] = %packageResult.packageName
       entry["latestCommit"] = %packageResult.latestCommit
       entry["releaseCount"] = %packageResult.releaseCount
-      entry["digest"] = %packageDigestRelPath(info)
       entry["releasesMetadata"] = %packageReleasesMetadataRelPath(info)
       entry["processedAt"] = %now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
       packagesIndex.add entry
@@ -590,18 +595,17 @@ proc harvestRegistryCaches*(
       for packageResult in workerResult.packageResults:
         let info = packageInfoByName[packageResult.packageName]
         let workspaceRoot = packageWorkspaceRoot(info)
-        writePackageDigest(
+        mergePackageReleaseMetadata(
           workspaceRoot,
           info,
           packageResult.latestCommit,
           packageResult.releaseCount,
-          packageResult.digest
+          packageResult.tarballs
         )
         var entry = newJObject()
         entry["name"] = %packageResult.packageName
         entry["latestCommit"] = %packageResult.latestCommit
         entry["releaseCount"] = %packageResult.releaseCount
-        entry["digest"] = %packageDigestRelPath(info)
         entry["releasesMetadata"] = %packageReleasesMetadataRelPath(info)
         entry["processedAt"] = %now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
         packagesIndex.add entry

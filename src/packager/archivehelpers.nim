@@ -460,13 +460,22 @@ proc writeTrackedReleaseArchive*(
   moveFile($tmpArchivePath, $archivePath)
   result = $archivePath.splitPath().tail
 
-proc loadExistingDigestEntries*(digestPath: Path): JsonNode =
-  if not fileExists($digestPath):
+proc loadExistingArchiveEntries*(releasesMetadataPath: Path): JsonNode =
+  if not fileExists($releasesMetadataPath):
+    let digestPath = releasesMetadataPath.parentDir() / Path"digest.json"
+    if not fileExists($digestPath):
+      return newJArray()
+    try:
+      let digest = parseFile($digestPath)
+      if "tarballs" in digest and digest["tarballs"].kind == JArray:
+        return digest["tarballs"]
+    except CatchableError:
+      discard
     return newJArray()
   try:
-    let digest = parseFile($digestPath)
-    if "tarballs" in digest and digest["tarballs"].kind == JArray:
-      return digest["tarballs"]
+    let metadata = parseFile($releasesMetadataPath)
+    if "tarballs" in metadata and metadata["tarballs"].kind == JArray:
+      return metadata["tarballs"]
   except CatchableError:
     discard
   newJArray()

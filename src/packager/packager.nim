@@ -504,7 +504,7 @@ proc runPackagerOnce*(
       for packageName in githubSkipped:
         if packageName notin ignoredPackages:
           ignoredPackages.add packageName
-      notice "atlas:pkger", "auto-skipping unchanged github packages:", githubSkipped.join(",")
+      notice "atlas:pkger", "auto-skipping unchanged github packages:", $githubSkipped.len()
   let summary = harvestRegistryCaches(
     packagesFile,
     metadataDir,

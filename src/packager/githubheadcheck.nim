@@ -18,7 +18,6 @@ const
 type
   RetainedPackageState* = object
     latestCommit*: string
-    digestPath*: string
     releasesMetadataPath*: string
 
   RetainedIndexState* = object
@@ -75,7 +74,6 @@ proc loadRetainedIndexState*(metadataDir: Path): RetainedIndexState =
           continue
         result.packages[name] = RetainedPackageState(
           latestCommit: entry{"latestCommit"}.getStr(),
-          digestPath: entry{"digest"}.getStr(),
           releasesMetadataPath: entry{"releasesMetadata"}.getStr()
         )
   except CatchableError as e:
@@ -83,9 +81,7 @@ proc loadRetainedIndexState*(metadataDir: Path): RetainedIndexState =
 
 proc hasRetainedArtifacts(metadataDir: Path; state: RetainedPackageState): bool =
   state.latestCommit.len > 0 and
-    state.digestPath.len > 0 and
     state.releasesMetadataPath.len > 0 and
-    fileExists($(metadataDir / Path(state.digestPath))) and
     fileExists($(metadataDir / Path(state.releasesMetadataPath)))
 
 proc loadRetainedVersions(metadataDir: Path; state: RetainedPackageState): HashSet[string] =
