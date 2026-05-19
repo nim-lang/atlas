@@ -347,7 +347,7 @@ proc parseAtlasPackagerOptions*(
           writeHelp(versionString)
       of "ephemeral":
         result.ephemeral = true
-      of "daemon":
+      of "daemon", "d":
         result.daemon.enabled = true
       of "interval", "daemon-interval", "daemoninterval":
         if val.len == 0:
