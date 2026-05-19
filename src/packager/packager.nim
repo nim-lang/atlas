@@ -365,7 +365,7 @@ proc main*(versionString = "unknown") =
       if packageName notin opts.ignoredPackageNames:
         autoIgnored.add packageName
     notice "atlas:pkger", "auto-skipping inaccessible packages:", autoIgnored.join(",")
-  if not opts.regenerateTarballs:
+  if opts.updateRepos and not opts.regenerateTarballs:
     let githubSkipped = findUnchangedGitHubPackages(
       packagesFile,
       metadataDir,
