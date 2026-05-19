@@ -22,13 +22,12 @@ Experimental packager based on Atlas package parser.
 
   (c) 2026 Atlas Contributors
 Usage:
-  atlas-packager [options] [packages.json] [metadata-dir]
+  atlas-packager [options] [packages.json] [packages-dir]
 
 Options:
   --help, -h            show this help
   --version, -v         show the version
-  --packages=path       use the given packages.json file
-  --metadata=path       write copied cache files to the given directory
+  --packages=path       write copied cache files to the given directory
   --package=name[,name] process only the named package(s) from packages.json
   --ignore=name[,name]  skip the named package(s) from packages.json
   --update-repos        run `gitops.updateRepo` for existing repos before harvest
@@ -188,10 +187,6 @@ proc parseAtlasPackagerOptions*(
       of "version", "v":
         writeVersion(versionString)
       of "packages":
-        if val.len == 0:
-          writeHelp(versionString)
-        result.packagesFile = Path(val)
-      of "metadata":
         if val.len == 0:
           writeHelp(versionString)
         result.metadataDir = Path(val)
