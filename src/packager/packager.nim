@@ -40,9 +40,16 @@ Options:
   --threads=count, -j   number of package processing threads
                         default: number of processors
   --ephemeral           delete each cloned repo from pkgs/ after its metadata is produced
+  --daemon              repeat the harvest run on a schedule
+  --interval=duration   set daemon interval, default is 1h; accepts
+                        plain seconds or a suffix of s, m, h, or d
 """
 
 type
+  PackagerDaemonSchedule* = object
+    enabled*: bool
+    intervalSeconds*: int
+
   PackagerCliOptions* = object
     packagesFile: Path
     metadataDir: Path
@@ -54,6 +61,10 @@ type
     updateRepos: bool
     regenerateTarballs: bool
     ephemeral: bool
+    daemon*: PackagerDaemonSchedule
+
+const
+  DefaultDaemonIntervalSeconds* = 60 * 60
 
 proc summarizeErrorLine(message: string): string =
   result = message.replace('\n', ' ').replace('\r', ' ')
@@ -159,6 +170,39 @@ proc parsePositiveCount*(value: string; label: string): int =
   if result < 1:
     raise newException(ValueError, label & " must be at least 1")
 
+proc parseDaemonInterval*(value: string): int =
+  let raw = value.strip().toLowerAscii()
+  if raw.len == 0:
+    raise newException(ValueError, "missing daemon interval")
+
+  var multiplier = 1
+  var number = raw
+  case raw[^1]
+  of 's':
+    number.setLen(number.len - 1)
+  of 'm':
+    multiplier = 60
+    number.setLen(number.len - 1)
+  of 'h':
+    multiplier = 60 * 60
+    number.setLen(number.len - 1)
+  of 'd':
+    multiplier = 60 * 60 * 24
+    number.setLen(number.len - 1)
+  else:
+    discard
+
+  if number.len == 0 or not number.allCharsInSet({'0'..'9'}):
+    raise newException(ValueError, "invalid daemon interval: " & value)
+
+  try:
+    result = parseInt(number) * multiplier
+  except ValueError:
+    raise newException(ValueError, "invalid daemon interval: " & value)
+
+  if result < 1:
+    raise newException(ValueError, "daemon interval must be at least 1 second")
+
 proc writeHelp*(versionString: string; code = 2) =
   stdout.write(usage(versionString))
   stdout.flushFile()
@@ -177,6 +221,7 @@ proc parseAtlasPackagerOptions*(
   result.compressions = @[acGzip]
   result.githubApiChunkSize = DefaultGitHubGraphqlBatchSize
   result.threadCount = max(1, countProcessors())
+  result.daemon.intervalSeconds = DefaultDaemonIntervalSeconds
   var compressionWasSet = false
   for kind, key, val in getopt(params):
     case kind
@@ -228,6 +273,15 @@ proc parseAtlasPackagerOptions*(
           writeHelp(versionString)
       of "ephemeral":
         result.ephemeral = true
+      of "daemon":
+        result.daemon.enabled = true
+      of "interval", "daemon-interval", "daemoninterval":
+        if val.len == 0:
+          writeHelp(versionString)
+        try:
+          result.daemon.intervalSeconds = parseDaemonInterval(val)
+        except ValueError:
+          writeHelp(versionString)
       else:
         writeHelp(versionString)
     of cmdArgument:
@@ -292,6 +346,9 @@ proc writeSettings*(
   notice "atlas:pkger", "update repos:", $opts.updateRepos
   notice "atlas:pkger", "regenerate tarballs:", $opts.regenerateTarballs
   notice "atlas:pkger", "ephemeral:", $opts.ephemeral
+  notice "atlas:pkger", "daemon:", $opts.daemon.enabled
+  if opts.daemon.enabled:
+    notice "atlas:pkger", "interval:", $opts.daemon.intervalSeconds, "seconds"
   if opts.packageNames.len > 0:
     notice "atlas:pkger", "only filter:", opts.packageNames.join(",")
   else:
@@ -328,16 +385,11 @@ proc writeStats*(summary: HarvestSummary) =
     "stats releases per package avg:", formatFloat(average, ffDecimal, 2),
     "median:", formatFloat(median, ffDecimal, 2)
 
-proc main*(versionString = "unknown") =
-  setAtlasVerbosity(Notice)
-  enableManagedSubprocessGroups()
-  installControlCHandler()
+proc runPackagerOnce*(
+    opts: PackagerCliOptions;
+    args: seq[string]
+): bool =
   let startedAt = getMonoTime()
-  var args: seq[string]
-  let opts = parseAtlasPackagerOptions(commandLineParams(), versionString, args)
-  if args.len > 2:
-    writeHelp(versionString)
-
   let metadataDir = resolveMetadataDir(opts, args)
   initPackagerWorkspace(metadataDir)
   configurePackagerContext(opts)
@@ -352,7 +404,7 @@ proc main*(versionString = "unknown") =
     updatePackages()
   if not fileExists($packagesFile):
     stderr.writeLine("packages.json not found: " & $packagesFile)
-    quit(1)
+    return false
 
   writeSettings(packagesFile, metadataDir, opts)
   var ignoredPackages = opts.ignoredPackageNames
@@ -402,6 +454,29 @@ proc main*(versionString = "unknown") =
   writeStats(summary)
   let elapsed = getMonoTime() - startedAt
   notice "atlas:pkger", "elapsed:", $initDuration(milliseconds = int(elapsed.inMilliseconds))
+  true
+
+proc main*(versionString = "unknown") =
+  setAtlasVerbosity(Notice)
+  enableManagedSubprocessGroups()
+  installControlCHandler()
+  var args: seq[string]
+  let opts = parseAtlasPackagerOptions(commandLineParams(), versionString, args)
+  if args.len > 2:
+    writeHelp(versionString)
+
+  while true:
+    let runOk = runPackagerOnce(opts, args)
+    if not opts.daemon.enabled:
+      if not runOk:
+        quit(1)
+      break
+
+    if runOk:
+      notice "atlas:pkger", "daemon sleeping for", $opts.daemon.intervalSeconds, "seconds"
+    else:
+      warn "atlas:pkger", "run failed; retrying in", $opts.daemon.intervalSeconds, "seconds"
+    sleep opts.daemon.intervalSeconds * 1000
 
 when isMainModule:
   main()
