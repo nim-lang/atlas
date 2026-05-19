@@ -5,9 +5,9 @@
 
 ## Harvest package release caches for packages in a packages.json list.
 
-import std/[algorithm, json, locks, os, paths, sets, strutils, tables, threadpool, times]
+import std/[algorithm, json, jsonutils, locks, os, paths, sets, strutils, tables, threadpool, times]
 
-import ../basic/[context, dependencycache, nimblecontext, packageinfos, reporters, versions]
+import ../basic/[context, dependencycache, deptypesjson, nimblecontext, packageinfos, reporters, versions]
 import ../registryreleaseinfo
 import ./archivehelpers
 
@@ -125,13 +125,56 @@ proc loadPackageList*(packagesFile: Path): seq[PackageInfo] =
     if info != nil:
       result.add info
 
-proc copyPackageReleaseMetadata(pkg: Package; workspaceRoot: Path) =
+proc addHeadToRetainedReleaseMetadata(
+    retained: var JsonNode;
+    releaseInfo: PackageReleaseInfo
+) =
+  if retained.isNil or retained.kind != JObject:
+    return
+  if releaseInfo.currentCommit.isEmpty():
+    return
+  if not retained.hasKey("releases") or retained["releases"].kind != JArray:
+    return
+
+  var matchingReleaseJson: JsonNode
+  for entry in retained["releases"]:
+    if entry.kind != JObject or not entry.hasKey("vtag"):
+      continue
+    var vtag: VersionTag
+    try:
+      vtag.fromJson(entry["vtag"])
+    except CatchableError:
+      continue
+    if vtag.version == Version"#head":
+      return
+    if matchingReleaseJson.isNil and vtag.commit == releaseInfo.currentCommit and entry.hasKey("release"):
+      matchingReleaseJson = entry["release"].copy()
+
+  var headRelease: NimbleRelease
+  if matchingReleaseJson.isNil:
+    for (ver, release) in releaseInfo.releases:
+      if not ver.isNil and ver.vtag.commit == releaseInfo.currentCommit:
+        headRelease = release
+        break
+    if headRelease.isNil:
+      headRelease = NimbleRelease(version: Version"#head", status: Normal)
+    matchingReleaseJson = toJsonHook(headRelease, ToJsonOptions(enumMode: joptEnumString))
+
+  let headVtag = VersionTag(v: Version"#head", c: initCommitHash(releaseInfo.currentCommit, FromHead))
+  var headEntry = newJObject()
+  headEntry["vtag"] = toJson(headVtag, ToJsonOptions(enumMode: joptEnumString))
+  headEntry["release"] = matchingReleaseJson
+  retained["releases"].add headEntry
+
+proc copyPackageReleaseMetadata(pkg: Package; workspaceRoot: Path; releaseInfo: PackageReleaseInfo) =
   let cachePath = packageReleaseCachePath(pkg)
   if not fileExists($cachePath):
     raise newException(IOError, "missing release cache: " & $cachePath)
   createDir($workspaceRoot)
   let dest = packageReleasesMetadataFile(workspaceRoot)
-  writeTextFileAtomic(dest, readFile($cachePath))
+  var retained = parseFile($cachePath)
+  retained.addHeadToRetainedReleaseMetadata(releaseInfo)
+  writeTextFileAtomic(dest, pretty(retained))
 
 proc primeReleaseCacheFromRetainedMetadata(pkg: Package; workspaceRoot: Path) =
   let retainedPath = packageReleasesMetadataFile(workspaceRoot)
@@ -390,7 +433,7 @@ proc harvestPackage(
       raise newException(ValueError, "cannot load registry package " & info.name & ": " & msg)
 
     let releaseInfo = nc.loadPackageReleaseInfo(pkg, AllReleases, @[])
-    copyPackageReleaseMetadata(pkg, workspaceRoot)
+    copyPackageReleaseMetadata(pkg, workspaceRoot, releaseInfo)
     let digestEntries = collectReleaseArchives(
       pkg,
       info,
