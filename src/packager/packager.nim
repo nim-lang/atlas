@@ -43,6 +43,17 @@ Options:
   --daemon              repeat the harvest run on a schedule
   --interval=duration   set daemon interval, default is 1h; accepts
                         plain seconds or a suffix of s, m, h, or d
+
+Environment:
+  ATLAS_PACKAGER_PACKAGES             same as --packages
+  ATLAS_PACKAGER_ONLY                 same as --only
+  ATLAS_PACKAGER_IGNORE               same as --ignore
+  ATLAS_PACKAGER_UPDATE_REPOS         same as --update-repos
+  ATLAS_PACKAGER_GITHUB_API_CHUNK_SIZE
+                                      same as --github-api-chunk-size
+  ATLAS_PACKAGER_COMPRESSION          same as --compression
+  ATLAS_PACKAGER_THREADS              same as --threads
+  ATLAS_PACKAGER_EPHEMERAL            same as --ephemeral
 """
 
 type
@@ -51,20 +62,28 @@ type
     intervalSeconds*: int
 
   PackagerCliOptions* = object
-    packagesFile: Path
-    metadataDir: Path
-    packageNames: seq[string]
-    ignoredPackageNames: seq[string]
-    compressions: seq[ArchiveCompression]
-    githubApiChunkSize: int
-    threadCount: int
-    updateRepos: bool
-    regenerateTarballs: bool
-    ephemeral: bool
+    packagesFile*: Path
+    metadataDir*: Path
+    packageNames*: seq[string]
+    ignoredPackageNames*: seq[string]
+    compressions*: seq[ArchiveCompression]
+    githubApiChunkSize*: int
+    threadCount*: int
+    updateRepos*: bool
+    regenerateTarballs*: bool
+    ephemeral*: bool
     daemon*: PackagerDaemonSchedule
 
 const
   DefaultDaemonIntervalSeconds* = 60 * 60
+  EnvPackages* = "ATLAS_PACKAGER_PACKAGES"
+  EnvOnly* = "ATLAS_PACKAGER_ONLY"
+  EnvIgnore* = "ATLAS_PACKAGER_IGNORE"
+  EnvUpdateRepos* = "ATLAS_PACKAGER_UPDATE_REPOS"
+  EnvGitHubApiChunkSize* = "ATLAS_PACKAGER_GITHUB_API_CHUNK_SIZE"
+  EnvCompression* = "ATLAS_PACKAGER_COMPRESSION"
+  EnvThreads* = "ATLAS_PACKAGER_THREADS"
+  EnvEphemeral* = "ATLAS_PACKAGER_EPHEMERAL"
 
 proc summarizeErrorLine(message: string): string =
   result = message.replace('\n', ' ').replace('\r', ' ')
@@ -203,6 +222,49 @@ proc parseDaemonInterval*(value: string): int =
   if result < 1:
     raise newException(ValueError, "daemon interval must be at least 1 second")
 
+proc parseEnvBool*(value: string; label: string): bool =
+  case value.strip().toLowerAscii()
+  of "1", "true", "yes", "on":
+    true
+  of "0", "false", "no", "off":
+    false
+  else:
+    raise newException(ValueError, "invalid " & label & ": " & value)
+
+proc applyPackagerEnvDefaults*(opts: var PackagerCliOptions) =
+  if existsEnv(EnvPackages):
+    let val = getEnv(EnvPackages).strip()
+    if val.len > 0:
+      opts.metadataDir = Path(val)
+
+  if existsEnv(EnvOnly):
+    let val = getEnv(EnvOnly).strip()
+    if val.len > 0:
+      opts.packageNames = parsePackageNames(val)
+
+  if existsEnv(EnvIgnore):
+    let val = getEnv(EnvIgnore).strip()
+    if val.len > 0:
+      opts.ignoredPackageNames = parsePackageNames(val)
+
+  if existsEnv(EnvUpdateRepos):
+    opts.updateRepos = parseEnvBool(getEnv(EnvUpdateRepos), "update repos env var")
+
+  if existsEnv(EnvGitHubApiChunkSize):
+    opts.githubApiChunkSize =
+      parsePositiveCount(getEnv(EnvGitHubApiChunkSize), "github api chunk size env var")
+
+  if existsEnv(EnvCompression):
+    let val = getEnv(EnvCompression).strip()
+    if val.len > 0:
+      opts.compressions = parseArchiveCompressions(val)
+
+  if existsEnv(EnvThreads):
+    opts.threadCount = parseThreadCount(getEnv(EnvThreads))
+
+  if existsEnv(EnvEphemeral):
+    opts.ephemeral = parseEnvBool(getEnv(EnvEphemeral), "ephemeral env var")
+
 proc writeHelp*(versionString: string; code = 2) =
   stdout.write(usage(versionString))
   stdout.flushFile()
@@ -222,7 +284,13 @@ proc parseAtlasPackagerOptions*(
   result.githubApiChunkSize = DefaultGitHubGraphqlBatchSize
   result.threadCount = max(1, countProcessors())
   result.daemon.intervalSeconds = DefaultDaemonIntervalSeconds
+  try:
+    result.applyPackagerEnvDefaults()
+  except ValueError:
+    writeHelp(versionString)
   var compressionWasSet = false
+  var onlyWasSet = false
+  var ignoreWasSet = false
   for kind, key, val in getopt(params):
     case kind
     of cmdLongOption, cmdShortOption:
@@ -238,10 +306,16 @@ proc parseAtlasPackagerOptions*(
       of "only":
         if val.len == 0:
           writeHelp(versionString)
+        if not onlyWasSet:
+          result.packageNames.setLen(0)
+          onlyWasSet = true
         result.packageNames.addPackageNames(val)
       of "ignore":
         if val.len == 0:
           writeHelp(versionString)
+        if not ignoreWasSet:
+          result.ignoredPackageNames.setLen(0)
+          ignoreWasSet = true
         result.ignoredPackageNames.addPackageNames(val)
       of "update-repos", "u":
         result.updateRepos = true
