@@ -28,9 +28,9 @@ Options:
   --help, -h            show this help
   --version, -v         show the version
   --packages=path       write copied cache files to the given directory
-  --package=name[,name] process only the named package(s) from packages.json
+  --only=name[,name]    process only the named package(s) from packages.json
   --ignore=name[,name]  skip the named package(s) from packages.json
-  --update-repos        run `gitops.updateRepo` for existing repos before harvest
+  --update-repos, -u    run `gitops.updateRepo` for existing repos before harvest
   --regenerate-tarballs rebuild all tarballs instead of reusing matching archives
   --github-api-chunk-size=count
                         github api batch size for precheck
@@ -190,7 +190,7 @@ proc parseAtlasPackagerOptions*(
         if val.len == 0:
           writeHelp(versionString)
         result.metadataDir = Path(val)
-      of "package":
+      of "only":
         if val.len == 0:
           writeHelp(versionString)
         result.packageNames.addPackageNames(val)
@@ -198,7 +198,7 @@ proc parseAtlasPackagerOptions*(
         if val.len == 0:
           writeHelp(versionString)
         result.ignoredPackageNames.addPackageNames(val)
-      of "update-repos":
+      of "update-repos", "u":
         result.updateRepos = true
       of "regenerate-tarballs":
         result.regenerateTarballs = true
@@ -293,9 +293,9 @@ proc writeSettings*(
   notice "atlas:pkger", "regenerate tarballs:", $opts.regenerateTarballs
   notice "atlas:pkger", "ephemeral:", $opts.ephemeral
   if opts.packageNames.len > 0:
-    notice "atlas:pkger", "package filter:", opts.packageNames.join(",")
+    notice "atlas:pkger", "only filter:", opts.packageNames.join(",")
   else:
-    notice "atlas:pkger", "package filter:", "all"
+    notice "atlas:pkger", "only filter:", "all"
   if opts.ignoredPackageNames.len > 0:
     notice "atlas:pkger", "ignore filter:", opts.ignoredPackageNames.join(",")
   else:
