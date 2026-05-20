@@ -351,6 +351,16 @@ suite "packager allDeps metadata":
               ]
             }
           }
+        },
+        {
+          "vtag": "#head@eeee",
+          "release": {
+            "requirements": [
+              {"name": "gamma", "version": "*"}
+            ],
+            "version": "#head",
+            "status": "Normal"
+          }
         }
       ]
     }))
@@ -391,15 +401,15 @@ suite "packager allDeps metadata":
     check summary.packagesFailed == 0
     let deps = allDeps(root / "alpha" / "releases.json")
     check jsonStringSeq(deps["packages"]) == @[
-      "beta",
-      "delta",
+      "beta <= 1.0.0",
+      "delta <= 1.0.0",
       "gamma"
     ]
     check jsonStringSeq(deps["urls"]) == @[
-      "https://example.com/external",
-      "https://example.com/feature-only"
+      "https://example.com/external <= 1.0.0",
+      "https://example.com/feature-only > 1.0.0"
     ]
-    check jsonStringSeq(deps["missing"]) == @[
+    check jsonStringSeq(deps["unresolved"]) == @[
       "delta",
       "missing"
     ]

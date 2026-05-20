@@ -7,7 +7,7 @@
 
 import std/[algorithm, json, locks, os, paths, sets, strutils, tables, threadpool]
 
-import ../basic/[packageinfos, pkgurls, reporters]
+import ../basic/[packageinfos, pkgurls, reporters, versions]
 import ./cacheharvest
 
 type
@@ -38,10 +38,18 @@ type
     officialPathByName: Table[string, Path]
     officialNameByUrl: Table[string, string]
 
+  PendingDep = object
+    name: string
+    releaseVersion: string
+
+  DepUse = object
+    value: string
+    releaseVersions: HashSet[string]
+
   AllDepsSet = object
-    packages: Table[string, string]
-    urls: Table[string, string]
-    missing: Table[string, string]
+    packages: Table[string, DepUse]
+    urls: Table[string, DepUse]
+    unresolved: Table[string, string]
 
 proc popPackage(queue: ptr PackageQueue; info: var PackageInfo): bool {.gcsafe.} =
   acquire(queue.lock)
@@ -122,10 +130,70 @@ proc allDepsPath(index: AllDepsIndex; packageName: string): Path =
   if index.officialPathByName.hasKey(normalizedName):
     result = index.officialPathByName[normalizedName]
 
+proc sortVersionAsc(a, b: Version): int =
+  if a < b: -1
+  elif a == b: 0
+  else: 1
+
+proc normalizedReleaseVersion(version: string): string =
+  let parsed = toVersion(version)
+  if parsed != Version"":
+    result = $parsed
+
+proc isSpecialVersion(version: Version): bool =
+  version.string.len > 0 and version.string[0] == '#'
+
+proc releaseVersion(entry: JsonNode): string =
+  if entry.kind != JObject or not entry.hasKey("release"):
+    return
+  let release = entry["release"]
+  if release.kind != JObject or not release.hasKey("version"):
+    return
+  try:
+    result = normalizedReleaseVersion(release["version"].getStr())
+  except ValueError:
+    result = ""
+
+proc releaseEntries(releasesMetadata: JsonNode): JsonNode =
+  if releasesMetadata.isNil or releasesMetadata.kind != JObject:
+    return nil
+  if not releasesMetadata.hasKey("releases") or releasesMetadata["releases"].kind != JArray:
+    return nil
+  result = releasesMetadata["releases"]
+
+proc collectRootVersions(releasesMetadata: JsonNode): seq[Version] =
+  let entries = releaseEntries(releasesMetadata)
+  if entries.isNil:
+    return
+
+  var seen = initHashSet[string]()
+  for entry in entries:
+    let version = releaseVersion(entry)
+    if version.len > 0:
+      let parsed = toVersion(version)
+      if not parsed.isSpecialVersion and not seen.containsOrIncl(version):
+        result.add parsed
+  result.sort(sortVersionAsc)
+
+proc recordDepUse(
+    items: var Table[string, DepUse];
+    key: string;
+    value: string;
+    releaseVersion: string
+) =
+  var depUse =
+    if items.hasKey(key):
+      items[key]
+    else:
+      DepUse(value: value, releaseVersions: initHashSet[string]())
+  depUse.releaseVersions.incl releaseVersion
+  items[key] = depUse
+
 proc addAllDep(
     allDeps: var AllDepsSet;
-    pending: var seq[string];
+    pending: var seq[PendingDep];
     rootPackageName: string;
+    releaseVersion: string;
     dep: JsonNode;
     index: AllDepsIndex
 ) =
@@ -138,14 +206,13 @@ proc addAllDep(
     if normalizedName == normalizedPackageName(rootPackageName):
       return
     if not index.officialByName.hasKey(normalizedName):
-      if normalizedName notin allDeps.missing:
-        allDeps.missing[normalizedName] = depName
+      if normalizedName notin allDeps.unresolved:
+        allDeps.unresolved[normalizedName] = depName
       return
     let officialName = index.officialByName[normalizedName]
     let key = normalizedPackageName(officialName)
-    if key notin allDeps.packages:
-      allDeps.packages[key] = officialName
-      pending.add officialName
+    recordDepUse(allDeps.packages, key, officialName, releaseVersion)
+    pending.add PendingDep(name: officialName, releaseVersion: releaseVersion)
   elif dep.hasKey("url"):
     let rawUrl = dep["url"].getStr()
     let normalizedUrl = normalizedPackageUrl(rawUrl)
@@ -156,40 +223,50 @@ proc addAllDep(
       if normalizedPackageName(officialName) == normalizedPackageName(rootPackageName):
         return
       let key = normalizedPackageName(officialName)
-      if key notin allDeps.packages:
-        allDeps.packages[key] = officialName
-        pending.add officialName
+      recordDepUse(allDeps.packages, key, officialName, releaseVersion)
+      pending.add PendingDep(name: officialName, releaseVersion: releaseVersion)
     else:
-      if normalizedUrl notin allDeps.urls:
-        allDeps.urls[normalizedUrl] = rawUrl
+      recordDepUse(allDeps.urls, normalizedUrl, rawUrl, releaseVersion)
+
+proc collectReleaseRequirementsFromRelease(
+    release: JsonNode;
+    allDeps: var AllDepsSet;
+    pending: var seq[PendingDep];
+    rootPackageName: string;
+    releaseVersion: string;
+    index: AllDepsIndex
+) =
+  if release.kind != JObject:
+    return
+
+  if release.hasKey("requirements") and release["requirements"].kind == JArray:
+    for dep in release["requirements"]:
+      addAllDep(allDeps, pending, rootPackageName, releaseVersion, dep, index)
+  if release.hasKey("features") and release["features"].kind == JObject:
+    for _, featureDeps in release["features"]:
+      if featureDeps.kind != JArray:
+        continue
+      for dep in featureDeps:
+        addAllDep(allDeps, pending, rootPackageName, releaseVersion, dep, index)
 
 proc collectReleaseRequirements(
     releasesMetadata: JsonNode;
     allDeps: var AllDepsSet;
-    pending: var seq[string];
+    pending: var seq[PendingDep];
     rootPackageName: string;
+    releaseVersion: string;
     index: AllDepsIndex
 ) =
-  if releasesMetadata.isNil or releasesMetadata.kind != JObject:
-    return
-  if not releasesMetadata.hasKey("releases") or releasesMetadata["releases"].kind != JArray:
+  let entries = releaseEntries(releasesMetadata)
+  if entries.isNil:
     return
 
-  for entry in releasesMetadata["releases"]:
+  for entry in entries:
     if entry.kind != JObject or not entry.hasKey("release"):
       continue
-    let release = entry["release"]
-    if release.kind != JObject:
-      continue
-    if release.hasKey("requirements") and release["requirements"].kind == JArray:
-      for dep in release["requirements"]:
-        addAllDep(allDeps, pending, rootPackageName, dep, index)
-    if release.hasKey("features") and release["features"].kind == JObject:
-      for _, featureDeps in release["features"]:
-        if featureDeps.kind != JArray:
-          continue
-        for dep in featureDeps:
-          addAllDep(allDeps, pending, rootPackageName, dep, index)
+    collectReleaseRequirementsFromRelease(
+      entry["release"], allDeps, pending, rootPackageName, releaseVersion, index
+    )
 
 proc sortedValues(items: Table[string, string]): JsonNode =
   var keys: seq[string]
@@ -201,44 +278,98 @@ proc sortedValues(items: Table[string, string]): JsonNode =
   for key in keys:
     result.add %items[key]
 
+proc constrainedDep(value: string; depUse: DepUse; rootVersions: seq[Version]): string =
+  if rootVersions.len == 0:
+    return value
+
+  var versionIndex = initTable[string, int]()
+  for i, version in rootVersions:
+    versionIndex[$version] = i
+
+  var minIndex = rootVersions.len
+  var maxIndex = -1
+  for version in depUse.releaseVersions:
+    if versionIndex.hasKey(version):
+      let index = versionIndex[version]
+      minIndex = min(minIndex, index)
+      maxIndex = max(maxIndex, index)
+
+  if maxIndex < 0:
+    return value
+
+  var constraints: seq[string]
+  if minIndex > 0:
+    constraints.add "> " & $rootVersions[minIndex - 1]
+  if maxIndex < rootVersions.high:
+    constraints.add "<= " & $rootVersions[maxIndex]
+  if constraints.len == 0:
+    result = value
+  else:
+    result = value & " " & constraints.join(" & ")
+
+proc sortedConstrainedValues(items: Table[string, DepUse]; rootVersions: seq[Version]): JsonNode =
+  var values: seq[string]
+  for depUse in items.values:
+    values.add constrainedDep(depUse.value, depUse, rootVersions)
+  values.sort()
+
+  result = newJArray()
+  for value in values:
+    result.add %value
+
 proc computeAllDeps(
     packageName: string;
     releasesMetadata: JsonNode;
     index: AllDepsIndex
 ): JsonNode =
+  let rootVersions = collectRootVersions(releasesMetadata)
   var allDeps = AllDepsSet(
-    packages: initTable[string, string](),
-    urls: initTable[string, string](),
-    missing: initTable[string, string]()
+    packages: initTable[string, DepUse](),
+    urls: initTable[string, DepUse](),
+    unresolved: initTable[string, string]()
   )
-  var pending: seq[string]
+  var pending: seq[PendingDep]
   var expanded = initHashSet[string]()
 
-  collectReleaseRequirements(releasesMetadata, allDeps, pending, packageName, index)
+  let entries = releaseEntries(releasesMetadata)
+  if not entries.isNil:
+    for entry in entries:
+      if entry.kind != JObject or not entry.hasKey("release"):
+        continue
+      let version = releaseVersion(entry)
+      if version.len == 0:
+        continue
+      collectReleaseRequirementsFromRelease(
+        entry["release"], allDeps, pending, packageName, version, index
+      )
 
   var next = 0
   while next < pending.len:
-    let depName = pending[next]
+    let dep = pending[next]
     inc next
+    let depName = dep.name
     let normalizedName = normalizedPackageName(depName)
-    if expanded.containsOrIncl(normalizedName):
+    let expandedKey = normalizedName & "\0" & dep.releaseVersion
+    if expanded.containsOrIncl(expandedKey):
       continue
     let depPath = index.allDepsPath(depName)
     if depPath.len == 0 or not fileExists($depPath):
-      if normalizedName notin allDeps.missing:
-        allDeps.missing[normalizedName] = depName
+      if normalizedName notin allDeps.unresolved:
+        allDeps.unresolved[normalizedName] = depName
       continue
     try:
       let depReleasesMetadata = parseFile($depPath)
-      collectReleaseRequirements(depReleasesMetadata, allDeps, pending, packageName, index)
+      collectReleaseRequirements(
+        depReleasesMetadata, allDeps, pending, packageName, dep.releaseVersion, index
+      )
     except CatchableError:
-      if normalizedName notin allDeps.missing:
-        allDeps.missing[normalizedName] = depName
+      if normalizedName notin allDeps.unresolved:
+        allDeps.unresolved[normalizedName] = depName
 
   result = newJObject()
-  result["packages"] = sortedValues(allDeps.packages)
-  result["urls"] = sortedValues(allDeps.urls)
-  result["missing"] = sortedValues(allDeps.missing)
+  result["packages"] = sortedConstrainedValues(allDeps.packages, rootVersions)
+  result["urls"] = sortedConstrainedValues(allDeps.urls, rootVersions)
+  result["unresolved"] = sortedValues(allDeps.unresolved)
 
 proc updatePackageAllDeps(
     info: PackageInfo;
