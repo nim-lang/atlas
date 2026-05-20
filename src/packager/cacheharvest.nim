@@ -330,9 +330,7 @@ proc mergePackageReleaseMetadata(
     metadata = newJObject()
   metadata["generatedAt"] = %now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
   metadata["name"] = %info.name
-  metadata["latestCommit"] = %latestCommit
   metadata["releaseCount"] = %releaseCount
-  metadata["releasesPath"] = %"releases"
   metadata["tarballs"] = tarballEntries
   writeTextFileAtomic(releasesMetadataPath, pretty(metadata))
   let digestPath = packageDigestFile(workspaceRoot)
