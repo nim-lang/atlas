@@ -117,27 +117,24 @@ proc shouldSkipRetriedRepo(errorType: string; details: string): bool =
 
 proc loadAutoIgnoredPackages(metadataDir: Path): seq[string] =
   let errorsPath = metadataDir / Path"index-errors.json"
-  let indexPath = metadataDir / Path"index.json"
-  if not fileExists($errorsPath) and not fileExists($indexPath):
+  if not fileExists($errorsPath):
     return
 
   try:
-    let errors =
-      if fileExists($errorsPath):
-        parseFile($errorsPath)
-      else:
-        let index = parseFile($indexPath)
-        index{"errors"}
+    let errors = parseFile($errorsPath)
     if errors.isNil or errors.kind != JObject:
       return
 
-    for packageName, errInfo in errors:
-      if errInfo.kind != JObject:
+    for topKey, value in errors:
+      if value.kind != JObject:
         continue
-      let errorType = errInfo{"type"}.getStr()
-      let details = errInfo{"details"}.getStr()
-      if shouldSkipRetriedRepo(errorType, details) and packageName notin result:
-        result.add packageName
+      let errorType = topKey
+      for packageName, errInfo in value:
+        if errInfo.kind != JObject:
+          continue
+        let details = errInfo{"details"}.getStr()
+        if shouldSkipRetriedRepo(errorType, details) and packageName notin result:
+          result.add packageName
   except CatchableError:
     discard
 

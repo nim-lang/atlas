@@ -299,64 +299,73 @@ proc collectReleaseArchives(
     let release = releaseEntry.release
     if ver.isNil or ver.vtag.commit.h.len == 0:
       continue
-    let baseName = archiveBaseName(pkg, info, release)
-    let label = archiveReleaseLabel(ver, release, releaseEntry.isHead)
-    let commitSuffix = archiveCommitLabel(ver)
-    let rootSubdir = packageRootSubdir(pkg)
-    let rootArchiveFiles = collectArchiveFiles(pkg, ver, info, release, rootSubdir)
-    let hashStem = baseName & "-" & label & "-" & commitSuffix
-    let hashTarPath = siblingTempPath(archiveDir / Path(hashStem & ".hash.tar"))
-    var contentHash = ""
     try:
-      writeTrackedReleaseTar(pkg, ver, hashTarPath, hashStem, rootArchiveFiles)
-      contentHash = archiveContentHash(hashTarPath, hashStem & "/")
-    finally:
-      if fileExists($hashTarPath):
-        removeFile($hashTarPath)
-    let contentHashSuffix = sanitizeArchiveComponent(contentHash[0 .. 7])
-    var rootStem =
-      if releaseEntry.isHead:
-        baseName & "-head-" & commitSuffix
-      else:
-        baseName & "-" & label & "-" & commitSuffix & "-" & contentHashSuffix
-    if usedStems.containsOrIncl(rootStem):
-      rootStem.add "-" & commitSuffix
-      discard usedStems.containsOrIncl(rootStem)
+      let baseName = archiveBaseName(pkg, info, release)
+      let label = archiveReleaseLabel(ver, release, releaseEntry.isHead)
+      let commitSuffix = archiveCommitLabel(ver)
+      let rootSubdir = packageRootSubdir(pkg)
+      let rootArchiveFiles = collectArchiveFiles(pkg, ver, info, release, rootSubdir)
+      let hashStem = baseName & "-" & label & "-" & commitSuffix
+      let hashTarPath = siblingTempPath(archiveDir / Path(hashStem & ".hash.tar"))
+      var contentHash = ""
+      try:
+        writeTrackedReleaseTar(pkg, ver, hashTarPath, hashStem, rootArchiveFiles)
+        contentHash = archiveContentHash(hashTarPath, hashStem & "/")
+      finally:
+        if fileExists($hashTarPath):
+          removeFile($hashTarPath)
+      let contentHashSuffix = sanitizeArchiveComponent(contentHash[0 .. 7])
+      var rootStem =
+        if releaseEntry.isHead:
+          baseName & "-head-" & commitSuffix
+        else:
+          baseName & "-" & label & "-" & commitSuffix & "-" & contentHashSuffix
+      if usedStems.containsOrIncl(rootStem):
+        rootStem.add "-" & commitSuffix
+        discard usedStems.containsOrIncl(rootStem)
 
-    for compression in compressions:
-      let compressionName = archiveCompressionName(compression)
-      if not regenerateTarballs:
-        let existingEntry = matchingDigestEntry(
-          existingEntries,
+      for compression in compressions:
+        let compressionName = archiveCompressionName(compression)
+        if not regenerateTarballs:
+          let existingEntry = matchingDigestEntry(
+            existingEntries,
+            label,
+            ver.vtag.commit.h,
+            compressionName
+          )
+          if existingEntry != nil and "file" in existingEntry:
+            let archiveFile = existingEntry["file"].getStr()
+            let archivePath = archiveDir / Path(archiveFile)
+            if fileExists($archivePath):
+              referencedFiles.incl(archiveFile)
+              result.add existingEntry
+              continue
+
+        let archiveFile = writeTrackedReleaseArchive(
+          pkg, ver, archiveDir, rootStem, rootArchiveFiles, compression, siblingTempPath
+        )
+        let archivePath = archiveDir / Path(archiveFile)
+        referencedFiles.incl(archiveFile)
+        result.add initArchiveEntry(
           label,
           ver.vtag.commit.h,
-          compressionName
+          commitSuffix,
+          contentHash,
+          contentHashSuffix,
+          compressionName,
+          archiveFile,
+          getFileSize($archivePath),
+          rootSubdir,
+          release
         )
-        if existingEntry != nil and "file" in existingEntry:
-          let archiveFile = existingEntry["file"].getStr()
-          let archivePath = archiveDir / Path(archiveFile)
-          if fileExists($archivePath):
-            referencedFiles.incl(archiveFile)
-            result.add existingEntry
-            continue
-
-      let archiveFile = writeTrackedReleaseArchive(
-        pkg, ver, archiveDir, rootStem, rootArchiveFiles, compression, siblingTempPath
-      )
-      let archivePath = archiveDir / Path(archiveFile)
-      referencedFiles.incl(archiveFile)
-      result.add initArchiveEntry(
-        label,
-        ver.vtag.commit.h,
-        commitSuffix,
-        contentHash,
-        contentHashSuffix,
-        compressionName,
-        archiveFile,
-        getFileSize($archivePath),
-        rootSubdir,
-        release
-      )
+    except CatchableError as e:
+      warn "atlas:pkger",
+        "skipping release archive:",
+        info.name,
+        archiveReleaseLabel(ver, release, releaseEntry.isHead),
+        ver.vtag.commit.short(),
+        "reason:",
+        e.msg
 
   for kind, path in walkDir($archiveDir):
     if kind != pcFile:
@@ -397,6 +406,19 @@ proc summarizeErrorLine(message: string): string =
 
 proc classifyHarvestError(message: string): string =
   let normalized = summarizeErrorLine(message).toLowerAscii()
+  if
+      "terminal prompts disabled" in normalized or
+      "could not read username" in normalized or
+      "repository not found" in normalized or
+      "unable to access" in normalized or
+      "failed to connect" in normalized or
+      "could not resolve host" in normalized or
+      "permission denied" in normalized or
+      "access denied" in normalized or
+      "authentication failed" in normalized or
+      "not a valid remote name" in normalized or
+      "unable to read askpass response" in normalized:
+    return "missing"
   if "clone" in normalized:
     return "clone"
   if "archive" in normalized or "tarball" in normalized or "compress" in normalized:
@@ -420,12 +442,14 @@ proc classifyHarvestError(message: string): string =
 proc buildErrorsIndex(failures: openArray[HarvestFailure]): JsonNode =
   result = newJObject()
   for failure in failures:
-    var entry = newJObject()
     let detail = summarizeErrorLine(failure.errorMessage)
-    entry["type"] = %classifyHarvestError(detail)
+    let errorType = classifyHarvestError(detail)
+    if errorType notin result or result[errorType].kind != JObject:
+      result[errorType] = newJObject()
+    var entry = newJObject()
     if detail.len > 0:
       entry["details"] = %detail
-    result[failure.packageName] = entry
+    result[errorType][failure.packageName] = entry
 
 proc loadExistingErrorsIndex(metadataDir: Path): JsonNode =
   let errorsPath = errorsIndexPath(metadataDir)
@@ -434,16 +458,6 @@ proc loadExistingErrorsIndex(metadataDir: Path): JsonNode =
       result = parseFile($errorsPath)
     except CatchableError:
       discard
-  if result.isNil or result.kind != JObject:
-    let indexPath = metadataDir / Path"index.json"
-    if fileExists($indexPath):
-      try:
-        let index = parseFile($indexPath)
-        let legacyErrors = index{"errors"}
-        if not legacyErrors.isNil and legacyErrors.kind == JObject:
-          result = legacyErrors.copy()
-      except CatchableError:
-        discard
   if result.isNil or result.kind != JObject:
     result = newJObject()
 
@@ -454,11 +468,23 @@ proc writeErrorsIndex(
 ) =
   var errors = loadExistingErrorsIndex(metadataDir)
   let currentFailures = buildErrorsIndex(failures)
-  for packageName in succeededPackages:
-    if errors.hasKey(packageName):
-      errors.delete(packageName)
-  for packageName, errInfo in currentFailures:
-    errors[packageName] = errInfo
+  for errorType, packages in mpairs(errors):
+    if packages.kind != JObject:
+      continue
+    for packageName in succeededPackages:
+      if packages.hasKey(packageName):
+        packages.delete(packageName)
+  for errorType, packages in currentFailures:
+    if errorType notin errors or errors[errorType].kind != JObject:
+      errors[errorType] = newJObject()
+    for packageName, errInfo in packages:
+      errors[errorType][packageName] = errInfo
+  var emptyTypes: seq[string]
+  for errorType, packages in errors:
+    if packages.kind != JObject or packages.len == 0:
+      emptyTypes.add errorType
+  for errorType in emptyTypes:
+    errors.delete(errorType)
   writeTextFileAtomic(errorsIndexPath(metadataDir), pretty(errors))
 
 proc writeIndex(
