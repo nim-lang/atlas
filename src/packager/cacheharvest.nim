@@ -472,6 +472,18 @@ proc metadataField(metadata: JsonNode; key: string): JsonNode =
   else:
     result = newJNull()
 
+proc comparableReleaseMetadata*(metadata: JsonNode): JsonNode =
+  ## Normalize package release metadata down to the harvested fields that
+  ## should trigger a releases.json rewrite on subsequent packager runs.
+  result = newJObject()
+  for key in ["name", "releaseCount", "releases", "tarballs"]:
+    let value = metadata.metadataField(key)
+    result[key] =
+      if value.isNil:
+        newJNull()
+      else:
+        value.copy()
+
 proc metadataChangeReason(
     hadExistingMetadata: bool;
     existingMetadata: JsonNode;
@@ -525,15 +537,16 @@ proc mergePackageReleaseMetadata(
   metadata["releaseCount"] = %releaseCount
   metadata["tarballs"] = tarballEntries
 
-  var existingComparable = existingMetadata.copy()
-  if existingComparable.kind != JObject:
-    existingComparable = newJObject()
-  if existingComparable.hasKey("generatedAt"):
-    existingComparable.delete("generatedAt")
+  let existingComparable = comparableReleaseMetadata(existingMetadata)
+  let metadataComparable = comparableReleaseMetadata(metadata)
 
-  let metadataChanged = metadata != existingComparable
+  let metadataChanged = metadataComparable != existingComparable
   if metadataChanged:
-    let reason = metadataChangeReason(hadExistingMetadata, existingComparable, metadata)
+    let reason = metadataChangeReason(
+      hadExistingMetadata,
+      existingComparable,
+      metadataComparable
+    )
     metadata["generatedAt"] = %now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
     writeTextFileAtomic(releasesMetadataPath, pretty(metadata))
     notice "atlas:pkger", "updated metadata:", $releasesMetadataPath, "reason:", reason

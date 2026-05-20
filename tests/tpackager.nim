@@ -413,3 +413,66 @@ suite "packager allDeps metadata":
       "delta",
       "missing"
     ]
+
+suite "packager release metadata comparison":
+  test "comparable release metadata ignores derived allDeps and timestamps":
+    let harvested = %*{
+      "name": "alpha",
+      "releaseCount": 1,
+      "releases": [
+        {
+          "vtag": "1.0.0@aaaa",
+          "release": {
+            "version": "1.0.0",
+            "status": "Normal"
+          }
+        }
+      ],
+      "tarballs": [
+        {
+          "version": "1.0.0",
+          "entries": []
+        }
+      ]
+    }
+    let retained = %*{
+      "name": "alpha",
+      "releaseCount": 1,
+      "releases": [
+        {
+          "vtag": "1.0.0@aaaa",
+          "release": {
+            "version": "1.0.0",
+            "status": "Normal"
+          }
+        }
+      ],
+      "tarballs": [
+        {
+          "version": "1.0.0",
+          "entries": []
+        }
+      ],
+      "generatedAt": "2026-05-20T00:00:00Z",
+      "allDeps": {
+        "packages": ["beta"],
+        "urls": [],
+        "unresolved": []
+      }
+    }
+    check comparableReleaseMetadata(retained) == comparableReleaseMetadata(harvested)
+
+  test "comparable release metadata still detects tarball changes":
+    let base = %*{
+      "name": "alpha",
+      "releaseCount": 1,
+      "releases": [],
+      "tarballs": [{"version": "1.0.0", "entries": []}]
+    }
+    let changed = %*{
+      "name": "alpha",
+      "releaseCount": 1,
+      "releases": [],
+      "tarballs": [{"version": "1.0.0", "entries": [{"compression": "xz"}]}]
+    }
+    check comparableReleaseMetadata(base) != comparableReleaseMetadata(changed)
