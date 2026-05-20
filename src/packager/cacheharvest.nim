@@ -332,6 +332,7 @@ proc mergePackageReleaseMetadata(
   metadata["releaseCount"] = %releaseCount
   metadata["tarballs"] = tarballEntries
   writeTextFileAtomic(releasesMetadataPath, pretty(metadata))
+  notice "atlas:pkger", "updated metadata:", $releasesMetadataPath
   let digestPath = packageDigestFile(workspaceRoot)
   if fileExists($digestPath):
     removeFile($digestPath)
@@ -500,6 +501,13 @@ proc harvestWorker(
           inc result.untaggedPackages
           result.untaggedReleases += packageResult.releaseCount
     except CatchableError as e:
+      block:
+        {.cast(gcsafe).}:
+          error "atlas:pkger",
+            "stopped processing package:",
+            info.name,
+            "reason:",
+            e.msg
       result.failures.add HarvestFailure(packageName: info.name, errorMessage: e.msg)
       inc result.packagesFailed
 
@@ -557,15 +565,9 @@ proc harvestRegistryCaches*(
     result.releaseCounts.add workerResult.releaseCounts
     for failure in workerResult.failures:
       result.failures.add failure
-      error "atlas:pkger",
-        "stopped processing package:",
-        failure.packageName,
-        "reason:",
-        failure.errorMessage
+      error "atlas:pkger", "failed package:", failure.packageName, "error:", failure.errorMessage
     for packageResult in workerResult.packageResults:
       let info = packageInfoByName[packageResult.packageName]
-      let releasesMetadataPath = packageReleasesMetadataFile(packageWorkspaceRoot(info))
-      notice "atlas:pkger", "updated metadata:", $releasesMetadataPath
       var entry = newJObject()
       entry["name"] = %packageResult.packageName
       entry["latestCommit"] = %packageResult.latestCommit
@@ -596,15 +598,9 @@ proc harvestRegistryCaches*(
       result.releaseCounts.add workerResult.releaseCounts
       for failure in workerResult.failures:
         result.failures.add failure
-        error "atlas:pkger",
-          "stopped processing package:",
-          failure.packageName,
-          "reason:",
-          failure.errorMessage
+        error "atlas:pkger", "failed package:", failure.packageName, "error:", failure.errorMessage
       for packageResult in workerResult.packageResults:
         let info = packageInfoByName[packageResult.packageName]
-        let releasesMetadataPath = packageReleasesMetadataFile(packageWorkspaceRoot(info))
-        notice "atlas:pkger", "updated metadata:", $releasesMetadataPath
         var entry = newJObject()
         entry["name"] = %packageResult.packageName
         entry["latestCommit"] = %packageResult.latestCommit
