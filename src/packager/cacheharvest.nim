@@ -333,6 +333,7 @@ proc mergePackageReleaseMetadata(
   metadata["releaseCount"] = %releaseCount
   metadata["tarballs"] = tarballEntries
   writeTextFileAtomic(releasesMetadataPath, pretty(metadata))
+  notice "atlas:pkger", "updated metadata:", $releasesMetadataPath
   let digestPath = packageDigestFile(workspaceRoot)
   if fileExists($digestPath):
     removeFile($digestPath)
@@ -491,6 +492,13 @@ proc harvestWorker(
           inc result.untaggedPackages
           result.untaggedReleases += packageResult.releaseCount
     except CatchableError as e:
+      block:
+        {.cast(gcsafe).}:
+          error "atlas:pkger",
+            "stopped processing package:",
+            info.name,
+            "reason:",
+            e.msg
       result.failures.add HarvestFailure(packageName: info.name, errorMessage: e.msg)
       inc result.packagesFailed
 
