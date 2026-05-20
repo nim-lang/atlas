@@ -390,6 +390,13 @@ proc ensureCanonicalOrigin*(path: Path; url: Uri; origin = "origin"; errorReport
   ## Ensures `origin` exists and points to the canonical URL.
   ensureRemoteUrl(path, origin, $url, errorReportLevel)
 
+proc applyAtlasRemoteLayout(path: Path; canonicalUrl: Uri; errorReportLevel: MsgKind = Warning): bool =
+  if not ensureCanonicalOrigin(path, canonicalUrl, errorReportLevel = errorReportLevel):
+    return false
+  if remoteNameFromGitUrl($canonicalUrl).len == 0:
+    return true
+  resolveRemoteName(path, errorReportLevel = errorReportLevel).len > 0
+
 proc ensureRemoteForUrl*(path: Path; url: Uri; errorReportLevel: MsgKind = Warning): string =
   ## Ensures a named remote exists for `url` (derived from `repo.user.host`).
   result = remoteNameFromGitUrl($url)
@@ -542,7 +549,7 @@ proc cloneBareSingleBranch*(url: Uri, dest: Path; retries = 5): (CloneStatus, st
   var args = @["--bare", "--single-branch", $url, $dest]
   let (_, status) = exec(GitClone, dest, args, Debug, requireRepo = false, streamOutput = true)
   if status == RES_OK:
-    discard ensureCanonicalOrigin(dest, canonicalUrl)
+    discard applyAtlasRemoteLayout(dest, canonicalUrl)
     discard updateServerInfo(dest)
     return (Ok, "")
 
@@ -551,7 +558,7 @@ proc cloneBareSingleBranch*(url: Uri, dest: Path; retries = 5): (CloneStatus, st
     os.sleep(Pauses[min(i, Pauses.len()-1)])
     let (outp, status) = exec(GitClone, dest, args, Debug, requireRepo = false)
     if status == RES_OK:
-      discard ensureCanonicalOrigin(dest, canonicalUrl)
+      discard applyAtlasRemoteLayout(dest, canonicalUrl)
       discard updateServerInfo(dest)
       return (Ok, "")
     elif "not found" in outp or "Not a git repo" in outp:
@@ -562,6 +569,25 @@ proc cloneBareSingleBranch*(url: Uri, dest: Path; retries = 5): (CloneStatus, st
   result[0] = NotFound
 
 proc convertRepoToBareSingleBranch*(srcPath, destPath: Path; errorReportLevel: MsgKind = Warning): bool =
+  let canonicalUrl =
+    block:
+      let raw = getCanonicalUrl(srcPath)
+      if raw.len > 0: raw
+      else: getRemoteUrlFor(srcPath, "origin")
+  let operationalRemote =
+    if canonicalUrl.len > 0:
+      remoteNameFromGitUrl(canonicalUrl)
+    else:
+      ""
+  var extraRemotes: seq[(string, string)]
+  for remote in listRemotes(srcPath):
+    let remoteUrl = getRemoteUrlFor(srcPath, remote)
+    if remoteUrl.len == 0:
+      continue
+    if remote == "origin" or (operationalRemote.len > 0 and remote == operationalRemote):
+      continue
+    extraRemotes.add (remote, remoteUrl)
+
   let srcUri = parseUri("file://" & $srcPath.absolutePath())
   let tmpPath = destPath.parentDir() / Path(destPath.splitPath().tail.string & ".tmp-bare")
   if dirExists($tmpPath):
@@ -574,6 +600,18 @@ proc convertRepoToBareSingleBranch*(srcPath, destPath: Path; errorReportLevel: M
     if dirExists($tmpPath):
       removeDir($tmpPath)
     return false
+
+  if canonicalUrl.len > 0:
+    if not applyAtlasRemoteLayout(tmpPath, parseUri(canonicalUrl), errorReportLevel):
+      if dirExists($tmpPath):
+        removeDir($tmpPath)
+      return false
+  for (remote, remoteUrl) in extraRemotes:
+    if not ensureRemoteUrl(tmpPath, remote, remoteUrl, errorReportLevel):
+      if dirExists($tmpPath):
+        removeDir($tmpPath)
+      return false
+  discard updateServerInfo(tmpPath)
 
   if dirExists($destPath):
     removeDir($destPath)

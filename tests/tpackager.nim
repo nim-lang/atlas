@@ -37,6 +37,9 @@ proc writeText(path: string; contents: string) =
 proc fileUri(path: Path): Uri =
   parseUri("file://" & $path)
 
+proc atlasRemoteName(url: string): string =
+  remoteNameFromGitUrl(url)
+
 suite "packager daemon options":
   test "daemon interval parser supports suffixes":
     check parseDaemonInterval("45") == 45
@@ -138,11 +141,20 @@ suite "packager mirrored repo helpers":
     discard runGit(["add", "feature.txt"], repo)
     discard runGit(["commit", "-m", "feature"], repo)
     discard runGit(["checkout", "main"], repo)
+    let upstreamUrl = "https://github.com/example/source.git"
+    discard runGit(["remote", "add", "origin", upstreamUrl], repo)
 
     let bareRepo = root / "pkg.git"
     check convertRepoToBareSingleBranch(Path(repo), Path(bareRepo))
     check isBareGitRepo(Path(bareRepo))
     check dirExists(repo / ".git")
+
+    let remotes = runGit(["remote"], bareRepo)
+    check "origin" in remotes
+    let fqnRemote = atlasRemoteName(upstreamUrl)
+    check fqnRemote in remotes
+    check runGit(["remote", "get-url", "origin"], bareRepo).strip() == upstreamUrl
+    check runGit(["remote", "get-url", fqnRemote], bareRepo).strip() == upstreamUrl
 
     let refs = runGit(["for-each-ref", "--format=%(refname)"], bareRepo)
     check "refs/heads/main" in refs
@@ -174,6 +186,9 @@ suite "packager mirrored repo helpers":
     check msg.len == 0
     check dirExists(mirrorRepo)
     check fileExists(mirrorRepo / "info/refs")
+
+    let remotes = runGit(["remote"], mirrorRepo)
+    check "origin" in remotes
 
     let refs = runGit(["for-each-ref", "--format=%(refname)"], mirrorRepo)
     check "refs/heads/main" in refs
