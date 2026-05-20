@@ -126,6 +126,30 @@ suite "packager env options":
                     check opts.ephemeral
 
 suite "packager mirrored repo helpers":
+  test "bare repo shape without HEAD commit is not usable":
+    let root = createTempDir("atlas-packager", "broken-bare-test-")
+    defer: removeDir(root)
+
+    let bareRepo = root / "pkg.git"
+    createDir(bareRepo / "objects")
+    createDir(bareRepo / "refs")
+    writeText(bareRepo / "HEAD", "ref: refs/heads/main\n")
+    writeText(bareRepo / "config", "[core]\n\tbare = true\n")
+
+    check isBareGitRepo(Path(bareRepo))
+    check not isUsableBareGitRepo(Path(bareRepo))
+
+  test "bare clone without retries preserves git error output":
+    let root = createTempDir("atlas-packager", "bare-clone-error-")
+    defer: removeDir(root)
+
+    let missingRepo = root / "missing"
+    let dest = root / "pkg.git"
+    let (status, msg) = cloneBareSingleBranch(fileUri(Path(missingRepo)), Path(dest), retries = 0)
+
+    check status != CloneStatus.Ok
+    check msg.len > 0
+
   test "regular repo can be converted to bare single-branch repo":
     let root = createTempDir("atlas-packager", "convert-test-")
     defer: removeDir(root)

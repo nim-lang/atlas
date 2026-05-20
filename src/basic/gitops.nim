@@ -61,6 +61,7 @@ proc resolveRemoteName*(path: Path; origin = "origin"; errorReportLevel: MsgKind
 proc maybeUrlProxy*(url: Uri): Uri
 proc updateServerInfo*(path: Path): bool
 proc isBareGitRepo*(path: Path): bool
+proc isUsableBareGitRepo*(path: Path): bool
 proc convertRepoToBareSingleBranch*(srcPath, destPath: Path; errorReportLevel: MsgKind = Warning): bool
 proc syncRemoteRefs(path: Path; srcRemote, dstRemote: string; errorReportLevel: MsgKind = Warning): bool
 proc readGitRef(path: Path; refName: string): string
@@ -190,6 +191,17 @@ proc isBareGitRepo*(path: Path): bool =
     fileExists($(path / Path"HEAD")) and
     fileExists($(path / Path"config")) and
     dirExists($(path / Path"objects"))
+
+proc isUsableBareGitRepo*(path: Path): bool =
+  if not isBareGitRepo(path):
+    return false
+  let (_, status) = exec(
+    GitRevParse,
+    path,
+    ["--verify", "HEAD^{commit}"],
+    Debug
+  )
+  status == RES_OK
 
 proc commonGitDir(gitDir: Path): Path =
   if gitDir.string == "":
@@ -547,11 +559,19 @@ proc cloneBareSingleBranch*(url: Uri, dest: Path; retries = 5): (CloneStatus, st
   var url = maybeUrlProxy(url)
 
   var args = @["--bare", "--single-branch", $url, $dest]
-  let (_, status) = exec(GitClone, dest, args, Debug, requireRepo = false, streamOutput = true)
+  let (firstOut, status) = exec(
+    GitClone,
+    dest,
+    args,
+    Debug,
+    requireRepo = false,
+    streamOutput = retries > 0
+  )
   if status == RES_OK:
     discard applyAtlasRemoteLayout(dest, canonicalUrl)
     discard updateServerInfo(dest)
     return (Ok, "")
+  result[1] = firstOut
 
   const Pauses = [0, 1000, 2000, 3000, 4000, 6000]
   for i in 1..retries:

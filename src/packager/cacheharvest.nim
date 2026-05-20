@@ -191,6 +191,8 @@ proc prepareMirroredPackageRepo(
     createDir($workspaceRoot)
     let (status, msg) = cloneBareSingleBranch(pkg.url.cloneUri(), repoPath)
     if status != Ok:
+      if dirExists($repoPath):
+        removeDir($repoPath)
       let err =
         if msg.len > 0: $status & ": " & msg
         else: $status
@@ -207,6 +209,14 @@ proc prepareMirroredPackageRepo(
           $repoPath
         removeDir($repoPath)
         cloneFreshBareRepo()
+    elif not isUsableBareGitRepo(repoPath):
+      warn "atlas:pkger",
+        "existing bare repo is unusable; recloning bare repo:",
+        info.name,
+        "path:",
+        $repoPath
+      removeDir($repoPath)
+      cloneFreshBareRepo()
     if updateRepos and not updateBareRepoDefaultBranch(repoPath):
       raise newException(IOError, "could not update mirrored repo")
   else:
