@@ -1,4 +1,4 @@
-import std/[algorithm, json, os, osproc, paths, sequtils, strutils, tempfiles, unittest, uri]
+import std/[algorithm, json, os, osproc, paths, sequtils, strutils, tempfiles, times, unittest, uri]
 
 import packager/packager
 import packager/alldeps
@@ -82,6 +82,11 @@ suite "packager daemon options":
     check opts.daemon.enabled
     check opts.daemon.intervalSeconds == 20 * 60
     check args == @["packages.json", "pkgs"]
+
+  test "daemon sleep floors elapsed and overrun intervals":
+    check daemonSleepMilliseconds(initDuration(milliseconds = 3_000)) == 3_000
+    check daemonSleepMilliseconds(initDuration(milliseconds = 0)) == 0
+    check daemonSleepMilliseconds(initDuration(milliseconds = -500)) == 0
 
 suite "packager env options":
   test "packager options read env defaults":

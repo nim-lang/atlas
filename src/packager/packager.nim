@@ -487,6 +487,13 @@ proc writeStats*(summary: HarvestSummary) =
     "stats releases per package avg:", formatFloat(average, ffDecimal, 2),
     "median:", formatFloat(median, ffDecimal, 2)
 
+proc daemonSleepMilliseconds*(remaining: Duration): int =
+  let remainingMilliseconds = remaining.inMilliseconds
+  if remainingMilliseconds <= 0:
+    result = 0
+  else:
+    result = int(remainingMilliseconds)
+
 proc runPackagerOnce*(
     opts: PackagerCliOptions;
     args: seq[string]
@@ -593,6 +600,8 @@ proc main*(versionString = "unknown") =
   if args.len > 2:
     writeHelp(versionString)
 
+  var nextRunAt = getMonoTime()
+  let daemonInterval = initDuration(seconds = opts.daemon.intervalSeconds)
   while true:
     let runOk = runPackagerOnce(opts, args)
     if not opts.daemon.enabled:
@@ -600,11 +609,17 @@ proc main*(versionString = "unknown") =
         quit(1)
       break
 
+    nextRunAt = nextRunAt + daemonInterval
+    let now = getMonoTime()
+    while nextRunAt <= now:
+      nextRunAt = nextRunAt + daemonInterval
+    let sleepMs = daemonSleepMilliseconds(nextRunAt - now)
     if runOk:
-      notice "atlas:pkger", "daemon sleeping for", $opts.daemon.intervalSeconds, "seconds"
+      notice "atlas:pkger", "daemon sleeping for", $(sleepMs div 1000), "seconds"
     else:
-      warn "atlas:pkger", "run failed; retrying in", $opts.daemon.intervalSeconds, "seconds"
-    sleep opts.daemon.intervalSeconds * 1000
+      warn "atlas:pkger", "run failed; retrying in", $(sleepMs div 1000), "seconds"
+    if sleepMs > 0:
+      sleep sleepMs
 
 when isMainModule:
   main()
