@@ -156,7 +156,14 @@ proc `==`*(a, b: CfgPath): bool {.borrow.}
 
 proc isGitDir*(path: string): bool =
   let gitPath = path / ".git"
-  dirExists(gitPath) or fileExists(gitPath)
+  if dirExists(gitPath) or fileExists(gitPath):
+    return true
+
+  let bareEntries = [path / "HEAD", path / "config", path / "objects", path / "refs"]
+  for entry in bareEntries:
+    if not (dirExists(entry) or fileExists(entry)):
+      return false
+  true
 
 proc isGitDir*(path: Path): bool =
   isGitDir($(path))

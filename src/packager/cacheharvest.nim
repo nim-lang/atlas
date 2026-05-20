@@ -7,7 +7,7 @@
 
 import std/[algorithm, json, jsonutils, locks, os, paths, sets, strutils, tables, threadpool, times]
 
-import ../basic/[context, dependencycache, deptypesjson, nimblecontext, packageinfos, reporters, versions]
+import ../basic/[context, dependencycache, deptypesjson, gitops, nimblecontext, packageinfos, pkgurls, reporters, versions]
 import ../registryreleaseinfo
 import ./archivehelpers
 
@@ -91,6 +91,12 @@ proc packageReleasesMetadataRelPath(info: PackageInfo): string =
 proc packageDigestFile(workspaceRoot: Path): Path =
   workspaceRoot / Path"digest.json"
 
+proc packageRepoMirrorPath(info: PackageInfo): Path =
+  packageWorkspaceRoot(info) / Path(info.name)
+
+proc packageRepoWorktreePath(workspaceRoot: Path): Path =
+  workspaceRoot / Path".worktree"
+
 proc errorsIndexPath(metadataDir: Path): Path =
   metadataDir / Path"index-errors.json"
 
@@ -160,12 +166,39 @@ proc loadRetainedPackageIndexState(metadataDir: Path): Table[string, RetainedPac
   except CatchableError:
     discard
 
-proc cleanupClonedPackage(pkg: Package) =
-  if pkg.isNil or pkg.ondisk.len == 0:
-    return
-  let depsRoot = depsDir()
-  if pkg.ondisk != depsRoot and pkg.ondisk.isRelativeTo(depsRoot) and dirExists($pkg.ondisk):
-    removeDir($pkg.ondisk)
+proc cleanupMirroredPackage(repoPath, worktreePath: Path; removeRepo: bool) =
+  if isGitDir(repoPath):
+    removeWorktreeFromBareRepo(repoPath, worktreePath)
+  elif dirExists($worktreePath):
+    removeDir($worktreePath)
+  if removeRepo and dirExists($repoPath):
+    removeDir($repoPath)
+
+proc prepareMirroredPackageRepo(
+    pkg: var Package;
+    info: PackageInfo;
+    workspaceRoot: Path;
+    updateRepos: bool
+) =
+  let repoPath = packageRepoMirrorPath(info)
+  let worktreePath = packageRepoWorktreePath(workspaceRoot)
+  if dirExists($repoPath):
+    if updateRepos and not updateBareRepoDefaultBranch(repoPath):
+      raise newException(IOError, "could not update mirrored repo")
+  else:
+    createDir($workspaceRoot)
+    let (status, msg) = cloneBareSingleBranch(pkg.url.cloneUri(), repoPath)
+    if status != Ok:
+      let err =
+        if msg.len > 0: $status & ": " & msg
+        else: $status
+      raise newException(IOError, "cannot clone mirrored repo: " & err)
+
+  cleanupMirroredPackage(repoPath, worktreePath, removeRepo = false)
+  if not addWorktreeFromBareRepo(repoPath, worktreePath):
+    raise newException(IOError, "could not create worktree from mirrored repo")
+  pkg.ondisk = worktreePath
+  pkg.state = Found
 
 proc loadPackageList*(packagesFile: Path): seq[PackageInfo] =
   let root = parseFile($packagesFile)
@@ -554,6 +587,7 @@ proc harvestPackage(
     info: PackageInfo;
     metadataDir: Path;
     ephemeral: bool;
+    updateRepos: bool;
     compressions: openArray[ArchiveCompression];
     regenerateTarballs: bool
 ): PackageHarvestResult =
@@ -562,18 +596,15 @@ proc harvestPackage(
   let previousContext = context()
   var packageContext = previousContext
   var pkg: Package
+  let repoPath = packageRepoMirrorPath(info)
+  let worktreePath = packageRepoWorktreePath(workspaceRoot)
   packageContext.depsDir = workspaceRoot
   createDir($packageContext.depsDir)
   setContext(packageContext)
   try:
     pkg = nc.initRegistryPackage(info)
     primeReleaseCacheFromRetainedMetadata(pkg, workspaceRoot)
-    nc.loadDependency(pkg, DoClone)
-    if pkg.state == Error:
-      let msg =
-        if pkg.errors.len > 0: pkg.errors.join("; ")
-        else: "unknown package load error"
-      raise newException(ValueError, "cannot load registry package " & info.name & ": " & msg)
+    prepareMirroredPackageRepo(pkg, info, workspaceRoot, updateRepos)
 
     let releaseInfo = nc.loadPackageReleaseInfo(pkg, AllReleases, @[])
     let releaseMetadata = loadPackageReleaseMetadata(pkg, releaseInfo)
@@ -607,10 +638,9 @@ proc harvestPackage(
     result.releaseCount = releaseCount
     result.hasGitTags = hasGitTags
     result.tarballs = tarballEntries
-    if ephemeral:
-      cleanupClonedPackage(pkg)
   finally:
     cleanupTransientReleaseCache(pkg)
+    cleanupMirroredPackage(repoPath, worktreePath, removeRepo = ephemeral)
     setContext(previousContext)
 
 proc harvestWorker(
@@ -618,6 +648,7 @@ proc harvestWorker(
     baseContext: AtlasContext;
     metadataDir: Path;
     ephemeral: bool;
+    updateRepos: bool;
     compressions: seq[ArchiveCompression];
     regenerateTarballs: bool
 ): HarvestWorkerResult {.gcsafe.} =
@@ -630,7 +661,14 @@ proc harvestWorker(
     try:
       let packageResult = block:
         {.cast(gcsafe).}:
-          nc.harvestPackage(info, metadataDir, ephemeral, compressions, regenerateTarballs)
+          nc.harvestPackage(
+            info,
+            metadataDir,
+            ephemeral,
+            updateRepos,
+            compressions,
+            regenerateTarballs
+          )
       if packageResult.ok:
         result.packageResults.add packageResult
         inc result.packagesProcessed
@@ -656,6 +694,7 @@ proc harvestRegistryCaches*(
     packagesFile: Path;
     metadataDir: Path;
     ephemeral: bool,
+    updateRepos: bool,
     pkgNames: seq[string];
     ignoredPkgNames: seq[string];
     compressions: openArray[ArchiveCompression];
@@ -696,6 +735,7 @@ proc harvestRegistryCaches*(
       baseContext,
       metadataDir,
       ephemeral,
+      updateRepos,
       compressionList,
       regenerateTarballs
     )
@@ -741,6 +781,7 @@ proc harvestRegistryCaches*(
         baseContext,
         metadataDir,
         ephemeral,
+        updateRepos,
         compressionList,
         regenerateTarballs
       )

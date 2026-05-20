@@ -1,7 +1,9 @@
-import std/[os, paths, unittest]
+import std/[os, osproc, paths, sequtils, strutils, tempfiles, unittest, uri]
 
 import packager/packager
 import packager/archivehelpers
+import basic/context
+import basic/gitops
 
 proc withEnvVar(name: string; value: string; body: proc() {.closure.}) =
   let hadOldValue = existsEnv(name)
@@ -17,6 +19,23 @@ proc withEnvVar(name: string; value: string; body: proc() {.closure.}) =
       putEnv(name, oldValue)
     else:
       putEnv(name, "")
+
+proc runGit(args: openArray[string]; workdir = ""): string =
+  let cmd = "git " & args.mapIt(quoteShell(it)).join(" ")
+  let res =
+    if workdir.len > 0:
+      execCmdEx(cmd, workingDir = workdir)
+    else:
+      execCmdEx(cmd)
+  check res.exitCode == 0
+  res.output
+
+proc writeText(path: string; contents: string) =
+  createDir(parentDir(path))
+  writeFile(path, contents)
+
+proc fileUri(path: Path): Uri =
+  parseUri("file://" & $path)
 
 suite "packager daemon options":
   test "daemon interval parser supports suffixes":
@@ -100,3 +119,80 @@ suite "packager env options":
                     check opts.compressions == @[acGzip]
                     check opts.threadCount == 5
                     check opts.ephemeral
+
+suite "packager mirrored repo helpers":
+  test "bare single-branch clone omits non-default branches":
+    let root = createTempDir("atlas-packager", "mirror-test-")
+    defer: removeDir(root)
+
+    let srcRepo = root / "source"
+    createDir(srcRepo)
+    discard runGit(["init", "-b", "main"], srcRepo)
+    discard runGit(["config", "user.name", "Atlas Tests"], srcRepo)
+    discard runGit(["config", "user.email", "atlas-tests@example.com"], srcRepo)
+    writeText(srcRepo / "pkg.nimble", "version = \"0.1.0\"\n")
+    discard runGit(["add", "pkg.nimble"], srcRepo)
+    discard runGit(["commit", "-m", "main commit"], srcRepo)
+    discard runGit(["tag", "v0.1.0"], srcRepo)
+
+    discard runGit(["checkout", "-b", "feature"], srcRepo)
+    writeText(srcRepo / "feature.txt", "feature branch only\n")
+    discard runGit(["add", "feature.txt"], srcRepo)
+    discard runGit(["commit", "-m", "feature commit"], srcRepo)
+    discard runGit(["checkout", "main"], srcRepo)
+
+    let mirrorRepo = root / "pkg.git"
+    let (status, msg) = cloneBareSingleBranch(fileUri(Path(srcRepo)), Path(mirrorRepo))
+    check status == CloneStatus.Ok
+    check msg.len == 0
+    check dirExists(mirrorRepo)
+    check fileExists(mirrorRepo / "info/refs")
+
+    let refs = runGit(["for-each-ref", "--format=%(refname)"], mirrorRepo)
+    check "refs/heads/main" in refs
+    check "refs/heads/feature" notin refs
+    check "refs/tags/v0.1.0" in refs
+
+  test "bare repo update and worktree expose default branch content":
+    let root = createTempDir("atlas-packager", "worktree-test-")
+    defer: removeDir(root)
+
+    let srcRepo = root / "source"
+    createDir(srcRepo)
+    discard runGit(["init", "-b", "main"], srcRepo)
+    discard runGit(["config", "user.name", "Atlas Tests"], srcRepo)
+    discard runGit(["config", "user.email", "atlas-tests@example.com"], srcRepo)
+    writeText(srcRepo / "pkg.nimble", "version = \"0.1.0\"\n")
+    discard runGit(["add", "pkg.nimble"], srcRepo)
+    discard runGit(["commit", "-m", "initial"], srcRepo)
+
+    let mirrorRepo = root / "pkg.git"
+    let (status, msg) = cloneBareSingleBranch(fileUri(Path(srcRepo)), Path(mirrorRepo))
+    check status == CloneStatus.Ok
+    check msg.len == 0
+
+    let worktree = root / "worktree"
+    check addWorktreeFromBareRepo(Path(mirrorRepo), Path(worktree))
+    check fileExists(worktree / "pkg.nimble")
+    removeWorktreeFromBareRepo(Path(mirrorRepo), Path(worktree))
+    check not dirExists(worktree)
+
+    writeText(srcRepo / "README.md", "updated on main\n")
+    discard runGit(["add", "README.md"], srcRepo)
+    discard runGit(["commit", "-m", "update main"], srcRepo)
+    discard runGit(["tag", "v0.2.0"], srcRepo)
+    discard runGit(["checkout", "-b", "feature"], srcRepo)
+    writeText(srcRepo / "feature.txt", "feature branch only\n")
+    discard runGit(["add", "feature.txt"], srcRepo)
+    discard runGit(["commit", "-m", "feature branch"], srcRepo)
+    discard runGit(["checkout", "main"], srcRepo)
+
+    check updateBareRepoDefaultBranch(Path(mirrorRepo))
+    check fileExists(mirrorRepo / "info/refs")
+
+    check addWorktreeFromBareRepo(Path(mirrorRepo), Path(worktree))
+    check fileExists(worktree / "README.md")
+    check not fileExists(worktree / "feature.txt")
+
+    let tags = runGit(["tag"], worktree)
+    check "v0.2.0" in tags

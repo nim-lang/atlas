@@ -516,6 +516,7 @@ proc runPackagerOnce*(
     packagesFile,
     metadataDir,
     opts.ephemeral,
+    opts.updateRepos,
     opts.packageNames,
     ignoredPackages,
     opts.compressions,

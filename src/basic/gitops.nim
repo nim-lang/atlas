@@ -12,6 +12,10 @@ import reporters, osutils, versions, context, subprocessgroups
 type
   Command* = enum
     GitClone = "git clone",
+    GitWorktreeAdd = "git -C $DIR worktree add",
+    GitWorktreeRemove = "git -C $DIR worktree remove",
+    GitWorktreePrune = "git -C $DIR worktree prune",
+    GitUpdateServerInfo = "git -C $DIR update-server-info",
     GitRemoteUrl = "git -C $DIR config --get",
     GitRemotesShow = "git -C $DIR remote",
     GitRemoteAdd = "git -C $DIR remote add",
@@ -55,6 +59,7 @@ proc fetchRemoteTags*(path: Path; origin = "origin"; errorReportLevel: MsgKind =
 proc fetchRemoteTagsByName(path: Path; remote: string; errorReportLevel: MsgKind = Warning): bool
 proc resolveRemoteName*(path: Path; origin = "origin"; errorReportLevel: MsgKind = Warning): string
 proc maybeUrlProxy*(url: Uri): Uri
+proc updateServerInfo*(path: Path): bool
 proc syncRemoteRefs(path: Path; srcRemote, dstRemote: string; errorReportLevel: MsgKind = Warning): bool
 proc readGitRef(path: Path; refName: string): string
 proc currentGitCommit*(path: Path, errorReportLevel: MsgKind = Info): CommitHash
@@ -157,6 +162,14 @@ proc exec*(gitCmd: Command;
     message errorReportLevel, "gitops", "Running Git failed:", $(int(result[1])), "command:", "`$1 $2`" % [cmd, join(args, " ")]
 
 proc gitMetadataDir(path: Path): Path =
+  let commonFiles = [Path"HEAD", Path"config", Path"objects"]
+  var looksBare = true
+  for entry in commonFiles:
+    if not (dirExists($(path / entry)) or fileExists($(path / entry))):
+      looksBare = false
+      break
+  if looksBare:
+    return path
   let dotGit = path / Path".git"
   if dirExists($dotGit):
     return dotGit
@@ -513,6 +526,82 @@ proc clone*(url: Uri, dest: Path; retries = 5): (CloneStatus, string) =
       result[1] = outp
 
   result[0] = NotFound
+
+proc cloneBareSingleBranch*(url: Uri, dest: Path; retries = 5): (CloneStatus, string) =
+  let canonicalUrl = url
+  var url = maybeUrlProxy(url)
+
+  var args = @["--bare", "--single-branch", $url, $dest]
+  let (_, status) = exec(GitClone, dest, args, Debug, requireRepo = false, streamOutput = true)
+  if status == RES_OK:
+    discard ensureCanonicalOrigin(dest, canonicalUrl)
+    discard updateServerInfo(dest)
+    return (Ok, "")
+
+  const Pauses = [0, 1000, 2000, 3000, 4000, 6000]
+  for i in 1..retries:
+    os.sleep(Pauses[min(i, Pauses.len()-1)])
+    let (outp, status) = exec(GitClone, dest, args, Debug, requireRepo = false)
+    if status == RES_OK:
+      discard ensureCanonicalOrigin(dest, canonicalUrl)
+      discard updateServerInfo(dest)
+      return (Ok, "")
+    elif "not found" in outp or "Not a git repo" in outp:
+      return (NotFound, "not found")
+    else:
+      result[1] = outp
+
+  result[0] = NotFound
+
+proc updateServerInfo*(path: Path): bool =
+  let (_, status) = exec(GitUpdateServerInfo, path, [], Warning)
+  status == RES_OK
+
+proc bareHeadBranch(path: Path): string =
+  let headPath = path / Path"HEAD"
+  if not fileExists($headPath):
+    return
+  let head = readFile($headPath).strip()
+  const prefix = "ref: refs/heads/"
+  if head.startsWith(prefix):
+    result = head[prefix.len .. ^1]
+
+proc updateBareRepoDefaultBranch*(path: Path; remote = "origin"; errorReportLevel: MsgKind = Warning): bool =
+  let headBranch = bareHeadBranch(path)
+  var args = @["--prune", remote]
+  if headBranch.len > 0:
+    args.add "+refs/heads/" & headBranch & ":refs/heads/" & headBranch
+  args.add "+refs/tags/*:refs/tags/*"
+  let (outp, status) = exec(GitFetch, path, args, errorReportLevel)
+  if status != RES_OK:
+    message(errorReportLevel, path, "could not update bare repo:", outp)
+    return false
+  discard updateServerInfo(path)
+  true
+
+proc addWorktreeFromBareRepo*(repoPath, worktreePath: Path; errorReportLevel: MsgKind = Warning): bool =
+  if dirExists($worktreePath):
+    removeDir($worktreePath)
+  let (_, status) = exec(
+    GitWorktreeAdd,
+    repoPath,
+    ["--detach", $worktreePath, "HEAD"],
+    errorReportLevel
+  )
+  status == RES_OK
+
+proc removeWorktreeFromBareRepo*(repoPath, worktreePath: Path; errorReportLevel: MsgKind = Warning) =
+  if not dirExists($worktreePath):
+    return
+  let (_, status) = exec(
+    GitWorktreeRemove,
+    repoPath,
+    ["--force", $worktreePath],
+    errorReportLevel
+  )
+  if status != RES_OK and dirExists($worktreePath):
+    removeDir($worktreePath)
+  discard exec(GitWorktreePrune, repoPath, [], Debug)
 
 proc gitDescribeRefTag*(path: Path, commit: string): string =
   let (lt, status) = exec(GitDescribe, path, ["--tags", commit])
