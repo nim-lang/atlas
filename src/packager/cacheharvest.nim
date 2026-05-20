@@ -215,15 +215,12 @@ proc addHeadToRetainedReleaseMetadata(
   headEntry["release"] = matchingReleaseJson
   retained["releases"].add headEntry
 
-proc copyPackageReleaseMetadata(pkg: Package; workspaceRoot: Path; releaseInfo: PackageReleaseInfo) =
+proc loadPackageReleaseMetadata(pkg: Package; releaseInfo: PackageReleaseInfo): JsonNode =
   let cachePath = packageReleaseCachePath(pkg)
   if not fileExists($cachePath):
     raise newException(IOError, "missing release cache: " & $cachePath)
-  createDir($workspaceRoot)
-  let dest = packageReleasesMetadataFile(workspaceRoot)
-  var retained = parseFile($cachePath)
-  retained.addHeadToRetainedReleaseMetadata(releaseInfo)
-  writeTextFileAtomic(dest, pretty(retained))
+  result = parseFile($cachePath)
+  result.addHeadToRetainedReleaseMetadata(releaseInfo)
 
 proc primeReleaseCacheFromRetainedMetadata(pkg: Package; workspaceRoot: Path) =
   let retainedPath = packageReleasesMetadataFile(workspaceRoot)
@@ -377,23 +374,40 @@ proc collectReleaseArchives(
 proc mergePackageReleaseMetadata(
     workspaceRoot: Path;
     info: PackageInfo;
+    releaseMetadata: JsonNode;
     releaseCount: int;
     tarballEntries: JsonNode
 ) =
   let releasesMetadataPath = packageReleasesMetadataFile(workspaceRoot)
-  var metadata =
+  createDir($workspaceRoot)
+  var existingMetadata =
     try:
       parseFile($releasesMetadataPath)
     except CatchableError:
       newJObject()
-  if metadata.isNil or metadata.kind != JObject:
-    metadata = newJObject()
-  metadata["generatedAt"] = %now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
+  if existingMetadata.isNil or existingMetadata.kind != JObject:
+    existingMetadata = newJObject()
+
+  var metadata =
+    if releaseMetadata.isNil or releaseMetadata.kind != JObject:
+      newJObject()
+    else:
+      releaseMetadata.copy()
   metadata["name"] = %info.name
   metadata["releaseCount"] = %releaseCount
   metadata["tarballs"] = tarballEntries
-  writeTextFileAtomic(releasesMetadataPath, pretty(metadata))
-  notice "atlas:pkger", "updated metadata:", $releasesMetadataPath
+
+  var existingComparable = existingMetadata.copy()
+  if existingComparable.kind != JObject:
+    existingComparable = newJObject()
+  if existingComparable.hasKey("generatedAt"):
+    existingComparable.delete("generatedAt")
+
+  let metadataChanged = metadata != existingComparable
+  if metadataChanged:
+    metadata["generatedAt"] = %now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
+    writeTextFileAtomic(releasesMetadataPath, pretty(metadata))
+    notice "atlas:pkger", "updated metadata:", $releasesMetadataPath
   let digestPath = packageDigestFile(workspaceRoot)
   if fileExists($digestPath):
     removeFile($digestPath)
@@ -562,7 +576,7 @@ proc harvestPackage(
       raise newException(ValueError, "cannot load registry package " & info.name & ": " & msg)
 
     let releaseInfo = nc.loadPackageReleaseInfo(pkg, AllReleases, @[])
-    copyPackageReleaseMetadata(pkg, workspaceRoot, releaseInfo)
+    let releaseMetadata = loadPackageReleaseMetadata(pkg, releaseInfo)
     let tarballEntries = collectReleaseArchives(
       pkg,
       info,
@@ -583,6 +597,7 @@ proc harvestPackage(
     mergePackageReleaseMetadata(
       workspaceRoot,
       info,
+      releaseMetadata,
       releaseCount,
       tarballEntries
     )
