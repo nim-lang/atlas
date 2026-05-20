@@ -80,8 +80,8 @@ proc popPackage(queue: ptr PackageQueue; info: var PackageInfo): bool {.gcsafe.}
   finally:
     release(queue.lock)
 
-proc packageWorkspaceRoot(info: PackageInfo): Path =
-  (depsDir() / Path(info.name)).absolutePath()
+proc packageWorkspaceRoot(harvestRoot: Path; info: PackageInfo): Path =
+  (harvestRoot / Path(info.name)).absolutePath()
 
 proc packageReleasesDir(workspaceRoot: Path): Path =
   workspaceRoot / Path"releases"
@@ -95,11 +95,11 @@ proc packageReleasesMetadataRelPath(info: PackageInfo): string =
 proc packageDigestFile(workspaceRoot: Path): Path =
   workspaceRoot / Path"digest.json"
 
-proc packageRepoMirrorPath(info: PackageInfo): Path =
-  packageWorkspaceRoot(info) / Path(info.name & ".git")
+proc packageRepoMirrorPath(workspaceRoot: Path; info: PackageInfo): Path =
+  workspaceRoot / Path(info.name & ".git")
 
-proc packageRepoLegacyMirrorPath(info: PackageInfo): Path =
-  packageWorkspaceRoot(info) / Path(info.name)
+proc packageRepoLegacyMirrorPath(workspaceRoot: Path; info: PackageInfo): Path =
+  workspaceRoot / Path(info.name)
 
 proc packageRepoWorktreePath(workspaceRoot: Path): Path =
   workspaceRoot / Path".worktree"
@@ -188,8 +188,8 @@ proc prepareMirroredPackageRepo(
     workspaceRoot: Path;
     updateRepos: bool
 ) =
-  let repoPath = packageRepoMirrorPath(info)
-  let legacyRepoPath = packageRepoLegacyMirrorPath(info)
+  let repoPath = packageRepoMirrorPath(workspaceRoot, info)
+  let legacyRepoPath = packageRepoLegacyMirrorPath(workspaceRoot, info)
   let worktreePath = packageRepoWorktreePath(workspaceRoot)
   template cloneFreshBareRepo() =
     createDir($workspaceRoot)
@@ -222,21 +222,13 @@ proc prepareMirroredPackageRepo(
         $repoPath
       moveDir($legacyRepoPath, $repoPath)
     elif isGitDir(legacyRepoPath):
-      notice "atlas:pkger",
-        "converting legacy regular repo to bare repo:",
-        $legacyRepoPath,
-        "to:",
-        $repoPath
-      if convertRepoToBareSingleBranch(legacyRepoPath, repoPath):
-        removeDir($legacyRepoPath)
-      else:
-        warn "atlas:pkger",
-          "legacy repo conversion failed; recloning bare repo:",
-          info.name,
-          "path:",
-          $legacyRepoPath
-        removeDir($legacyRepoPath)
-        cloneFreshBareRepo()
+      warn "atlas:pkger",
+        "legacy repo cache is not bare; recloning bare repo:",
+        info.name,
+        "path:",
+        $legacyRepoPath
+      removeDir($legacyRepoPath)
+      cloneFreshBareRepo()
     else:
       warn "atlas:pkger",
         "legacy repo cache is not a git repo; recloning bare repo:",
@@ -250,17 +242,7 @@ proc prepareMirroredPackageRepo(
 
   if dirExists($repoPath):
     if not isBareGitRepo(repoPath):
-      notice "atlas:pkger", "converting regular repo to bare repo:", $repoPath
-      let tmpRepoPath = repoPath.parentDir() / Path(repoPath.splitPath().tail.string & ".converted")
-      if dirExists($tmpRepoPath):
-        removeDir($tmpRepoPath)
-      if convertRepoToBareSingleBranch(repoPath, tmpRepoPath):
-        removeDir($repoPath)
-        moveDir($tmpRepoPath, $repoPath)
-      else:
-        if dirExists($tmpRepoPath):
-          removeDir($tmpRepoPath)
-        recloneBareRepo("conversion failed; recloning bare repo:")
+      recloneBareRepo("existing repo cache is not bare; recloning bare repo:")
     elif not isUsableBareGitRepo(repoPath):
       recloneBareRepo("existing bare repo is unusable; recloning bare repo:")
     if updateRepos and not updateBareRepoDefaultBranch(repoPath):
@@ -670,14 +652,15 @@ proc harvestPackage(
     ephemeral: bool;
     updateRepos: bool;
     compressions: openArray[ArchiveCompression];
+    harvestRoot: Path;
     regenerateTarballs: bool
 ): PackageHarvestResult =
   notice "atlas:pkger", "processing package:", info.name
-  let workspaceRoot = packageWorkspaceRoot(info)
+  let workspaceRoot = packageWorkspaceRoot(harvestRoot, info)
   let previousContext = context()
   var packageContext = previousContext
   var pkg: Package
-  let repoPath = packageRepoMirrorPath(info)
+  let repoPath = packageRepoMirrorPath(workspaceRoot, info)
   let worktreePath = packageRepoWorktreePath(workspaceRoot)
   packageContext.depsDir = workspaceRoot
   createDir($packageContext.depsDir)
@@ -734,6 +717,7 @@ proc harvestWorker(
     regenerateTarballs: bool
 ): HarvestWorkerResult {.gcsafe.} =
   setContext(baseContext)
+  let harvestRoot = baseContext.depsDir().absolutePath()
   var nc = block:
     {.cast(gcsafe).}:
       createNimbleContext()
@@ -748,6 +732,7 @@ proc harvestWorker(
             ephemeral,
             updateRepos,
             compressions,
+            harvestRoot,
             regenerateTarballs
           )
       if packageResult.ok:

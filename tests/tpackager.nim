@@ -39,9 +39,6 @@ proc writeText(path: string; contents: string) =
 proc fileUri(path: Path): Uri =
   parseUri("file://" & $path)
 
-proc atlasRemoteName(url: string): string =
-  remoteNameFromGitUrl(url)
-
 suite "packager daemon options":
   test "daemon interval parser supports suffixes":
     check parseDaemonInterval("45") == 45
@@ -111,6 +108,7 @@ suite "packager env options":
                       "--only=delta",
                       "--ignore=epsilon,zeta",
                       "--update-repos",
+                      "--retry-missing",
                       "--github-api-chunk-size=19",
                       "--compression=gzip",
                       "--threads=5",
@@ -120,6 +118,7 @@ suite "packager env options":
                     check opts.packageNames == @["delta"]
                     check opts.ignoredPackageNames == @["epsilon", "zeta"]
                     check opts.updateRepos
+                    check opts.retryMissing
                     check opts.githubApiChunkSize == 19
                     check opts.compressions == @[acGzip]
                     check opts.threadCount == 5
@@ -149,42 +148,6 @@ suite "packager mirrored repo helpers":
 
     check status != CloneStatus.Ok
     check msg.len > 0
-
-  test "regular repo can be converted to bare single-branch repo":
-    let root = createTempDir("atlas-packager", "convert-test-")
-    defer: removeDir(root)
-
-    let repo = root / "source"
-    createDir(repo)
-    discard runGit(["init", "-b", "main"], repo)
-    discard runGit(["config", "user.name", "Atlas Tests"], repo)
-    discard runGit(["config", "user.email", "atlas-tests@example.com"], repo)
-    writeText(repo / "pkg.nimble", "version = \"0.1.0\"\n")
-    discard runGit(["add", "pkg.nimble"], repo)
-    discard runGit(["commit", "-m", "initial"], repo)
-    discard runGit(["checkout", "-b", "feature"], repo)
-    writeText(repo / "feature.txt", "feature branch only\n")
-    discard runGit(["add", "feature.txt"], repo)
-    discard runGit(["commit", "-m", "feature"], repo)
-    discard runGit(["checkout", "main"], repo)
-    let upstreamUrl = "https://github.com/example/source.git"
-    discard runGit(["remote", "add", "origin", upstreamUrl], repo)
-
-    let bareRepo = root / "pkg.git"
-    check convertRepoToBareSingleBranch(Path(repo), Path(bareRepo))
-    check isBareGitRepo(Path(bareRepo))
-    check dirExists(repo / ".git")
-
-    let remotes = runGit(["remote"], bareRepo)
-    check "origin" in remotes
-    let fqnRemote = atlasRemoteName(upstreamUrl)
-    check fqnRemote in remotes
-    check runGit(["remote", "get-url", "origin"], bareRepo).strip() == upstreamUrl
-    check runGit(["remote", "get-url", fqnRemote], bareRepo).strip() == upstreamUrl
-
-    let refs = runGit(["for-each-ref", "--format=%(refname)"], bareRepo)
-    check "refs/heads/main" in refs
-    check "refs/heads/feature" notin refs
 
   test "bare single-branch clone omits non-default branches":
     let root = createTempDir("atlas-packager", "mirror-test-")

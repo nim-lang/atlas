@@ -32,6 +32,7 @@ Options:
   --ignore=name[,name]  skip the named package(s) from packages.json
   --update-repos, -u    run `gitops.updateRepo` for existing repos before harvest
   --regenerate-tarballs rebuild all tarballs instead of reusing matching archives
+  --retry-missing       retry repos previously classified as missing
   --github-api-chunk-size=count
                         github api batch size for precheck
                         default: 64
@@ -71,6 +72,7 @@ type
     threadCount*: int
     updateRepos*: bool
     regenerateTarballs*: bool
+    retryMissing*: bool
     ephemeral*: bool
     daemon*: PackagerDaemonSchedule
 
@@ -112,10 +114,17 @@ proc shouldSkipRetriedRepo(errorType: string; details: string): bool =
     " not found" in normalized or
     "missing canonical remote" in normalized
 
+  if kind == "missing":
+    return true
+
   (kind in ["git", "access"] and (looksInaccessible or looksMissing)) or
     (kind == "unknown" and looksInaccessible)
 
-proc loadAutoIgnoredPackages(metadataDir: Path): seq[string] =
+proc loadAutoIgnoredPackages(
+    metadataDir: Path;
+    includeMissing: bool;
+    includeOther: bool
+): seq[string] =
   let errorsPath = metadataDir / Path"index-errors.json"
   if not fileExists($errorsPath):
     return
@@ -129,6 +138,9 @@ proc loadAutoIgnoredPackages(metadataDir: Path): seq[string] =
       if value.kind != JObject:
         continue
       let errorType = topKey
+      let isMissing = errorType.toLowerAscii() == "missing"
+      if (isMissing and not includeMissing) or (not isMissing and not includeOther):
+        continue
       for packageName, errInfo in value:
         if errInfo.kind != JObject:
           continue
@@ -328,6 +340,8 @@ proc parseAtlasPackagerOptions*(
         result.updateRepos = true
       of "regenerate-tarballs":
         result.regenerateTarballs = true
+      of "retry-missing":
+        result.retryMissing = true
       of "github-api-chunk-size":
         if val.len == 0:
           writeHelp(versionString)
@@ -431,6 +445,7 @@ proc writeSettings*(
   notice "atlas:pkger", "compressions:", archiveCompressionNames(opts.compressions).join(",")
   notice "atlas:pkger", "update repos:", $opts.updateRepos
   notice "atlas:pkger", "regenerate tarballs:", $opts.regenerateTarballs
+  notice "atlas:pkger", "retry missing:", $opts.retryMissing
   notice "atlas:pkger", "ephemeral:", $opts.ephemeral
   notice "atlas:pkger", "daemon:", $opts.daemon.enabled
   if opts.daemon.enabled:
@@ -494,15 +509,22 @@ proc runPackagerOnce*(
 
   writeSettings(packagesFile, metadataDir, opts)
   var ignoredPackages = opts.ignoredPackageNames
-  for packageName in loadAutoIgnoredPackages(metadataDir):
-    if packageName notin ignoredPackages:
-      ignoredPackages.add packageName
-  if ignoredPackages.len > opts.ignoredPackageNames.len:
-    var autoIgnored: seq[string]
-    for packageName in ignoredPackages:
-      if packageName notin opts.ignoredPackageNames:
-        autoIgnored.add packageName
-    notice "atlas:pkger", "auto-skipping inaccessible packages:", autoIgnored.join(",")
+  let includeMissingAutoSkips = not opts.retryMissing
+  let includeOtherAutoSkips = not opts.updateRepos and not opts.regenerateTarballs
+  if includeMissingAutoSkips or includeOtherAutoSkips:
+    for packageName in loadAutoIgnoredPackages(
+        metadataDir,
+        includeMissingAutoSkips,
+        includeOtherAutoSkips
+    ):
+      if packageName notin ignoredPackages:
+        ignoredPackages.add packageName
+    if ignoredPackages.len > opts.ignoredPackageNames.len:
+      var autoIgnored: seq[string]
+      for packageName in ignoredPackages:
+        if packageName notin opts.ignoredPackageNames:
+          autoIgnored.add packageName
+      notice "atlas:pkger", "auto-skipping inaccessible packages:", autoIgnored.join(",")
   let refreshAllPackages = shouldRefreshAllPackagesForReleaseCacheVersion(metadataDir)
   if refreshAllPackages:
     notice "atlas:pkger",
