@@ -388,10 +388,21 @@ proc configurePackagerContext*(opts: PackagerCliOptions) =
   if opts.updateRepos:
     context().flags.incl UpdateRepos
 
+proc nonInteractiveAskPassCommand(): string =
+  let disabledCommand = findExe("false")
+  if disabledCommand.len > 0:
+    return disabledCommand
+  when defined(posix):
+    for candidate in ["/usr/bin/false", "/bin/false"]:
+      if fileExists(candidate):
+        return candidate
+  "false"
+
 proc configureNonInteractiveGit*() =
   putEnv("GIT_TERMINAL_PROMPT", "0")
-  putEnv("GIT_ASKPASS", "/bin/false")
-  putEnv("SSH_ASKPASS", "/bin/false")
+  let askPassCommand = nonInteractiveAskPassCommand()
+  putEnv("GIT_ASKPASS", askPassCommand)
+  putEnv("SSH_ASKPASS", askPassCommand)
   putEnv("GCM_INTERACTIVE", "never")
   putEnv("GIT_SSH_COMMAND", "ssh -oBatchMode=yes -oNumberOfPasswordPrompts=0")
 
