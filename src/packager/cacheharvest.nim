@@ -96,6 +96,9 @@ proc packageDigestFile(workspaceRoot: Path): Path =
   workspaceRoot / Path"digest.json"
 
 proc packageRepoMirrorPath(info: PackageInfo): Path =
+  packageWorkspaceRoot(info) / Path(info.name & ".git")
+
+proc packageRepoLegacyMirrorPath(info: PackageInfo): Path =
   packageWorkspaceRoot(info) / Path(info.name)
 
 proc packageRepoWorktreePath(workspaceRoot: Path): Path =
@@ -186,9 +189,12 @@ proc prepareMirroredPackageRepo(
     updateRepos: bool
 ) =
   let repoPath = packageRepoMirrorPath(info)
+  let legacyRepoPath = packageRepoLegacyMirrorPath(info)
   let worktreePath = packageRepoWorktreePath(workspaceRoot)
   template cloneFreshBareRepo() =
     createDir($workspaceRoot)
+    if dirExists($repoPath):
+      removeDir($repoPath)
     let (status, msg) = cloneBareSingleBranch(pkg.url.cloneUri(), repoPath)
     if status != Ok:
       if dirExists($repoPath):
@@ -198,33 +204,79 @@ proc prepareMirroredPackageRepo(
         else: $status
       raise newException(IOError, "cannot clone mirrored repo: " & err)
 
+  template recloneBareRepo(reason: string) =
+    warn "atlas:pkger",
+      reason,
+      info.name,
+      "path:",
+      $repoPath
+    cloneFreshBareRepo()
+
+  if not dirExists($repoPath) and dirExists($legacyRepoPath):
+    createDir($workspaceRoot)
+    if isBareGitRepo(legacyRepoPath):
+      notice "atlas:pkger",
+        "renaming legacy bare repo cache:",
+        $legacyRepoPath,
+        "to:",
+        $repoPath
+      moveDir($legacyRepoPath, $repoPath)
+    elif isGitDir(legacyRepoPath):
+      notice "atlas:pkger",
+        "converting legacy regular repo to bare repo:",
+        $legacyRepoPath,
+        "to:",
+        $repoPath
+      if convertRepoToBareSingleBranch(legacyRepoPath, repoPath):
+        removeDir($legacyRepoPath)
+      else:
+        warn "atlas:pkger",
+          "legacy repo conversion failed; recloning bare repo:",
+          info.name,
+          "path:",
+          $legacyRepoPath
+        removeDir($legacyRepoPath)
+        cloneFreshBareRepo()
+    else:
+      warn "atlas:pkger",
+        "legacy repo cache is not a git repo; recloning bare repo:",
+        info.name,
+        "path:",
+        $legacyRepoPath
+      removeDir($legacyRepoPath)
+      cloneFreshBareRepo()
+  elif dirExists($repoPath) and dirExists($legacyRepoPath):
+    removeDir($legacyRepoPath)
+
   if dirExists($repoPath):
     if not isBareGitRepo(repoPath):
       notice "atlas:pkger", "converting regular repo to bare repo:", $repoPath
-      if not convertRepoToBareSingleBranch(repoPath, repoPath):
-        warn "atlas:pkger",
-          "conversion failed; recloning bare repo:",
-          info.name,
-          "path:",
-          $repoPath
+      let tmpRepoPath = repoPath.parentDir() / Path(repoPath.splitPath().tail.string & ".converted")
+      if dirExists($tmpRepoPath):
+        removeDir($tmpRepoPath)
+      if convertRepoToBareSingleBranch(repoPath, tmpRepoPath):
         removeDir($repoPath)
-        cloneFreshBareRepo()
+        moveDir($tmpRepoPath, $repoPath)
+      else:
+        if dirExists($tmpRepoPath):
+          removeDir($tmpRepoPath)
+        recloneBareRepo("conversion failed; recloning bare repo:")
     elif not isUsableBareGitRepo(repoPath):
-      warn "atlas:pkger",
-        "existing bare repo is unusable; recloning bare repo:",
-        info.name,
-        "path:",
-        $repoPath
-      removeDir($repoPath)
-      cloneFreshBareRepo()
+      recloneBareRepo("existing bare repo is unusable; recloning bare repo:")
     if updateRepos and not updateBareRepoDefaultBranch(repoPath):
-      raise newException(IOError, "could not update mirrored repo")
+      if not isUsableBareGitRepo(repoPath):
+        recloneBareRepo("could not update unusable mirrored repo; recloning bare repo:")
+      else:
+        raise newException(IOError, "could not update mirrored repo")
   else:
     cloneFreshBareRepo()
 
   cleanupMirroredPackage(repoPath, worktreePath, removeRepo = false)
   if not addWorktreeFromBareRepo(repoPath, worktreePath):
-    raise newException(IOError, "could not create worktree from mirrored repo")
+    recloneBareRepo("could not create worktree from mirrored repo; recloning bare repo:")
+    cleanupMirroredPackage(repoPath, worktreePath, removeRepo = false)
+    if not addWorktreeFromBareRepo(repoPath, worktreePath):
+      raise newException(IOError, "could not create worktree from mirrored repo")
   pkg.ondisk = worktreePath
   pkg.state = Found
 

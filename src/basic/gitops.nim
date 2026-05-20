@@ -667,25 +667,51 @@ proc updateBareRepoDefaultBranch*(path: Path; remote = "origin"; errorReportLeve
 proc addWorktreeFromBareRepo*(repoPath, worktreePath: Path; errorReportLevel: MsgKind = Warning): bool =
   if dirExists($worktreePath):
     removeDir($worktreePath)
-  let (_, status) = exec(
+  elif fileExists($worktreePath):
+    removeFile($worktreePath)
+  discard exec(GitWorktreePrune, repoPath, [], Debug)
+
+  let (outp, status) = exec(
     GitWorktreeAdd,
     repoPath,
     ["--detach", $worktreePath, "HEAD"],
     errorReportLevel
   )
-  status == RES_OK
+  if status == RES_OK:
+    return true
 
-proc removeWorktreeFromBareRepo*(repoPath, worktreePath: Path; errorReportLevel: MsgKind = Warning) =
-  if not dirExists($worktreePath):
-    return
-  let (_, status) = exec(
-    GitWorktreeRemove,
+  if dirExists($worktreePath):
+    removeDir($worktreePath)
+  elif fileExists($worktreePath):
+    removeFile($worktreePath)
+  discard exec(GitWorktreePrune, repoPath, [], Debug)
+
+  let (retryOutp, retryStatus) = exec(
+    GitWorktreeAdd,
     repoPath,
-    ["--force", $worktreePath],
+    ["--detach", $worktreePath, "HEAD"],
     errorReportLevel
   )
-  if status != RES_OK and dirExists($worktreePath):
-    removeDir($worktreePath)
+  if retryStatus == RES_OK:
+    return true
+
+  let details = if retryOutp.len > 0: retryOutp else: outp
+  if details.len > 0:
+    message(errorReportLevel, repoPath, "could not create worktree:", details)
+  false
+
+proc removeWorktreeFromBareRepo*(repoPath, worktreePath: Path; errorReportLevel: MsgKind = Warning) =
+  if dirExists($worktreePath):
+    let (_, status) = exec(
+      GitWorktreeRemove,
+      repoPath,
+      ["--force", $worktreePath],
+      errorReportLevel
+    )
+    if status != RES_OK and dirExists($worktreePath):
+      removeDir($worktreePath)
+  elif fileExists($worktreePath):
+    removeFile($worktreePath)
   discard exec(GitWorktreePrune, repoPath, [], Debug)
 
 proc gitDescribeRefTag*(path: Path, commit: string): string =

@@ -265,6 +265,31 @@ suite "packager mirrored repo helpers":
     let tags = runGit(["tag"], worktree)
     check "v0.2.0" in tags
 
+  test "bare repo worktree add prunes stale missing worktree registrations":
+    let root = createTempDir("atlas-packager", "stale-worktree-test-")
+    defer: removeDir(root)
+
+    let srcRepo = root / "source"
+    createDir(srcRepo)
+    discard runGit(["init", "-b", "main"], srcRepo)
+    discard runGit(["config", "user.name", "Atlas Tests"], srcRepo)
+    discard runGit(["config", "user.email", "atlas-tests@example.com"], srcRepo)
+    writeText(srcRepo / "pkg.nimble", "version = \"0.1.0\"\n")
+    discard runGit(["add", "pkg.nimble"], srcRepo)
+    discard runGit(["commit", "-m", "initial"], srcRepo)
+
+    let mirrorRepo = root / "pkg.git"
+    let (status, msg) = cloneBareSingleBranch(fileUri(Path(srcRepo)), Path(mirrorRepo))
+    check status == CloneStatus.Ok
+    check msg.len == 0
+
+    let worktree = root / "worktree"
+    check addWorktreeFromBareRepo(Path(mirrorRepo), Path(worktree))
+    removeDir(worktree)
+
+    check addWorktreeFromBareRepo(Path(mirrorRepo), Path(worktree))
+    check fileExists(worktree / "pkg.nimble")
+
 suite "packager retained index versioning":
   test "retained release cache version match requires current cache version":
     let root = createTempDir("atlas-packager", "index-version-")
