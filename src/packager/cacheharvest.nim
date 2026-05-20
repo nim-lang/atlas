@@ -316,7 +316,6 @@ proc collectReleaseArchives(
 proc mergePackageReleaseMetadata(
     workspaceRoot: Path;
     info: PackageInfo;
-    latestCommit: string;
     releaseCount: int;
     tarballEntries: JsonNode
 ) =
@@ -447,15 +446,25 @@ proc harvestPackage(
       compressions,
       regenerateTarballs
     )
-    result.ok = true
-    result.packageName = info.name
-    result.latestCommit = releaseInfo.currentCommit.h
+    var releaseCount = 0
+    var hasGitTags = false
     for (ver, _) in releaseInfo.releases:
       if ver.isNil or ver.vtag.version == Version"#head":
         continue
-      inc result.releaseCount
+      inc releaseCount
       if ver.vtag.commit.orig == FromGitTag:
-        result.hasGitTags = true
+        hasGitTags = true
+    mergePackageReleaseMetadata(
+      workspaceRoot,
+      info,
+      releaseCount,
+      tarballEntries
+    )
+    result.ok = true
+    result.packageName = info.name
+    result.latestCommit = releaseInfo.currentCommit.h
+    result.releaseCount = releaseCount
+    result.hasGitTags = hasGitTags
     result.tarballs = tarballEntries
     if ephemeral:
       cleanupClonedPackage(pkg)
@@ -559,14 +568,6 @@ proc harvestRegistryCaches*(
       error "atlas:pkger", "failed package:", failure.packageName, "error:", failure.errorMessage
     for packageResult in workerResult.packageResults:
       let info = packageInfoByName[packageResult.packageName]
-      let workspaceRoot = packageWorkspaceRoot(info)
-      mergePackageReleaseMetadata(
-        workspaceRoot,
-        info,
-        packageResult.latestCommit,
-        packageResult.releaseCount,
-        packageResult.tarballs
-      )
       var entry = newJObject()
       entry["name"] = %packageResult.packageName
       entry["latestCommit"] = %packageResult.latestCommit
@@ -600,14 +601,6 @@ proc harvestRegistryCaches*(
         error "atlas:pkger", "failed package:", failure.packageName, "error:", failure.errorMessage
       for packageResult in workerResult.packageResults:
         let info = packageInfoByName[packageResult.packageName]
-        let workspaceRoot = packageWorkspaceRoot(info)
-        mergePackageReleaseMetadata(
-          workspaceRoot,
-          info,
-          packageResult.latestCommit,
-          packageResult.releaseCount,
-          packageResult.tarballs
-        )
         var entry = newJObject()
         entry["name"] = %packageResult.packageName
         entry["latestCommit"] = %packageResult.latestCommit
