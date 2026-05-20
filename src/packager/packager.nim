@@ -394,9 +394,14 @@ proc configurePackagerContext*(opts: PackagerCliOptions) =
     context().flags.incl UpdateRepos
 
 proc configureNonInteractiveGit*() =
+  const askPassPath =
+    when defined(freebsd):
+      "/usr/bin/false"
+    else:
+      "/bin/false"
   putEnv("GIT_TERMINAL_PROMPT", "0")
-  putEnv("GIT_ASKPASS", "/bin/false")
-  putEnv("SSH_ASKPASS", "/bin/false")
+  putEnv("GIT_ASKPASS", askPassPath)
+  putEnv("SSH_ASKPASS", askPassPath)
   putEnv("GCM_INTERACTIVE", "never")
   putEnv("GIT_SSH_COMMAND", "ssh -oBatchMode=yes -oNumberOfPasswordPrompts=0")
 
