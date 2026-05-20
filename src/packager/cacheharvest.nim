@@ -466,6 +466,37 @@ proc collectReleaseArchives(
     if path.Path.splitFile().ext in [".gz", ".xz", ".tar"] and filename notin referencedFiles:
       removeFile(path)
 
+proc metadataField(metadata: JsonNode; key: string): JsonNode =
+  if metadata.kind == JObject and metadata.hasKey(key):
+    result = metadata[key]
+  else:
+    result = newJNull()
+
+proc metadataChangeReason(
+    hadExistingMetadata: bool;
+    existingMetadata: JsonNode;
+    metadata: JsonNode
+): string =
+  if not hadExistingMetadata:
+    return "initial metadata"
+
+  var reasons: seq[string]
+  for field in [
+      ("name", "name"),
+      ("releaseCount", "release count"),
+      ("releases", "releases"),
+      ("tarballs", "tarballs")
+  ]:
+    let key = field[0]
+    let label = field[1]
+    if existingMetadata.metadataField(key) != metadata.metadataField(key):
+      reasons.add label & " changed"
+
+  if reasons.len == 0:
+    result = "metadata changed"
+  else:
+    result = reasons.join(", ")
+
 proc mergePackageReleaseMetadata(
     workspaceRoot: Path;
     info: PackageInfo;
@@ -475,10 +506,12 @@ proc mergePackageReleaseMetadata(
 ) =
   let releasesMetadataPath = packageReleasesMetadataFile(workspaceRoot)
   createDir($workspaceRoot)
+  var hadExistingMetadata = fileExists($releasesMetadataPath)
   var existingMetadata =
     try:
       parseFile($releasesMetadataPath)
     except CatchableError:
+      hadExistingMetadata = false
       newJObject()
   if existingMetadata.isNil or existingMetadata.kind != JObject:
     existingMetadata = newJObject()
@@ -500,9 +533,10 @@ proc mergePackageReleaseMetadata(
 
   let metadataChanged = metadata != existingComparable
   if metadataChanged:
+    let reason = metadataChangeReason(hadExistingMetadata, existingComparable, metadata)
     metadata["generatedAt"] = %now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
     writeTextFileAtomic(releasesMetadataPath, pretty(metadata))
-    notice "atlas:pkger", "updated metadata:", $releasesMetadataPath
+    notice "atlas:pkger", "updated metadata:", $releasesMetadataPath, "reason:", reason
   let digestPath = packageDigestFile(workspaceRoot)
   if fileExists($digestPath):
     removeFile($digestPath)
