@@ -187,14 +187,7 @@ proc prepareMirroredPackageRepo(
 ) =
   let repoPath = packageRepoMirrorPath(info)
   let worktreePath = packageRepoWorktreePath(workspaceRoot)
-  if dirExists($repoPath):
-    if not isBareGitRepo(repoPath):
-      notice "atlas:pkger", "converting regular repo to bare repo:", $repoPath
-      if not convertRepoToBareSingleBranch(repoPath, repoPath):
-        raise newException(IOError, "could not convert regular repo to bare repo")
-    if updateRepos and not updateBareRepoDefaultBranch(repoPath):
-      raise newException(IOError, "could not update mirrored repo")
-  else:
+  template cloneFreshBareRepo() =
     createDir($workspaceRoot)
     let (status, msg) = cloneBareSingleBranch(pkg.url.cloneUri(), repoPath)
     if status != Ok:
@@ -202,6 +195,22 @@ proc prepareMirroredPackageRepo(
         if msg.len > 0: $status & ": " & msg
         else: $status
       raise newException(IOError, "cannot clone mirrored repo: " & err)
+
+  if dirExists($repoPath):
+    if not isBareGitRepo(repoPath):
+      notice "atlas:pkger", "converting regular repo to bare repo:", $repoPath
+      if not convertRepoToBareSingleBranch(repoPath, repoPath):
+        warn "atlas:pkger",
+          "conversion failed; recloning bare repo:",
+          info.name,
+          "path:",
+          $repoPath
+        removeDir($repoPath)
+        cloneFreshBareRepo()
+    if updateRepos and not updateBareRepoDefaultBranch(repoPath):
+      raise newException(IOError, "could not update mirrored repo")
+  else:
+    cloneFreshBareRepo()
 
   cleanupMirroredPackage(repoPath, worktreePath, removeRepo = false)
   if not addWorktreeFromBareRepo(repoPath, worktreePath):
