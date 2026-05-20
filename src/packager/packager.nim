@@ -13,6 +13,7 @@ when defined(posix):
   import std / posix
 import ../basic / [context, dependencycache, packageinfos, reporters]
 import ../basic/subprocessgroups
+import ./alldeps
 import ./cacheharvest
 import ./githubheadcheck
 
@@ -555,6 +556,19 @@ proc runPackagerOnce*(
     opts.threadCount,
     opts.regenerateTarballs
   )
+  let allDepsSummary = updatePackageAllDeps(
+    packagesFile,
+    metadataDir,
+    opts.packageNames,
+    opts.ignoredPackageNames,
+    opts.threadCount
+  )
+  notice "atlas:pkger",
+    "allDeps:",
+    "processed", $allDepsSummary.packagesProcessed,
+    "updated", $allDepsSummary.packagesUpdated,
+    "missing", $allDepsSummary.packagesSkipped,
+    "failed", $allDepsSummary.packagesFailed
   stdout.writeLine(
     "processed " & $summary.packagesProcessed &
     " packages, failed " & $summary.packagesFailed &

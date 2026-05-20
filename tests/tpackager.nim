@@ -1,7 +1,9 @@
-import std/[json, os, osproc, paths, sequtils, strutils, tempfiles, unittest, uri]
+import std/[algorithm, json, os, osproc, paths, sequtils, strutils, tempfiles, unittest, uri]
 
 import packager/packager
+import packager/alldeps
 import packager/archivehelpers
+import packager/cacheharvest
 import packager/githubheadcheck
 import basic/context
 import basic/dependencycache
@@ -38,6 +40,15 @@ proc writeText(path: string; contents: string) =
 
 proc fileUri(path: Path): Uri =
   parseUri("file://" & $path)
+
+proc jsonStringSeq(node: JsonNode): seq[string] =
+  for item in node:
+    result.add item.getStr()
+  result.sort()
+
+proc allDeps(path: string): JsonNode =
+  let root = parseFile(path)
+  root["allDeps"]
 
 suite "packager daemon options":
   test "daemon interval parser supports suffixes":
@@ -272,3 +283,123 @@ suite "packager retained index versioning":
       "packages": []
     }))
     check not retainedReleaseCacheVersionMatches(Path(root))
+
+suite "packager allDeps metadata":
+  test "allDeps expands official deps and keeps url deps without expanding them":
+    let root = createTempDir("atlas-packager", "all-deps-")
+    defer: removeDir(root)
+
+    let packagesFile = root / "packages.json"
+    writeText(packagesFile, $(%*[
+      {
+        "name": "alpha",
+        "url": "https://example.com/alpha",
+        "method": "git",
+        "tags": [],
+        "description": "alpha"
+      },
+      {
+        "name": "beta",
+        "url": "https://example.com/beta",
+        "method": "git",
+        "tags": [],
+        "description": "beta"
+      },
+      {
+        "name": "gamma",
+        "url": "https://example.com/gamma",
+        "method": "git",
+        "tags": [],
+        "description": "gamma"
+      },
+      {
+        "name": "delta",
+        "url": "https://example.com/delta",
+        "method": "git",
+        "tags": [],
+        "description": "delta"
+      }
+    ]))
+
+    writeText(root / "alpha" / "releases.json", pretty(%*{
+      "name": "alpha",
+      "releases": [
+        {
+          "vtag": "1.0.0@aaaa",
+          "release": {
+            "requirements": [
+              {"name": "beta", "version": ">= 1.0.0"},
+              {"name": "delta", "version": "*"},
+              {"url": "https://example.com/external", "version": "*"},
+              {"name": "missing", "version": "*"}
+            ],
+            "version": "1.0.0",
+            "status": "Normal"
+          }
+        },
+        {
+          "vtag": "2.0.0@bbbb",
+          "release": {
+            "requirements": [
+              {"name": "gamma", "version": "*"}
+            ],
+            "version": "2.0.0",
+            "status": "Normal",
+            "features": {
+              "dev": [
+                {"url": "https://example.com/feature-only", "version": "*"}
+              ]
+            }
+          }
+        }
+      ]
+    }))
+    writeText(root / "beta" / "releases.json", pretty(%*{
+      "name": "beta",
+      "releases": [
+        {
+          "vtag": "1.0.0@cccc",
+          "release": {
+            "requirements": [
+              {"name": "gamma", "version": "*"}
+            ],
+            "version": "1.0.0",
+            "status": "Normal"
+          }
+        }
+      ]
+    }))
+    writeText(root / "gamma" / "releases.json", pretty(%*{
+      "name": "gamma",
+      "releases": [
+        {
+          "vtag": "1.0.0@dddd",
+          "release": {
+            "requirements": [
+              {"name": "alpha", "version": "*"}
+            ],
+            "version": "1.0.0",
+            "status": "Normal"
+          }
+        }
+      ]
+    }))
+
+    let summary = updatePackageAllDeps(Path(packagesFile), Path(root), @["alpha"], @[], 2)
+    check summary.packagesProcessed == 1
+    check summary.packagesUpdated == 1
+    check summary.packagesFailed == 0
+    let deps = allDeps(root / "alpha" / "releases.json")
+    check jsonStringSeq(deps["packages"]) == @[
+      "beta",
+      "delta",
+      "gamma"
+    ]
+    check jsonStringSeq(deps["urls"]) == @[
+      "https://example.com/external",
+      "https://example.com/feature-only"
+    ]
+    check jsonStringSeq(deps["missing"]) == @[
+      "delta",
+      "missing"
+    ]
