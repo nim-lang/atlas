@@ -23,7 +23,7 @@ type
     name*: string
     url*: PkgUrl
     subdir*: Path
-    fullName*: string
+    fqn*: string
     head*: CommitHash
     current*: CommitHash
     author*: string
@@ -46,7 +46,7 @@ type
     releases*: seq[PackageReleaseCacheEntry]
 
 const
-  PackageReleaseCacheVersion = 6
+  PackageReleaseCacheVersion = 7
 
 proc sanitizeCacheStem(stem: var string) =
   for c in mitems(stem):
@@ -177,8 +177,8 @@ proc toPackageReleaseCacheJson(cache: PackageReleaseCache; opt: ToJsonOptions): 
   result["url"] = toJson($(cache.url))
   if cache.subdir.len > 0:
     result["subdir"] = toJson(cache.subdir, opt)
-  if cache.fullName.len > 0:
-    result["fullName"] = toJson(cache.fullName, opt)
+  if cache.fqn.len > 0:
+    result["fqn"] = toJson(cache.fqn, opt)
   result["head"] = toJson(cache.head, opt)
   result["current"] = toJson(cache.current, opt)
   if cache.author.len > 0:
@@ -362,7 +362,7 @@ proc savePackageReleaseCache*(
     name: firstNonEmptyMetadata(versions, proc (release: NimbleRelease): string = release.name),
     url: pkg.url,
     subdir: if pkg.subdir.len > 0: pkg.subdir else: pkg.url.subdir(),
-    fullName: pkg.url.fullName(),
+    fqn: pkg.url.fullName(),
     head: pkg.originHead,
     current: currentCommit,
     author: firstNonEmptyMetadata(versions, proc (release: NimbleRelease): string = release.author),

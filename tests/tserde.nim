@@ -137,9 +137,9 @@ suite "json serde":
       @[(VersionTag(v: Version"1.0.0", c: current).toPkgVer, release)]
     )
     let cache = parseFile($packageReleaseCachePath(pkg))
-    check cache["cacheVersion"].getInt() > 0
+    check cache["cacheVersion"].getInt() == 7
     check cache["name"].getStr() == "foobar"
-    check cache["fullName"].getStr() == "foobar.nimble-test.github.com"
+    check cache["fqn"].getStr() == "foobar.nimble-test.github.com"
     check "shortName" notin cache
 
   test "package release cache uses url identity and subdir":
@@ -221,6 +221,7 @@ suite "json serde":
 
     savePackageReleaseCache(pkg, current, @[(version, release)])
     let regeneratedCache = parseFile($cachePath)
+    check regeneratedCache["cacheVersion"].getInt() == 7
 
   test "package release cache lifts stable metadata":
     let oldCtx = context()
