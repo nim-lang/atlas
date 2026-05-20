@@ -37,6 +37,7 @@ type
     latestCommit: string
     releaseCount: int
     hasGitTags: bool
+    releaseVtags: HashSet[string]
     tarballs: JsonNode
 
   HarvestFailure* = object
@@ -58,6 +59,12 @@ type
     ver: PackageVersion
     release: NimbleRelease
     isHead: bool
+
+  RetainedPackageIndexState = object
+    latestCommit: string
+    lastUpdate: string
+    releaseCount: int
+    releaseVtags: HashSet[string]
 
 proc popPackage(queue: ptr PackageQueue; info: var PackageInfo): bool {.gcsafe.} =
   acquire(queue.lock)
@@ -110,6 +117,48 @@ proc relativeIndexPath(baseDir: Path; path: Path): string =
     $(path.relativePath(baseDir))
   else:
     $path
+
+proc loadReleaseVtags(releasesPath: Path): HashSet[string] =
+  if not fileExists($releasesPath):
+    return
+  try:
+    let root = parseFile($releasesPath)
+    if "releases" notin root or root["releases"].kind != JArray:
+      return
+    for entry in root["releases"]:
+      let vtag = entry{"vtag"}.getStr()
+      if vtag.len > 0 and not vtag.startsWith("#head@"):
+        result.incl vtag
+  except CatchableError:
+    discard
+
+proc loadRetainedPackageIndexState(metadataDir: Path): Table[string, RetainedPackageIndexState] =
+  let indexPath = metadataDir / Path"index.json"
+  if not fileExists($indexPath):
+    return
+  try:
+    let index = parseFile($indexPath)
+    if "packages" notin index or index["packages"].kind != JArray:
+      return
+    for entry in index["packages"]:
+      if entry.kind != JObject or "name" notin entry:
+        continue
+      let packageName = entry["name"].getStr()
+      if packageName.len == 0:
+        continue
+      let releasesMetadataPath = entry{"releasesMetadata"}.getStr()
+      result[packageName] = RetainedPackageIndexState(
+        latestCommit: entry{"latestCommit"}.getStr(),
+        lastUpdate: entry{"lastUpdate"}.getStr(),
+        releaseCount: entry{"releaseCount"}.getInt(),
+        releaseVtags:
+          if releasesMetadataPath.len > 0:
+            loadReleaseVtags(metadataDir / Path(releasesMetadataPath))
+          else:
+            initHashSet[string]()
+      )
+  except CatchableError:
+    discard
 
 proc cleanupClonedPackage(pkg: Package) =
   if pkg.isNil or pkg.ondisk.len == 0:
@@ -370,18 +419,11 @@ proc classifyHarvestError(message: string): string =
 
 proc buildErrorsIndex(failures: openArray[HarvestFailure]): JsonNode =
   result = newJObject()
-  var detailCounts = initCountTable[string]()
-  var summarizedDetails: seq[string] = @[]
   for failure in failures:
-    let detail = summarizeErrorLine(failure.errorMessage)
-    summarizedDetails.add detail
-    detailCounts.inc(detail)
-
-  for i, failure in failures:
-    let detail = summarizedDetails[i]
     var entry = newJObject()
+    let detail = summarizeErrorLine(failure.errorMessage)
     entry["type"] = %classifyHarvestError(detail)
-    if detail.len > 0 and detailCounts[detail] == 1:
+    if detail.len > 0:
       entry["details"] = %detail
     result[failure.packageName] = entry
 
@@ -491,6 +533,7 @@ proc harvestPackage(
       if ver.isNil or ver.vtag.version == Version"#head":
         continue
       inc releaseCount
+      result.releaseVtags.incl $ver.vtag
       if ver.vtag.commit.orig == FromGitTag:
         hasGitTags = true
     mergePackageReleaseMetadata(
@@ -569,6 +612,7 @@ proc harvestRegistryCaches*(
   initLock(queue.lock)
   var packagesIndex = newJArray()
   var succeededPackages: seq[string]
+  let retainedPackageState = loadRetainedPackageIndexState(metadataDir)
 
   result.packagesSeen = packageList.len
   for info in packageList:
@@ -609,12 +653,25 @@ proc harvestRegistryCaches*(
     for packageResult in workerResult.packageResults:
       let info = packageInfoByName[packageResult.packageName]
       succeededPackages.add packageResult.packageName
+      let processedAt = now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
+      let retained =
+        if retainedPackageState.hasKey(packageResult.packageName):
+          retainedPackageState[packageResult.packageName]
+        else:
+          RetainedPackageIndexState()
+      let changed =
+        retained.lastUpdate.len == 0 or
+        retained.latestCommit != packageResult.latestCommit or
+        retained.releaseCount != packageResult.releaseCount or
+        retained.releaseVtags != packageResult.releaseVtags
       var entry = newJObject()
       entry["name"] = %packageResult.packageName
       entry["latestCommit"] = %packageResult.latestCommit
       entry["releaseCount"] = %packageResult.releaseCount
       entry["releasesMetadata"] = %packageReleasesMetadataRelPath(info)
-      entry["processedAt"] = %now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
+      entry["processedAt"] = %processedAt
+      entry["lastUpdate"] =
+        %(if changed: processedAt else: retained.lastUpdate)
       packagesIndex.add entry
   else:
     setMaxPoolSize(workerCount)
@@ -643,12 +700,25 @@ proc harvestRegistryCaches*(
       for packageResult in workerResult.packageResults:
         let info = packageInfoByName[packageResult.packageName]
         succeededPackages.add packageResult.packageName
+        let processedAt = now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
+        let retained =
+          if retainedPackageState.hasKey(packageResult.packageName):
+            retainedPackageState[packageResult.packageName]
+          else:
+            RetainedPackageIndexState()
+        let changed =
+          retained.lastUpdate.len == 0 or
+          retained.latestCommit != packageResult.latestCommit or
+          retained.releaseCount != packageResult.releaseCount or
+          retained.releaseVtags != packageResult.releaseVtags
         var entry = newJObject()
         entry["name"] = %packageResult.packageName
         entry["latestCommit"] = %packageResult.latestCommit
         entry["releaseCount"] = %packageResult.releaseCount
         entry["releasesMetadata"] = %packageReleasesMetadataRelPath(info)
-        entry["processedAt"] = %now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
+        entry["processedAt"] = %processedAt
+        entry["lastUpdate"] =
+          %(if changed: processedAt else: retained.lastUpdate)
         packagesIndex.add entry
   deinitLock(queue.lock)
 
