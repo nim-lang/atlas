@@ -84,6 +84,9 @@ proc packageReleasesMetadataRelPath(info: PackageInfo): string =
 proc packageDigestFile(workspaceRoot: Path): Path =
   workspaceRoot / Path"digest.json"
 
+proc errorsIndexPath(metadataDir: Path): Path =
+  metadataDir / Path"index-errors.json"
+
 proc siblingTempPath(dest: Path): Path =
   let destDir = dest.parentDir()
   destDir / Path(".tmp." & dest.splitPath().tail.string)
@@ -193,7 +196,7 @@ proc cleanupDanglingReleaseCaches(metadataDir: Path) =
     if kind != pcFile:
       continue
     let tail = $path.Path.splitPath().tail
-    if tail in ["packages.json", "index.json"]:
+    if tail in ["packages.json", "index.json", "index-errors.json"]:
       continue
     if path.Path.splitFile().ext == ".json":
       removeFile(path)
@@ -382,11 +385,46 @@ proc buildErrorsIndex(failures: openArray[HarvestFailure]): JsonNode =
       entry["details"] = %detail
     result[failure.packageName] = entry
 
+proc loadExistingErrorsIndex(metadataDir: Path): JsonNode =
+  let errorsPath = errorsIndexPath(metadataDir)
+  if fileExists($errorsPath):
+    try:
+      result = parseFile($errorsPath)
+    except CatchableError:
+      discard
+  if result.isNil or result.kind != JObject:
+    let indexPath = metadataDir / Path"index.json"
+    if fileExists($indexPath):
+      try:
+        let index = parseFile($indexPath)
+        let legacyErrors = index{"errors"}
+        if not legacyErrors.isNil and legacyErrors.kind == JObject:
+          result = legacyErrors.copy()
+      except CatchableError:
+        discard
+  if result.isNil or result.kind != JObject:
+    result = newJObject()
+
+proc writeErrorsIndex(
+    metadataDir: Path;
+    failures: openArray[HarvestFailure];
+    succeededPackages: openArray[string]
+) =
+  var errors = loadExistingErrorsIndex(metadataDir)
+  let currentFailures = buildErrorsIndex(failures)
+  for packageName in succeededPackages:
+    if errors.hasKey(packageName):
+      errors.delete(packageName)
+  for packageName, errInfo in currentFailures:
+    errors[packageName] = errInfo
+  writeTextFileAtomic(errorsIndexPath(metadataDir), pretty(errors))
+
 proc writeIndex(
     metadataDir: Path;
     packagesFile: Path;
     summary: HarvestSummary;
     packages: JsonNode;
+    succeededPackages: seq[string];
     ephemeral: bool;
     compressions: openArray[ArchiveCompression];
     packageName = "";
@@ -406,8 +444,9 @@ proc writeIndex(
   index["aliasesSkipped"] = %summary.aliasesSkipped
   index["packagesProcessed"] = %summary.packagesProcessed
   index["packagesFailed"] = %summary.packagesFailed
-  index["errors"] = buildErrorsIndex(summary.failures)
+  index["errorsPath"] = %"index-errors.json"
   index["packages"] = packages
+  writeErrorsIndex(metadataDir, summary.failures, succeededPackages)
   writeTextFileAtomic(metadataDir / Path("index.json"), pretty(index))
 
 proc harvestPackage(
@@ -529,6 +568,7 @@ proc harvestRegistryCaches*(
   var queue: PackageQueue
   initLock(queue.lock)
   var packagesIndex = newJArray()
+  var succeededPackages: seq[string]
 
   result.packagesSeen = packageList.len
   for info in packageList:
@@ -568,6 +608,7 @@ proc harvestRegistryCaches*(
       error "atlas:pkger", "failed package:", failure.packageName, "error:", failure.errorMessage
     for packageResult in workerResult.packageResults:
       let info = packageInfoByName[packageResult.packageName]
+      succeededPackages.add packageResult.packageName
       var entry = newJObject()
       entry["name"] = %packageResult.packageName
       entry["latestCommit"] = %packageResult.latestCommit
@@ -601,6 +642,7 @@ proc harvestRegistryCaches*(
         error "atlas:pkger", "failed package:", failure.packageName, "error:", failure.errorMessage
       for packageResult in workerResult.packageResults:
         let info = packageInfoByName[packageResult.packageName]
+        succeededPackages.add packageResult.packageName
         var entry = newJObject()
         entry["name"] = %packageResult.packageName
         entry["latestCommit"] = %packageResult.latestCommit
@@ -615,6 +657,7 @@ proc harvestRegistryCaches*(
     packagesFile,
     result,
     packagesIndex,
+    succeededPackages,
     ephemeral,
     compressions,
     packageNames = pkgNames

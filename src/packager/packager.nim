@@ -116,13 +116,18 @@ proc shouldSkipRetriedRepo(errorType: string; details: string): bool =
     (kind == "unknown" and looksInaccessible)
 
 proc loadAutoIgnoredPackages(metadataDir: Path): seq[string] =
+  let errorsPath = metadataDir / Path"index-errors.json"
   let indexPath = metadataDir / Path"index.json"
-  if not fileExists($indexPath):
+  if not fileExists($errorsPath) and not fileExists($indexPath):
     return
 
   try:
-    let index = parseFile($indexPath)
-    let errors = index{"errors"}
+    let errors =
+      if fileExists($errorsPath):
+        parseFile($errorsPath)
+      else:
+        let index = parseFile($indexPath)
+        index{"errors"}
     if errors.isNil or errors.kind != JObject:
       return
 
