@@ -482,19 +482,6 @@ proc clone*(url: Uri, dest: Path; retries = 5): (CloneStatus, string) =
   let canonicalUrl = url
   var url = maybeUrlProxy(url)
 
-  proc isNonRetryableCloneFailure(output: string): bool =
-    let normalized = output.toLowerAscii()
-    "terminal prompts disabled" in normalized or
-      "could not read username" in normalized or
-      "repository not found" in normalized or
-      "unable to access" in normalized or
-      "failed to connect" in normalized or
-      "could not resolve host" in normalized or
-      "permission denied" in normalized or
-      "access denied" in normalized or
-      "authentication failed" in normalized or
-      "not a valid remote name" in normalized
-
   let remote = remoteNameFromGitUrl($canonicalUrl)
 
   # Try first clone with git output directly to the terminal
@@ -522,8 +509,6 @@ proc clone*(url: Uri, dest: Path; retries = 5): (CloneStatus, string) =
       return (Ok, "")
     elif "not found" in outp or "Not a git repo" in outp:
       return (NotFound, "not found")
-    elif isNonRetryableCloneFailure(outp):
-      return (OtherError, outp)
     else:
       result[1] = outp
 
