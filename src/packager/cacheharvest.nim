@@ -512,6 +512,24 @@ proc writeIndex(
   index["aliasesSkipped"] = %summary.aliasesSkipped
   index["packagesProcessed"] = %summary.packagesProcessed
   index["packagesFailed"] = %summary.packagesFailed
+  index["taggedPackages"] = %summary.taggedPackages
+  index["untaggedPackages"] = %summary.untaggedPackages
+  index["taggedReleases"] = %summary.taggedReleases
+  index["untaggedReleases"] = %summary.untaggedReleases
+  if summary.releaseCounts.len > 0:
+    var counts = summary.releaseCounts
+    counts.sort()
+    var totalReleases = 0
+    for count in counts:
+      totalReleases += count
+    let average = totalReleases.float / counts.len.float
+    let median =
+      if counts.len mod 2 == 1:
+        counts[counts.len div 2].float
+      else:
+        (counts[counts.len div 2 - 1].float + counts[counts.len div 2].float) / 2.0
+    index["releasesPerPackageAvg"] = %formatFloat(average, ffDecimal, 2)
+    index["releasesPerPackageMedian"] = %formatFloat(median, ffDecimal, 2)
   index["errorsPath"] = %"index-errors.json"
   index["packages"] = packages
   writeErrorsIndex(metadataDir, summary.failures, succeededPackages)
