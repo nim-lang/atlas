@@ -1,8 +1,10 @@
-import std/[os, osproc, paths, sequtils, strutils, tempfiles, unittest, uri]
+import std/[json, os, osproc, paths, sequtils, strutils, tempfiles, unittest, uri]
 
 import packager/packager
 import packager/archivehelpers
+import packager/githubheadcheck
 import basic/context
+import basic/dependencycache
 import basic/gitops
 
 proc withEnvVar(name: string; value: string; body: proc() {.closure.}) =
@@ -238,3 +240,23 @@ suite "packager mirrored repo helpers":
 
     let tags = runGit(["tag"], worktree)
     check "v0.2.0" in tags
+
+suite "packager retained index versioning":
+  test "retained release cache version match requires current cache version":
+    let root = createTempDir("atlas-packager", "index-version-")
+    defer: removeDir(root)
+
+    let indexPath = root / "index.json"
+    writeFile(indexPath, $(%*{
+      "releaseCacheVersion": PackageReleaseCacheVersion,
+      "compressions": ["gzip"],
+      "packages": []
+    }))
+    check retainedReleaseCacheVersionMatches(Path(root))
+
+    writeFile(indexPath, $(%*{
+      "releaseCacheVersion": PackageReleaseCacheVersion - 1,
+      "compressions": ["gzip"],
+      "packages": []
+    }))
+    check not retainedReleaseCacheVersionMatches(Path(root))

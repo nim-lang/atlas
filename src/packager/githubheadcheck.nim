@@ -7,7 +7,7 @@
 
 import std/[algorithm, httpclient, json, os, paths, sets, streams, strutils, tables]
 
-import ../basic/[httpclientutils, packageinfos, pkgurls, reporters]
+import ../basic/[dependencycache, httpclientutils, packageinfos, pkgurls, reporters]
 
 const
   GitHubGraphqlEndpoint* = "https://api.github.com/graphql"
@@ -21,6 +21,7 @@ type
     releasesMetadataPath*: string
 
   RetainedIndexState* = object
+    releaseCacheVersion*: int
     compressions*: seq[string]
     packages*: Table[string, RetainedPackageState]
 
@@ -61,6 +62,7 @@ proc loadRetainedIndexState*(metadataDir: Path): RetainedIndexState =
 
   try:
     let index = parseFile($indexPath)
+    result.releaseCacheVersion = index{"releaseCacheVersion"}.getInt()
     if "compressions" in index and index["compressions"].kind == JArray:
       for compression in index["compressions"]:
         result.compressions.add compression.getStr()
@@ -83,6 +85,10 @@ proc hasRetainedArtifacts(metadataDir: Path; state: RetainedPackageState): bool 
   state.latestCommit.len > 0 and
     state.releasesMetadataPath.len > 0 and
     fileExists($(metadataDir / Path(state.releasesMetadataPath)))
+
+proc retainedReleaseCacheVersionMatches*(metadataDir: Path): bool =
+  let retainedIndex = loadRetainedIndexState(metadataDir)
+  retainedIndex.releaseCacheVersion == PackageReleaseCacheVersion
 
 proc loadRetainedVersions(metadataDir: Path; state: RetainedPackageState): HashSet[string] =
   let releasesPath = metadataDir / Path(state.releasesMetadataPath)
@@ -308,6 +314,12 @@ proc findUnchangedGitHubPackages*(
   let retainedIndex = loadRetainedIndexState(metadataDir)
   if retainedIndex.packages.len == 0:
     info "atlas:pkger", "github api check skipped: missing retained index package state"
+    return
+  if retainedIndex.releaseCacheVersion != PackageReleaseCacheVersion:
+    info "atlas:pkger",
+      "github api check skipped: release cache version changed",
+      "cached:", $retainedIndex.releaseCacheVersion,
+      "current:", $PackageReleaseCacheVersion
     return
   if not sameCompressions(retainedIndex.compressions, currentCompressions):
     info "atlas:pkger", "github api check skipped: compressions changed"

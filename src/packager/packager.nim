@@ -11,7 +11,7 @@
 import std / [algorithm, cpuinfo, json, monotimes, parseopt, os, paths, strutils, times]
 when defined(posix):
   import std / posix
-import ../basic / [context, packageinfos, reporters]
+import ../basic / [context, dependencycache, packageinfos, reporters]
 import ../basic/subprocessgroups
 import ./cacheharvest
 import ./githubheadcheck
@@ -137,6 +137,11 @@ proc loadAutoIgnoredPackages(metadataDir: Path): seq[string] =
           result.add packageName
   except CatchableError:
     discard
+
+proc shouldRefreshAllPackagesForReleaseCacheVersion(metadataDir: Path): bool =
+  if not fileExists($(metadataDir / Path"index.json")):
+    return false
+  not retainedReleaseCacheVersionMatches(metadataDir)
 
 proc parsePackageNames*(value: string): seq[string] =
   for rawName in value.split(','):
@@ -498,7 +503,12 @@ proc runPackagerOnce*(
       if packageName notin opts.ignoredPackageNames:
         autoIgnored.add packageName
     notice "atlas:pkger", "auto-skipping inaccessible packages:", autoIgnored.join(",")
-  if opts.updateRepos and not opts.regenerateTarballs:
+  let refreshAllPackages = shouldRefreshAllPackagesForReleaseCacheVersion(metadataDir)
+  if refreshAllPackages:
+    notice "atlas:pkger",
+      "release cache version changed; reprocessing all packages",
+      "current:", $PackageReleaseCacheVersion
+  if opts.updateRepos and not opts.regenerateTarballs and not refreshAllPackages:
     let githubSkipped = findUnchangedGitHubPackages(
       packagesFile,
       metadataDir,

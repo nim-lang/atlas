@@ -66,6 +66,10 @@ type
     releaseCount: int
     releaseVtags: HashSet[string]
 
+  RetainedIndexMetadata = object
+    releaseCacheVersion: int
+    packages: Table[string, RetainedPackageIndexState]
+
 proc popPackage(queue: ptr PackageQueue; info: var PackageInfo): bool {.gcsafe.} =
   acquire(queue.lock)
   try:
@@ -138,12 +142,13 @@ proc loadReleaseVtags(releasesPath: Path): HashSet[string] =
   except CatchableError:
     discard
 
-proc loadRetainedPackageIndexState(metadataDir: Path): Table[string, RetainedPackageIndexState] =
+proc loadRetainedPackageIndexState(metadataDir: Path): RetainedIndexMetadata =
   let indexPath = metadataDir / Path"index.json"
   if not fileExists($indexPath):
     return
   try:
     let index = parseFile($indexPath)
+    result.releaseCacheVersion = index{"releaseCacheVersion"}.getInt()
     if "packages" notin index or index["packages"].kind != JArray:
       return
     for entry in index["packages"]:
@@ -153,7 +158,7 @@ proc loadRetainedPackageIndexState(metadataDir: Path): Table[string, RetainedPac
       if packageName.len == 0:
         continue
       let releasesMetadataPath = entry{"releasesMetadata"}.getStr()
-      result[packageName] = RetainedPackageIndexState(
+      result.packages[packageName] = RetainedPackageIndexState(
         latestCommit: entry{"latestCommit"}.getStr(),
         lastUpdate: entry{"lastUpdate"}.getStr(),
         releaseCount: entry{"releaseCount"}.getInt(),
@@ -551,6 +556,7 @@ proc writeIndex(
 ) =
   var index = newJObject()
   index["generatedAt"] = %now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
+  index["releaseCacheVersion"] = %PackageReleaseCacheVersion
   index["packagesFile"] = %relativeIndexPath(metadataDir, packagesFile)
   index["releasesPath"] = %"{package}/releases"
   index["ephemeral"] = %ephemeral
@@ -714,7 +720,7 @@ proc harvestRegistryCaches*(
   initLock(queue.lock)
   var packagesIndex = newJArray()
   var succeededPackages: seq[string]
-  let retainedPackageState = loadRetainedPackageIndexState(metadataDir)
+  let retainedIndexMetadata = loadRetainedPackageIndexState(metadataDir)
 
   result.packagesSeen = packageList.len
   for info in packageList:
@@ -758,8 +764,8 @@ proc harvestRegistryCaches*(
       succeededPackages.add packageResult.packageName
       let processedAt = now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
       let retained =
-        if retainedPackageState.hasKey(packageResult.packageName):
-          retainedPackageState[packageResult.packageName]
+        if retainedIndexMetadata.packages.hasKey(packageResult.packageName):
+          retainedIndexMetadata.packages[packageResult.packageName]
         else:
           RetainedPackageIndexState()
       let changed =
@@ -806,8 +812,8 @@ proc harvestRegistryCaches*(
         succeededPackages.add packageResult.packageName
         let processedAt = now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
         let retained =
-          if retainedPackageState.hasKey(packageResult.packageName):
-            retainedPackageState[packageResult.packageName]
+          if retainedIndexMetadata.packages.hasKey(packageResult.packageName):
+            retainedIndexMetadata.packages[packageResult.packageName]
           else:
             RetainedPackageIndexState()
         let changed =
