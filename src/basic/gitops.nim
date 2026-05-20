@@ -60,6 +60,8 @@ proc fetchRemoteTagsByName(path: Path; remote: string; errorReportLevel: MsgKind
 proc resolveRemoteName*(path: Path; origin = "origin"; errorReportLevel: MsgKind = Warning): string
 proc maybeUrlProxy*(url: Uri): Uri
 proc updateServerInfo*(path: Path): bool
+proc isBareGitRepo*(path: Path): bool
+proc convertRepoToBareSingleBranch*(srcPath, destPath: Path; errorReportLevel: MsgKind = Warning): bool
 proc syncRemoteRefs(path: Path; srcRemote, dstRemote: string; errorReportLevel: MsgKind = Warning): bool
 proc readGitRef(path: Path; refName: string): string
 proc currentGitCommit*(path: Path, errorReportLevel: MsgKind = Info): CommitHash
@@ -182,6 +184,12 @@ proc gitMetadataDir(path: Path): Path =
           return Path""
         return if isAbsolute(gitDir): Path(gitDir) else: path / Path(gitDir)
   Path""
+
+proc isBareGitRepo*(path: Path): bool =
+  gitMetadataDir(path) == path and
+    fileExists($(path / Path"HEAD")) and
+    fileExists($(path / Path"config")) and
+    dirExists($(path / Path"objects"))
 
 proc commonGitDir(gitDir: Path): Path =
   if gitDir.string == "":
@@ -552,6 +560,25 @@ proc cloneBareSingleBranch*(url: Uri, dest: Path; retries = 5): (CloneStatus, st
       result[1] = outp
 
   result[0] = NotFound
+
+proc convertRepoToBareSingleBranch*(srcPath, destPath: Path; errorReportLevel: MsgKind = Warning): bool =
+  let srcUri = parseUri("file://" & $srcPath.absolutePath())
+  let tmpPath = destPath.parentDir() / Path(destPath.splitPath().tail.string & ".tmp-bare")
+  if dirExists($tmpPath):
+    removeDir($tmpPath)
+
+  let (status, msg) = cloneBareSingleBranch(srcUri, tmpPath, retries = 0)
+  if status != Ok:
+    let err = if msg.len > 0: msg else: $status
+    message(errorReportLevel, srcPath, "could not convert repo to bare clone:", err)
+    if dirExists($tmpPath):
+      removeDir($tmpPath)
+    return false
+
+  if dirExists($destPath):
+    removeDir($destPath)
+  moveDir($tmpPath, $destPath)
+  true
 
 proc updateServerInfo*(path: Path): bool =
   let (_, status) = exec(GitUpdateServerInfo, path, [], Warning)

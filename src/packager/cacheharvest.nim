@@ -183,6 +183,10 @@ proc prepareMirroredPackageRepo(
   let repoPath = packageRepoMirrorPath(info)
   let worktreePath = packageRepoWorktreePath(workspaceRoot)
   if dirExists($repoPath):
+    if not isBareGitRepo(repoPath):
+      notice "atlas:pkger", "converting regular repo to bare repo:", $repoPath
+      if not convertRepoToBareSingleBranch(repoPath, repoPath):
+        raise newException(IOError, "could not convert regular repo to bare repo")
     if updateRepos and not updateBareRepoDefaultBranch(repoPath):
       raise newException(IOError, "could not update mirrored repo")
   else:

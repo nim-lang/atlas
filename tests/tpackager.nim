@@ -121,6 +121,33 @@ suite "packager env options":
                     check opts.ephemeral
 
 suite "packager mirrored repo helpers":
+  test "regular repo can be converted to bare single-branch repo":
+    let root = createTempDir("atlas-packager", "convert-test-")
+    defer: removeDir(root)
+
+    let repo = root / "source"
+    createDir(repo)
+    discard runGit(["init", "-b", "main"], repo)
+    discard runGit(["config", "user.name", "Atlas Tests"], repo)
+    discard runGit(["config", "user.email", "atlas-tests@example.com"], repo)
+    writeText(repo / "pkg.nimble", "version = \"0.1.0\"\n")
+    discard runGit(["add", "pkg.nimble"], repo)
+    discard runGit(["commit", "-m", "initial"], repo)
+    discard runGit(["checkout", "-b", "feature"], repo)
+    writeText(repo / "feature.txt", "feature branch only\n")
+    discard runGit(["add", "feature.txt"], repo)
+    discard runGit(["commit", "-m", "feature"], repo)
+    discard runGit(["checkout", "main"], repo)
+
+    let bareRepo = root / "pkg.git"
+    check convertRepoToBareSingleBranch(Path(repo), Path(bareRepo))
+    check isBareGitRepo(Path(bareRepo))
+    check dirExists(repo / ".git")
+
+    let refs = runGit(["for-each-ref", "--format=%(refname)"], bareRepo)
+    check "refs/heads/main" in refs
+    check "refs/heads/feature" notin refs
+
   test "bare single-branch clone omits non-default branches":
     let root = createTempDir("atlas-packager", "mirror-test-")
     defer: removeDir(root)
