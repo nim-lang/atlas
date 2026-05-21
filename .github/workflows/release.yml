@@ -4,15 +4,12 @@ on:
   push:
     tags:
       - '*'
-  release:
-    types:
-      - published
 
 permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.event.release.tag_name || github.ref_name }}
+  group: release-${{ github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -233,7 +230,7 @@ jobs:
       - name: Publish GitHub release assets
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG_NAME: ${{ github.event.release.tag_name || github.ref_name }}
+          TAG_NAME: ${{ github.ref_name }}
         run: |
           if ! gh release view "$TAG_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release create "$TAG_NAME" \
