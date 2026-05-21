@@ -1,0 +1,173 @@
+name: atlas release
+
+on:
+  push:
+    tags:
+      - '*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - os: linux
+            arch: amd64
+            setup_arch: amd64
+            runner: ubuntu-latest
+            artifact: atlas-linux-amd64
+            archive: atlas-linux-amd64.tar.gz
+          - os: macos
+            arch: universal
+            setup_arch: amd64
+            runner: macos-latest
+            artifact: atlas-macos-universal
+            archive: atlas-macos-universal.tar.gz
+          - os: windows
+            arch: amd64
+            setup_arch: amd64
+            runner: windows-latest
+            artifact: atlas-windows-amd64
+            archive: atlas-windows-amd64.zip
+          - os: windows
+            arch: i386
+            setup_arch: i386
+            runner: windows-latest
+            artifact: atlas-windows-i386
+            archive: atlas-windows-i386.zip
+
+    name: ${{ matrix.target.artifact }}
+    runs-on: ${{ matrix.target.runner }}
+    env:
+      OS: ${{ matrix.target.os }}
+      ARCH: ${{ matrix.target.arch }}
+
+    steps:
+      - name: set `core.autocrlf` to false
+        run: |
+          git config --global core.autocrlf false
+          git config --global init.defaultBranch master
+          git config --global user.email "atlasbot@nimlang.com"
+          git config --global user.name "atlasbot"
+
+      - name: Checkout atlas
+        uses: actions/checkout@v5
+        with:
+          submodules: false
+
+      - name: Restore MinGW-W64 (Windows) from cache
+        if: runner.os == 'Windows'
+        id: windows-mingw-cache
+        uses: actions/cache@v5
+        with:
+          path: external/mingw-${{ matrix.target.setup_arch }}
+          key: 'mingw-${{ matrix.target.setup_arch }}'
+
+      - name: Restore Nim DLLs dependencies (Windows) from cache
+        if: runner.os == 'Windows'
+        id: windows-dlls-cache
+        uses: actions/cache@v5
+        with:
+          path: external/dlls-${{ matrix.target.setup_arch }}
+          key: 'dlls-${{ matrix.target.setup_arch }}'
+
+      - name: Install MinGW64 dependency (Windows)
+        if: >
+          steps.windows-mingw-cache.outputs.cache-hit != 'true' &&
+          runner.os == 'Windows'
+        shell: bash
+        run: |
+          mkdir -p external
+          if [[ '${{ matrix.target.setup_arch }}' == 'amd64' ]]; then
+            MINGW_URL="https://github.com/brechtsanders/winlibs_mingw/releases/download/11.1.0-12.0.0-9.0.0-r2/winlibs-x86_64-posix-seh-gcc-11.1.0-mingw-w64-9.0.0-r2.7z"
+            ARCH=64
+          else
+            MINGW_URL="https://github.com/brechtsanders/winlibs_mingw/releases/download/11.1.0-12.0.0-9.0.0-r2/winlibs-i686-posix-dwarf-gcc-11.1.0-mingw-w64-9.0.0-r2.7z"
+            ARCH=32
+          fi
+          curl -L "$MINGW_URL" -o "external/mingw-${{ matrix.target.setup_arch }}.7z"
+          7z x -y "external/mingw-${{ matrix.target.setup_arch }}.7z" -oexternal/
+          mv external/mingw$ARCH external/mingw-${{ matrix.target.setup_arch }}
+
+      - name: Install DLLs dependencies (Windows)
+        if: >
+          steps.windows-dlls-cache.outputs.cache-hit != 'true' &&
+          runner.os == 'Windows'
+        shell: bash
+        run: |
+          mkdir -p external
+          curl -L "https://nim-lang.org/download/windeps.zip" -o external/windeps.zip
+          7z x -y external/windeps.zip -oexternal/dlls-${{ matrix.target.setup_arch }}
+
+      - name: Path to cached dependencies (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          echo '${{ github.workspace }}'"/external/mingw-${{ matrix.target.setup_arch }}/bin" >> $GITHUB_PATH
+          echo '${{ github.workspace }}'"/external/dlls-${{ matrix.target.setup_arch }}" >> $GITHUB_PATH
+
+      - name: Setup Nim
+        uses: alaviss/setup-nim@0.1.1
+        with:
+          path: 'nim'
+          version: version-2-2
+          architecture: ${{ matrix.target.setup_arch }}
+
+      - name: Build release
+        run: nim buildRelease
+
+      - name: Smoke test
+        shell: bash
+        run: |
+          if [[ -f bin/atlas.exe ]]; then
+            ./bin/atlas.exe --version
+          else
+            ./bin/atlas --version
+          fi
+
+      - name: Package release artifact
+        shell: bash
+        run: |
+          package_dir="dist/${{ matrix.target.artifact }}"
+          mkdir -p "$package_dir"
+          if [[ -f bin/atlas.exe ]]; then
+            cp bin/atlas.exe "$package_dir/"
+          else
+            cp bin/atlas "$package_dir/"
+          fi
+          cp license.txt readme.md "$package_dir/"
+          if [[ '${{ matrix.target.os }}' == 'windows' ]]; then
+            (cd dist && 7z a "${{ matrix.target.archive }}" "${{ matrix.target.artifact }}")
+          else
+            tar -czf "dist/${{ matrix.target.archive }}" -C dist "${{ matrix.target.artifact }}"
+          fi
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target.artifact }}
+          path: dist/${{ matrix.target.archive }}
+          if-no-files-found: error
+
+  publish-release:
+    needs: build-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create GitHub release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$TAG_NAME" \
+            --generate-notes
