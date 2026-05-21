@@ -75,6 +75,8 @@ Options:
   --noautoinit          do not auto initialize an atlas project
   --no-lazy-deps        disable lazy dependency loading and use eager loading
                         for all transitive dependencies during SAT solving
+  --parallel[=count], -t[=count]
+                        clone dependency repositories in parallel, default count is 3
   --proxy=url           use the given proxy URL for all git operations
   --dumbProxy           use a dumb proxy without smart git protocol
   --packagesRepo        use the nim-lang/packages git repo (legacy behavior)
@@ -95,6 +97,16 @@ proc writeVersion() =
   stdout.write("version: " & AtlasVersion & "\n")
   stdout.flushFile()
   quit(0)
+
+proc parseParallelCloneWorkers(value: string): int =
+  if value.len == 0:
+    return DefaultParallelCloneWorkers
+  try:
+    result = parseInt(value)
+  except ValueError:
+    writeHelp()
+  if result < 1:
+    writeHelp()
 
 proc tag(tag: string) =
   if gitops.getCanonicalUrl(project()).len == 0:
@@ -456,6 +468,9 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
         else: writeHelp()
       of "nolazydeps", "no-lazy-deps":
         context().flags.incl NoLazyDeps
+      of "parallel", "t":
+        context().flags.incl ParallelClones
+        context().parallelCloneWorkers = parseParallelCloneWorkers(val)
       of "verbosity":
         case val.normalize
         of "normal": setAtlasVerbosity(Info)

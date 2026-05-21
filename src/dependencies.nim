@@ -15,7 +15,7 @@
 ## dependencies during traversal.
 
 import std / [os, strutils, uri, tables, sequtils, sets, paths, dirs]
-import basic/[context, deptypes, versions, osutils, reporters, gitops, pkgurls, nimblecontext, deptypesjson, packageutils]
+import basic/[context, deptypes, versions, osutils, reporters, gitops, pkgurls, nimblecontext, deptypesjson, packageutils, gitprogresspool]
 import releaseinfo
 
 export deptypes, versions, deptypesjson, releaseinfo, packageutils
@@ -23,6 +23,80 @@ export deptypes, versions, deptypesjson, releaseinfo, packageutils
 type
   PackageAction* = enum
     DoNothing, DoClone
+
+  PendingCloneJob = object
+    pkgUrl: PkgUrl
+    checkoutDir: Path
+    progressJob: GitProgressJob
+
+proc cloneProgressJob(pkg: Package; checkoutDir: Path): GitProgressJob =
+  let canonicalUrl = pkg.url.cloneUri()
+  let remote = gitops.remoteNameFromGitUrl($canonicalUrl)
+  let effectiveUrl = gitops.maybeUrlProxy(canonicalUrl)
+  result = GitProgressJob(
+    label: pkg.projectName,
+    command: "git",
+    args: @["clone"]
+  )
+  if $context().proxy == "" or DumbProxy notin context().flags:
+    if ShallowClones in context().flags:
+      result.args.add "--depth=1"
+  if remote.len > 0:
+    result.args.add "--origin"
+    result.args.add remote
+  result.args.add "--no-tags"
+  result.args.add "--progress"
+  result.args.add $effectiveUrl
+  result.args.add $checkoutDir
+
+proc markCloneFailure(pkg: var Package; details: string) =
+  pkg.state = Error
+  if details.len > 0:
+    pkg.errors.add details
+  else:
+    pkg.errors.add "clone failed"
+
+proc finishClonedDependency(
+    nc: NimbleContext;
+    pkg: var Package;
+    checkoutDir: Path;
+    officialUrl: PkgUrl;
+    isFork: bool
+) =
+  pkg.completeClonedPackage(checkoutDir)
+  var repo = gitops.loadRepoMetadata(pkg.ondisk, expectedCanonicalUrl = $pkg.url.cloneUri())
+  if isFork:
+    discard gitops.ensureRemoteForUrl(pkg.ondisk, officialUrl.cloneUri())
+  discard gitops.fetchRemoteTags(repo)
+  pkg.state = Found
+
+proc processCloneEpoch(
+    nc: var NimbleContext;
+    root: Package;
+    cloneJobs: seq[PendingCloneJob]
+) =
+  if cloneJobs.len == 0:
+    return
+
+  notice root.projectName, "Cloning packages in parallel:", $cloneJobs.len
+  let cloneResults = runGitProgressJobs(
+    cloneJobs.mapIt(it.progressJob),
+    title = "atlas:clone",
+    workerCount = context().parallelCloneWorkers
+  )
+
+  for i, job in cloneJobs:
+    var pkg = nc.packageToDependency[job.pkgUrl]
+    let cloneResult = cloneResults[i]
+    if cloneResult.exitCode == 0 and isGitDir(job.checkoutDir):
+      let officialUrl = nc.lookup(pkg.projectName())
+      let isFork = pkg.isFork
+      nc.finishClonedDependency(pkg, job.checkoutDir, officialUrl, isFork)
+    else:
+      var details = cloneResult.output.strip()
+      if details.len == 0:
+        details = "clone failed for " & $pkg.url.cloneUri()
+      pkg.markCloneFailure(details)
 
 proc childDependencyState(pkg: Package; deferChildDeps: bool): PackageState =
   ## Returns the initial state for newly discovered child dependencies.
@@ -227,6 +301,7 @@ proc processPendingPackages(
   while processing:
     processing = false
     let pkgUrls = nc.packageToDependency.keys().toSeq()
+    var cloneJobs: seq[PendingCloneJob]
 
     # Build concise package lists for progress logging.
     var initializingPkgs: seq[string]
@@ -252,9 +327,79 @@ proc processPendingPackages(
       case pkg.state:
       of NotInitialized, DoLoad:
         info pkg.projectName, "Initializing package:", $pkg.url
-        nc.loadDependency(pkg, onClone)
+        if ParallelClones notin context().flags:
+          nc.loadDependency(pkg, onClone)
+          trace pkg.projectName, "expanded pkg:", pkg.repr
+          processing = true
+          continue
+
+        if pkg.isRoot:
+          nc.loadDependency(pkg, onClone)
+          trace pkg.projectName, "expanded pkg:", pkg.repr
+          processing = true
+          continue
+
+        let officialUrl = nc.lookup(pkg.projectName())
+        let isFork = pkg.isFork
+
+        if isFork:
+          info pkg.url.projectName, "package is unofficial or forked"
+          let canonicalDir = officialUrl.toDirectoryPath(pkg.projectName())
+          let forkDir = pkg.url.toDirectoryPath()
+          if dirExists(forkDir) and not dirExists(canonicalDir) and
+              forkDir.isRelativeTo(depsDir()) and canonicalDir.isRelativeTo(depsDir()):
+            try:
+              moveDir(forkDir.string, canonicalDir.string)
+            except OSError:
+              discard
+          pkg.ondisk = canonicalDir
+        else:
+          pkg.ondisk = pkg.url.toDirectoryPath(pkg.projectName())
+
+        pkg.isAtlasProject = pkg.url.isAtlasProject()
+        pkg.isLocalOnly = pkg.url.isNimbleLink()
+        var todo = if pkg.resolveExistingPackageDir(): DoNothing else: DoClone
+        if pkg.isLocalOnly:
+          todo = DoNothing
+        if pkg.state == LazyDeferred:
+          todo = DoNothing
+
+        debug pkg.url.projectName, "loading dependency todo:", $todo, "ondisk:", $pkg.ondisk, "isLinked:", $pkg.url.isFileProtocol, "isLazyDeferred:", $(pkg.state == LazyDeferred)
+        case todo
+        of DoClone:
+          if onClone == DoNothing:
+            pkg.state = Error
+            pkg.errors.add "Not found"
+          elif pkg.url.isFileProtocol:
+            nc.loadDependency(pkg, onClone)
+            trace pkg.projectName, "expanded pkg:", pkg.repr
+            processing = true
+          else:
+            let checkoutDir = pkg.prepareCloneCheckoutDir()
+            cloneJobs.add PendingCloneJob(
+              pkgUrl: pkgUrl,
+              checkoutDir: checkoutDir,
+              progressJob: cloneProgressJob(pkg, checkoutDir)
+            )
+            processing = true
+        of DoNothing:
+          if pkg.ondisk.dirExists():
+            pkg.state = Found
+            if not pkg.isLocalOnly:
+              discard gitops.loadRepoMetadata(pkg.ondisk, expectedCanonicalUrl = $pkg.url.cloneUri())
+              if isFork:
+                discard gitops.ensureRemoteForUrl(pkg.ondisk, officialUrl.cloneUri())
+            if UpdateRepos in context().flags:
+              gitops.updateRepo(pkg.ondisk)
+              if not pkg.isLocalOnly:
+                var repo = gitops.loadRepoMetadata(pkg.ondisk, expectedCanonicalUrl = $pkg.url.cloneUri())
+                discard gitops.fetchRemoteTags(repo)
+            trace pkg.projectName, "expanded pkg:", pkg.repr
+            processing = true
+          else:
+            pkg.state = Error
+            pkg.errors.add "ondisk location missing"
         trace pkg.projectName, "expanded pkg:", pkg.repr
-        processing = true
       of LazyDeferred:
         if pkgUrl notin graph.pkgs:
           graph.pkgs[pkgUrl] = pkg
@@ -287,6 +432,8 @@ proc processPendingPackages(
       else:
         discard
         info pkg.projectName, "Skipping package:", $pkg.url, "state:", $pkg.state
+
+    nc.processCloneEpoch(root, cloneJobs)
 
 proc expandGraph*(
     path: Path,

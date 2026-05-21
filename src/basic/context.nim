@@ -20,6 +20,7 @@ const
   DefaultPackagesSubDir* = Path"_packages"
   DefaultCachesSubDir* = Path".cache"
   DefaultNimbleCachesSubDir* = Path"_nimbles"
+  DefaultParallelCloneWorkers* = 3
 
 
 type
@@ -53,6 +54,7 @@ type
     DumbProxy
     ForceGitToHttps
     NoLazyDeps
+    ParallelClones
     KeepFeatures
     IncludeTagsAndNimbleCommits # include nimble commits and tags in the solver
     NimbleCommitsMax # takes the newest commit for each version
@@ -70,19 +72,31 @@ type
     overridesFile*: Path
     pluginsFile*: Path
     proxy*: Uri
+    parallelCloneWorkers*: int = DefaultParallelCloneWorkers
     features*: HashSet[string]
 
-var atlasContext = AtlasContext()
+var
+  atlasContext {.threadvar.}: AtlasContext
+  atlasContextInitialized {.threadvar.}: bool
+
+proc initAtlasContext() =
+  if not atlasContextInitialized:
+    atlasContext = AtlasContext()
+    atlasContextInitialized = true
 
 proc setContext*(ctx: AtlasContext) =
   atlasContext = ctx
+  atlasContextInitialized = true
 proc context*(): var AtlasContext =
+  initAtlasContext()
   atlasContext
 
 proc project*(): Path =
+  initAtlasContext()
   atlasContext.projectDir
 
 proc project*(ws: Path) =
+  initAtlasContext()
   atlasContext.projectDir = ws
 
 proc depsDir*(ctx: AtlasContext, relative = false): Path =
@@ -94,6 +108,7 @@ proc depsDir*(ctx: AtlasContext, relative = false): Path =
     result = ctx.projectDir / ctx.depsDir
 
 proc depsDir*(relative = false): Path =
+  initAtlasContext()
   depsDir(atlasContext, relative)
 
 proc packagesDirectory*(): Path =

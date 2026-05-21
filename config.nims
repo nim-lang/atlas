@@ -15,6 +15,8 @@ else:
 --path:"$nim"
 --nimcache:".nimcache"
 --d:ssl
+--gc:atomicArc
+--threads:on
 
 task installSat, "install sat if needed":
   if not dirExists("../sat/src") and
