@@ -63,7 +63,7 @@ proc warnPackageNameMismatch(pkg: Package; nimbleName: string) =
     warn pkg.projectName, "packages.json package name differs from nimble file name:",
          "packages.json:", pkg.name, "nimble:", nimbleName
 
-proc finalizeClonedPackagePath(pkg: var Package; checkoutDir: Path) =
+proc finalizeClonedPackagePath*(pkg: var Package; checkoutDir: Path) =
   let nimbleName = nameFromNimbleFile(pkg, checkoutDir)
   if nimbleName.len > 0:
     if pkg.isOfficial:
@@ -125,6 +125,15 @@ proc checkoutDir(pkg: Package): Path =
   else:
     pkg.ondisk
 
+proc prepareCloneCheckoutDir*(pkg: Package): Path =
+  checkoutDir(pkg)
+
+proc completeClonedPackage*(pkg: var Package; checkoutDir: Path) =
+  if checkoutDir != pkg.ondisk:
+    pkg.finalizeClonedPackagePath(checkoutDir)
+  else:
+    warnPackageNameMismatch(pkg, nameFromNimbleFile(pkg, pkg.ondisk))
+
 proc clonePackage*(
     pkg: var Package;
     officialUrl: PkgUrl;
@@ -136,7 +145,7 @@ proc clonePackage*(
   ## first so the `.nimble` filename can provide the package/install name.
   ## This is useful since if others fork the same unofficial package
   ## we could end up with different packages.
-  let checkoutDir = pkg.checkoutDir()
+  let checkoutDir = pkg.prepareCloneCheckoutDir()
   let (status, msg) =
     if pkg.url.isFileProtocol:
       pkg.isLocalOnly = true
@@ -149,10 +158,7 @@ proc clonePackage*(
     pkg.errors.add $status & ": " & msg
     return
 
-  if checkoutDir != pkg.ondisk:
-    pkg.finalizeClonedPackagePath(checkoutDir)
-  else:
-    warnPackageNameMismatch(pkg, nameFromNimbleFile(pkg, pkg.ondisk))
+  pkg.completeClonedPackage(checkoutDir)
 
   if not pkg.isLocalOnly:
     var repo = gitops.loadRepoMetadata(pkg.ondisk, expectedCanonicalUrl = $pkg.url.cloneUri())
