@@ -4,9 +4,16 @@ on:
   push:
     tags:
       - '*'
+  release:
+    types:
+      - published
 
 permissions:
   contents: write
+
+concurrency:
+  group: release-${{ github.event.release.tag_name || github.ref_name }}
+  cancel-in-progress: false
 
 jobs:
   build-release:
@@ -152,8 +159,69 @@ jobs:
           path: dist/${{ matrix.target.archive }}
           if-no-files-found: error
 
+  build-linux-arm-release:
+    name: linux-arm
+    runs-on: ubuntu-latest
+    steps:
+      - name: set `core.autocrlf` to false
+        run: |
+          git config --global core.autocrlf false
+          git config --global init.defaultBranch master
+          git config --global user.email "atlasbot@nimlang.com"
+          git config --global user.name "atlasbot"
+
+      - name: Checkout atlas
+        uses: actions/checkout@v5
+        with:
+          submodules: false
+
+      - name: Setup Nim
+        uses: alaviss/setup-nim@0.1.1
+        with:
+          path: 'nim'
+          version: version-2-2
+          architecture: amd64
+
+      - name: Install Linux ARM cross compilers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabihf
+
+      - name: Build and package Linux ARM releases
+        shell: bash
+        run: |
+          build_target() {
+            local artifact="$1"
+            local archive="$2"
+            local nim_arch="$3"
+            local cc="$4"
+            local package_dir="dist/${artifact}"
+
+            rm -f bin/atlas
+            OS=linux ARCH="$nim_arch" CC="$cc" nim buildRelease
+
+            mkdir -p "$package_dir"
+            cp bin/atlas "$package_dir/"
+            cp license.txt readme.md "$package_dir/"
+            tar -czf "dist/${archive}" -C dist "$artifact"
+          }
+
+          build_target atlas-linux-arm64 atlas-linux-arm64.tar.gz arm64 aarch64-linux-gnu-gcc
+          build_target atlas-linux-arm32 atlas-linux-arm32.tar.gz arm arm-linux-gnueabihf-gcc
+
+      - name: Upload Linux ARM release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: atlas-linux-arm
+          path: |
+            dist/atlas-linux-arm64.tar.gz
+            dist/atlas-linux-arm32.tar.gz
+          if-no-files-found: error
+
   publish-release:
-    needs: build-release
+    needs:
+      - build-release
+      - build-linux-arm-release
     runs-on: ubuntu-latest
     steps:
       - name: Download release artifacts
@@ -162,12 +230,18 @@ jobs:
           path: dist
           merge-multiple: true
 
-      - name: Create GitHub release
+      - name: Publish GitHub release assets
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG_NAME: ${{ github.ref_name }}
+          TAG_NAME: ${{ github.event.release.tag_name || github.ref_name }}
         run: |
-          gh release create "$TAG_NAME" dist/* \
+          if ! gh release view "$TAG_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$TAG_NAME" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$TAG_NAME" \
+              --generate-notes
+          fi
+
+          gh release upload "$TAG_NAME" dist/* \
             --repo "$GITHUB_REPOSITORY" \
-            --title "$TAG_NAME" \
-            --generate-notes
+            --clobber
