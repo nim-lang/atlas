@@ -164,31 +164,31 @@ proc lt(a, b: string): bool {.inline.} =
 proc isAsciiAlphaNumHyphen(c: char): bool {.inline.} =
   c in {'0'..'9', 'A'..'Z', 'a'..'z', '-'}
 
+proc parseNumericIdentifier(s: string, start: int; value: var int; nextPos: var int): bool =
+  if start >= s.len or s[start] notin Digits:
+    return false
+  var j = start
+  while j < s.len and s[j] in Digits:
+    inc j
+  if j - start > 1 and s[start] == '0':
+    return false
+  value = 0
+  discard parseSaturatedNatural(s, value, start)
+  nextPos = j
+  true
+
 proc parseSemVerLike(s: string): ParsedVersion =
   var i = 0
 
-  proc parseNumericIdentifier(start: int; value: var int; nextPos: var int): bool =
-    if start >= s.len or s[start] notin Digits:
-      return false
-    var j = start
-    while j < s.len and s[j] in Digits:
-      inc j
-    if j - start > 1 and s[start] == '0':
-      return false
-    value = 0
-    discard parseSaturatedNatural(s, value, start)
-    nextPos = j
-    true
-
   var part = 0
   var nextPos = 0
-  if not parseNumericIdentifier(i, part, nextPos):
+  if not s.parseNumericIdentifier(i, part, nextPos):
     return
   result.core.add part
   i = nextPos
   while i < s.len and s[i] == '.':
     inc i
-    if not parseNumericIdentifier(i, part, nextPos):
+    if not s.parseNumericIdentifier(i, part, nextPos):
       return
     result.core.add part
     i = nextPos
