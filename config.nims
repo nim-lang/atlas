@@ -15,6 +15,8 @@ else:
 --path:"$nim"
 --nimcache:".nimcache"
 --d:ssl
+--gc:atomicArc
+--threads:on
 
 task installSat, "install sat if needed":
   if not dirExists("../sat/src") and
@@ -66,13 +68,19 @@ task buildRelease, "Build release":
   else:
     let os = getEnv("OS")
     let arch = getEnv("ARCH")
+    let cc = getEnv("CC")
+    let ccArgs =
+      if cc != "":
+        " --gcc.exe:" & cc & " --gcc.linkerexe:" & cc
+      else:
+        ""
     if os != "" and arch != "":
       if os == "windows":
         exec "nim c -d:release -d:mingw -o:bin/atlas src/atlas.nim"
         exec "nim c -d:release -d:mingw -o:bin/atlas-packager src/atlas_packager.nim"
       else:
-        exec "nim c -d:release --cpu:" & arch & " --os:" & os & " -o:bin/atlas src/atlas.nim"
-        exec "nim c -d:release --cpu:" & arch & " --os:" & os & " -o:bin/atlas-packager src/atlas_packager.nim"
+        exec "nim c -d:release --cpu:" & arch & " --os:" & os & ccArgs & " -o:bin/atlas src/atlas.nim"
+        exec "nim c -d:release --cpu:" & arch & " --os:" & os & ccArgs & " -o:bin/atlas-packager src/atlas_packager.nim"
     else:
       exec "nim c -d:release -o:bin/atlas src/atlas.nim"
       exec "nim c -d:release -o:bin/atlas-packager src/atlas_packager.nim"
