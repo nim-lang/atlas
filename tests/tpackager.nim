@@ -548,3 +548,4 @@ suite "packager release metadata comparison":
     ]
     check matchingDigestEntry(entries, "1.0.0", "aaaa", "gzip", "new") == entries[1]
     check matchingDigestEntry(entries, "1.0.0", "aaaa", "gzip", "missing").isNil
+    check matchingDigestEntry(entries, "1.0.0", "aaaa", "xz", "new").isNil
