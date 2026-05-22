@@ -122,7 +122,10 @@ proc hash*(r: Package): Hash =
 proc hash*(r: NimbleRelease): Hash =
   var h: Hash = 0
   for _, val in fieldPairs(r[]):
-    h = h !& hash(val)
+    when compiles(hash(val)):
+      h = h !& hash(val)
+    else:
+      h = h !& hash($val)
   result = !$h
 
 proc `==`*(a, b: NimbleRelease): bool =
