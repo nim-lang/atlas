@@ -484,7 +484,8 @@ proc matchingDigestEntry*(
     entries: JsonNode;
     versionLabel: string;
     gitSha: string;
-    compression: string
+    compression: string;
+    contentSha: string
 ): JsonNode =
   if entries.kind != JArray:
     return nil
@@ -493,7 +494,9 @@ proc matchingDigestEntry*(
       continue
     if entry{"version"}.getStr() == versionLabel and
         entry{"gitSha"}.getStr() == gitSha and
-        entry{"compression"}.getStr() == compression:
+        entry{"compression"}.getStr() == compression and
+        (entry{"contentSha"}.getStr() == "" or
+          entry{"contentSha"}.getStr() == contentSha):
       return entry
   nil
 

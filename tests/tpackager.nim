@@ -481,3 +481,70 @@ suite "packager release metadata comparison":
       "tarballs": [{"version": "1.0.0", "entries": [{"compression": "xz"}]}]
     }
     check comparableReleaseMetadata(base) != comparableReleaseMetadata(changed)
+
+  test "comparable release metadata ignores tarball timestamps and order":
+    let base = %*{
+      "name": "alpha",
+      "releaseCount": 2,
+      "releases": [],
+      "tarballs": [
+        {
+          "version": "2.0.0",
+          "createdAt": "2026-05-22T10:00:00Z",
+          "gitSha": "bbbb",
+          "compression": "gzip",
+          "contentSha": "2222",
+          "file": "alpha-2.tar.gz"
+        },
+        {
+          "version": "1.0.0",
+          "createdAt": "2026-05-22T10:00:00Z",
+          "gitSha": "aaaa",
+          "compression": "gzip",
+          "contentSha": "1111",
+          "file": "alpha-1.tar.gz"
+        }
+      ]
+    }
+    let same = %*{
+      "name": "alpha",
+      "releaseCount": 2,
+      "releases": [],
+      "tarballs": [
+        {
+          "version": "1.0.0",
+          "createdAt": "2026-05-22T11:00:00Z",
+          "gitSha": "aaaa",
+          "compression": "gzip",
+          "contentSha": "1111",
+          "file": "alpha-1.tar.gz"
+        },
+        {
+          "version": "2.0.0",
+          "createdAt": "2026-05-22T11:00:00Z",
+          "gitSha": "bbbb",
+          "compression": "gzip",
+          "contentSha": "2222",
+          "file": "alpha-2.tar.gz"
+        }
+      ]
+    }
+    check comparableReleaseMetadata(base) == comparableReleaseMetadata(same)
+
+  test "matching digest entries include content hash when present":
+    let entries = %*[
+      {
+        "version": "1.0.0",
+        "gitSha": "aaaa",
+        "compression": "gzip",
+        "contentSha": "old"
+      },
+      {
+        "version": "1.0.0",
+        "gitSha": "aaaa",
+        "compression": "gzip",
+        "contentSha": "new"
+      }
+    ]
+    check matchingDigestEntry(entries, "1.0.0", "aaaa", "gzip", "new") == entries[1]
+    check matchingDigestEntry(entries, "1.0.0", "aaaa", "gzip", "missing").isNil

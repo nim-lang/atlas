@@ -423,7 +423,8 @@ proc collectReleaseArchives(
             existingEntries,
             label,
             ver.vtag.commit.h,
-            compressionName
+            compressionName,
+            contentHash
           )
           if existingEntry != nil and "file" in existingEntry:
             let archiveFile = existingEntry["file"].getStr()
@@ -472,6 +473,37 @@ proc metadataField(metadata: JsonNode; key: string): JsonNode =
   else:
     result = newJNull()
 
+proc comparableTarballEntry(entry: JsonNode): JsonNode =
+  result = newJObject()
+  if entry.kind != JObject:
+    return entry.copy()
+  for key, value in entry:
+    if key notin ["createdAt", "generatedAt"]:
+      result[key] = value.copy()
+
+proc tarballSortKey(entry: JsonNode): string =
+  if entry.kind != JObject:
+    return $entry
+  entry{"version"}.getStr() & "\t" &
+    entry{"gitSha"}.getStr() & "\t" &
+    entry{"compression"}.getStr() & "\t" &
+    entry{"contentSha"}.getStr() & "\t" &
+    entry{"file"}.getStr()
+
+proc comparableTarballs(tarballs: JsonNode): JsonNode =
+  if tarballs.kind != JArray:
+    return tarballs.copy()
+
+  var entries: seq[JsonNode]
+  for entry in tarballs:
+    entries.add comparableTarballEntry(entry)
+  entries.sort do (a, b: JsonNode) -> int:
+    cmp(tarballSortKey(a), tarballSortKey(b))
+
+  result = newJArray()
+  for entry in entries:
+    result.add entry
+
 proc comparableReleaseMetadata*(metadata: JsonNode): JsonNode =
   ## Normalize package release metadata down to the harvested fields that
   ## should trigger a releases.json rewrite on subsequent packager runs.
@@ -482,7 +514,10 @@ proc comparableReleaseMetadata*(metadata: JsonNode): JsonNode =
       if value.isNil:
         newJNull()
       else:
-        value.copy()
+        if key == "tarballs":
+          comparableTarballs(value)
+        else:
+          value.copy()
 
 proc metadataChangeReason(
     hadExistingMetadata: bool;
