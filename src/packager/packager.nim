@@ -33,6 +33,7 @@ Options:
   --ignore=name[,name]  skip the named package(s) from packages.json
   --update-repos, -u    run `gitops.updateRepo` for existing repos before harvest
   --regenerate-tarballs rebuild all tarballs instead of reusing matching archives
+  --no-tarballs        refresh metadata without creating or pruning tarballs
   --retry-missing       retry repos previously classified as missing
   --github-api-chunk-size=count
                         github api batch size for precheck
@@ -51,6 +52,7 @@ Environment:
   ATLAS_PACKAGER_ONLY                 same as --only
   ATLAS_PACKAGER_IGNORE               same as --ignore
   ATLAS_PACKAGER_UPDATE_REPOS         same as --update-repos
+  ATLAS_PACKAGER_NO_TARBALLS          same as --no-tarballs
   ATLAS_PACKAGER_GITHUB_API_CHUNK_SIZE
                                       same as --github-api-chunk-size
   ATLAS_PACKAGER_COMPRESSION          same as --compression
@@ -73,6 +75,7 @@ type
     threadCount*: int
     updateRepos*: bool
     regenerateTarballs*: bool
+    createTarballs*: bool
     retryMissing*: bool
     ephemeral*: bool
     daemon*: PackagerDaemonSchedule
@@ -83,6 +86,7 @@ const
   EnvOnly* = "ATLAS_PACKAGER_ONLY"
   EnvIgnore* = "ATLAS_PACKAGER_IGNORE"
   EnvUpdateRepos* = "ATLAS_PACKAGER_UPDATE_REPOS"
+  EnvNoTarballs* = "ATLAS_PACKAGER_NO_TARBALLS"
   EnvGitHubApiChunkSize* = "ATLAS_PACKAGER_GITHUB_API_CHUNK_SIZE"
   EnvCompression* = "ATLAS_PACKAGER_COMPRESSION"
   EnvThreads* = "ATLAS_PACKAGER_THREADS"
@@ -270,6 +274,9 @@ proc applyPackagerEnvDefaults*(opts: var PackagerCliOptions) =
   if existsEnv(EnvUpdateRepos):
     opts.updateRepos = parseEnvBool(getEnv(EnvUpdateRepos), "update repos env var")
 
+  if existsEnv(EnvNoTarballs):
+    opts.createTarballs = not parseEnvBool(getEnv(EnvNoTarballs), "no tarballs env var")
+
   if existsEnv(EnvGitHubApiChunkSize):
     opts.githubApiChunkSize =
       parsePositiveCount(getEnv(EnvGitHubApiChunkSize), "github api chunk size env var")
@@ -301,6 +308,7 @@ proc parseAtlasPackagerOptions*(
     positional: var seq[string]
 ): PackagerCliOptions =
   result.compressions = @[acGzip]
+  result.createTarballs = true
   result.githubApiChunkSize = DefaultGitHubGraphqlBatchSize
   result.threadCount = max(1, countProcessors())
   result.daemon.intervalSeconds = DefaultDaemonIntervalSeconds
@@ -339,8 +347,11 @@ proc parseAtlasPackagerOptions*(
         result.ignoredPackageNames.addPackageNames(val)
       of "update-repos", "u":
         result.updateRepos = true
-      of "regenerate-tarballs":
+      of "regenerate-tarballs", "regeneratetarballs":
         result.regenerateTarballs = true
+        result.createTarballs = true
+      of "no-tarballs", "notarballs":
+        result.createTarballs = false
       of "retry-missing":
         result.retryMissing = true
       of "github-api-chunk-size":
@@ -445,6 +456,7 @@ proc writeSettings*(
   notice "atlas:pkger", "github api chunk size:", $opts.githubApiChunkSize
   notice "atlas:pkger", "compressions:", archiveCompressionNames(opts.compressions).join(",")
   notice "atlas:pkger", "update repos:", $opts.updateRepos
+  notice "atlas:pkger", "create tarballs:", $opts.createTarballs
   notice "atlas:pkger", "regenerate tarballs:", $opts.regenerateTarballs
   notice "atlas:pkger", "retry missing:", $opts.retryMissing
   notice "atlas:pkger", "ephemeral:", $opts.ephemeral
@@ -561,7 +573,8 @@ proc runPackagerOnce*(
     ignoredPackages,
     opts.compressions,
     opts.threadCount,
-    opts.regenerateTarballs
+    opts.regenerateTarballs,
+    opts.createTarballs
   )
   let allDepsSummary = updatePackageAllDeps(
     packagesFile,

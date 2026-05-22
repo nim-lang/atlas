@@ -22,7 +22,7 @@ proc withEnvVar(name: string; value: string; body: proc() {.closure.}) =
     if hadOldValue:
       putEnv(name, oldValue)
     else:
-      putEnv(name, "")
+      delEnv(name)
 
 proc runGit(args: openArray[string]; workdir = ""): string =
   let cmd = "git " & args.mapIt(quoteShell(it)).join(" ")
@@ -104,6 +104,7 @@ suite "packager env options":
                     check opts.packageNames == @["alpha", "beta"]
                     check opts.ignoredPackageNames == @["gamma"]
                     check opts.updateRepos
+                    check opts.createTarballs
                     check opts.githubApiChunkSize == 17
                     check opts.compressions == @[acXz]
                     check opts.threadCount == 3
@@ -124,6 +125,7 @@ suite "packager env options":
                       "--only=delta",
                       "--ignore=epsilon,zeta",
                       "--update-repos",
+                      "--no-tarballs",
                       "--retry-missing",
                       "--github-api-chunk-size=19",
                       "--compression=gzip",
@@ -134,11 +136,28 @@ suite "packager env options":
                     check opts.packageNames == @["delta"]
                     check opts.ignoredPackageNames == @["epsilon", "zeta"]
                     check opts.updateRepos
+                    check not opts.createTarballs
                     check opts.retryMissing
                     check opts.githubApiChunkSize == 19
                     check opts.compressions == @[acGzip]
                     check opts.threadCount == 5
                     check opts.ephemeral
+
+  test "regenerate tarballs overrides no tarballs when set later":
+    var args: seq[string]
+    let opts = parseAtlasPackagerOptions(
+      @["--no-tarballs", "--regenerate-tarballs"],
+      "test",
+      args
+    )
+    check opts.createTarballs
+    check opts.regenerateTarballs
+
+  test "no tarballs can be set from env":
+    withEnvVar(EnvNoTarballs, "true") do:
+      var args: seq[string]
+      let opts = parseAtlasPackagerOptions(@[], "test", args)
+      check not opts.createTarballs
 
 suite "packager mirrored repo helpers":
   test "bare repo shape without HEAD commit is not usable":

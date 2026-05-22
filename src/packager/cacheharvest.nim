@@ -735,7 +735,8 @@ proc harvestPackage(
     updateRepos: bool;
     compressions: openArray[ArchiveCompression];
     harvestRoot: Path;
-    regenerateTarballs: bool
+    regenerateTarballs: bool;
+    createTarballs: bool
 ): PackageHarvestResult =
   notice "atlas:pkger", "processing package:", info.name
   let workspaceRoot = packageWorkspaceRoot(harvestRoot, info)
@@ -754,14 +755,18 @@ proc harvestPackage(
 
     let releaseInfo = nc.loadPackageReleaseInfo(pkg, AllReleases, @[])
     let releaseMetadata = loadPackageReleaseMetadata(pkg, releaseInfo)
-    let tarballEntries = collectReleaseArchives(
-      pkg,
-      info,
-      releaseInfo,
-      packageReleasesDir(workspaceRoot),
-      compressions,
-      regenerateTarballs
-    )
+    let tarballEntries =
+      if createTarballs:
+        collectReleaseArchives(
+          pkg,
+          info,
+          releaseInfo,
+          packageReleasesDir(workspaceRoot),
+          compressions,
+          regenerateTarballs
+        )
+      else:
+        loadExistingArchiveEntries(packageReleasesMetadataFile(workspaceRoot))
     var releaseCount = 0
     var hasGitTags = false
     for (ver, _) in releaseInfo.releases:
@@ -796,7 +801,8 @@ proc harvestWorker(
     ephemeral: bool;
     updateRepos: bool;
     compressions: seq[ArchiveCompression];
-    regenerateTarballs: bool
+    regenerateTarballs: bool;
+    createTarballs: bool
 ): HarvestWorkerResult {.gcsafe.} =
   setContext(baseContext)
   let harvestRoot = baseContext.depsDir().absolutePath()
@@ -815,7 +821,8 @@ proc harvestWorker(
             updateRepos,
             compressions,
             harvestRoot,
-            regenerateTarballs
+            regenerateTarballs,
+            createTarballs
           )
       if packageResult.ok:
         result.packageResults.add packageResult
@@ -847,7 +854,8 @@ proc harvestRegistryCaches*(
     ignoredPkgNames: seq[string];
     compressions: openArray[ArchiveCompression];
     threadCount: int;
-    regenerateTarballs: bool = false
+    regenerateTarballs: bool = false;
+    createTarballs: bool = true
 ): HarvestSummary =
   createDir($metadataDir)
   cleanupDanglingReleaseCaches(metadataDir)
@@ -885,7 +893,8 @@ proc harvestRegistryCaches*(
       ephemeral,
       updateRepos,
       compressionList,
-      regenerateTarballs
+      regenerateTarballs,
+      createTarballs
     )
     result.packagesProcessed += workerResult.packagesProcessed
     result.packagesFailed += workerResult.packagesFailed
@@ -931,7 +940,8 @@ proc harvestRegistryCaches*(
         ephemeral,
         updateRepos,
         compressionList,
-        regenerateTarballs
+        regenerateTarballs,
+        createTarballs
       )
     for worker in workers:
       let workerResult = ^worker
