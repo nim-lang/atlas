@@ -11,6 +11,12 @@ import std / [strutils, uri, parseutils, algorithm, hashes, tables, sets]
 type
   Version* = distinct string
 
+  ParsedVersion = object
+    valid: bool
+    core: seq[int]
+    pre: seq[string]
+    hasPre: bool
+
   VersionRelation* = enum
     verGe, # >= V -- Equal or later
     verGt, # > V
@@ -155,6 +161,133 @@ proc lt(a, b: string): bool {.inline.} =
 
   result = false
 
+proc isAsciiAlphaNumHyphen(c: char): bool {.inline.} =
+  c in {'0'..'9', 'A'..'Z', 'a'..'z', '-'}
+
+proc parseNumericIdentifier(s: string, start: int; value: var int; nextPos: var int): bool =
+  if start >= s.len or s[start] notin Digits:
+    return false
+  var j = start
+  while j < s.len and s[j] in Digits:
+    inc j
+  if j - start > 1 and s[start] == '0':
+    return false
+  value = 0
+  discard parseSaturatedNatural(s, value, start)
+  nextPos = j
+  true
+
+proc parseSemVerLike(s: string): ParsedVersion =
+  var i = 0
+
+  var part = 0
+  var nextPos = 0
+  if not s.parseNumericIdentifier(i, part, nextPos):
+    return
+  result.core.add part
+  i = nextPos
+  while i < s.len and s[i] == '.':
+    inc i
+    if not s.parseNumericIdentifier(i, part, nextPos):
+      return
+    result.core.add part
+    i = nextPos
+
+  if i < s.len and s[i] == '-':
+    result.hasPre = true
+    inc i
+    if i >= s.len:
+      return
+    while true:
+      let start = i
+      while i < s.len and isAsciiAlphaNumHyphen(s[i]):
+        inc i
+      if i == start:
+        return
+      let ident = s[start ..< i]
+      if ident.allCharsInSet(Digits) and ident.len > 1 and ident[0] == '0':
+        return
+      result.pre.add ident
+      if i >= s.len or s[i] != '.':
+        break
+      inc i
+      if i >= s.len:
+        return
+
+  if i < s.len and s[i] == '+':
+    inc i
+    if i >= s.len:
+      return
+    while true:
+      let start = i
+      while i < s.len and isAsciiAlphaNumHyphen(s[i]):
+        inc i
+      if i == start:
+        return
+      if i >= s.len or s[i] != '.':
+        break
+      inc i
+      if i >= s.len:
+        return
+
+  if i != s.len:
+    return
+  result.valid = result.core.len > 0
+
+proc compareNumericCore(a, b: string): int =
+  var i = 0
+  var j = 0
+  while i < a.len or j < b.len:
+    var x = 0
+    let l1 = parseSaturatedNatural(a, x, i)
+    var y = 0
+    let l2 = parseSaturatedNatural(b, y, j)
+    if x < y:
+      return -1
+    if x > y:
+      return 1
+    next l1, i, a
+    next l2, j, b
+  0
+
+proc comparePreReleaseIdentifiers(a, b: string): int =
+  let aIsNumeric = a.len > 0 and a.allCharsInSet(Digits)
+  let bIsNumeric = b.len > 0 and b.allCharsInSet(Digits)
+  if aIsNumeric and bIsNumeric:
+    var x = 0
+    var y = 0
+    discard parseSaturatedNatural(a, x, 0)
+    discard parseSaturatedNatural(b, y, 0)
+    return cmp(x, y)
+  if aIsNumeric != bIsNumeric:
+    return if aIsNumeric: -1 else: 1
+  cmp(a, b)
+
+proc compareVersions(a, b: string): int =
+  let pa = parseSemVerLike(a)
+  let pb = parseSemVerLike(b)
+  if pa.valid and pb.valid and (pa.hasPre or pb.hasPre or '+' in a or '+' in b):
+    let maxCoreLen = max(pa.core.len, pb.core.len)
+    for idx in 0..<maxCoreLen:
+      let av = if idx < pa.core.len: pa.core[idx] else: 0
+      let bv = if idx < pb.core.len: pb.core[idx] else: 0
+      if av != bv:
+        return cmp(av, bv)
+    if pa.hasPre != pb.hasPre:
+      return if pa.hasPre: -1 else: 1
+    if pa.hasPre and pb.hasPre:
+      let maxPreLen = max(pa.pre.len, pb.pre.len)
+      for idx in 0..<maxPreLen:
+        if idx >= pa.pre.len:
+          return -1
+        if idx >= pb.pre.len:
+          return 1
+        let partCmp = comparePreReleaseIdentifiers(pa.pre[idx], pb.pre[idx])
+        if partCmp != 0:
+          return partCmp
+    return 0
+  compareNumericCore(a, b)
+
 proc `<`*(a, b: Version): bool =
   # Handling for special versions such as "#head" or "#branch".
   if a.isSpecial or b.isSpecial:
@@ -164,7 +297,7 @@ proc `<`*(a, b: Version): bool =
     # to the bottom:
     if a.isSpecial and b.isSpecial:
       return a.string < b.string
-  return lt(a.string, b.string)
+  compareVersions(a.string, b.string) < 0
 
 proc eq(a, b: string): bool {.inline.} =
   var i = 0
@@ -189,7 +322,7 @@ proc `==`*(a, b: Version): bool =
   if a.isSpecial or b.isSpecial:
     result = a.string == b.string
   else:
-    result = eq(a.string, b.string)
+    result = compareVersions(a.string, b.string) == 0
 
 proc sortVersionsAsc*(a, b: VersionTag): int =
   (if a.v < b.v: -1
@@ -218,7 +351,15 @@ proc parseVer(s: string; start: var int): Version =
     start = i
   elif start < s.len and s[start] in Digits:
     var i = start
-    while i < s.len and s[i] in Digits+{'.'}: inc i
+    while i < s.len and s[i] in Digits + {'.'}: inc i
+    if i < s.len and s[i] == '-':
+      inc i
+      while i < s.len and s[i] in Digits + Letters + {'-', '.'}:
+        inc i
+    if i < s.len and s[i] == '+':
+      inc i
+      while i < s.len and s[i] in Digits + Letters + {'-', '.'}:
+        inc i
     result = Version s.substr(start, i-1)
     start = i
   elif start == s.len(): # we're at the end
@@ -240,10 +381,74 @@ proc parseExplicitVersion*(s: string): Version =
   const start = 0
   if start < s.len and s[start] in Digits:
     var i = start
-    while i < s.len and s[i] in Digits+{'.'}: inc i
+    while i < s.len and s[i] in Digits + {'.'}: inc i
+    if i < s.len and s[i] == '-':
+      inc i
+      while i < s.len and s[i] in Digits + Letters + {'-', '.'}:
+        inc i
+    if i < s.len and s[i] == '+':
+      inc i
+      while i < s.len and s[i] in Digits + Letters + {'-', '.'}:
+        inc i
     result = Version s.substr(start, i-1)
   else:
     result = Version""
+
+type
+  VersionParts = object
+    major, minor, patch: int
+    count: int
+
+proc parseVersionParts(v: Version): VersionParts =
+  var i = 0
+  while i < v.string.len and result.count < 3:
+    var x = 0
+    let parsed = parseSaturatedNatural(v.string, x, i)
+    if parsed <= 0:
+      break
+    case result.count
+    of 0: result.major = x
+    of 1: result.minor = x
+    else: result.patch = x
+    inc result.count
+    inc i, parsed
+    if i < v.string.len and v.string[i] == '.':
+      inc i
+    else:
+      break
+
+proc normalizedLowerBound(v: Version; parts: VersionParts): Version =
+  if parts.count == 1:
+    result = Version($parts.major & ".0.0")
+  elif parts.count == 2:
+    result = Version($parts.major & "." & $parts.minor & ".0")
+  else:
+    result = v
+
+proc caretUpperBound(parts: VersionParts): Version =
+  if parts.count == 1:
+    result = Version($(parts.major+1) & ".0.0")
+  elif parts.major > 0:
+    result = Version($(parts.major+1) & ".0.0")
+  elif parts.minor == 0:
+    result = Version("0.0." & $(parts.patch+1))
+  else:
+    result = Version("0." & $(parts.minor+1) & ".0")
+
+proc tildeUpperBound(parts: VersionParts): Version =
+  if parts.count <= 2:
+    result = Version($(parts.major+1) & ".0.0")
+  else:
+    result = Version($parts.major & "." & $(parts.minor+1) & ".0")
+
+proc expandCompatibleVersion(v: Version; parts: VersionParts; op: char): VersionInterval =
+  let upperBound =
+    if op == '^': caretUpperBound(parts)
+    else: tildeUpperBound(parts)
+  result = VersionInterval(
+    a: VersionReq(r: verGe, v: normalizedLowerBound(v, parts)),
+    b: VersionReq(r: verLt, v: upperBound),
+    isInterval: true)
 
 proc parseSuffix(s: string; start: int; result: var VersionInterval; err: var bool) =
   # >= 1.5 & <= 1.8
@@ -307,6 +512,21 @@ proc parseVersionInterval*(s: string; start: int; err: var bool): VersionInterva
       while i < s.len and s[i] in Whitespace: inc i
       result = VersionInterval(a: VersionReq(r: r, v: parseVer(s, i)))
       parseSuffix(s, i, result, err)
+    of '^', '~':
+      let op = s[i]
+      inc i
+      if i < s.len and s[i] == '=':
+        inc i
+        while i < s.len and s[i] in Whitespace: inc i
+        let v = parseVer(s, i)
+        let parts = parseVersionParts(v)
+        if parts.count == 0:
+          err = true
+        else:
+          result = expandCompatibleVersion(v, parts, op)
+          err = i < s.len
+      else:
+        err = true
     else:
       err = true
   else:
@@ -391,7 +611,7 @@ proc matches*(pattern: VersionInterval; v: Version): bool =
     result = matches(pattern.a, v)
 
 proc extractRequirementName*(req: string): (string, seq[string], int) =
-  const verChars = {'#', '<', '=', '>', '['}
+  const verChars = {'#', '<', '=', '>', '^', '~', '['}
   proc isScpStyleGitUrl(name: string): bool =
     ## Accept scp-like git URLs such as `git@github.com:user/repo`.
     name.startsWith("git@") and name.find(':') >= 0 and name.find('/') >= 0
