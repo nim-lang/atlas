@@ -127,6 +127,7 @@ proc hash*(r: NimbleRelease): Hash =
   h = h !& hash(r.description)
   h = h !& hash(r.license)
   h = h !& hash(r.requirements)
+  h = h !& hash(r.reqsByFeatures)
   h = h !& hash(r.nimVersion)
   h = h !& hash(r.hasInstallHooks)
   h = h !& hash($r.srcDir)
@@ -143,6 +144,7 @@ proc hash*(r: NimbleRelease): Hash =
   h = h !& hash(r.hasBin)
   h = h !& hash($r.err)
   h = h !& hash($r.status)
+  h = h !& hash(r.features)
   result = !$h
 
 proc `==`*(a, b: NimbleRelease): bool =
@@ -153,6 +155,7 @@ proc `==`*(a, b: NimbleRelease): bool =
   result = result and a.description == b.description
   result = result and a.license == b.license
   result = result and a.requirements == b.requirements
+  result = result and a.reqsByFeatures == b.reqsByFeatures
   result = result and a.nimVersion == b.nimVersion
   result = result and a.hasInstallHooks == b.hasInstallHooks
   result = result and a.srcDir == b.srcDir
@@ -169,6 +172,7 @@ proc `==`*(a, b: NimbleRelease): bool =
   result = result and a.hasBin == b.hasBin
   result = result and a.err == b.err
   result = result and a.status == b.status
+  result = result and a.features == b.features
 
 proc `$`*(r: PackageVersion): string =
   result = $(r.vtag)

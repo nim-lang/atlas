@@ -82,6 +82,7 @@ proc parseNimbleFile*(nc: var NimbleContext;
     processRequirement(nc, nimbleFile, req, "", result)
   
   for feature, reqs in nimbleInfo.features:
+    discard result.features.mgetOrPut(feature, @[])
     for req in reqs:
       processRequirement(nc, nimbleFile, req, feature, result)
 

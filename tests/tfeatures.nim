@@ -304,6 +304,68 @@ suite "test global features":
         if featurePkgs.len == 1:
           check featurePkgs[0].version.startsWith("1.0.0@")
 
+  test "requires dependency feature activates empty feature declaration":
+      setAtlasVerbosity(Error)
+      withDir "tests/ws_features_global":
+        removeDir("deps")
+
+        let rootNimble = "ws_features_global.nimble"
+        let originalRootNimble = readFile(rootNimble)
+        defer:
+          writeFile(rootNimble, originalRootNimble)
+
+        setContext(AtlasContext())
+        context().nameOverrides = Patterns()
+        context().urlOverrides = Patterns()
+        context().proxy = parseUri "http://localhost:4242"
+        context().flags = {DumbProxy, NoExec}
+        context().depsDir = Path "deps"
+        context().defaultAlgo = SemVer
+        project(paths.getCurrentDir())
+
+        expectedVersionWithGitTags()
+        var nc = createNimbleContext()
+        nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a"))
+        nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b"))
+        nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c"))
+        nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d"))
+
+        let dir = paths.getCurrentDir().absolutePath
+        discard dir.loadWorkspace(nc, AllReleases, onClone=DoClone, doSolve=false)
+
+        withDir "deps" / "proj_a":
+          writeFile("proj_a.nimble", dedent"""
+          requires "proj_b >= 1.1.0"
+          feature "marker":
+            discard
+          """)
+          exec "git add proj_a.nimble"
+          exec "git commit -m \"feat: add empty marker feature\""
+          exec "git tag -f v1.2.0"
+
+        writeFile(rootNimble, "requires \"proj_a[marker]\"\n")
+
+        setContext(AtlasContext())
+        context().nameOverrides = Patterns()
+        context().urlOverrides = Patterns()
+        context().proxy = parseUri "http://localhost:4242"
+        context().flags = {DumbProxy, NoExec}
+        context().depsDir = Path "deps"
+        context().defaultAlgo = SemVer
+        project(paths.getCurrentDir())
+
+        var nc2 = createNimbleContext()
+        nc2.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a"))
+        nc2.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b"))
+        nc2.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c"))
+        nc2.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d"))
+
+        let graph = dir.loadWorkspace(nc2, AllReleases, onClone=DoClone, doSolve=true)
+        check graph.pkgs[nc2.createUrl("proj_a")].activeFeatures == @["marker"]
+
+        let (_, features) = graph.activateGraph()
+        check "feature.proj_a.marker" in features
+
   test "parse features from nim.cfg":
       withDir "tests/ws_features_global":
         writeFile("nim.cfg", dedent"""
