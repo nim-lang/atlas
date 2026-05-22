@@ -56,6 +56,24 @@ suite "nimbleparser":
     check res.features["useOldAsyncTools"].len == 1
     check res.features["useOldAsyncTools"][0] == "asynctools >= 0.1.0"
 
+  test "parse nimble file preserves empty features":
+    let nimbleFile = Path("tests" / "test_data" / "empty_feature.nimble")
+    writeFile($nimbleFile, dedent"""
+    feature "myFeature":
+      discard
+    """)
+    defer:
+      removeFile($nimbleFile)
+
+    let info = extractRequiresInfo(nimbleFile)
+    check info.features.hasKey("myFeature")
+    check info.features["myFeature"].len == 0
+
+    var nc = createUnfilledNimbleContext()
+    let release = nc.parseNimbleFile(nimbleFile)
+    check release.features.hasKey("myFeature")
+    check release.features["myFeature"].len == 0
+
   test "parse nimble file with bin metadata":
     let nimbleFile = Path("tests" / "test_data" / "bin_metadata.nimble")
     var res = extractRequiresInfo(nimbleFile)

@@ -121,54 +121,18 @@ proc hash*(r: Package): Hash =
 
 proc hash*(r: NimbleRelease): Hash =
   var h: Hash = 0
-  h = h !& hash(r.name)
-  h = h !& hash(r.version)
-  h = h !& hash(r.author)
-  h = h !& hash(r.description)
-  h = h !& hash(r.license)
-  h = h !& hash(r.requirements)
-  h = h !& hash(r.nimVersion)
-  h = h !& hash(r.hasInstallHooks)
-  h = h !& hash($r.srcDir)
-  h = h !& hash($r.binDir)
-  h = h !& hash(r.skipDirs)
-  h = h !& hash(r.skipFiles)
-  h = h !& hash(r.skipExt)
-  h = h !& hash(r.installDirs)
-  h = h !& hash(r.installFiles)
-  h = h !& hash(r.installExt)
-  h = h !& hash(r.bin)
-  h = h !& hash(r.namedBin)
-  h = h !& hash(r.backend)
-  h = h !& hash(r.hasBin)
-  h = h !& hash($r.err)
-  h = h !& hash($r.status)
+  for _, val in fieldPairs(r[]):
+    when compiles(hash(val)):
+      h = h !& hash(val)
+    else:
+      h = h !& hash($val)
   result = !$h
 
 proc `==`*(a, b: NimbleRelease): bool =
+  for _, valA, valB in fieldPairs(a[], b[]):
+    if valA != valB:
+      return false
   result = true
-  result = result and a.name == b.name
-  result = result and a.version == b.version
-  result = result and a.author == b.author
-  result = result and a.description == b.description
-  result = result and a.license == b.license
-  result = result and a.requirements == b.requirements
-  result = result and a.nimVersion == b.nimVersion
-  result = result and a.hasInstallHooks == b.hasInstallHooks
-  result = result and a.srcDir == b.srcDir
-  result = result and a.binDir == b.binDir
-  result = result and a.skipDirs == b.skipDirs
-  result = result and a.skipFiles == b.skipFiles
-  result = result and a.skipExt == b.skipExt
-  result = result and a.installDirs == b.installDirs
-  result = result and a.installFiles == b.installFiles
-  result = result and a.installExt == b.installExt
-  result = result and a.bin == b.bin
-  result = result and a.namedBin == b.namedBin
-  result = result and a.backend == b.backend
-  result = result and a.hasBin == b.hasBin
-  result = result and a.err == b.err
-  result = result and a.status == b.status
 
 proc `$`*(r: PackageVersion): string =
   result = $(r.vtag)
