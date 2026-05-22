@@ -245,6 +245,62 @@ proc parseExplicitVersion*(s: string): Version =
   else:
     result = Version""
 
+type
+  VersionParts = object
+    major, minor, patch: int
+    count: int
+
+proc parseVersionParts(v: Version): VersionParts =
+  var i = 0
+  while i < v.string.len and result.count < 3:
+    var x = 0
+    let parsed = parseSaturatedNatural(v.string, x, i)
+    if parsed <= 0:
+      break
+    case result.count
+    of 0: result.major = x
+    of 1: result.minor = x
+    else: result.patch = x
+    inc result.count
+    inc i, parsed
+    if i < v.string.len and v.string[i] == '.':
+      inc i
+    else:
+      break
+
+proc normalizedLowerBound(v: Version; parts: VersionParts): Version =
+  if parts.count == 1:
+    result = Version($parts.major & ".0.0")
+  elif parts.count == 2:
+    result = Version($parts.major & "." & $parts.minor & ".0")
+  else:
+    result = v
+
+proc caretUpperBound(parts: VersionParts): Version =
+  if parts.count == 1:
+    result = Version($(parts.major+1) & ".0.0")
+  elif parts.major > 0:
+    result = Version($(parts.major+1) & ".0.0")
+  elif parts.minor == 0:
+    result = Version("0.0." & $(parts.patch+1))
+  else:
+    result = Version("0." & $(parts.minor+1) & ".0")
+
+proc tildeUpperBound(parts: VersionParts): Version =
+  if parts.count <= 2:
+    result = Version($(parts.major+1) & ".0.0")
+  else:
+    result = Version($parts.major & "." & $(parts.minor+1) & ".0")
+
+proc expandCompatibleVersion(v: Version; parts: VersionParts; op: char): VersionInterval =
+  let upperBound =
+    if op == '^': caretUpperBound(parts)
+    else: tildeUpperBound(parts)
+  result = VersionInterval(
+    a: VersionReq(r: verGe, v: normalizedLowerBound(v, parts)),
+    b: VersionReq(r: verLt, v: upperBound),
+    isInterval: true)
+
 proc parseSuffix(s: string; start: int; result: var VersionInterval; err: var bool) =
   # >= 1.5 & <= 1.8
   #        ^ we are here
@@ -307,6 +363,21 @@ proc parseVersionInterval*(s: string; start: int; err: var bool): VersionInterva
       while i < s.len and s[i] in Whitespace: inc i
       result = VersionInterval(a: VersionReq(r: r, v: parseVer(s, i)))
       parseSuffix(s, i, result, err)
+    of '^', '~':
+      let op = s[i]
+      inc i
+      if i < s.len and s[i] == '=':
+        inc i
+        while i < s.len and s[i] in Whitespace: inc i
+        let v = parseVer(s, i)
+        let parts = parseVersionParts(v)
+        if parts.count == 0:
+          err = true
+        else:
+          result = expandCompatibleVersion(v, parts, op)
+          err = i < s.len
+      else:
+        err = true
     else:
       err = true
   else:
@@ -391,7 +462,7 @@ proc matches*(pattern: VersionInterval; v: Version): bool =
     result = matches(pattern.a, v)
 
 proc extractRequirementName*(req: string): (string, seq[string], int) =
-  const verChars = {'#', '<', '=', '>', '['}
+  const verChars = {'#', '<', '=', '>', '^', '~', '['}
   proc isScpStyleGitUrl(name: string): bool =
     ## Accept scp-like git URLs such as `git@github.com:user/repo`.
     name.startsWith("git@") and name.find(':') >= 0 and name.find('/') >= 0
