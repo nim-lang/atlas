@@ -5,7 +5,7 @@
 
 ## Helpers for selecting and building package archives using Nimble-like rules.
 
-import std/[json, os, osproc, paths, sequtils, sets, strutils, times]
+import std/[json, os, osproc, paths, sequtils, sets, strutils]
 
 import ../basic/[deptypes, gitops, nimblechecksums, packageinfos, pkgurls, subprocessgroups, versions]
 
@@ -301,6 +301,12 @@ proc archiveCompressionName*(compression: ArchiveCompression): string =
   of acGzip: "gzip"
   of acXz: "xz"
 
+proc archiveCompressionExtension*(compression: string): string =
+  case compression
+  of "gzip": ".tar.gz"
+  of "xz": ".tar.xz"
+  else: ""
+
 proc archiveCompressionNames*(compressions: openArray[ArchiveCompression]): seq[string] =
   for compression in compressions:
     result.add archiveCompressionName(compression)
@@ -489,12 +495,14 @@ proc matchingDigestEntry*(
 ): JsonNode =
   if entries.kind != JArray:
     return nil
+  let compressionExtension = archiveCompressionExtension(compression)
   for entry in entries:
     if entry.kind != JObject:
       continue
+    let archiveFile = entry{"file"}.getStr()
     if entry{"version"}.getStr() == versionLabel and
         entry{"gitSha"}.getStr() == gitSha and
-        entry{"compression"}.getStr() == compression and
+        (compressionExtension.len == 0 or archiveFile.endsWith(compressionExtension)) and
         (entry{"contentSha"}.getStr() == "" or
           entry{"contentSha"}.getStr() == contentSha):
       return entry
@@ -503,10 +511,7 @@ proc matchingDigestEntry*(
 proc initArchiveEntry*(
     versionLabel: string;
     gitSha: string;
-    gitShortSha: string;
     contentSha: string;
-    contentShortSha: string;
-    compression: string;
     archiveFile: string;
     archiveSize: BiggestInt;
     packageSubdir: Path;
@@ -514,13 +519,9 @@ proc initArchiveEntry*(
 ): JsonNode =
   result = newJObject()
   result["version"] = %versionLabel
-  result["createdAt"] = %now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
   result["gitSha"] = %gitSha
-  result["gitShortSha"] = %gitShortSha
   result["contentSha"] = %contentSha
-  result["contentShortSha"] = %contentShortSha
   result["archiveRoot"] = %"package"
-  result["compression"] = %compression
   result["file"] = %archiveFile
   result["size"] = %archiveSize
   if $packageSubdir != "":

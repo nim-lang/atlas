@@ -352,10 +352,10 @@ suite "packager allDeps metadata":
           "vtag": "1.0.0@aaaa",
           "release": {
             "requirements": [
-              {"name": "beta", "version": ">= 1.0.0"},
-              {"name": "delta", "version": "*"},
-              {"url": "https://example.com/external", "version": "*"},
-              {"name": "missing", "version": "*"}
+              "beta >= 1.0.0",
+              "delta",
+              "https://example.com/external",
+              "missing"
             ],
             "version": "1.0.0",
             "status": "Normal"
@@ -365,13 +365,13 @@ suite "packager allDeps metadata":
           "vtag": "2.0.0@bbbb",
           "release": {
             "requirements": [
-              {"name": "gamma", "version": "*"}
+              "gamma"
             ],
             "version": "2.0.0",
             "status": "Normal",
             "features": {
               "dev": [
-                {"url": "https://example.com/feature-only", "version": "*"}
+                "https://example.com/feature-only"
               ]
             }
           }
@@ -380,7 +380,7 @@ suite "packager allDeps metadata":
           "vtag": "#head@eeee",
           "release": {
             "requirements": [
-              {"name": "gamma", "version": "*"}
+              "gamma"
             ],
             "version": "#head",
             "status": "Normal"
@@ -395,7 +395,7 @@ suite "packager allDeps metadata":
           "vtag": "1.0.0@cccc",
           "release": {
             "requirements": [
-              {"name": "gamma", "version": "*"}
+              "gamma"
             ],
             "version": "1.0.0",
             "status": "Normal"
@@ -410,7 +410,7 @@ suite "packager allDeps metadata":
           "vtag": "1.0.0@dddd",
           "release": {
             "requirements": [
-              {"name": "alpha", "version": "*"}
+              "alpha"
             ],
             "version": "1.0.0",
             "status": "Normal"
@@ -497,11 +497,11 @@ suite "packager release metadata comparison":
       "name": "alpha",
       "releaseCount": 1,
       "releases": [],
-      "tarballs": [{"version": "1.0.0", "entries": [{"compression": "xz"}]}]
+      "tarballs": [{"version": "1.0.0", "entries": [{"file": "alpha-1.tar.xz"}]}]
     }
     check comparableReleaseMetadata(base) != comparableReleaseMetadata(changed)
 
-  test "comparable release metadata ignores tarball timestamps and order":
+  test "comparable release metadata normalizes tarball order":
     let base = %*{
       "name": "alpha",
       "releaseCount": 2,
@@ -509,17 +509,13 @@ suite "packager release metadata comparison":
       "tarballs": [
         {
           "version": "2.0.0",
-          "createdAt": "2026-05-22T10:00:00Z",
           "gitSha": "bbbb",
-          "compression": "gzip",
           "contentSha": "2222",
           "file": "alpha-2.tar.gz"
         },
         {
           "version": "1.0.0",
-          "createdAt": "2026-05-22T10:00:00Z",
           "gitSha": "aaaa",
-          "compression": "gzip",
           "contentSha": "1111",
           "file": "alpha-1.tar.gz"
         }
@@ -532,17 +528,13 @@ suite "packager release metadata comparison":
       "tarballs": [
         {
           "version": "1.0.0",
-          "createdAt": "2026-05-22T11:00:00Z",
           "gitSha": "aaaa",
-          "compression": "gzip",
           "contentSha": "1111",
           "file": "alpha-1.tar.gz"
         },
         {
           "version": "2.0.0",
-          "createdAt": "2026-05-22T11:00:00Z",
           "gitSha": "bbbb",
-          "compression": "gzip",
           "contentSha": "2222",
           "file": "alpha-2.tar.gz"
         }
@@ -555,16 +547,22 @@ suite "packager release metadata comparison":
       {
         "version": "1.0.0",
         "gitSha": "aaaa",
-        "compression": "gzip",
-        "contentSha": "old"
+        "contentSha": "old",
+        "file": "alpha-1.tar.gz"
       },
       {
         "version": "1.0.0",
         "gitSha": "aaaa",
-        "compression": "gzip",
-        "contentSha": "new"
+        "contentSha": "new",
+        "file": "alpha-1.tar.gz"
+      },
+      {
+        "version": "1.0.0",
+        "gitSha": "aaaa",
+        "contentSha": "new",
+        "file": "alpha-1.tar.xz"
       }
     ]
     check matchingDigestEntry(entries, "1.0.0", "aaaa", "gzip", "new") == entries[1]
+    check matchingDigestEntry(entries, "1.0.0", "aaaa", "xz", "new") == entries[2]
     check matchingDigestEntry(entries, "1.0.0", "aaaa", "gzip", "missing").isNil
-    check matchingDigestEntry(entries, "1.0.0", "aaaa", "xz", "new").isNil

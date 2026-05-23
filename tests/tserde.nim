@@ -137,7 +137,7 @@ suite "json serde":
       @[(VersionTag(v: Version"1.0.0", c: current).toPkgVer, release)]
     )
     let cache = parseFile($packageReleaseCachePath(pkg))
-    check cache["cacheVersion"].getInt() == 7
+    check cache["cacheVersion"].getInt() == 9
     check cache["name"].getStr() == "foobar"
     check cache["fqn"].getStr() == "foobar.nimble-test.github.com"
     check "shortName" notin cache
@@ -221,7 +221,56 @@ suite "json serde":
 
     savePackageReleaseCache(pkg, current, @[(version, release)])
     let regeneratedCache = parseFile($cachePath)
-    check regeneratedCache["cacheVersion"].getInt() == 7
+    check regeneratedCache["cacheVersion"].getInt() == 9
+
+  test "json serde nimble release requirements use combined strings":
+    let starDep = createUrlSkipPatterns("https://github.com/nimble-test/mummy", skipDirTest = true)
+    let jwtDep = createUrlSkipPatterns("https://github.com/nimble-test/jwt", skipDirTest = true)
+    let urlDep = createUrlSkipPatterns(
+      "https://github.com/yglukhov/bearssl_pkey_decoder",
+      skipDirTest = true
+    )
+    let release = NimbleRelease(
+      version: Version"1.0.0",
+      status: Normal,
+      requirements: @[(starDep, p"*"), (jwtDep, p">= 0.3"), (urlDep, p"#546f8d9b")]
+    )
+
+    let jnRelease = toJsonHook(release)
+    check jnRelease["requirements"][0].getStr() == "https://github.com/nimble-test/mummy"
+    check jnRelease["requirements"][1].getStr() == "https://github.com/nimble-test/jwt >= 0.3"
+    check jnRelease["requirements"][2].getStr() ==
+      "https://github.com/yglukhov/bearssl_pkey_decoder #546f8d9b"
+
+    var release2: NimbleRelease
+    fromJsonHook(release2, jnRelease)
+    check release2.requirements == release.requirements
+
+  test "json serde nimble release feature requirements use combined strings":
+    let starDep = createUrlSkipPatterns("https://github.com/nimble-test/mummy", skipDirTest = true)
+    let jwtDep = createUrlSkipPatterns("https://github.com/nimble-test/jwt", skipDirTest = true)
+    let urlDep = createUrlSkipPatterns(
+      "https://github.com/yglukhov/bearssl_pkey_decoder",
+      skipDirTest = true
+    )
+    let release = NimbleRelease(
+      version: Version"1.0.0",
+      status: Normal,
+      requirements: @[],
+      features: {
+        "dev": @[(starDep, p"*"), (jwtDep, p">= 0.3"), (urlDep, p"#546f8d9b")]
+      }.toTable()
+    )
+
+    let jnRelease = toJsonHook(release)
+    check jnRelease["features"]["dev"][0].getStr() == "https://github.com/nimble-test/mummy"
+    check jnRelease["features"]["dev"][1].getStr() == "https://github.com/nimble-test/jwt >= 0.3"
+    check jnRelease["features"]["dev"][2].getStr() ==
+      "https://github.com/yglukhov/bearssl_pkey_decoder #546f8d9b"
+
+    var release2: NimbleRelease
+    fromJsonHook(release2, jnRelease)
+    check release2.features == release.features
 
   test "package release cache lifts stable metadata":
     let oldCtx = context()

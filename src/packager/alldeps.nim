@@ -189,6 +189,78 @@ proc recordDepUse(
   depUse.releaseVersions.incl releaseVersion
   items[key] = depUse
 
+proc looksLikeUrl(value: string): bool =
+  value.contains("://") or value.startsWith("git@")
+
+proc requirementNameFromString(raw: string): string =
+  var i = 0
+  while i < raw.len:
+    if raw[i] in Whitespace:
+      var j = i
+      while j < raw.len and raw[j] in Whitespace:
+        inc j
+      if j >= raw.len or raw[j] in {'#', '<', '=', '>', '*'} + Digits:
+        return raw.substr(0, i - 1)
+    inc i
+
+  if raw.looksLikeUrl:
+    result = raw
+  else:
+    let (name, _, _) = extractRequirementName(raw)
+    result = name
+
+proc addAllDepName(
+    allDeps: var AllDepsSet;
+    pending: var seq[PendingDep];
+    rootPackageName: string;
+    releaseVersion: string;
+    depName: string;
+    index: AllDepsIndex
+) =
+  let normalizedName = normalizedPackageName(depName)
+  if normalizedName == normalizedPackageName(rootPackageName):
+    return
+  if index.officialByName.hasKey(normalizedName):
+    let officialName = index.officialByName[normalizedName]
+    let key = normalizedPackageName(officialName)
+    recordDepUse(allDeps.packages, key, officialName, releaseVersion)
+    pending.add PendingDep(name: officialName, releaseVersion: releaseVersion)
+    return
+
+  let normalizedUrl = normalizedPackageUrl(depName)
+  if normalizedUrl.len > 0 and index.officialNameByUrl.hasKey(normalizedUrl):
+    let officialName = index.officialNameByUrl[normalizedUrl]
+    if normalizedPackageName(officialName) == normalizedPackageName(rootPackageName):
+      return
+    let key = normalizedPackageName(officialName)
+    recordDepUse(allDeps.packages, key, officialName, releaseVersion)
+    pending.add PendingDep(name: officialName, releaseVersion: releaseVersion)
+  elif depName.looksLikeUrl:
+    recordDepUse(allDeps.urls, normalizedUrl, depName, releaseVersion)
+  elif normalizedName notin allDeps.unresolved:
+    allDeps.unresolved[normalizedName] = depName
+
+proc addAllDepUrl(
+    allDeps: var AllDepsSet;
+    pending: var seq[PendingDep];
+    rootPackageName: string;
+    releaseVersion: string;
+    rawUrl: string;
+    index: AllDepsIndex
+) =
+  let normalizedUrl = normalizedPackageUrl(rawUrl)
+  if normalizedUrl.len == 0:
+    return
+  if index.officialNameByUrl.hasKey(normalizedUrl):
+    let officialName = index.officialNameByUrl[normalizedUrl]
+    if normalizedPackageName(officialName) == normalizedPackageName(rootPackageName):
+      return
+    let key = normalizedPackageName(officialName)
+    recordDepUse(allDeps.packages, key, officialName, releaseVersion)
+    pending.add PendingDep(name: officialName, releaseVersion: releaseVersion)
+  else:
+    recordDepUse(allDeps.urls, normalizedUrl, rawUrl, releaseVersion)
+
 proc addAllDep(
     allDeps: var AllDepsSet;
     pending: var seq[PendingDep];
@@ -197,36 +269,23 @@ proc addAllDep(
     dep: JsonNode;
     index: AllDepsIndex
 ) =
-  if dep.isNil or dep.kind != JObject:
+  if dep.isNil:
     return
 
-  if dep.hasKey("name"):
-    let depName = dep["name"].getStr()
-    let normalizedName = normalizedPackageName(depName)
-    if normalizedName == normalizedPackageName(rootPackageName):
-      return
-    if not index.officialByName.hasKey(normalizedName):
-      if normalizedName notin allDeps.unresolved:
-        allDeps.unresolved[normalizedName] = depName
-      return
-    let officialName = index.officialByName[normalizedName]
-    let key = normalizedPackageName(officialName)
-    recordDepUse(allDeps.packages, key, officialName, releaseVersion)
-    pending.add PendingDep(name: officialName, releaseVersion: releaseVersion)
-  elif dep.hasKey("url"):
-    let rawUrl = dep["url"].getStr()
-    let normalizedUrl = normalizedPackageUrl(rawUrl)
-    if normalizedUrl.len == 0:
-      return
-    if index.officialNameByUrl.hasKey(normalizedUrl):
-      let officialName = index.officialNameByUrl[normalizedUrl]
-      if normalizedPackageName(officialName) == normalizedPackageName(rootPackageName):
-        return
-      let key = normalizedPackageName(officialName)
-      recordDepUse(allDeps.packages, key, officialName, releaseVersion)
-      pending.add PendingDep(name: officialName, releaseVersion: releaseVersion)
-    else:
-      recordDepUse(allDeps.urls, normalizedUrl, rawUrl, releaseVersion)
+  case dep.kind
+  of JString:
+    try:
+      let depName = requirementNameFromString(dep.getStr())
+      addAllDepName(allDeps, pending, rootPackageName, releaseVersion, depName, index)
+    except ValueError:
+      discard
+  of JObject:
+    if dep.hasKey("name"):
+      addAllDepName(allDeps, pending, rootPackageName, releaseVersion, dep["name"].getStr(), index)
+    elif dep.hasKey("url"):
+      addAllDepUrl(allDeps, pending, rootPackageName, releaseVersion, dep["url"].getStr(), index)
+  else:
+    discard
 
 proc collectReleaseRequirementsFromRelease(
     release: JsonNode;

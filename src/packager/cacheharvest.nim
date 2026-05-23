@@ -442,10 +442,7 @@ proc collectReleaseArchives(
         result.add initArchiveEntry(
           label,
           ver.vtag.commit.h,
-          commitSuffix,
           contentHash,
-          contentHashSuffix,
-          compressionName,
           archiveFile,
           getFileSize($archivePath),
           rootSubdir,
@@ -478,7 +475,7 @@ proc comparableTarballEntry(entry: JsonNode): JsonNode =
   if entry.kind != JObject:
     return entry.copy()
   for key, value in entry:
-    if key notin ["createdAt", "generatedAt"]:
+    if key != "generatedAt":
       result[key] = value.copy()
 
 proc tarballSortKey(entry: JsonNode): string =
@@ -486,7 +483,6 @@ proc tarballSortKey(entry: JsonNode): string =
     return $entry
   entry{"version"}.getStr() & "\t" &
     entry{"gitSha"}.getStr() & "\t" &
-    entry{"compression"}.getStr() & "\t" &
     entry{"contentSha"}.getStr() & "\t" &
     entry{"file"}.getStr()
 

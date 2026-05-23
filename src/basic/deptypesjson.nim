@@ -1,4 +1,4 @@
-import std/[json, jsonutils, paths, tables, sets, strutils]
+import std/[json, jsonutils, paths, tables, sets, strutils, uri]
 import sattypes, deptypes, pkgurls, versions, nimblecontext
 
 export json, jsonutils
@@ -63,7 +63,7 @@ proc toJsonHook*(vid: VarId): JsonNode = toJson(int(vid))
 proc fromJsonHook*(a: var VarId; b: JsonNode; opt = Joptions()) =
   a = VarId(int(b.getInt()))
 
-proc toJsonHook*(p: Path): JsonNode = toJson($(p))
+proc toJsonHook*(p: Path): JsonNode = toJson(p.string)
 
 proc fromJsonHook*(a: var Path; b: JsonNode; opt = Joptions()) =
   a = Path(b.getStr())
@@ -85,6 +85,73 @@ proc fromJsonHook*(a: var (PkgUrl, VersionInterval); b: JsonNode; opt = Joptions
   else:
     raise newException(ValueError, "requirement entry is missing both 'url' and 'name'")
   a[1].fromJson(b["version"])
+
+proc requirementName(v: PkgUrl): string =
+  let nc = jsonContext()
+  if nc.canRoundTripByRegistryName(v):
+    result = nc.registryName(v)
+  else:
+    result = $v
+
+proc requirementToJson(req: (PkgUrl, VersionInterval)): JsonNode =
+  result = %requirementName(req[0])
+  let query = $req[1]
+  if query != "*":
+    result = %(result.getStr() & " " & query)
+
+proc requirementsToJson(reqs: seq[(PkgUrl, VersionInterval)]): JsonNode =
+  result = newJArray()
+  for req in reqs:
+    result.add requirementToJson(req)
+
+proc splitRequirement(raw: string): (string, int) =
+  var i = 0
+  while i < raw.len:
+    if raw[i] in Whitespace:
+      var j = i
+      while j < raw.len and raw[j] in Whitespace:
+        inc j
+      if j >= raw.len or raw[j] in {'#', '<', '=', '>', '*'} + Digits:
+        return (raw.substr(0, i - 1), j)
+    inc i
+
+  let url = parseUri(raw)
+  if url.scheme.len > 0:
+    result = (raw, raw.len)
+  else:
+    let (name, _, verIdx) = extractRequirementName(raw)
+    result = (name, verIdx)
+
+proc requirementFromJson(b: JsonNode): (PkgUrl, VersionInterval) =
+  let raw = b.getStr()
+  let (name, verIdx) = splitRequirement(raw)
+  result[0].fromJson(%name)
+  var err = false
+  result[1] = parseVersionInterval(raw, verIdx, err)
+  if err:
+    raise newException(ValueError, "invalid requirement entry: " & raw)
+
+proc requirementsFromJson(reqs: var seq[(PkgUrl, VersionInterval)]; b: JsonNode) =
+  reqs.setLen(0)
+  for item in b:
+    reqs.add requirementFromJson(item)
+
+proc featuresToJson(features: Table[string, seq[(PkgUrl, VersionInterval)]]): JsonNode =
+  result = newJObject()
+  for feature, reqs in features:
+    result[feature] = requirementsToJson(reqs)
+
+proc featuresFromJson(
+    features: var Table[string, seq[(PkgUrl, VersionInterval)]];
+    b: JsonNode
+) =
+  features.clear()
+  if b.kind != JObject:
+    return
+  for feature, featureReqs in b:
+    var reqs: seq[(PkgUrl, VersionInterval)]
+    reqs.requirementsFromJson(featureReqs)
+    features[feature] = reqs
 
 proc toJsonHook*(r: NimbleRelease, opt: ToJsonOptions): JsonNode
 proc fromJsonHook*(r: var NimbleRelease; b: JsonNode; opt = Joptions())
@@ -128,7 +195,7 @@ proc nimbleReleaseToJson(r: NimbleRelease, opt: ToJsonOptions): JsonNode =
   result = newJObject()
   if r.name != "":
     result["name"] = toJson(r.name, opt)
-  result["requirements"] = toJson(r.requirements, opt)
+  result["requirements"] = requirementsToJson(r.requirements)
   if r.hasInstallHooks:
     result["hasInstallHooks"] = toJson(r.hasInstallHooks, opt)
   if r.author != "":
@@ -168,7 +235,7 @@ proc nimbleReleaseToJson(r: NimbleRelease, opt: ToJsonOptions): JsonNode =
   if r.err != "":
     result["err"] = toJson(r.err, opt)
   if r.features.len > 0:
-    result["features"] = toJson(r.features, opt)
+    result["features"] = featuresToJson(r.features)
   if r.reqsByFeatures.len > 0:
     result["reqsByFeatures"] = toJson(r.reqsByFeatures, opt)
   if r.featureVars.len > 0:
@@ -188,7 +255,7 @@ proc fromJsonHook*(r: var NimbleRelease; b: JsonNode; opt = Joptions()) =
   r.version.fromJson(b["version"])
   if b.hasKey("nimVersion"):
     r.nimVersion.fromJson(b["nimVersion"])
-  r.requirements.fromJson(b["requirements"])
+  r.requirements.requirementsFromJson(b["requirements"])
   r.status.fromJson(b["status"])
   if b.hasKey("hasInstallHooks"):
     r.hasInstallHooks = b["hasInstallHooks"].getBool()
@@ -225,7 +292,7 @@ proc fromJsonHook*(r: var NimbleRelease; b: JsonNode; opt = Joptions()) =
   if b.hasKey("err"):
     r.err = b["err"].getStr()
   if b.hasKey("features"):
-    r.features.fromJson(b["features"])
+    r.features.featuresFromJson(b["features"])
   if b.hasKey("reqsByFeatures"):
     r.reqsByFeatures.fromJson(b["reqsByFeatures"])
   if b.hasKey("featureVars"):
