@@ -1,4 +1,4 @@
-import std/[unittest, json, jsonutils, sets, tables, os, times, paths, strutils]
+import std/[unittest, json, jsonutils, sets, tables, os, times, paths, sequtils]
 import basic/[context, sattypes, pkgurls, deptypes, nimblecontext, dependencycache]
 import basic/[deptypesjson, versions]
 import confighandler
@@ -88,6 +88,7 @@ suite "json serde":
     check "backend" notin jnRelease
     check "hasBin" notin jnRelease
     check "err" notin jnRelease
+    check "reqs" notin jnRelease
     check "features" notin jnRelease
     check "featureVars" notin jnRelease
     check "reqsByFeatures" notin jnRelease
@@ -111,6 +112,7 @@ suite "json serde":
     check "backend" notin jnVersions[0][1]
     check "hasBin" notin jnVersions[0][1]
     check "err" notin jnVersions[0][1]
+    check "reqs" notin jnVersions[0][1]
     check "features" notin jnVersions[0][1]
     check "featureVars" notin jnVersions[0][1]
     check "reqsByFeatures" notin jnVersions[0][1]
@@ -137,10 +139,34 @@ suite "json serde":
       @[(VersionTag(v: Version"1.0.0", c: current).toPkgVer, release)]
     )
     let cache = parseFile($packageReleaseCachePath(pkg))
-    check cache["cacheVersion"].getInt() == 9
+    check cache["cv"].getInt() == 12
+    check "cacheVersion" notin cache
     check cache["name"].getStr() == "foobar"
     check cache["fqn"].getStr() == "foobar.nimble-test.github.com"
+    check "url" notin cache
+    check "current" notin cache
     check "shortName" notin cache
+    check "nim" notin cache
+    check "includeTagsAndNimbleCommits" notin cache
+    check "nimbleCommitsMax" notin cache
+    check "name" notin cache["releases"][0]
+    check "version" notin cache["releases"][0]
+    check "status" notin cache["releases"][0]
+    check cache["releases"][0].pairs().toSeq()[0][0] == "v"
+
+    setContext(AtlasContext(
+      projectDir: ws,
+      depsDir: Path"deps",
+      flags: {IncludeTagsAndNimbleCommits, NimbleCommitsMax}
+    ))
+    savePackageReleaseCache(
+      pkg,
+      current,
+      @[(VersionTag(v: Version"1.0.0", c: current).toPkgVer, release)]
+    )
+    let cacheWithFlags = parseFile($packageReleaseCachePath(pkg))
+    check cacheWithFlags["includeTagsAndNimbleCommits"].getBool()
+    check cacheWithFlags["nimbleCommitsMax"].getBool()
 
   test "package release cache uses url identity and subdir":
     let oldCtx = context()
@@ -179,7 +205,7 @@ suite "json serde":
 
     let cache = parseFile($subdirPath)
     check "shortName" notin cache
-    check cache["url"].getStr().contains("subdir=bindings%2Fnim")
+    check "url" notin cache
     check cache["subdir"].getStr() == "bindings/nim"
     check "registryName" notin cache
     check "registrySubdir" notin cache
@@ -212,7 +238,7 @@ suite "json serde":
     savePackageReleaseCache(pkg, current, @[(version, release)])
     let cachePath = packageReleaseCachePath(pkg)
     var staleCache = parseFile($cachePath)
-    staleCache["cacheVersion"] = %1
+    staleCache["cv"] = %1
     writeFile($cachePath, pretty(staleCache))
 
     var entries: seq[PackageReleaseCacheEntry]
@@ -221,7 +247,7 @@ suite "json serde":
 
     savePackageReleaseCache(pkg, current, @[(version, release)])
     let regeneratedCache = parseFile($cachePath)
-    check regeneratedCache["cacheVersion"].getInt() == 9
+    check regeneratedCache["cv"].getInt() == 12
 
   test "json serde nimble release requirements use combined strings":
     let starDep = createUrlSkipPatterns("https://github.com/nimble-test/mummy", skipDirTest = true)
@@ -237,9 +263,11 @@ suite "json serde":
     )
 
     let jnRelease = toJsonHook(release)
-    check jnRelease["requirements"][0].getStr() == "https://github.com/nimble-test/mummy"
-    check jnRelease["requirements"][1].getStr() == "https://github.com/nimble-test/jwt >= 0.3"
-    check jnRelease["requirements"][2].getStr() ==
+    check "requirements" notin jnRelease
+    check "reqs" notin jnRelease
+    check jnRelease["r"][0].getStr() == "https://github.com/nimble-test/mummy"
+    check jnRelease["r"][1].getStr() == "https://github.com/nimble-test/jwt >= 0.3"
+    check jnRelease["r"][2].getStr() ==
       "https://github.com/yglukhov/bearssl_pkey_decoder #546f8d9b"
 
     var release2: NimbleRelease
@@ -263,9 +291,10 @@ suite "json serde":
     )
 
     let jnRelease = toJsonHook(release)
-    check jnRelease["features"]["dev"][0].getStr() == "https://github.com/nimble-test/mummy"
-    check jnRelease["features"]["dev"][1].getStr() == "https://github.com/nimble-test/jwt >= 0.3"
-    check jnRelease["features"]["dev"][2].getStr() ==
+    check "features" notin jnRelease
+    check jnRelease["f"]["dev"][0].getStr() == "https://github.com/nimble-test/mummy"
+    check jnRelease["f"]["dev"][1].getStr() == "https://github.com/nimble-test/jwt >= 0.3"
+    check jnRelease["f"]["dev"][2].getStr() ==
       "https://github.com/yglukhov/bearssl_pkey_decoder #546f8d9b"
 
     var release2: NimbleRelease
@@ -291,6 +320,7 @@ suite "json serde":
       version: Version"1.0.0",
       requirements: @[],
       status: Normal,
+      nimVersion: Version"2.0.0",
       author: "Atlas Tester",
       description: "Test package",
       license: "MIT",
@@ -331,6 +361,7 @@ suite "json serde":
       version: Version"3.0.0",
       requirements: @[],
       status: Normal,
+      nimVersion: Version"2.2.0",
       author: "Other Tester",
       description: "Test package",
       license: "MIT",
@@ -352,7 +383,10 @@ suite "json serde":
     let cache = parseFile($packageReleaseCachePath(pkg))
     check cache["author"].getStr() == "Atlas Tester"
     check cache["description"].getStr() == "Test package"
+    check "by" notin cache
+    check "desc" notin cache
     check cache["license"].getStr() == "MIT"
+    check cache["nim"].getStr() == "2.0.0"
     check cache["srcDir"].getStr() == "src"
     check cache["binDir"].getStr() == "bin"
     check cache["skipDirs"][0].getStr() == "tests"
@@ -365,39 +399,43 @@ suite "json serde":
     check cache["namedBin"]["main"].getStr() == "myfoo"
     check cache["backend"].getStr() == "c"
     check cache["hasBin"].getBool()
-    check "author" notin cache["releases"][0]["release"]
-    check "description" notin cache["releases"][0]["release"]
-    check "license" notin cache["releases"][0]["release"]
-    check "srcDir" notin cache["releases"][0]["release"]
-    check "binDir" notin cache["releases"][0]["release"]
-    check "skipDirs" notin cache["releases"][0]["release"]
-    check "skipFiles" notin cache["releases"][0]["release"]
-    check "skipExt" notin cache["releases"][0]["release"]
-    check "installDirs" notin cache["releases"][0]["release"]
-    check "installFiles" notin cache["releases"][0]["release"]
-    check "installExt" notin cache["releases"][0]["release"]
-    check "bin" notin cache["releases"][0]["release"]
-    check "namedBin" notin cache["releases"][0]["release"]
-    check "backend" notin cache["releases"][0]["release"]
-    check "hasBin" notin cache["releases"][0]["release"]
-    check "author" notin cache["releases"][1]["release"]
-    check cache["releases"][1]["release"]["srcDir"].getStr() == ""
-    check cache["releases"][1]["release"]["binDir"].getStr() == ""
-    check cache["releases"][1]["release"]["skipFiles"].len == 0
-    check cache["releases"][1]["release"]["bin"].len == 0
-    check cache["releases"][1]["release"]["namedBin"].len == 0
-    check cache["releases"][1]["release"]["backend"].getStr() == ""
-    check cache["releases"][1]["release"]["hasBin"].getBool() == false
-    check cache["releases"][2]["release"]["author"].getStr() == "Other Tester"
-    check cache["releases"][2]["release"]["srcDir"].getStr() == "lib"
-    check cache["releases"][2]["release"]["binDir"].getStr() == "dist"
-    check cache["releases"][2]["release"]["skipDirs"][0].getStr() == "docs"
-    check cache["releases"][2]["release"]["installFiles"].len == 0
-    check cache["releases"][2]["release"]["bin"][0].getStr() == "tool"
-    check cache["releases"][2]["release"]["namedBin"]["tool"].getStr() == "other"
-    check cache["releases"][2]["release"]["backend"].getStr() == "cpp"
-    check "description" notin cache["releases"][2]["release"]
-    check "license" notin cache["releases"][2]["release"]
+    check "author" notin cache["releases"][0]
+    check "description" notin cache["releases"][0]
+    check "license" notin cache["releases"][0]
+    check "name" notin cache["releases"][0]
+    check "m" notin cache["releases"][0]
+    check "s" notin cache["releases"][0]
+    check "b" notin cache["releases"][0]
+    check "x" notin cache["releases"][0]
+    check "y" notin cache["releases"][0]
+    check "z" notin cache["releases"][0]
+    check "i" notin cache["releases"][0]
+    check "j" notin cache["releases"][0]
+    check "k" notin cache["releases"][0]
+    check "p" notin cache["releases"][0]
+    check "o" notin cache["releases"][0]
+    check "e" notin cache["releases"][0]
+    check "g" notin cache["releases"][0]
+    check "author" notin cache["releases"][1]
+    check cache["releases"][1]["m"].getStr() == "~"
+    check cache["releases"][1]["s"].getStr() == ""
+    check cache["releases"][1]["b"].getStr() == ""
+    check cache["releases"][1]["y"].len == 0
+    check cache["releases"][1]["p"].len == 0
+    check cache["releases"][1]["o"].len == 0
+    check cache["releases"][1]["e"].getStr() == ""
+    check cache["releases"][1]["g"].getBool() == false
+    check cache["releases"][2]["a"].getStr() == "Other Tester"
+    check cache["releases"][2]["m"].getStr() == "2.2.0"
+    check cache["releases"][2]["s"].getStr() == "lib"
+    check cache["releases"][2]["b"].getStr() == "dist"
+    check cache["releases"][2]["x"][0].getStr() == "docs"
+    check cache["releases"][2]["j"].len == 0
+    check cache["releases"][2]["p"][0].getStr() == "tool"
+    check cache["releases"][2]["o"]["tool"].getStr() == "other"
+    check cache["releases"][2]["e"].getStr() == "cpp"
+    check "description" notin cache["releases"][2]
+    check "license" notin cache["releases"][2]
 
     var entries: seq[PackageReleaseCacheEntry]
     check loadPackageReleaseCache(pkg, current, entries)
@@ -409,6 +447,9 @@ suite "json serde":
     check entries[2].release.description == "Test package"
     check entries[0].release.license == "MIT"
     check entries[2].release.license == "MIT"
+    check entries[0].release.nimVersion == Version"2.0.0"
+    check entries[1].release.nimVersion == Version""
+    check entries[2].release.nimVersion == Version"2.2.0"
     check entries[0].release.srcDir == Path"src"
     check entries[1].release.srcDir == Path""
     check entries[2].release.srcDir == Path"lib"
@@ -532,26 +573,29 @@ suite "json serde":
       featureVars: {"testing": VarId(3)}.toTable
     )
     let jnRelease = toJsonHook(release)
-    check jnRelease["name"].getStr() == "foobar"
-    check jnRelease["author"].getStr() == "Atlas Tester"
-    check jnRelease["description"].getStr() == "Test package"
-    check jnRelease["license"].getStr() == "MIT"
-    check jnRelease["srcDir"].getStr() == "src"
-    check jnRelease["binDir"].getStr() == "bin"
-    check jnRelease["skipDirs"][0].getStr() == "tests"
-    check jnRelease["skipFiles"][0].getStr() == "config.local"
-    check jnRelease["skipExt"][0].getStr() == "tmp"
-    check jnRelease["installDirs"][0].getStr() == "assets"
-    check jnRelease["installFiles"][0].getStr() == "README.md"
-    check jnRelease["installExt"][0].getStr() == "nim"
-    check jnRelease["bin"].len == 2
-    check jnRelease["namedBin"]["main"].getStr() == "myfoo"
-    check jnRelease["backend"].getStr() == "c"
-    check jnRelease["hasBin"].getBool()
-    check jnRelease["err"].getStr() == "broken"
-    check jnRelease.hasKey("features")
-    check jnRelease.hasKey("featureVars")
-    check jnRelease.hasKey("reqsByFeatures")
+    check jnRelease["n"].getStr() == "foobar"
+    check jnRelease["a"].getStr() == "Atlas Tester"
+    check jnRelease["d"].getStr() == "Test package"
+    check jnRelease["l"].getStr() == "MIT"
+    check jnRelease["s"].getStr() == "src"
+    check jnRelease["b"].getStr() == "bin"
+    check jnRelease["x"][0].getStr() == "tests"
+    check jnRelease["y"][0].getStr() == "config.local"
+    check jnRelease["z"][0].getStr() == "tmp"
+    check jnRelease["i"][0].getStr() == "assets"
+    check jnRelease["j"][0].getStr() == "README.md"
+    check jnRelease["k"][0].getStr() == "nim"
+    check jnRelease["p"].len == 2
+    check jnRelease["o"]["main"].getStr() == "myfoo"
+    check jnRelease["e"].getStr() == "c"
+    check jnRelease["g"].getBool()
+    check jnRelease["m"].getStr() == "2.0.0"
+    check "nimVersion" notin jnRelease
+    check jnRelease["E"].getStr() == "broken"
+    check jnRelease.hasKey("f")
+    check "features" notin jnRelease
+    check jnRelease.hasKey("F")
+    check jnRelease.hasKey("q")
     var release2: NimbleRelease
     fromJsonHook(release2, jnRelease)
 

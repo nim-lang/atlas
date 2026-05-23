@@ -356,42 +356,30 @@ suite "packager allDeps metadata":
       "name": "alpha",
       "releases": [
         {
-          "vtag": "1.0.0@aaaa",
-          "release": {
-            "requirements": [
-              "beta >= 1.0.0",
-              "delta",
-              "https://example.com/external",
-              "missing"
-            ],
-            "version": "1.0.0",
-            "status": "Normal"
+          "v": "1.0.0@aaaa",
+          "r": [
+            "beta >= 1.0.0",
+            "delta",
+            "https://example.com/external",
+            "missing"
+          ]
+        },
+        {
+          "v": "2.0.0@bbbb",
+          "r": [
+            "gamma"
+          ],
+          "f": {
+            "dev": [
+              "https://example.com/feature-only"
+            ]
           }
         },
         {
-          "vtag": "2.0.0@bbbb",
-          "release": {
-            "requirements": [
-              "gamma"
-            ],
-            "version": "2.0.0",
-            "status": "Normal",
-            "features": {
-              "dev": [
-                "https://example.com/feature-only"
-              ]
-            }
-          }
-        },
-        {
-          "vtag": "#head@eeee",
-          "release": {
-            "requirements": [
-              "gamma"
-            ],
-            "version": "#head",
-            "status": "Normal"
-          }
+          "v": "#head@eeee",
+          "r": [
+            "gamma"
+          ]
         }
       ]
     }))
@@ -399,14 +387,10 @@ suite "packager allDeps metadata":
       "name": "beta",
       "releases": [
         {
-          "vtag": "1.0.0@cccc",
-          "release": {
-            "requirements": [
-              "gamma"
-            ],
-            "version": "1.0.0",
-            "status": "Normal"
-          }
+          "v": "1.0.0@cccc",
+          "r": [
+            "gamma"
+          ]
         }
       ]
     }))
@@ -414,14 +398,10 @@ suite "packager allDeps metadata":
       "name": "gamma",
       "releases": [
         {
-          "vtag": "1.0.0@dddd",
-          "release": {
-            "requirements": [
-              "alpha"
-            ],
-            "version": "1.0.0",
-            "status": "Normal"
-          }
+          "v": "1.0.0@dddd",
+          "r": [
+            "alpha"
+          ]
         }
       ]
     }))
@@ -449,41 +429,25 @@ suite "packager release metadata comparison":
   test "comparable release metadata ignores derived allDeps and timestamps":
     let harvested = %*{
       "name": "alpha",
-      "releaseCount": 1,
       "releases": [
         {
-          "vtag": "1.0.0@aaaa",
-          "release": {
-            "version": "1.0.0",
-            "status": "Normal"
-          }
+          "v": "1.0.0@aaaa"
         }
       ],
-      "tarballs": [
-        {
-          "version": "1.0.0",
-          "entries": []
-        }
-      ]
+      "tarballs": {
+        "1.0.0": []
+      }
     }
     let retained = %*{
       "name": "alpha",
-      "releaseCount": 1,
       "releases": [
         {
-          "vtag": "1.0.0@aaaa",
-          "release": {
-            "version": "1.0.0",
-            "status": "Normal"
-          }
+          "v": "1.0.0@aaaa"
         }
       ],
-      "tarballs": [
-        {
-          "version": "1.0.0",
-          "entries": []
-        }
-      ],
+      "tarballs": {
+        "1.0.0": []
+      },
       "generatedAt": "2026-05-20T00:00:00Z",
       "allDeps": {
         "packages": ["beta"],
@@ -496,101 +460,88 @@ suite "packager release metadata comparison":
   test "comparable release metadata still detects tarball changes":
     let base = %*{
       "name": "alpha",
-      "releaseCount": 1,
       "releases": [],
-      "tarballs": [{"version": "1.0.0", "entries": []}]
+      "tarballs": {"1.0.0": []}
     }
     let changed = %*{
       "name": "alpha",
-      "releaseCount": 1,
       "releases": [],
-      "tarballs": [{"version": "1.0.0", "entries": [{"file": "alpha-1.tar.xz"}]}]
+      "tarballs": {"1.0.0": [{"f": "alpha-1.tar.xz"}]}
     }
     check comparableReleaseMetadata(base) != comparableReleaseMetadata(changed)
 
   test "comparable release metadata normalizes tarball order":
     let base = %*{
       "name": "alpha",
-      "releaseCount": 2,
       "releases": [],
-      "tarballs": [
-        {
-          "version": "2.0.0",
-          "gitSha": "bbbb",
-          "contentSha": "2222",
-          "file": "alpha-2.tar.gz"
-        },
-        {
-          "version": "1.0.0",
-          "gitSha": "aaaa",
-          "contentSha": "1111",
-          "file": "alpha-1.tar.gz"
-        }
-      ]
+      "tarballs": {
+        "2.0.0": [{
+          "s": "2222",
+          "f": "alpha-2.tar.gz"
+        }],
+        "1.0.0": [{
+          "s": "1111",
+          "f": "alpha-1.tar.gz"
+        }]
+      }
     }
     let same = %*{
       "name": "alpha",
-      "releaseCount": 2,
       "releases": [],
-      "tarballs": [
-        {
-          "version": "1.0.0",
-          "gitSha": "aaaa",
-          "contentSha": "1111",
-          "file": "alpha-1.tar.gz"
-        },
-        {
-          "version": "2.0.0",
-          "gitSha": "bbbb",
-          "contentSha": "2222",
-          "file": "alpha-2.tar.gz"
-        }
-      ]
+      "tarballs": {
+        "1.0.0": [{
+          "s": "1111",
+          "f": "alpha-1.tar.gz"
+        }],
+        "2.0.0": [{
+          "s": "2222",
+          "f": "alpha-2.tar.gz"
+        }]
+      }
     }
     check comparableReleaseMetadata(base) == comparableReleaseMetadata(same)
 
   test "matching digest entries include content hash when present":
-    let entries = %*[
-      {
-        "version": "1.0.0",
-        "gitSha": "aaaa",
-        "contentSha": "old",
-        "file": "alpha-1.tar.gz"
-      },
-      {
-        "version": "1.0.0",
-        "gitSha": "aaaa",
-        "contentSha": "new",
-        "file": "alpha-1.tar.gz"
-      },
-      {
-        "version": "1.0.0",
-        "gitSha": "aaaa",
-        "contentSha": "new",
-        "file": "alpha-1.tar.xz"
-      }
-    ]
-    check matchingDigestEntry(entries, "1.0.0", "aaaa", "gzip", "new") == entries[1]
-    check matchingDigestEntry(entries, "1.0.0", "aaaa", "xz", "new") == entries[2]
+    let entries = %*{
+      "1.0.0": [
+        {
+          "s": "old",
+          "f": "alpha-1.tar.gz"
+        },
+        {
+          "s": "new",
+          "f": "alpha-1.tar.gz"
+        },
+        {
+          "s": "new",
+          "f": "alpha-1.tar.xz"
+        }
+      ]
+    }
+    check matchingDigestEntry(entries, "1.0.0", "aaaa", "gzip", "new") == entries["1.0.0"][1]
+    check matchingDigestEntry(entries, "1.0.0", "aaaa", "xz", "new") == entries["1.0.0"][2]
     check matchingDigestEntry(entries, "1.0.0", "aaaa", "gzip", "missing").isNil
 
   test "archive entries use canonical tarball metadata":
     let release = NimbleRelease(version: Version"1.0.0", status: Normal)
     let entry = initArchiveEntry(
       "1.0.0",
-      "aaaaaaaa",
       "bbbbbbbb",
       "alpha-1.tar.xz",
-      123,
       Path"",
       release
     )
-    check entry["version"].getStr() == "1.0.0"
-    check entry["gitSha"].getStr() == "aaaaaaaa"
-    check entry["contentSha"].getStr() == "bbbbbbbb"
-    check entry["file"].getStr() == "alpha-1.tar.xz"
-    check entry["size"].getInt() == 123
+    check "version" notin entry
+    check "gitSha" notin entry
+    check entry["s"].getStr() == "bbbbbbbb"
+    check "sha" notin entry
+    check "contentSha" notin entry
+    check entry["f"].getStr() == "alpha-1.tar.xz"
+    check "file" notin entry
+    check "size" notin entry
     check "createdAt" notin entry
     check "gitShortSha" notin entry
     check "contentShortSha" notin entry
     check "compression" notin entry
+    check "srcDir" notin entry
+    check "archiveRoot" notin entry

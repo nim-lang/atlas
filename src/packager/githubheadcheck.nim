@@ -97,10 +97,13 @@ proc loadRetainedVersions(metadataDir: Path; state: RetainedPackageState): HashS
 
   try:
     let root = parseFile($releasesPath)
-    if "releases" notin root or root["releases"].kind != JArray:
+    let releases =
+      if root.hasKey("releases") and root["releases"].kind == JArray: root["releases"]
+      else: nil
+    if releases.isNil:
       return
-    for entry in root["releases"]:
-      let vtag = entry{"vtag"}.getStr()
+    for entry in releases:
+      let vtag = entry{"v"}.getStr()
       if vtag.len == 0:
         continue
       let at = vtag.find('@')

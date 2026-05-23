@@ -29,6 +29,7 @@ type
     author*: string
     description*: string
     license*: string
+    nimVersion*: Version
     srcDir*: Path
     binDir*: Path
     skipDirs*: seq[string]
@@ -46,7 +47,7 @@ type
     releases*: seq[PackageReleaseCacheEntry]
 
 const
-  PackageReleaseCacheVersion* = 9
+  PackageReleaseCacheVersion* = 12
 
 proc sanitizeCacheStem(stem: var string) =
   for c in mitems(stem):
@@ -153,6 +154,16 @@ proc firstNonEmptyMetadata(
 
 proc firstNonEmptyMetadata(
     versions: seq[(PackageVersion, NimbleRelease)];
+    field: proc (release: NimbleRelease): Version
+): Version =
+  for (_, release) in versions:
+    if not release.isNil:
+      result = field(release)
+      if result != Version"":
+        return
+
+proc firstNonEmptyMetadata(
+    versions: seq[(PackageVersion, NimbleRelease)];
     field: proc (release: NimbleRelease): Table[string, string]
 ): Table[string, string] =
   for (_, release) in versions:
@@ -171,22 +182,22 @@ proc firstTrueMetadata(
 
 proc toPackageReleaseCacheJson(cache: PackageReleaseCache; opt: ToJsonOptions): JsonNode =
   result = newJObject()
-  result["cacheVersion"] = toJson(cache.cacheVersion, opt)
+  result["cv"] = toJson(cache.cacheVersion, opt)
   if cache.name.len > 0:
     result["name"] = toJson(cache.name, opt)
-  result["url"] = toJson($(cache.url))
   if cache.subdir.len > 0:
     result["subdir"] = toJson(cache.subdir, opt)
   if cache.fqn.len > 0:
     result["fqn"] = toJson(cache.fqn, opt)
   result["head"] = toJson(cache.head, opt)
-  result["current"] = toJson(cache.current, opt)
   if cache.author.len > 0:
     result["author"] = toJson(cache.author, opt)
   if cache.description.len > 0:
     result["description"] = toJson(cache.description, opt)
   if cache.license.len > 0:
     result["license"] = toJson(cache.license, opt)
+  if cache.nimVersion != Version"":
+    result["nim"] = toJson(cache.nimVersion, opt)
   if cache.srcDir.len > 0:
     result["srcDir"] = toJson(cache.srcDir, opt)
   if cache.binDir.len > 0:
@@ -211,106 +222,146 @@ proc toPackageReleaseCacheJson(cache: PackageReleaseCache; opt: ToJsonOptions): 
     result["backend"] = toJson(cache.backend, opt)
   if cache.hasBin:
     result["hasBin"] = toJson(cache.hasBin, opt)
-  result["includeTagsAndNimbleCommits"] = toJson(cache.includeTagsAndNimbleCommits, opt)
-  result["nimbleCommitsMax"] = toJson(cache.nimbleCommitsMax, opt)
+  if cache.includeTagsAndNimbleCommits:
+    result["includeTagsAndNimbleCommits"] = toJson(cache.includeTagsAndNimbleCommits, opt)
+  if cache.nimbleCommitsMax:
+    result["nimbleCommitsMax"] = toJson(cache.nimbleCommitsMax, opt)
   result["releases"] = newJArray()
 
   for entry in cache.releases:
-    var entryJson = newJObject()
-    entryJson["vtag"] = toJson(entry.vtag, opt)
-    let releaseJson = toJsonHook(entry.release, opt)
+    var releaseJson = toJsonHook(entry.release, opt)
+    if releaseJson.isNil or releaseJson.kind != JObject:
+      releaseJson = newJObject()
     if not entry.release.isNil:
-      if entry.release.author == cache.author and releaseJson.hasKey("author"):
-        releaseJson.delete("author")
-      if entry.release.description == cache.description and releaseJson.hasKey("description"):
-        releaseJson.delete("description")
-      if entry.release.license == cache.license and releaseJson.hasKey("license"):
-        releaseJson.delete("license")
-      if entry.release.srcDir == cache.srcDir and releaseJson.hasKey("srcDir"):
-        releaseJson.delete("srcDir")
+      if releaseJson.hasKey("n"):
+        releaseJson.delete("n")
+      if releaseJson.hasKey("v"):
+        releaseJson.delete("v")
+      if entry.release.nimVersion == cache.nimVersion and releaseJson.hasKey("m"):
+        releaseJson.delete("m")
+      elif entry.release.nimVersion == Version"" and cache.nimVersion != Version"":
+        releaseJson["m"] = toJson(entry.release.nimVersion, opt)
+      if entry.release.author == cache.author and releaseJson.hasKey("a"):
+        releaseJson.delete("a")
+      if entry.release.description == cache.description and releaseJson.hasKey("d"):
+        releaseJson.delete("d")
+      if entry.release.license == cache.license and releaseJson.hasKey("l"):
+        releaseJson.delete("l")
+      if entry.release.srcDir == cache.srcDir and releaseJson.hasKey("s"):
+        releaseJson.delete("s")
       elif entry.release.srcDir.len == 0 and cache.srcDir.len > 0:
-        releaseJson["srcDir"] = toJson(entry.release.srcDir, opt)
-      if entry.release.binDir == cache.binDir and releaseJson.hasKey("binDir"):
-        releaseJson.delete("binDir")
+        releaseJson["s"] = toJson(entry.release.srcDir, opt)
+      if entry.release.binDir == cache.binDir and releaseJson.hasKey("b"):
+        releaseJson.delete("b")
       elif entry.release.binDir.len == 0 and cache.binDir.len > 0:
-        releaseJson["binDir"] = toJson(entry.release.binDir, opt)
-      if entry.release.skipDirs == cache.skipDirs and releaseJson.hasKey("skipDirs"):
-        releaseJson.delete("skipDirs")
+        releaseJson["b"] = toJson(entry.release.binDir, opt)
+      if entry.release.skipDirs == cache.skipDirs and releaseJson.hasKey("x"):
+        releaseJson.delete("x")
       elif entry.release.skipDirs.len == 0 and cache.skipDirs.len > 0:
-        releaseJson["skipDirs"] = toJson(entry.release.skipDirs, opt)
-      if entry.release.skipFiles == cache.skipFiles and releaseJson.hasKey("skipFiles"):
-        releaseJson.delete("skipFiles")
+        releaseJson["x"] = toJson(entry.release.skipDirs, opt)
+      if entry.release.skipFiles == cache.skipFiles and releaseJson.hasKey("y"):
+        releaseJson.delete("y")
       elif entry.release.skipFiles.len == 0 and cache.skipFiles.len > 0:
-        releaseJson["skipFiles"] = toJson(entry.release.skipFiles, opt)
-      if entry.release.skipExt == cache.skipExt and releaseJson.hasKey("skipExt"):
-        releaseJson.delete("skipExt")
+        releaseJson["y"] = toJson(entry.release.skipFiles, opt)
+      if entry.release.skipExt == cache.skipExt and releaseJson.hasKey("z"):
+        releaseJson.delete("z")
       elif entry.release.skipExt.len == 0 and cache.skipExt.len > 0:
-        releaseJson["skipExt"] = toJson(entry.release.skipExt, opt)
-      if entry.release.installDirs == cache.installDirs and releaseJson.hasKey("installDirs"):
-        releaseJson.delete("installDirs")
+        releaseJson["z"] = toJson(entry.release.skipExt, opt)
+      if entry.release.installDirs == cache.installDirs and releaseJson.hasKey("i"):
+        releaseJson.delete("i")
       elif entry.release.installDirs.len == 0 and cache.installDirs.len > 0:
-        releaseJson["installDirs"] = toJson(entry.release.installDirs, opt)
-      if entry.release.installFiles == cache.installFiles and releaseJson.hasKey("installFiles"):
-        releaseJson.delete("installFiles")
+        releaseJson["i"] = toJson(entry.release.installDirs, opt)
+      if entry.release.installFiles == cache.installFiles and releaseJson.hasKey("j"):
+        releaseJson.delete("j")
       elif entry.release.installFiles.len == 0 and cache.installFiles.len > 0:
-        releaseJson["installFiles"] = toJson(entry.release.installFiles, opt)
-      if entry.release.installExt == cache.installExt and releaseJson.hasKey("installExt"):
-        releaseJson.delete("installExt")
+        releaseJson["j"] = toJson(entry.release.installFiles, opt)
+      if entry.release.installExt == cache.installExt and releaseJson.hasKey("k"):
+        releaseJson.delete("k")
       elif entry.release.installExt.len == 0 and cache.installExt.len > 0:
-        releaseJson["installExt"] = toJson(entry.release.installExt, opt)
-      if entry.release.bin == cache.bin and releaseJson.hasKey("bin"):
-        releaseJson.delete("bin")
+        releaseJson["k"] = toJson(entry.release.installExt, opt)
+      if entry.release.bin == cache.bin and releaseJson.hasKey("p"):
+        releaseJson.delete("p")
       elif entry.release.bin.len == 0 and cache.bin.len > 0:
-        releaseJson["bin"] = toJson(entry.release.bin, opt)
-      if entry.release.namedBin == cache.namedBin and releaseJson.hasKey("namedBin"):
-        releaseJson.delete("namedBin")
+        releaseJson["p"] = toJson(entry.release.bin, opt)
+      if entry.release.namedBin == cache.namedBin and releaseJson.hasKey("o"):
+        releaseJson.delete("o")
       elif entry.release.namedBin.len == 0 and cache.namedBin.len > 0:
-        releaseJson["namedBin"] = toJson(entry.release.namedBin, opt)
-      if entry.release.backend == cache.backend and releaseJson.hasKey("backend"):
-        releaseJson.delete("backend")
+        releaseJson["o"] = toJson(entry.release.namedBin, opt)
+      if entry.release.backend == cache.backend and releaseJson.hasKey("e"):
+        releaseJson.delete("e")
       elif entry.release.backend.len == 0 and cache.backend.len > 0:
-        releaseJson["backend"] = toJson(entry.release.backend, opt)
-      if entry.release.hasBin == cache.hasBin and releaseJson.hasKey("hasBin"):
-        releaseJson.delete("hasBin")
+        releaseJson["e"] = toJson(entry.release.backend, opt)
+      if entry.release.hasBin == cache.hasBin and releaseJson.hasKey("g"):
+        releaseJson.delete("g")
       elif not entry.release.hasBin and cache.hasBin:
-        releaseJson["hasBin"] = toJson(entry.release.hasBin, opt)
-    entryJson["release"] = releaseJson
+        releaseJson["g"] = toJson(entry.release.hasBin, opt)
+    var entryJson = newJObject()
+    entryJson["v"] = toJson(entry.vtag, opt)
+    for key, value in releaseJson:
+      if key notin ["v", "vtag"]:
+        entryJson[key] = value
     result["releases"].add entryJson
 
 proc loadPackageReleaseCacheJson(cache: var PackageReleaseCache; jn: JsonNode) =
   cache.fromJson(jn, Joptions(allowMissingKeys: true, allowExtraKeys: true))
+  if jn.hasKey("cv"):
+    cache.cacheVersion = jn["cv"].getInt()
+  if jn.hasKey("author"):
+    cache.author = jn["author"].getStr()
+  if jn.hasKey("description"):
+    cache.description = jn["description"].getStr()
+  if jn.hasKey("nim"):
+    cache.nimVersion.fromJson(jn["nim"])
+  cache.releases.setLen(0)
+  let releasesJson =
+    if jn.hasKey("releases") and jn["releases"].kind == JArray: jn["releases"]
+    else: newJArray()
+  if releasesJson.kind == JArray:
+    for rawEntry in releasesJson:
+      if rawEntry.kind != JObject or not rawEntry.hasKey("v"):
+        continue
+      var entry: PackageReleaseCacheEntry
+      entry.vtag.fromJson(rawEntry["v"])
+      entry.release.fromJsonHook(rawEntry, Joptions(allowMissingKeys: true, allowExtraKeys: true))
+      if entry.release.version == Version"":
+        entry.release.version = entry.vtag.version
+      cache.releases.add entry
   for i, entry in mpairs(cache.releases):
     if not entry.release.isNil:
-      let releaseJson = jn["releases"][i]["release"]
+      var entryJson = releasesJson[i]
       if entry.release.author.len == 0:
         entry.release.author = cache.author
+      if entry.release.name.len == 0:
+        entry.release.name = cache.name
       if entry.release.description.len == 0:
         entry.release.description = cache.description
       if entry.release.license.len == 0:
         entry.release.license = cache.license
-      if not releaseJson.hasKey("srcDir"):
+      if entry.release.nimVersion == Version"" and not entryJson.hasKey("m"):
+        entry.release.nimVersion = cache.nimVersion
+      if not entryJson.hasKey("s"):
         entry.release.srcDir = cache.srcDir
-      if not releaseJson.hasKey("binDir"):
+      if not entryJson.hasKey("b"):
         entry.release.binDir = cache.binDir
-      if not releaseJson.hasKey("skipDirs"):
+      if not entryJson.hasKey("x"):
         entry.release.skipDirs = cache.skipDirs
-      if not releaseJson.hasKey("skipFiles"):
+      if not entryJson.hasKey("y"):
         entry.release.skipFiles = cache.skipFiles
-      if not releaseJson.hasKey("skipExt"):
+      if not entryJson.hasKey("z"):
         entry.release.skipExt = cache.skipExt
-      if not releaseJson.hasKey("installDirs"):
+      if not entryJson.hasKey("i"):
         entry.release.installDirs = cache.installDirs
-      if not releaseJson.hasKey("installFiles"):
+      if not entryJson.hasKey("j"):
         entry.release.installFiles = cache.installFiles
-      if not releaseJson.hasKey("installExt"):
+      if not entryJson.hasKey("k"):
         entry.release.installExt = cache.installExt
-      if not releaseJson.hasKey("bin"):
+      if not entryJson.hasKey("p"):
         entry.release.bin = cache.bin
-      if not releaseJson.hasKey("namedBin"):
+      if not entryJson.hasKey("o"):
         entry.release.namedBin = cache.namedBin
-      if not releaseJson.hasKey("backend"):
+      if not entryJson.hasKey("e"):
         entry.release.backend = cache.backend
-      if not releaseJson.hasKey("hasBin"):
+      if not entryJson.hasKey("g"):
         entry.release.hasBin = cache.hasBin
 
 proc loadPackageReleaseCache*(
@@ -338,10 +389,10 @@ proc loadPackageReleaseCache*(
     return false
 
   result =
-    cache.url == pkg.url and
+    (cache.fqn.len == 0 or cache.fqn == pkg.url.fullName()) and
     cache.subdir == (if pkg.subdir.len > 0: pkg.subdir else: pkg.url.subdir()) and
     cache.head == pkg.originHead and
-    cache.current == currentCommit and
+    cache.head == currentCommit and
     cache.includeTagsAndNimbleCommits == includeTagsAndNimbleCommitsFlag() and
     cache.nimbleCommitsMax == nimbleCommitsMaxFlag()
 
@@ -364,10 +415,10 @@ proc savePackageReleaseCache*(
     subdir: if pkg.subdir.len > 0: pkg.subdir else: pkg.url.subdir(),
     fqn: pkg.url.fullName(),
     head: pkg.originHead,
-    current: currentCommit,
     author: firstNonEmptyMetadata(versions, proc (release: NimbleRelease): string = release.author),
     description: firstNonEmptyMetadata(versions, proc (release: NimbleRelease): string = release.description),
     license: firstNonEmptyMetadata(versions, proc (release: NimbleRelease): string = release.license),
+    nimVersion: firstNonEmptyMetadata(versions, proc (release: NimbleRelease): Version = release.nimVersion),
     srcDir: firstNonEmptyMetadata(versions, proc (release: NimbleRelease): Path = release.srcDir),
     binDir: firstNonEmptyMetadata(versions, proc (release: NimbleRelease): Path = release.binDir),
     skipDirs: firstNonEmptyMetadata(versions, proc (release: NimbleRelease): seq[string] = release.skipDirs),

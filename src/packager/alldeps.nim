@@ -143,23 +143,29 @@ proc normalizedReleaseVersion(version: string): string =
 proc isSpecialVersion(version: Version): bool =
   version.string.len > 0 and version.string[0] == '#'
 
+proc releaseJson(entry: JsonNode): JsonNode =
+  if entry.kind != JObject:
+    return
+  entry
+
 proc releaseVersion(entry: JsonNode): string =
-  if entry.kind != JObject or not entry.hasKey("release"):
+  let release = releaseJson(entry)
+  if release.kind != JObject:
     return
-  let release = entry["release"]
-  if release.kind != JObject or not release.hasKey("version"):
-    return
-  try:
-    result = normalizedReleaseVersion(release["version"].getStr())
-  except ValueError:
-    result = ""
+  let vtag = release{"v"}.getStr()
+  let at = vtag.find('@')
+  if at > 0:
+    return normalizedReleaseVersion(vtag[0 ..< at])
+  if vtag.len > 0:
+    return normalizedReleaseVersion(vtag)
 
 proc releaseEntries(releasesMetadata: JsonNode): JsonNode =
   if releasesMetadata.isNil or releasesMetadata.kind != JObject:
     return nil
-  if not releasesMetadata.hasKey("releases") or releasesMetadata["releases"].kind != JArray:
+  if releasesMetadata.hasKey("releases") and releasesMetadata["releases"].kind == JArray:
+    result = releasesMetadata["releases"]
+  else:
     return nil
-  result = releasesMetadata["releases"]
 
 proc collectRootVersions(releasesMetadata: JsonNode): seq[Version] =
   let entries = releaseEntries(releasesMetadata)
@@ -298,11 +304,13 @@ proc collectReleaseRequirementsFromRelease(
   if release.kind != JObject:
     return
 
-  if release.hasKey("requirements") and release["requirements"].kind == JArray:
-    for dep in release["requirements"]:
+  let reqs = release{"r"}
+  if not reqs.isNil and reqs.kind == JArray:
+    for dep in reqs:
       addAllDep(allDeps, pending, rootPackageName, releaseVersion, dep, index)
-  if release.hasKey("features") and release["features"].kind == JObject:
-    for _, featureDeps in release["features"]:
+  let features = release{"f"}
+  if not features.isNil and features.kind == JObject:
+    for _, featureDeps in features:
       if featureDeps.kind != JArray:
         continue
       for dep in featureDeps:
@@ -321,10 +329,8 @@ proc collectReleaseRequirements(
     return
 
   for entry in entries:
-    if entry.kind != JObject or not entry.hasKey("release"):
-      continue
     collectReleaseRequirementsFromRelease(
-      entry["release"], allDeps, pending, rootPackageName, releaseVersion, index
+      releaseJson(entry), allDeps, pending, rootPackageName, releaseVersion, index
     )
 
 proc sortedValues(items: Table[string, string]): JsonNode =
@@ -393,13 +399,11 @@ proc computeAllDeps(
   let entries = releaseEntries(releasesMetadata)
   if not entries.isNil:
     for entry in entries:
-      if entry.kind != JObject or not entry.hasKey("release"):
-        continue
       let version = releaseVersion(entry)
       if version.len == 0:
         continue
       collectReleaseRequirementsFromRelease(
-        entry["release"], allDeps, pending, packageName, version, index
+        releaseJson(entry), allDeps, pending, packageName, version, index
       )
 
   var next = 0

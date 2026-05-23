@@ -63,7 +63,6 @@ type
   RetainedPackageIndexState = object
     latestCommit: string
     lastUpdate: string
-    releaseCount: int
     releaseVtags: HashSet[string]
 
   RetainedIndexMetadata = object
@@ -136,10 +135,13 @@ proc loadReleaseVtags(releasesPath: Path): HashSet[string] =
     return
   try:
     let root = parseFile($releasesPath)
-    if "releases" notin root or root["releases"].kind != JArray:
+    let releases =
+      if root.hasKey("releases") and root["releases"].kind == JArray: root["releases"]
+      else: nil
+    if releases.isNil:
       return
-    for entry in root["releases"]:
-      let vtag = entry{"vtag"}.getStr()
+    for entry in releases:
+      let vtag = entry{"v"}.getStr()
       if vtag.len > 0 and not vtag.startsWith("#head@"):
         result.incl vtag
   except CatchableError:
@@ -164,7 +166,6 @@ proc loadRetainedPackageIndexState(metadataDir: Path): RetainedIndexMetadata =
       result.packages[packageName] = RetainedPackageIndexState(
         latestCommit: entry{"latestCommit"}.getStr(),
         lastUpdate: entry{"lastUpdate"}.getStr(),
-        releaseCount: entry{"releaseCount"}.getInt(),
         releaseVtags:
           if releasesMetadataPath.len > 0:
             loadReleaseVtags(metadataDir / Path(releasesMetadataPath))
@@ -277,22 +278,25 @@ proc addHeadToRetainedReleaseMetadata(
     return
   if releaseInfo.currentCommit.isEmpty():
     return
-  if not retained.hasKey("releases") or retained["releases"].kind != JArray:
+  let releases =
+    if retained.hasKey("releases") and retained["releases"].kind == JArray: retained["releases"]
+    else: nil
+  if releases.isNil:
     return
 
   var matchingReleaseJson: JsonNode
-  for entry in retained["releases"]:
-    if entry.kind != JObject or not entry.hasKey("vtag"):
+  for entry in releases:
+    if entry.kind != JObject or not entry.hasKey("v"):
       continue
     var vtag: VersionTag
     try:
-      vtag.fromJson(entry["vtag"])
+      vtag.fromJson(entry["v"])
     except CatchableError:
       continue
     if vtag.version == Version"#head":
       return
-    if matchingReleaseJson.isNil and vtag.commit == releaseInfo.currentCommit and entry.hasKey("release"):
-      matchingReleaseJson = entry["release"].copy()
+    if matchingReleaseJson.isNil and vtag.commit == releaseInfo.currentCommit:
+      matchingReleaseJson = entry.copy()
 
   var headRelease: NimbleRelease
   if matchingReleaseJson.isNil:
@@ -306,9 +310,11 @@ proc addHeadToRetainedReleaseMetadata(
 
   let headVtag = VersionTag(v: Version"#head", c: initCommitHash(releaseInfo.currentCommit, FromHead))
   var headEntry = newJObject()
-  headEntry["vtag"] = toJson(headVtag, ToJsonOptions(enumMode: joptEnumString))
-  headEntry["release"] = matchingReleaseJson
-  retained["releases"].add headEntry
+  headEntry["v"] = toJson(headVtag, ToJsonOptions(enumMode: joptEnumString))
+  for key, value in matchingReleaseJson:
+    if key != "v":
+      headEntry[key] = value.copy()
+  releases.add headEntry
 
 proc loadPackageReleaseMetadata(pkg: Package; releaseInfo: PackageReleaseInfo): JsonNode =
   let cachePath = packageReleaseCachePath(pkg)
@@ -380,12 +386,18 @@ proc collectReleaseArchives(
     compressions: openArray[ArchiveCompression];
     regenerateTarballs: bool
 ): JsonNode =
-  result = newJArray()
+  result = newJObject()
   let workspaceRoot = archiveDir.parentDir()
   let existingEntries = loadExistingArchiveEntries(packageReleasesMetadataFile(workspaceRoot))
   createDir($archiveDir)
   var usedStems = initHashSet[string]()
   var referencedFiles = initHashSet[string]()
+
+  proc addTarballEntry(tarballs: JsonNode; versionLabel: string; entry: JsonNode) =
+    if not tarballs.hasKey(versionLabel) or tarballs[versionLabel].kind != JArray:
+      tarballs[versionLabel] = newJArray()
+    tarballs[versionLabel].add entry
+
   for releaseEntry in archiveReleaseEntries(releaseInfo):
     let ver = releaseEntry.ver
     let release = releaseEntry.release
@@ -426,17 +438,15 @@ proc collectReleaseArchives(
             compressionName,
             contentHash
           )
-          if existingEntry != nil and "file" in existingEntry:
-            let archiveFile = existingEntry["file"].getStr()
+          if existingEntry != nil and "f" in existingEntry:
+            let archiveFile = existingEntry["f"].getStr()
             let archivePath = archiveDir / Path(archiveFile)
             if fileExists($archivePath):
               referencedFiles.incl(archiveFile)
-              result.add initArchiveEntry(
+              addTarballEntry result, label, initArchiveEntry(
                 label,
-                ver.vtag.commit.h,
                 contentHash,
                 archiveFile,
-                getFileSize($archivePath),
                 rootSubdir,
                 release
               )
@@ -445,14 +455,11 @@ proc collectReleaseArchives(
         let archiveFile = writeTrackedReleaseArchive(
           pkg, ver, archiveDir, rootStem, rootArchiveFiles, compression, siblingTempPath
         )
-        let archivePath = archiveDir / Path(archiveFile)
         referencedFiles.incl(archiveFile)
-        result.add initArchiveEntry(
+        addTarballEntry result, label, initArchiveEntry(
           label,
-          ver.vtag.commit.h,
           contentHash,
           archiveFile,
-          getFileSize($archivePath),
           rootSubdir,
           release
         )
@@ -483,36 +490,45 @@ proc comparableTarballEntry(entry: JsonNode): JsonNode =
   if entry.kind != JObject:
     return entry.copy()
   for key, value in entry:
-    if key != "generatedAt":
+    if key notin ["generatedAt", "version", "size"]:
       result[key] = value.copy()
 
 proc tarballSortKey(entry: JsonNode): string =
   if entry.kind != JObject:
     return $entry
-  entry{"version"}.getStr() & "\t" &
-    entry{"gitSha"}.getStr() & "\t" &
-    entry{"contentSha"}.getStr() & "\t" &
-    entry{"file"}.getStr()
+  entry{"s"}.getStr() & "\t" & entry{"f"}.getStr()
 
 proc comparableTarballs(tarballs: JsonNode): JsonNode =
-  if tarballs.kind != JArray:
+  if tarballs.kind != JObject:
     return tarballs.copy()
 
-  var entries: seq[JsonNode]
-  for entry in tarballs:
-    entries.add comparableTarballEntry(entry)
-  entries.sort do (a, b: JsonNode) -> int:
-    cmp(tarballSortKey(a), tarballSortKey(b))
+  var byRelease = initTable[string, seq[JsonNode]]()
+  for version, value in tarballs:
+    if value.kind == JArray:
+      for entry in value:
+        byRelease.mgetOrPut(version, @[]).add comparableTarballEntry(entry)
+    elif value.kind == JObject:
+      byRelease.mgetOrPut(version, @[]).add comparableTarballEntry(value)
 
-  result = newJArray()
-  for entry in entries:
-    result.add entry
+  var versions: seq[string]
+  for version in byRelease.keys:
+    versions.add version
+  versions.sort(cmp)
+
+  result = newJObject()
+  for version in versions:
+    var entries = byRelease[version]
+    entries.sort do (a, b: JsonNode) -> int:
+      cmp(tarballSortKey(a), tarballSortKey(b))
+    result[version] = newJArray()
+    for entry in entries:
+      result[version].add entry
 
 proc comparableReleaseMetadata*(metadata: JsonNode): JsonNode =
   ## Normalize package release metadata down to the harvested fields that
   ## should trigger a releases.json rewrite on subsequent packager runs.
   result = newJObject()
-  for key in ["name", "releaseCount", "releases", "tarballs"]:
+  for key in ["name", "releases", "tarballs"]:
     let value = metadata.metadataField(key)
     result[key] =
       if value.isNil:
@@ -534,7 +550,6 @@ proc metadataChangeReason(
   var reasons: seq[string]
   for field in [
       ("name", "name"),
-      ("releaseCount", "release count"),
       ("releases", "releases"),
       ("tarballs", "tarballs")
   ]:
@@ -552,7 +567,6 @@ proc mergePackageReleaseMetadata(
     workspaceRoot: Path;
     info: PackageInfo;
     releaseMetadata: JsonNode;
-    releaseCount: int;
     tarballEntries: JsonNode
 ) =
   let releasesMetadataPath = packageReleasesMetadataFile(workspaceRoot)
@@ -573,7 +587,6 @@ proc mergePackageReleaseMetadata(
     else:
       releaseMetadata.copy()
   metadata["name"] = %info.name
-  metadata["releaseCount"] = %releaseCount
   metadata["tarballs"] = tarballEntries
 
   let existingComparable = comparableReleaseMetadata(existingMetadata)
@@ -784,7 +797,6 @@ proc harvestPackage(
       workspaceRoot,
       info,
       releaseMetadata,
-      releaseCount,
       tarballEntries
     )
     result.ok = true
@@ -922,12 +934,10 @@ proc harvestRegistryCaches*(
       let changed =
         retained.lastUpdate.len == 0 or
         retained.latestCommit != packageResult.latestCommit or
-        retained.releaseCount != packageResult.releaseCount or
         retained.releaseVtags != packageResult.releaseVtags
       var entry = newJObject()
       entry["name"] = %packageResult.packageName
       entry["latestCommit"] = %packageResult.latestCommit
-      entry["releaseCount"] = %packageResult.releaseCount
       entry["releasesMetadata"] = %packageReleasesMetadataRelPath(info)
       entry["processedAt"] = %processedAt
       entry["lastUpdate"] =
@@ -971,12 +981,10 @@ proc harvestRegistryCaches*(
         let changed =
           retained.lastUpdate.len == 0 or
           retained.latestCommit != packageResult.latestCommit or
-          retained.releaseCount != packageResult.releaseCount or
           retained.releaseVtags != packageResult.releaseVtags
         var entry = newJObject()
         entry["name"] = %packageResult.packageName
         entry["latestCommit"] = %packageResult.latestCommit
-        entry["releaseCount"] = %packageResult.releaseCount
         entry["releasesMetadata"] = %packageReleasesMetadataRelPath(info)
         entry["processedAt"] = %processedAt
         entry["lastUpdate"] =

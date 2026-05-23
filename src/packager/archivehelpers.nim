@@ -473,14 +473,14 @@ proc loadExistingArchiveEntries*(releasesMetadataPath: Path): JsonNode =
       return newJArray()
     try:
       let digest = parseFile($digestPath)
-      if "tarballs" in digest and digest["tarballs"].kind == JArray:
+      if "tarballs" in digest and digest["tarballs"].kind in {JArray, JObject}:
         return digest["tarballs"]
     except CatchableError:
       discard
     return newJArray()
   try:
     let metadata = parseFile($releasesMetadataPath)
-    if "tarballs" in metadata and metadata["tarballs"].kind == JArray:
+    if "tarballs" in metadata and metadata["tarballs"].kind in {JArray, JObject}:
       return metadata["tarballs"]
   except CatchableError:
     discard
@@ -493,40 +493,38 @@ proc matchingDigestEntry*(
     compression: string;
     contentSha: string
 ): JsonNode =
-  if entries.kind != JArray:
-    return nil
   let compressionExtension = archiveCompressionExtension(compression)
-  for entry in entries:
+
+  proc matches(entry: JsonNode; releaseKey: string): bool =
     if entry.kind != JObject:
-      continue
-    let archiveFile = entry{"file"}.getStr()
-    if entry{"version"}.getStr() == versionLabel and
-        entry{"gitSha"}.getStr() == gitSha and
+      return false
+    let archiveFile = entry{"f"}.getStr()
+    let entryContentSha = entry{"s"}.getStr()
+    result = releaseKey == versionLabel and
         (compressionExtension.len == 0 or archiveFile.endsWith(compressionExtension)) and
-        (entry{"contentSha"}.getStr() == "" or
-          entry{"contentSha"}.getStr() == contentSha):
-      return entry
+        (entryContentSha == "" or entryContentSha == contentSha)
+
+  if entries.kind == JObject:
+    for releaseKey, value in entries:
+      if value.kind == JArray:
+        for entry in value:
+          if entry.matches(releaseKey):
+            return entry
+      elif value.matches(releaseKey):
+        return value
   nil
 
 proc initArchiveEntry*(
     versionLabel: string;
-    gitSha: string;
     contentSha: string;
     archiveFile: string;
-    archiveSize: BiggestInt;
     packageSubdir: Path;
     release: NimbleRelease
 ): JsonNode =
   result = newJObject()
-  result["version"] = %versionLabel
-  result["gitSha"] = %gitSha
-  result["contentSha"] = %contentSha
-  result["archiveRoot"] = %"package"
-  result["file"] = %archiveFile
-  result["size"] = %archiveSize
+  result["s"] = %contentSha
+  result["f"] = %archiveFile
   if $packageSubdir != "":
-    result["packageSubdir"] = %($packageSubdir)
+    result["u"] = %($packageSubdir)
   if not release.isNil and release.name.len > 0:
-    result["name"] = %release.name
-  if not release.isNil and $release.srcDir != "":
-    result["srcDir"] = %($release.srcDir)
+    result["n"] = %release.name

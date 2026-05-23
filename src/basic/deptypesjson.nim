@@ -3,8 +3,8 @@ import sattypes, deptypes, pkgurls, versions, nimblecontext
 
 export json, jsonutils
 
-var pkgUrlJsonContext: NimbleContext
-var pkgUrlJsonContextLoaded = false
+var pkgUrlJsonContext {.threadvar.}: NimbleContext
+var pkgUrlJsonContextLoaded {.threadvar.}: bool
 
 proc jsonContext(): var NimbleContext =
   if not pkgUrlJsonContextLoaded:
@@ -194,52 +194,53 @@ proc nimbleReleaseToJson(r: NimbleRelease, opt: ToJsonOptions): JsonNode =
     return newJNull()
   result = newJObject()
   if r.name != "":
-    result["name"] = toJson(r.name, opt)
-  result["requirements"] = requirementsToJson(r.requirements)
+    result["n"] = toJson(r.name, opt)
+  result["r"] = requirementsToJson(r.requirements)
   if r.hasInstallHooks:
-    result["hasInstallHooks"] = toJson(r.hasInstallHooks, opt)
+    result["h"] = toJson(r.hasInstallHooks, opt)
   if r.author != "":
-    result["author"] = toJson(r.author, opt)
+    result["a"] = toJson(r.author, opt)
   if r.description != "":
-    result["description"] = toJson(r.description, opt)
+    result["d"] = toJson(r.description, opt)
   if r.license != "":
-    result["license"] = toJson(r.license, opt)
+    result["l"] = toJson(r.license, opt)
   if r.srcDir != Path "":
-    result["srcDir"] = toJson(r.srcDir, opt)
+    result["s"] = toJson(r.srcDir, opt)
   if r.binDir != Path "":
-    result["binDir"] = toJson(r.binDir, opt)
+    result["b"] = toJson(r.binDir, opt)
   if r.skipDirs.len > 0:
-    result["skipDirs"] = toJson(r.skipDirs, opt)
+    result["x"] = toJson(r.skipDirs, opt)
   if r.skipFiles.len > 0:
-    result["skipFiles"] = toJson(r.skipFiles, opt)
+    result["y"] = toJson(r.skipFiles, opt)
   if r.skipExt.len > 0:
-    result["skipExt"] = toJson(r.skipExt, opt)
+    result["z"] = toJson(r.skipExt, opt)
   if r.installDirs.len > 0:
-    result["installDirs"] = toJson(r.installDirs, opt)
+    result["i"] = toJson(r.installDirs, opt)
   if r.installFiles.len > 0:
-    result["installFiles"] = toJson(r.installFiles, opt)
+    result["j"] = toJson(r.installFiles, opt)
   if r.installExt.len > 0:
-    result["installExt"] = toJson(r.installExt, opt)
+    result["k"] = toJson(r.installExt, opt)
   if r.bin.len > 0:
-    result["bin"] = toJson(r.bin, opt)
+    result["p"] = toJson(r.bin, opt)
   if r.namedBin.len > 0:
-    result["namedBin"] = toJson(r.namedBin, opt)
+    result["o"] = toJson(r.namedBin, opt)
   if r.backend != "":
-    result["backend"] = toJson(r.backend, opt)
+    result["e"] = toJson(r.backend, opt)
   if r.hasBin:
-    result["hasBin"] = toJson(r.hasBin, opt)
-  result["version"] = toJson(r.version, opt)
+    result["g"] = toJson(r.hasBin, opt)
+  result["v"] = toJson(r.version, opt)
   if r.nimVersion != Version"":
-    result["nimVersion"] = toJson(r.nimVersion, opt)
-  result["status"] = toJson(r.status, opt)
+    result["m"] = toJson(r.nimVersion, opt)
+  if r.status != Normal:
+    result["S"] = toJson(r.status, opt)
   if r.err != "":
-    result["err"] = toJson(r.err, opt)
+    result["E"] = toJson(r.err, opt)
   if r.features.len > 0:
-    result["features"] = featuresToJson(r.features)
+    result["f"] = featuresToJson(r.features)
   if r.reqsByFeatures.len > 0:
-    result["reqsByFeatures"] = toJson(r.reqsByFeatures, opt)
+    result["q"] = toJson(r.reqsByFeatures, opt)
   if r.featureVars.len > 0:
-    result["featureVars"] = toJson(r.featureVars, opt)
+    result["F"] = toJson(r.featureVars, opt)
 
 proc toJsonHook*(r: NimbleRelease): JsonNode =
   nimbleReleaseToJson(r, ToJsonOptions())
@@ -250,53 +251,60 @@ proc toJsonHook*(r: NimbleRelease, opt: ToJsonOptions): JsonNode =
 proc fromJsonHook*(r: var NimbleRelease; b: JsonNode; opt = Joptions()) =
   if r.isNil:
     r = new(NimbleRelease)
-  if b.hasKey("name"):
-    r.name = b["name"].getStr()
-  r.version.fromJson(b["version"])
-  if b.hasKey("nimVersion"):
-    r.nimVersion.fromJson(b["nimVersion"])
-  r.requirements.requirementsFromJson(b["requirements"])
-  r.status.fromJson(b["status"])
-  if b.hasKey("hasInstallHooks"):
-    r.hasInstallHooks = b["hasInstallHooks"].getBool()
-  if b.hasKey("author"):
-    r.author = b["author"].getStr()
-  if b.hasKey("description"):
-    r.description = b["description"].getStr()
-  if b.hasKey("license"):
-    r.license = b["license"].getStr()
-  if b.hasKey("srcDir"):
-    r.srcDir.fromJson(b["srcDir"])
-  if b.hasKey("binDir"):
-    r.binDir.fromJson(b["binDir"])
-  if b.hasKey("skipDirs"):
-    r.skipDirs.fromJson(b["skipDirs"])
-  if b.hasKey("skipFiles"):
-    r.skipFiles.fromJson(b["skipFiles"])
-  if b.hasKey("skipExt"):
-    r.skipExt.fromJson(b["skipExt"])
-  if b.hasKey("installDirs"):
-    r.installDirs.fromJson(b["installDirs"])
-  if b.hasKey("installFiles"):
-    r.installFiles.fromJson(b["installFiles"])
-  if b.hasKey("installExt"):
-    r.installExt.fromJson(b["installExt"])
-  if b.hasKey("bin"):
-    r.bin.fromJson(b["bin"])
-  if b.hasKey("namedBin"):
-    r.namedBin.fromJson(b["namedBin"])
-  if b.hasKey("backend"):
-    r.backend = b["backend"].getStr()
-  if b.hasKey("hasBin"):
-    r.hasBin = b["hasBin"].getBool()
-  if b.hasKey("err"):
-    r.err = b["err"].getStr()
-  if b.hasKey("features"):
-    r.features.featuresFromJson(b["features"])
-  if b.hasKey("reqsByFeatures"):
-    r.reqsByFeatures.fromJson(b["reqsByFeatures"])
-  if b.hasKey("featureVars"):
-    r.featureVars.fromJson(b["featureVars"])
+  if b.hasKey("n"):
+    r.name = b["n"].getStr()
+  if b.hasKey("v"):
+    r.version.fromJson(b["v"])
+  if b.hasKey("m"):
+    r.nimVersion.fromJson(b["m"])
+  if b.hasKey("r"):
+    r.requirements.requirementsFromJson(b["r"])
+  else:
+    r.requirements.setLen(0)
+  if b.hasKey("S"):
+    r.status.fromJson(b["S"])
+  else:
+    r.status = Normal
+  if b.hasKey("h"):
+    r.hasInstallHooks = b["h"].getBool()
+  if b.hasKey("a"):
+    r.author = b["a"].getStr()
+  if b.hasKey("d"):
+    r.description = b["d"].getStr()
+  if b.hasKey("l"):
+    r.license = b["l"].getStr()
+  if b.hasKey("s"):
+    r.srcDir.fromJson(b["s"])
+  if b.hasKey("b"):
+    r.binDir.fromJson(b["b"])
+  if b.hasKey("x"):
+    r.skipDirs.fromJson(b["x"])
+  if b.hasKey("y"):
+    r.skipFiles.fromJson(b["y"])
+  if b.hasKey("z"):
+    r.skipExt.fromJson(b["z"])
+  if b.hasKey("i"):
+    r.installDirs.fromJson(b["i"])
+  if b.hasKey("j"):
+    r.installFiles.fromJson(b["j"])
+  if b.hasKey("k"):
+    r.installExt.fromJson(b["k"])
+  if b.hasKey("p"):
+    r.bin.fromJson(b["p"])
+  if b.hasKey("o"):
+    r.namedBin.fromJson(b["o"])
+  if b.hasKey("e"):
+    r.backend = b["e"].getStr()
+  if b.hasKey("g"):
+    r.hasBin = b["g"].getBool()
+  if b.hasKey("E"):
+    r.err = b["E"].getStr()
+  if b.hasKey("f"):
+    r.features.featuresFromJson(b["f"])
+  if b.hasKey("q"):
+    r.reqsByFeatures.fromJson(b["q"])
+  if b.hasKey("F"):
+    r.featureVars.fromJson(b["F"])
 
 proc toJsonGraph*(d: DepGraph): JsonNode =
   result = toJson(d, ToJsonOptions(enumMode: joptEnumString))
