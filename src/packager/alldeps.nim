@@ -457,7 +457,7 @@ proc updatePackageAllDeps(
     releasesMetadata["allDeps"] = allDeps
     writeTextFileAtomic(releasesMetadataPath, $releasesMetadata)
     result.updated = true
-    notice "atlas:pkger", "updated allDeps:", relativeToCurrentDir(releasesMetadataPath)
+    notice "atlas:pkger", "updated allDeps:", $releasesMetadataPath
 
 proc allDepsWorker(
     queue: ptr PackageQueue;

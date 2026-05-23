@@ -328,20 +328,22 @@ proc collectProjectTarballs(
     archiveDir: Path;
     compressions: openArray[ArchiveCompression];
     layout: ProjectReleaseLayout
-): JsonNode =
-  result = newJObject()
+): tuple[entries: JsonNode, paths: seq[Path]] =
+  result.entries = newJObject()
   createDir($archiveDir)
   var referencedFiles: seq[string]
-  result[layout.label] = newJArray()
+  result.entries[layout.label] = newJArray()
 
   for compression in compressions:
     let archiveFile = writeTrackedReleaseArchive(
       pkg, ver, archiveDir, layout.archiveStem, layout.rootArchiveFiles, compression, siblingTempPath
     )
+    let archivePath = archiveDir / Path(archiveFile)
     referencedFiles.add archiveFile
-    result[layout.label].add initArchiveEntry(
+    result.entries[layout.label].add initArchiveEntry(
       layout.label, layout.contentHash, archiveFile, layout.rootSubdir, release
     )
+    result.paths.add archivePath
 
   removeUnreferencedArchives(archiveDir, referencedFiles)
 
@@ -351,7 +353,7 @@ proc writeProjectReleaseMetadata(
     releaseMetadata: JsonNode;
     tarballEntries: JsonNode;
     metadataFileName: string
-) =
+): Path =
   var metadata =
     if releaseMetadata.isNil or releaseMetadata.kind != JObject:
       newJObject()
@@ -377,7 +379,8 @@ proc writeProjectReleaseMetadata(
     if filePath.splitFile().ext == ".json" and filename != metadataFileName:
       removeFile(path)
 
-  writeFile($(releasesDir / Path(metadataFileName)), $metadata)
+  result = releasesDir / Path(metadataFileName)
+  writeFile($result, $metadata)
 
 proc packageProject*(
     projectDir: Path;
@@ -385,7 +388,7 @@ proc packageProject*(
     compressions: seq[ArchiveCompression];
     createTarballs: bool;
     releaseMode: ProjectReleaseMode
-) =
+): tuple[jsonPath: Path, tarballPaths: seq[Path]] =
   let absProjectDir = projectDir.absolutePath()
   let absOutputDir =
     if outputDir.len > 0:
@@ -426,11 +429,18 @@ proc packageProject*(
         layout
       )
     else:
-      newJNull()
+      (newJNull(), @[])
   let metadataFileName = projectReleaseMetadataFileName(
     pkg, info, ver, release, layout.contentHash
   )
-  writeProjectReleaseMetadata(releasesDir, info, releaseMetadata, tarballs, metadataFileName)
+  result.jsonPath = writeProjectReleaseMetadata(
+    releasesDir,
+    info,
+    releaseMetadata,
+    tarballs.entries,
+    metadataFileName
+  )
+  result.tarballPaths = tarballs.paths
 
 proc runAtlasPackageOnce*(
     opts: ProjectPackageCliOptions;
@@ -457,7 +467,16 @@ proc runAtlasPackageOnce*(
   notice "atlas:package", "release mode:", $opts.releaseMode
 
   try:
-    packageProject(projectDir, outputDir, opts.compressions, opts.createTarballs, opts.releaseMode)
+    let generated = packageProject(
+      projectDir,
+      outputDir,
+      opts.compressions,
+      opts.createTarballs,
+      opts.releaseMode
+    )
+    notice "atlas:package", "json:", relativeToCurrentDir(generated.jsonPath)
+    for tarballPath in generated.tarballPaths:
+      notice "atlas:package", "tarball:", relativeToCurrentDir(tarballPath)
   except CatchableError as e:
     error "atlas:package", e.msg
     return false
