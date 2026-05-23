@@ -307,7 +307,7 @@ proc parseAtlasPackagerOptions*(
     versionString: string;
     positional: var seq[string]
 ): PackagerCliOptions =
-  result.compressions = @[acGzip]
+  result.compressions = @[acXz]
   result.createTarballs = true
   result.githubApiChunkSize = DefaultGitHubGraphqlBatchSize
   result.threadCount = max(1, countProcessors())

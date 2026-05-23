@@ -72,6 +72,11 @@ suite "packager daemon options":
     check not opts.daemon.enabled
     check opts.daemon.intervalSeconds == DefaultDaemonIntervalSeconds
 
+  test "packager options default archive compression to xz":
+    var args: seq[string]
+    let opts = parseAtlasPackagerOptions(@[], "test", args)
+    check opts.compressions == @[acXz]
+
   test "packager options parse daemon schedule":
     var args: seq[string]
     let opts = parseAtlasPackagerOptions(
