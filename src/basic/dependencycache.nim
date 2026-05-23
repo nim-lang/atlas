@@ -47,7 +47,7 @@ type
     releases*: seq[PackageReleaseCacheEntry]
 
 const
-  PackageReleaseCacheVersion* = 14
+  PackageReleaseCacheVersion* = 15
 
 proc sanitizeCacheStem(stem: var string) =
   for c in mitems(stem):
@@ -220,8 +220,6 @@ proc toPackageReleaseCacheJson(cache: PackageReleaseCache; opt: ToJsonOptions): 
     result["namedBin"] = toJson(cache.namedBin, opt)
   if cache.backend.len > 0:
     result["backend"] = toJson(cache.backend, opt)
-  if cache.hasBin:
-    result["hasBin"] = toJson(cache.hasBin, opt)
   if cache.includeTagsAndNimbleCommits:
     result["includeTagsAndNimbleCommits"] = toJson(cache.includeTagsAndNimbleCommits, opt)
   if cache.nimbleCommitsMax:
@@ -291,10 +289,6 @@ proc toPackageReleaseCacheJson(cache: PackageReleaseCache; opt: ToJsonOptions): 
         releaseJson.delete("e")
       elif entry.release.backend.len == 0 and cache.backend.len > 0:
         releaseJson["e"] = toJson(entry.release.backend, opt)
-      if entry.release.hasBin == cache.hasBin and releaseJson.hasKey("g"):
-        releaseJson.delete("g")
-      elif not entry.release.hasBin and cache.hasBin:
-        releaseJson["g"] = toJson(entry.release.hasBin, opt)
     var entryJson = newJObject()
     entryJson["v"] = toJson(entry.vtag, opt)
     for key, value in releaseJson:
