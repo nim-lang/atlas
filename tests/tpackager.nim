@@ -7,7 +7,9 @@ import packager/cacheharvest
 import packager/githubheadcheck
 import basic/context
 import basic/dependencycache
+import basic/deptypes
 import basic/gitops
+import basic/versions
 
 proc withEnvVar(name: string; value: string; body: proc() {.closure.}) =
   let hadOldValue = existsEnv(name)
@@ -571,3 +573,24 @@ suite "packager release metadata comparison":
     check matchingDigestEntry(entries, "1.0.0", "aaaa", "gzip", "new") == entries[1]
     check matchingDigestEntry(entries, "1.0.0", "aaaa", "xz", "new") == entries[2]
     check matchingDigestEntry(entries, "1.0.0", "aaaa", "gzip", "missing").isNil
+
+  test "archive entries use canonical tarball metadata":
+    let release = NimbleRelease(version: Version"1.0.0", status: Normal)
+    let entry = initArchiveEntry(
+      "1.0.0",
+      "aaaaaaaa",
+      "bbbbbbbb",
+      "alpha-1.tar.xz",
+      123,
+      Path"",
+      release
+    )
+    check entry["version"].getStr() == "1.0.0"
+    check entry["gitSha"].getStr() == "aaaaaaaa"
+    check entry["contentSha"].getStr() == "bbbbbbbb"
+    check entry["file"].getStr() == "alpha-1.tar.xz"
+    check entry["size"].getInt() == 123
+    check "createdAt" notin entry
+    check "gitShortSha" notin entry
+    check "contentShortSha" notin entry
+    check "compression" notin entry

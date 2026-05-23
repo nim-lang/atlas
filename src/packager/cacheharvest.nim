@@ -431,7 +431,15 @@ proc collectReleaseArchives(
             let archivePath = archiveDir / Path(archiveFile)
             if fileExists($archivePath):
               referencedFiles.incl(archiveFile)
-              result.add existingEntry
+              result.add initArchiveEntry(
+                label,
+                ver.vtag.commit.h,
+                contentHash,
+                archiveFile,
+                getFileSize($archivePath),
+                rootSubdir,
+                release
+              )
               continue
 
         let archiveFile = writeTrackedReleaseArchive(
