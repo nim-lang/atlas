@@ -13,6 +13,15 @@ import basic/gitops
 import basic/packageinfos
 import basic/versions
 
+proc toLowerAsciiAscii(c: char): string =
+  $toLowerAscii(c)
+
+proc bucketedPkgPath(root: string; name: string): string =
+  root / toLowerAsciiAscii(name[0]) / name
+
+proc flatPkgPath(root: string; name: string): string =
+  root / name
+
 proc withEnvVar(name: string; value: string; body: proc() {.closure.}) =
   let hadOldValue = existsEnv(name)
   let oldValue = getEnv(name)
@@ -346,6 +355,77 @@ suite "packager retained index versioning":
     check not retainedReleaseCacheVersionMatches(Path(root))
 
 suite "packager allDeps metadata":
+  test "package bucket dir uses first package letter":
+    check packageBucketDir("alpha") == Path"a"
+    check packageBucketDir("Beta") == Path"b"
+
+  test "legacy flat package workspace migrates to bucketed layout":
+    let root = createTempDir("atlas-packager", "legacy-migrate-")
+    defer: removeDir(root)
+
+    let info = PackageInfo(kind: pkPackage, name: "alpha")
+    let legacyRoot = flatPkgPath(root, "alpha")
+    let bucketedRoot = bucketedPkgPath(root, "alpha")
+
+    writeText(legacyRoot / "releases.json", pretty(%*{
+      "name": "alpha",
+      "releases": []
+    }))
+
+    let resolved = resolvePackageWorkspaceRoot(Path(root), info)
+    check resolved == Path(bucketedRoot).absolutePath()
+    check dirExists(bucketedRoot)
+    check not dirExists(legacyRoot)
+    check fileExists(bucketedRoot / "releases.json")
+
+  test "allDeps reads legacy flat package metadata without migration":
+    let root = createTempDir("atlas-packager", "legacy-alldeps-")
+    defer: removeDir(root)
+
+    let packagesFile = root / "packages.json"
+    writeText(packagesFile, $(%*[
+      {
+        "name": "alpha",
+        "url": "https://example.com/alpha",
+        "method": "git",
+        "tags": [],
+        "description": "alpha"
+      },
+      {
+        "name": "beta",
+        "url": "https://example.com/beta",
+        "method": "git",
+        "tags": [],
+        "description": "beta"
+      }
+    ]))
+
+    writeText(flatPkgPath(root, "alpha") / "releases.json", pretty(%*{
+      "name": "alpha",
+      "releases": [
+        {
+          "v": "1.0.0@aaaa",
+          "r": ["beta"]
+        }
+      ]
+    }))
+    writeText(flatPkgPath(root, "beta") / "releases.json", pretty(%*{
+      "name": "beta",
+      "releases": [
+        {
+          "v": "1.0.0@bbbb",
+          "r": []
+        }
+      ]
+    }))
+
+    let summary = updatePackageAllDeps(Path(packagesFile), Path(root), @["alpha"], @[], 1)
+    check summary.packagesProcessed == 1
+    check summary.packagesUpdated == 1
+    check summary.packagesFailed == 0
+    let deps = allDeps(flatPkgPath(root, "alpha") / "releases.json")
+    check jsonStringSeq(deps["packages"]) == @["beta"]
+
   test "allDeps expands official deps and keeps url deps without expanding them":
     let root = createTempDir("atlas-packager", "all-deps-")
     defer: removeDir(root)
@@ -382,7 +462,7 @@ suite "packager allDeps metadata":
       }
     ]))
 
-    writeText(root / "alpha" / "releases.json", pretty(%*{
+    writeText(bucketedPkgPath(root, "alpha") / "releases.json", pretty(%*{
       "name": "alpha",
       "releases": [
         {
@@ -413,7 +493,7 @@ suite "packager allDeps metadata":
         }
       ]
     }))
-    writeText(root / "beta" / "releases.json", pretty(%*{
+    writeText(bucketedPkgPath(root, "beta") / "releases.json", pretty(%*{
       "name": "beta",
       "releases": [
         {
@@ -424,7 +504,7 @@ suite "packager allDeps metadata":
         }
       ]
     }))
-    writeText(root / "gamma" / "releases.json", pretty(%*{
+    writeText(bucketedPkgPath(root, "gamma") / "releases.json", pretty(%*{
       "name": "gamma",
       "releases": [
         {
@@ -440,7 +520,7 @@ suite "packager allDeps metadata":
     check summary.packagesProcessed == 1
     check summary.packagesUpdated == 1
     check summary.packagesFailed == 0
-    let deps = allDeps(root / "alpha" / "releases.json")
+    let deps = allDeps(bucketedPkgPath(root, "alpha") / "releases.json")
     check jsonStringSeq(deps["packages"]) == @[
       "beta <= 1.0.0",
       "delta <= 1.0.0",

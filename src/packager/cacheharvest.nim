@@ -79,8 +79,43 @@ proc popPackage(queue: ptr PackageQueue; info: var PackageInfo): bool {.gcsafe.}
   finally:
     release(queue.lock)
 
-proc packageWorkspaceRoot(harvestRoot: Path; info: PackageInfo): Path =
+proc packageBucketDir*(packageName: string): Path =
+  if packageName.len == 0:
+    return Path"_"
+  Path($toLowerAscii(packageName[0]))
+
+proc packageWorkspaceRootLegacy(harvestRoot: Path; info: PackageInfo): Path =
   (harvestRoot / Path(info.name)).absolutePath()
+
+proc packageWorkspaceRoot(harvestRoot: Path; info: PackageInfo): Path =
+  (harvestRoot / packageBucketDir(info.name) / Path(info.name)).absolutePath()
+
+proc resolvePackageWorkspaceRoot*(
+    harvestRoot: Path;
+    info: PackageInfo;
+    migrateLegacy = true
+): Path =
+  let bucketedRoot = packageWorkspaceRoot(harvestRoot, info)
+  let legacyRoot = packageWorkspaceRootLegacy(harvestRoot, info)
+
+  if dirExists($bucketedRoot):
+    if dirExists($legacyRoot) and legacyRoot != bucketedRoot:
+      removeDir($legacyRoot)
+    return bucketedRoot
+
+  if dirExists($legacyRoot):
+    if migrateLegacy:
+      createDir($(bucketedRoot.parentDir()))
+      notice "atlas:pkger",
+        "migrating legacy package workspace:",
+        $legacyRoot,
+        "to:",
+        $bucketedRoot
+      moveDir($legacyRoot, $bucketedRoot)
+      return bucketedRoot
+    return legacyRoot
+
+  bucketedRoot
 
 proc packageReleasesDir(workspaceRoot: Path): Path =
   workspaceRoot / Path"releases"
@@ -89,7 +124,7 @@ proc packageReleasesMetadataFile(workspaceRoot: Path): Path =
   workspaceRoot / Path"releases.json"
 
 proc packageReleasesMetadataRelPath(info: PackageInfo): string =
-  $Path(info.name) / "releases.json"
+  $(packageBucketDir(info.name) / Path(info.name) / Path"releases.json")
 
 proc packageDigestFile(workspaceRoot: Path): Path =
   workspaceRoot / Path"digest.json"
@@ -775,7 +810,7 @@ proc harvestPackage(
     createTarballs: bool
 ): PackageHarvestResult =
   notice "atlas:pkger", "processing package:", info.name
-  let workspaceRoot = packageWorkspaceRoot(harvestRoot, info)
+  let workspaceRoot = resolvePackageWorkspaceRoot(harvestRoot, info)
   let previousContext = context()
   var packageContext = previousContext
   var pkg: Package
