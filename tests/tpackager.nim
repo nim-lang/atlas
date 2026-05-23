@@ -203,6 +203,16 @@ suite "local project packager options":
     check opts.selectionMode == psmAllReleases
 
 suite "packager mirrored repo helpers":
+  test "alphabetical workspace layout handles single-character package names":
+    let root = createTempDir("atlas-packager", "single-char-layout-")
+    defer: removeDir(root)
+
+    let info = PackageInfo(name: "m")
+    let workspaceRoot = resolvePackageWorkspaceRoot(Path(root), info)
+
+    check packageBucketDir(info.name) == Path"m"
+    check workspaceRoot == Path(root / "m" / "m").absolutePath()
+
   test "bare repo shape without HEAD commit is not usable":
     let root = createTempDir("atlas-packager", "broken-bare-test-")
     defer: removeDir(root)
