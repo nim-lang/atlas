@@ -13,6 +13,7 @@ type
   ArchiveCompression* = enum
     acGzip
     acXz
+    acZip
 
 proc packageRootSubdir*(pkg: Package): Path =
   let packageSubdir =
@@ -290,21 +291,25 @@ proc archiveCompressionExtension*(compression: ArchiveCompression): string =
   case compression
   of acGzip: ".tar.gz"
   of acXz: ".tar.xz"
+  of acZip: ".zip"
 
 proc compressionTempPath*(tarPath: Path; compression: ArchiveCompression): Path =
   case compression
   of acGzip: tarPath.parentDir() / Path(tarPath.splitPath().tail.string & ".gz")
   of acXz: tarPath.parentDir() / Path(tarPath.splitPath().tail.string & ".xz")
+  of acZip: tarPath.parentDir() / Path(tarPath.splitPath().tail.string & ".zip")
 
 proc archiveCompressionName*(compression: ArchiveCompression): string =
   case compression
   of acGzip: "gzip"
   of acXz: "xz"
+  of acZip: "zip"
 
 proc archiveCompressionExtension*(compression: string): string =
   case compression
   of "gzip": ".tar.gz"
   of "xz": ".tar.xz"
+  of "zip": ".zip"
   else: ""
 
 proc archiveCompressionNames*(compressions: openArray[ArchiveCompression]): seq[string] =
@@ -421,6 +426,33 @@ proc writeTrackedReleaseTar*(
       removeFile($tarPath)
     raise newException(IOError, "failed to archive release to " & $tarPath)
 
+proc writeTrackedReleaseZip(
+    pkg: Package;
+    ver: PackageVersion;
+    zipPath: Path;
+    archiveStem: string;
+    archiveFiles: openArray[string]
+) =
+  let prefix = archiveStem & "/"
+  var args = @[
+    "-C", $pkg.ondisk,
+    "archive",
+    "--format=zip",
+    "--prefix=" & prefix,
+    "-o", $zipPath,
+    ver.vtag.commit.h
+  ]
+  for file in archiveFiles:
+    args.add file
+
+  if fileExists($zipPath):
+    removeFile($zipPath)
+  let exitCode = runArchiveCommand("git " & args.mapIt(quoteShell(it)).join(" "))
+  if exitCode != 0 or not fileExists($zipPath):
+    if fileExists($zipPath):
+      removeFile($zipPath)
+    raise newException(IOError, "failed to archive release to " & $zipPath)
+
 proc writeTrackedReleaseArchive*(
     pkg: Package;
     ver: PackageVersion;
@@ -439,6 +471,15 @@ proc writeTrackedReleaseArchive*(
   let archivePath = archiveDir / Path(archiveStem & archiveCompressionExtension(compression))
   let tmpArchivePath = siblingTempPath(archivePath)
 
+  if compression == acZip:
+    if fileExists($tmpArchivePath):
+      removeFile($tmpArchivePath)
+    writeTrackedReleaseZip(pkg, ver, tmpArchivePath, archiveStem, archiveFiles)
+    if not fileExists($tmpArchivePath):
+      raise newException(IOError, "failed to archive release to " & $archivePath)
+    moveFile($tmpArchivePath, $archivePath)
+    return $archivePath.splitPath().tail
+
   let tarPath = siblingTempPath(archiveDir / Path(archiveStem & ".tar"))
   if fileExists($tmpArchivePath):
     removeFile($tmpArchivePath)
@@ -447,6 +488,7 @@ proc writeTrackedReleaseArchive*(
     case compression
     of acGzip: "gzip"
     of acXz: "xz"
+    of acZip: ""
   let compressedTarPath = compressionTempPath(tarPath, compression)
   if fileExists($compressedTarPath):
     removeFile($compressedTarPath)

@@ -81,6 +81,11 @@ suite "packager daemon options":
     let opts = parseAtlasPackagerOptions(@[], "test", args)
     check opts.compressions == @[acXz]
 
+  test "atlas-package options default archive compressions to xz gzip zip":
+    var args: seq[string]
+    let opts = parseAtlasPackageOptions(@[], "test", args)
+    check opts.compressions == @[acXz, acGzip, acZip]
+
   test "packager options parse daemon schedule":
     var args: seq[string]
     let opts = parseAtlasPackagerOptions(

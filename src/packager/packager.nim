@@ -177,6 +177,8 @@ proc parseArchiveCompression*(value: string): ArchiveCompression =
     acXz
   of "gzip", "gz":
     acGzip
+  of "zip":
+    acZip
   else:
     raise newException(ValueError, "unknown compression: " & value)
 

@@ -50,8 +50,8 @@ Options:
                         default: project directory
   --head                package the current git commit as a #head release
                         default packages the latest tagged/versioned release
-  --compression=type    archive compression(s): gzip, xz, or comma-separated list
-                        default: xz
+  --compression=type    archive compression(s): gzip, xz, zip, or comma-separated list
+                        default: xz,gzip,zip
   --no-tarballs         refresh releases.json without creating tarballs
 """
 
@@ -71,6 +71,8 @@ proc parseArchiveCompression(value: string): ArchiveCompression =
     acXz
   of "gzip", "gz":
     acGzip
+  of "zip":
+    acZip
   else:
     raise newException(ValueError, "unknown compression: " & value)
 
@@ -96,7 +98,7 @@ proc parseAtlasPackageOptions*(
     versionString: string;
     positional: var seq[string]
 ): ProjectPackageCliOptions =
-  result.compressions = @[acXz]
+  result.compressions = @[acXz, acGzip, acZip]
   result.createTarballs = true
   var compressionWasSet = false
   for kind, key, val in getopt(params):
@@ -294,7 +296,7 @@ proc removeUnreferencedArchives(archiveDir: Path; referencedFiles: seq[string]) 
     if kind != pcFile:
       continue
     let filename = $path.Path.splitPath().tail
-    if path.Path.splitFile().ext in [".gz", ".xz", ".tar"] and filename notin referencedFiles:
+    if path.Path.splitFile().ext in [".gz", ".xz", ".zip", ".tar"] and filename notin referencedFiles:
       removeFile(path)
 
 proc collectProjectReleaseLayout(

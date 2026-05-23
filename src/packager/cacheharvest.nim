@@ -487,7 +487,7 @@ proc collectReleaseArchives(
     if kind != pcFile:
       continue
     let filename = $path.Path.splitPath().tail
-    if path.Path.splitFile().ext in [".gz", ".xz", ".tar"] and filename notin referencedFiles:
+    if path.Path.splitFile().ext in [".gz", ".xz", ".zip", ".tar"] and filename notin referencedFiles:
       removeFile(path)
 
 proc metadataField(metadata: JsonNode; key: string): JsonNode =
