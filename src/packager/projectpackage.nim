@@ -416,8 +416,14 @@ proc packageProject*(
   let layout = collectProjectReleaseLayout(pkg, info, ver, release)
   let releasesDir = absOutputDir / Path"releases"
 
-  let versions = @[(ver, release)]
-  savePackageReleaseCache(pkg, currentCommit, versions)
+  # Collect the full historical release list for the cache while still packaging only the selected one.
+  let allReleases =
+    if releaseMode == prmLatestRelease:
+      let releaseInfo = nc.loadPackageReleaseInfo(pkg, AllReleases, @[])
+      releaseInfo.releases
+    else:
+      @[(ver, release)]
+  savePackageReleaseCache(pkg, currentCommit, allReleases)
   let releaseMetadata = parseFile($packageReleaseCachePath(pkg))
   let tarballs =
     if createTarballs:
