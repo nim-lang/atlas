@@ -184,6 +184,18 @@ suite "local project packager options":
     let opts = parseAtlasPackageOptions(@["--head"], "test", args)
     check opts.releaseMode == prmHead
 
+  test "atlas-package parses all selection mode":
+    var args: seq[string]
+    let opts = parseAtlasPackageOptions(@["--all"], "test", args)
+    check opts.releaseMode == prmLatestRelease
+    check opts.selectionMode == psmAllReleases
+
+  test "atlas-package head mode keeps single-release selection":
+    var args: seq[string]
+    let opts = parseAtlasPackageOptions(@["--head", "--all"], "test", args)
+    check opts.releaseMode == prmHead
+    check opts.selectionMode == psmAllReleases
+
 suite "packager mirrored repo helpers":
   test "bare repo shape without HEAD commit is not usable":
     let root = createTempDir("atlas-packager", "broken-bare-test-")
@@ -470,6 +482,14 @@ suite "packager release metadata comparison":
     let selected = selectLatestPackagedRelease(releases)
     check selected == 2
     check releases[selected][0].vtag.version == Version"2.0.0"
+
+  test "projectReleaseMetadataFileName uses first packaged release naming":
+    let pkg = Package(name: "atlas")
+    let info = PackageInfo(kind: pkPackage, name: "atlas")
+    let ver = VersionTag(v: Version"1.0.0", c: initCommitHash("aaaaaaaa", FromGitTag)).toPkgVer()
+    let release = NimbleRelease(version: Version"1.0.0", status: Normal)
+    check projectReleaseMetadataFileName(pkg, info, ver, release, "deadbeefcafebabe") ==
+      "atlas-1.0.0-aaaaaaaa-deadbeef.json"
 
   test "comparable release metadata ignores derived allDeps and timestamps":
     let harvested = %*{

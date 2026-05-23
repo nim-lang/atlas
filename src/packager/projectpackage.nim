@@ -18,6 +18,10 @@ type
     prmLatestRelease
     prmHead
 
+  ProjectSelectionMode* = enum
+    psmSelectedRelease
+    psmAllReleases
+
   ProjectReleaseLayout = object
     label: string
     baseName: string
@@ -34,6 +38,7 @@ type
     compressions*: seq[ArchiveCompression]
     createTarballs*: bool
     releaseMode*: ProjectReleaseMode
+    selectionMode*: ProjectSelectionMode
 
 proc usage*(versionString: string): string =
   "atlas-package - Atlas Local Project Packager Version " & versionString & """
@@ -50,6 +55,7 @@ Options:
                         default: project directory
   --head                package the current git commit as a #head release
                         default packages the latest tagged/versioned release
+  --all                 package tarballs for all discovered releases
   --compression=type    archive compression(s): gzip, xz, zip, or comma-separated list
                         default: xz,gzip,zip
   --no-tarballs         refresh releases.json without creating tarballs
@@ -119,6 +125,8 @@ proc parseAtlasPackageOptions*(
         result.outputDir = Path(val)
       of "head":
         result.releaseMode = prmHead
+      of "all":
+        result.selectionMode = psmAllReleases
       of "compression":
         if val.len == 0:
           writeHelp(versionString)
@@ -270,23 +278,40 @@ proc selectLatestPackagedRelease*(
 
   -1
 
-proc selectedProjectRelease(
+proc projectReleasesToPackage(
     nc: var NimbleContext;
     pkg: var Package;
-    releaseMode: ProjectReleaseMode
-): (PackageVersion, NimbleRelease, CommitHash) =
+    releaseMode: ProjectReleaseMode;
+    selectionMode: ProjectSelectionMode
+): tuple[
+    selected: seq[(PackageVersion, NimbleRelease)],
+    allReleases: seq[(PackageVersion, NimbleRelease)],
+    currentCommit: CommitHash
+  ] =
   case releaseMode
   of prmHead:
-    nc.headProjectRelease(pkg)
+    let headRelease = nc.headProjectRelease(pkg)
+    result.selected = @[(headRelease[0], headRelease[1])]
+    result.allReleases = result.selected
+    result.currentCommit = headRelease[2]
   of prmLatestRelease:
     let releaseInfo = nc.loadPackageReleaseInfo(pkg, AllReleases, @[])
-    let selectedIdx = selectLatestPackagedRelease(releaseInfo.releases)
+    result.allReleases = releaseInfo.releases
+    result.currentCommit = releaseInfo.currentCommit
+    if selectionMode == psmAllReleases:
+      result.selected = result.allReleases
+      return
+
+    let selectedIdx = selectLatestPackagedRelease(result.allReleases)
     if selectedIdx >= 0:
-      let selected = releaseInfo.releases[selectedIdx]
-      return (selected[0], selected[1], releaseInfo.currentCommit)
+      result.selected = @[result.allReleases[selectedIdx]]
+      return
 
     warn "atlas:package", "no tagged or versioned release found; packaging current head"
-    nc.headProjectRelease(pkg)
+    let headRelease = nc.headProjectRelease(pkg)
+    result.selected = @[(headRelease[0], headRelease[1])]
+    result.allReleases = result.selected
+    result.currentCommit = headRelease[2]
 
 proc removeUnreferencedArchives(archiveDir: Path; referencedFiles: seq[string]) =
   if not dirExists($archiveDir):
@@ -325,27 +350,31 @@ proc collectProjectReleaseLayout(
 proc collectProjectTarballs(
     pkg: Package;
     info: PackageInfo;
-    ver: PackageVersion;
-    release: NimbleRelease;
+    releases: openArray[(PackageVersion, NimbleRelease)];
     archiveDir: Path;
-    compressions: openArray[ArchiveCompression];
-    layout: ProjectReleaseLayout
-): tuple[entries: JsonNode, paths: seq[Path]] =
+    compressions: openArray[ArchiveCompression]
+): tuple[entries: JsonNode, paths: seq[Path], metadataFileName: string] =
   result.entries = newJObject()
   createDir($archiveDir)
   var referencedFiles: seq[string]
-  result.entries[layout.label] = newJArray()
 
-  for compression in compressions:
-    let archiveFile = writeTrackedReleaseArchive(
-      pkg, ver, archiveDir, layout.archiveStem, layout.rootArchiveFiles, compression, siblingTempPath
-    )
-    let archivePath = archiveDir / Path(archiveFile)
-    referencedFiles.add archiveFile
-    result.entries[layout.label].add initArchiveEntry(
-      layout.label, layout.contentHash, archiveFile, layout.rootSubdir, release
-    )
-    result.paths.add archivePath
+  for i, (ver, release) in releases:
+    let layout = collectProjectReleaseLayout(pkg, info, ver, release)
+    result.entries[layout.label] = newJArray()
+    for compression in compressions:
+      let archiveFile = writeTrackedReleaseArchive(
+        pkg, ver, archiveDir, layout.archiveStem, layout.rootArchiveFiles, compression, siblingTempPath
+      )
+      let archivePath = archiveDir / Path(archiveFile)
+      referencedFiles.add archiveFile
+      result.entries[layout.label].add initArchiveEntry(
+        layout.label, layout.contentHash, archiveFile, layout.rootSubdir, release
+      )
+      result.paths.add archivePath
+    if i == 0:
+      result.metadataFileName = projectReleaseMetadataFileName(
+        pkg, info, ver, release, layout.contentHash
+      )
 
   removeUnreferencedArchives(archiveDir, referencedFiles)
 
@@ -384,12 +413,18 @@ proc writeProjectReleaseMetadata(
   result = releasesDir / Path(metadataFileName)
   writeFile($result, $metadata)
 
+proc formatTarballSizeKb(tarballPath: Path): string =
+  let fileSize = getFileSize($tarballPath)
+  let kibibytes = (fileSize + 1023) div 1024
+  $kibibytes & " KB"
+
 proc packageProject*(
     projectDir: Path;
     outputDir: Path;
     compressions: seq[ArchiveCompression];
     createTarballs: bool;
-    releaseMode: ProjectReleaseMode
+    releaseMode: ProjectReleaseMode;
+    selectionMode: ProjectSelectionMode = psmSelectedRelease
 ): tuple[jsonPath: Path, tarballPaths: seq[Path]] =
   let absProjectDir = projectDir.absolutePath()
   let absOutputDir =
@@ -411,36 +446,26 @@ proc packageProject*(
 
   var nc = createNimbleContext()
   var pkg = nc.initProjectPackage(absProjectDir, nimbleFile)
-  let (ver, release, currentCommit) = nc.selectedProjectRelease(pkg, releaseMode)
+  let releasePlan = nc.projectReleasesToPackage(pkg, releaseMode, selectionMode)
   let info = PackageInfo(kind: pkPackage, name: pkg.name, subdir: $pkg.subdir)
-  let layout = collectProjectReleaseLayout(pkg, info, ver, release)
   let releasesDir = absOutputDir / Path"releases"
 
-  # Collect the full historical release list for the cache while still packaging only the selected one.
-  let allReleases =
-    if releaseMode == prmLatestRelease:
-      let releaseInfo = nc.loadPackageReleaseInfo(pkg, AllReleases, @[])
-      releaseInfo.releases
-    else:
-      @[(ver, release)]
-  savePackageReleaseCache(pkg, currentCommit, allReleases)
+  savePackageReleaseCache(pkg, releasePlan.currentCommit, releasePlan.allReleases)
   let releaseMetadata = parseFile($packageReleaseCachePath(pkg))
   let tarballs =
     if createTarballs:
-      collectProjectTarballs(
-        pkg,
-        info,
-        ver,
-        release,
-        releasesDir,
-        compressions,
-        layout
-      )
+      collectProjectTarballs(pkg, info, releasePlan.selected, releasesDir, compressions)
     else:
-      (newJNull(), @[])
-  let metadataFileName = projectReleaseMetadataFileName(
-    pkg, info, ver, release, layout.contentHash
-  )
+      (newJNull(), @[], "releases.json")
+  let metadataFileName =
+    if tarballs.metadataFileName.len > 0:
+      tarballs.metadataFileName
+    elif releasePlan.selected.len > 0:
+      let (ver, release) = releasePlan.selected[0]
+      let layout = collectProjectReleaseLayout(pkg, info, ver, release)
+      projectReleaseMetadataFileName(pkg, info, ver, release, layout.contentHash)
+    else:
+      "releases.json"
   result.jsonPath = writeProjectReleaseMetadata(
     releasesDir,
     info,
@@ -473,6 +498,7 @@ proc runAtlasPackageOnce*(
   notice "atlas:package", "compressions:", archiveCompressionNames(opts.compressions).join(",")
   notice "atlas:package", "create tarballs:", $opts.createTarballs
   notice "atlas:package", "release mode:", $opts.releaseMode
+  notice "atlas:package", "selection mode:", $opts.selectionMode
 
   try:
     let generated = packageProject(
@@ -480,11 +506,14 @@ proc runAtlasPackageOnce*(
       outputDir,
       opts.compressions,
       opts.createTarballs,
-      opts.releaseMode
+      opts.releaseMode,
+      opts.selectionMode
     )
     notice "atlas:package", "json:", relativeToCurrentDir(generated.jsonPath)
     for tarballPath in generated.tarballPaths:
-      notice "atlas:package", "tarball:", relativeToCurrentDir(tarballPath)
+      notice "atlas:package",
+        "tarball:", relativeToCurrentDir(tarballPath),
+        "size:", formatTarballSizeKb(tarballPath)
   except CatchableError as e:
     error "atlas:package", e.msg
     return false
