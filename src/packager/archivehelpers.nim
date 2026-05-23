@@ -526,5 +526,3 @@ proc initArchiveEntry*(
   result["f"] = %archiveFile
   if $packageSubdir != "":
     result["u"] = %($packageSubdir)
-  if not release.isNil and release.name.len > 0:
-    result["n"] = %release.name

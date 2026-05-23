@@ -163,6 +163,31 @@ suite "urls and naming":
     let upkg = nc.createUrl("srht:someuser/somepkg")
     check $upkg.url == "https://git.sr.ht/~someuser/somepkg"
 
+  test "forge alias supports all nimble shorthands":
+    let cases = [
+      ("gh:someuser/somepkg", "https://github.com/someuser/somepkg"),
+      ("github:someuser/somepkg", "https://github.com/someuser/somepkg"),
+      ("GH:someuser/somepkg", "https://github.com/someuser/somepkg"),
+      ("gl:someuser/somepkg", "https://gitlab.com/someuser/somepkg"),
+      ("gitlab:someuser/somepkg", "https://gitlab.com/someuser/somepkg"),
+      ("GL:someuser/somepkg", "https://gitlab.com/someuser/somepkg"),
+      ("srht:someuser/somepkg", "https://git.sr.ht/~someuser/somepkg"),
+      ("sourcehut:someuser/somepkg", "https://git.sr.ht/~someuser/somepkg"),
+      ("shart:someuser/somepkg", "https://git.sr.ht/~someuser/somepkg"),
+      ("SRHT:someuser/somepkg", "https://git.sr.ht/~someuser/somepkg"),
+      ("cb:someuser/somepkg", "https://codeberg.org/someuser/somepkg"),
+      ("cberg:someuser/somepkg", "https://codeberg.org/someuser/somepkg"),
+      ("codeberg:someuser/somepkg", "https://codeberg.org/someuser/somepkg"),
+      ("CBERG:someuser/somepkg", "https://codeberg.org/someuser/somepkg"),
+    ]
+
+    for (aliasValue, expanded) in cases:
+      check isForgeAlias(aliasValue)
+      check expandForgeAlias(aliasValue) == expanded
+      let upkg = nc.createUrl(aliasValue)
+      check $upkg.url == expanded
+      check $upkg.projectName == "somepkg"
+
   test "forge alias codeberg":
     let upkg = nc.createUrl("cb:someuser/somepkg")
     check upkg.url.hostname == "codeberg.org"
@@ -173,10 +198,19 @@ suite "urls and naming":
     check isForgeAlias("github:user/repo")
     check isForgeAlias("gl:user/repo")
     check isForgeAlias("srht:~user/repo")
+    check isForgeAlias("sourcehut:user/repo")
+    check isForgeAlias("shart:user/repo")
     check isForgeAlias("cb:user/repo")
+    check isForgeAlias("cberg:user/repo")
+    check isForgeAlias("codeberg:user/repo")
     check not isForgeAlias("notAForge:user/repo")
     check pkgurls.isUrl("gh:user/repo")
     check pkgurls.isUrl("https://github.com/user/repo")
+
+  test "forge alias invalid prefix is rejected":
+    check not isForgeAlias("nope:user/repo")
+    expect ValueError:
+      discard expandForgeAlias("nope:user/repo")
 
   test "forge alias extractRequirementName":
     check extractRequirementName("gh:user/repo") == ("gh:user/repo", @[], 12)

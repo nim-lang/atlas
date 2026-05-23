@@ -523,7 +523,7 @@ suite "packager release metadata comparison":
     check matchingDigestEntry(entries, "1.0.0", "aaaa", "gzip", "missing").isNil
 
   test "archive entries use canonical tarball metadata":
-    let release = NimbleRelease(version: Version"1.0.0", status: Normal)
+    let release = NimbleRelease(name: "alpha", version: Version"1.0.0", status: Normal)
     let entry = initArchiveEntry(
       "1.0.0",
       "bbbbbbbb",
@@ -545,3 +545,4 @@ suite "packager release metadata comparison":
     check "compression" notin entry
     check "srcDir" notin entry
     check "archiveRoot" notin entry
+    check "n" notin entry

@@ -33,6 +33,12 @@ const
     "cb": ForgeCodeberg, "cberg": ForgeCodeberg, "codeberg": ForgeCodeberg
   }.toTable()
 
+proc parseForgeKind(prefix: string): ForgeKind =
+  let normalized = prefix.toLowerAscii()
+  if normalized notin forgePrefixes:
+    raise newException(ValueError, "Invalid forge alias name: " & prefix)
+  forgePrefixes[normalized]
+
 proc isForgeAlias*(s: string): bool =
   let colon = s.find(':')
   if colon < 0: return false
@@ -43,7 +49,7 @@ proc isForgeAlias*(s: string): bool =
 proc expandForgeAlias*(s: string): string =
   let colon = s.find(':')
   doAssert colon >= 0
-  let prefix = s.substr(0, colon - 1).toLowerAscii()
+  let prefix = s.substr(0, colon - 1)
   let rest = s.substr(colon + 1)
   let slash = rest.find('/')
   if slash < 0:
@@ -52,7 +58,7 @@ proc expandForgeAlias*(s: string): string =
   let repo = rest.substr(slash + 1)
   if user.len == 0 or repo.len == 0:
     raise newException(ValueError, "Invalid forge alias format, expected <alias>:<user>/<repo>: " & s)
-  let kind = forgePrefixes.getOrDefault(prefix)
+  let kind = parseForgeKind(prefix)
   result = "https://"
   case kind
   of ForgeGitHub:
