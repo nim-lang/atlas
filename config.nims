@@ -28,6 +28,7 @@ task build, "Build local atlas":
   installSatTask()
   exec "nim c -d:debug -o:bin/atlas src/atlas.nim"
   exec "nim c -d:debug -o:bin/atlas-packager src/atlas_packager.nim"
+  exec "nim c -d:debug -o:bin/atlas-package src/atlas_package.nim"
 
 task unitTests, "Runs unit tests":
   installSatTask()
@@ -56,15 +57,20 @@ task buildRelease, "Build release":
     let x86Args = "\"-target x86_64-apple-macos11 -arch x86_64 -DARCH=x86_64\""
     exec "nim c -d:release --passC:" & x86args & " --passL:" & x86args & " -o:./atlas_x86_64 src/atlas.nim"
     exec "nim c -d:release --passC:" & x86args & " --passL:" & x86args & " -o:./atlas_pkger_x86_64 src/atlas_packager.nim"
+    exec "nim c -d:release --passC:" & x86args & " --passL:" & x86args & " -o:./atlas_pkg_x86_64 src/atlas_package.nim"
     let armArgs = "\"-target arm64-apple-macos11 -arch arm64 -DARCH=arm64\""
     exec "nim c -d:release --passC:" & armArgs & " --passL:" & armArgs & " -o:./atlas_arm64 src/atlas.nim"
     exec "nim c -d:release --passC:" & armArgs & " --passL:" & armArgs & " -o:./atlas_pkger_arm64 src/atlas_packager.nim"
+    exec "nim c -d:release --passC:" & armArgs & " --passL:" & armArgs & " -o:./atlas_pkg_arm64 src/atlas_package.nim"
     exec "lipo -create -output bin/atlas atlas_x86_64 atlas_arm64"
     exec "lipo -create -output bin/atlas-packager atlas_pkger_x86_64 atlas_pkger_arm64"
+    exec "lipo -create -output bin/atlas-package atlas_pkg_x86_64 atlas_pkg_arm64"
     rmFile("atlas_x86_64")
     rmFile("atlas_arm64")
     rmFile("atlas_pkger_x86_64")
     rmFile("atlas_pkger_arm64")
+    rmFile("atlas_pkg_x86_64")
+    rmFile("atlas_pkg_arm64")
   else:
     let os = getEnv("OS")
     let arch = getEnv("ARCH")
@@ -78,29 +84,40 @@ task buildRelease, "Build release":
       if os == "windows":
         exec "nim c -d:release -d:mingw -o:bin/atlas src/atlas.nim"
         exec "nim c -d:release -d:mingw -o:bin/atlas-packager src/atlas_packager.nim"
+        exec "nim c -d:release -d:mingw -o:bin/atlas-package src/atlas_package.nim"
       else:
         exec "nim c -d:release --cpu:" & arch & " --os:" & os & ccArgs & " -o:bin/atlas src/atlas.nim"
         exec "nim c -d:release --cpu:" & arch & " --os:" & os & ccArgs & " -o:bin/atlas-packager src/atlas_packager.nim"
+        exec "nim c -d:release --cpu:" & arch & " --os:" & os & ccArgs & " -o:bin/atlas-package src/atlas_package.nim"
     else:
       exec "nim c -d:release -o:bin/atlas src/atlas.nim"
       exec "nim c -d:release -o:bin/atlas-packager src/atlas_packager.nim"
+      exec "nim c -d:release -o:bin/atlas-package src/atlas_package.nim"
+
+task buildReleases, "Build release binaries":
+  buildReleaseTask()
 
 task installNimbleDir, "Build and install atlas to $HOME/.nimble/bin":
   buildReleaseTask()
   let nimbleBin = getHomeDir() / ".nimble" / "bin"
   let installedAtlas = nimbleBin / "atlas"
   let installedAtlasPkger = nimbleBin / "atlas-packager"
+  let installedAtlasPkg = nimbleBin / "atlas-package"
   if not dirExists(nimbleBin):
     mkDir(nimbleBin)
   if fileExists(installedAtlas):
     rmFile(installedAtlas)
   if fileExists(installedAtlasPkger):
     rmFile(installedAtlasPkger)
+  if fileExists(installedAtlasPkg):
+    rmFile(installedAtlasPkg)
   cpFile("bin" / "atlas", installedAtlas)
   cpFile("bin" / "atlas-packager", installedAtlasPkger)
+  cpFile("bin" / "atlas-package", installedAtlasPkg)
   echo "Installed Atlas to " & nimbleBin
   exec nimbleBin / "atlas" & " -v "
   exec nimbleBin / "atlas-packager" & " -v "
+  exec nimbleBin / "atlas-package" & " -v "
 
 task cleanTests, "Clean tests":
   echo "Stashing any changes to tests"

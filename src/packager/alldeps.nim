@@ -455,7 +455,7 @@ proc updatePackageAllDeps(
     else: newJNull()
   if previousAllDeps != allDeps:
     releasesMetadata["allDeps"] = allDeps
-    writeTextFileAtomic(releasesMetadataPath, pretty(releasesMetadata))
+    writeTextFileAtomic(releasesMetadataPath, $releasesMetadata)
     result.updated = true
     notice "atlas:pkger", "updated allDeps:", $releasesMetadataPath
 

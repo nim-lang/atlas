@@ -604,7 +604,7 @@ proc mergePackageReleaseMetadata*(
       metadataComparable
     )
     metadata["generatedAt"] = %now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
-    writeTextFileAtomic(releasesMetadataPath, pretty(metadata))
+    writeTextFileAtomic(releasesMetadataPath, $metadata)
     notice "atlas:pkger", "updated metadata:", $releasesMetadataPath, "reason:", reason
   let digestPath = packageDigestFile(workspaceRoot)
   if fileExists($digestPath):

@@ -5,6 +5,7 @@ import packager/alldeps
 import packager/archivehelpers
 import packager/cacheharvest
 import packager/githubheadcheck
+import packager/projectpackage
 import basic/context
 import basic/dependencycache
 import basic/deptypes
@@ -166,6 +167,17 @@ suite "packager env options":
       var args: seq[string]
       let opts = parseAtlasPackagerOptions(@[], "test", args)
       check not opts.createTarballs
+
+suite "local project packager options":
+  test "atlas-package defaults to latest release mode":
+    var args: seq[string]
+    let opts = parseAtlasPackageOptions(@[], "test", args)
+    check opts.releaseMode == prmLatestRelease
+
+  test "atlas-package parses head mode":
+    var args: seq[string]
+    let opts = parseAtlasPackageOptions(@["--head"], "test", args)
+    check opts.releaseMode == prmHead
 
 suite "packager mirrored repo helpers":
   test "bare repo shape without HEAD commit is not usable":
@@ -427,6 +439,29 @@ suite "packager allDeps metadata":
     ]
 
 suite "packager release metadata comparison":
+  test "local project archive names use release suffix":
+    check localArchiveBaseName("atlas") == "atlas-release"
+    check localArchiveBaseName("foo/bar") == "foo-bar-release"
+
+  test "latest packaged release selector skips head and prefers highest version":
+    let headRelease = (
+      VersionTag(v: Version"#head", c: initCommitHash("aaaaaaaa", FromHead)).toPkgVer(),
+      NimbleRelease(version: Version"#head", status: Normal)
+    )
+    let stableRelease = (
+      VersionTag(v: Version"1.2.0", c: initCommitHash("bbbbbbbb", FromGitTag)).toPkgVer(),
+      NimbleRelease(version: Version"1.2.0", status: Normal)
+    )
+    let latestRelease = (
+      VersionTag(v: Version"2.0.0", c: initCommitHash("cccccccc", FromGitTag)).toPkgVer(),
+      NimbleRelease(version: Version"2.0.0", status: Normal)
+    )
+
+    let releases = @[headRelease, stableRelease, latestRelease]
+    let selected = selectLatestPackagedRelease(releases)
+    check selected == 2
+    check releases[selected][0].vtag.version == Version"2.0.0"
+
   test "comparable release metadata ignores derived allDeps and timestamps":
     let harvested = %*{
       "name": "alpha",
