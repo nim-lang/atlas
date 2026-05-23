@@ -84,9 +84,6 @@ proc packageBucketDir*(packageName: string): Path =
     return Path"_"
   Path($toLowerAscii(packageName[0]))
 
-proc packageWorkspaceRootLegacy(harvestRoot: Path; info: PackageInfo): Path =
-  (harvestRoot / Path(info.name)).absolutePath()
-
 proc packageWorkspaceRoot(harvestRoot: Path; info: PackageInfo): Path =
   (harvestRoot / packageBucketDir(info.name) / Path(info.name)).absolutePath()
 
@@ -94,18 +91,7 @@ proc resolvePackageWorkspaceRoot*(
     harvestRoot: Path;
     info: PackageInfo
 ): Path =
-  let bucketedRoot = packageWorkspaceRoot(harvestRoot, info)
-  let legacyRoot = packageWorkspaceRootLegacy(harvestRoot, info)
-
-  if dirExists($bucketedRoot):
-    if dirExists($legacyRoot) and legacyRoot != bucketedRoot:
-      removeDir($legacyRoot)
-    return bucketedRoot
-
-  if dirExists($legacyRoot):
-    return legacyRoot
-
-  bucketedRoot
+  packageWorkspaceRoot(harvestRoot, info)
 
 proc packageReleasesDir(workspaceRoot: Path): Path =
   workspaceRoot / Path"releases"
