@@ -91,7 +91,7 @@ proc requirementName(v: PkgUrl): string =
   if nc.canRoundTripByRegistryName(v):
     result = nc.registryName(v)
   else:
-    result = $v
+    result = v.compactForgeAlias()
 
 proc requirementToJson(req: (PkgUrl, VersionInterval)): JsonNode =
   result = %requirementName(req[0])

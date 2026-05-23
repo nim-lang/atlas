@@ -73,6 +73,31 @@ proc expandForgeAlias*(s: string): string =
 
 proc isUrl*(s: string): bool = s.startsWith("git@") or "://" in s or isForgeAlias(s)
 
+proc compactForgeAlias*(u: PkgUrl): string =
+  ## Returns the shortest lossless forge shorthand when the URL is a plain
+  ## forge repo path without query or anchor metadata.
+  if u.u.query.len > 0 or u.u.anchor.len > 0:
+    return $u.u
+
+  let parts = u.u.path.split('/')
+  if parts.len != 3 or parts[0].len != 0 or parts[1].len == 0 or parts[2].len == 0:
+    return $u.u
+
+  case u.u.hostname.toLowerAscii()
+  of "github.com":
+    "gh:" & parts[1] & "/" & parts[2]
+  of "gitlab.com":
+    "gl:" & parts[1] & "/" & parts[2]
+  of "git.sr.ht":
+    let user =
+      if parts[1].startsWith('~'): parts[1].substr(1)
+      else: parts[1]
+    "srht:" & user & "/" & parts[2]
+  of "codeberg.org":
+    "cb:" & parts[1] & "/" & parts[2]
+  else:
+    $u.u
+
 proc extractProjectName*(url: Uri): tuple[name: string, user: string, host: string]
 
 proc fullName*(u: PkgUrl): string =

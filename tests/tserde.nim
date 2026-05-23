@@ -139,7 +139,7 @@ suite "json serde":
       @[(VersionTag(v: Version"1.0.0", c: current).toPkgVer, release)]
     )
     let cache = parseFile($packageReleaseCachePath(pkg))
-    check cache["cv"].getInt() == 12
+    check cache["cv"].getInt() == 14
     check "cacheVersion" notin cache
     check cache["name"].getStr() == "foobar"
     check cache["fqn"].getStr() == "foobar.nimble-test.github.com"
@@ -247,7 +247,7 @@ suite "json serde":
 
     savePackageReleaseCache(pkg, current, @[(version, release)])
     let regeneratedCache = parseFile($cachePath)
-    check regeneratedCache["cv"].getInt() == 12
+    check regeneratedCache["cv"].getInt() == 14
 
   test "json serde nimble release requirements use combined strings":
     let starDep = createUrlSkipPatterns("https://github.com/nimble-test/mummy", skipDirTest = true)
@@ -265,10 +265,9 @@ suite "json serde":
     let jnRelease = toJsonHook(release)
     check "requirements" notin jnRelease
     check "reqs" notin jnRelease
-    check jnRelease["r"][0].getStr() == "https://github.com/nimble-test/mummy"
-    check jnRelease["r"][1].getStr() == "https://github.com/nimble-test/jwt >= 0.3"
-    check jnRelease["r"][2].getStr() ==
-      "https://github.com/yglukhov/bearssl_pkey_decoder #546f8d9b"
+    check jnRelease["r"][0].getStr() == "gh:nimble-test/mummy"
+    check jnRelease["r"][1].getStr() == "gh:nimble-test/jwt >= 0.3"
+    check jnRelease["r"][2].getStr() == "gh:yglukhov/bearssl_pkey_decoder #546f8d9b"
 
     var release2: NimbleRelease
     fromJsonHook(release2, jnRelease)
@@ -292,10 +291,9 @@ suite "json serde":
 
     let jnRelease = toJsonHook(release)
     check "features" notin jnRelease
-    check jnRelease["f"]["dev"][0].getStr() == "https://github.com/nimble-test/mummy"
-    check jnRelease["f"]["dev"][1].getStr() == "https://github.com/nimble-test/jwt >= 0.3"
-    check jnRelease["f"]["dev"][2].getStr() ==
-      "https://github.com/yglukhov/bearssl_pkey_decoder #546f8d9b"
+    check jnRelease["f"]["dev"][0].getStr() == "gh:nimble-test/mummy"
+    check jnRelease["f"]["dev"][1].getStr() == "gh:nimble-test/jwt >= 0.3"
+    check jnRelease["f"]["dev"][2].getStr() == "gh:yglukhov/bearssl_pkey_decoder #546f8d9b"
 
     var release2: NimbleRelease
     fromJsonHook(release2, jnRelease)

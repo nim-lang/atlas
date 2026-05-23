@@ -212,6 +212,20 @@ suite "urls and naming":
     expect ValueError:
       discard expandForgeAlias("nope:user/repo")
 
+  test "forge alias compact serialization":
+    check createUrlSkipPatterns("https://github.com/someuser/somepkg", true).compactForgeAlias() ==
+      "gh:someuser/somepkg"
+    check createUrlSkipPatterns("https://gitlab.com/someuser/somepkg", true).compactForgeAlias() ==
+      "gl:someuser/somepkg"
+    check createUrlSkipPatterns("https://git.sr.ht/~someuser/somepkg", true).compactForgeAlias() ==
+      "srht:someuser/somepkg"
+    check createUrlSkipPatterns("https://codeberg.org/someuser/somepkg", true).compactForgeAlias() ==
+      "cb:someuser/somepkg"
+    check createUrlSkipPatterns(
+      "https://github.com/someuser/somepkg?subdir=bindings%2Fnim",
+      true
+    ).compactForgeAlias() == "https://github.com/someuser/somepkg?subdir=bindings%2Fnim"
+
   test "forge alias extractRequirementName":
     check extractRequirementName("gh:user/repo") == ("gh:user/repo", @[], 12)
     check extractRequirementName("gh:user/repo >= 1.0") == ("gh:user/repo", @[], 12)
