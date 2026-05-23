@@ -226,8 +226,6 @@ proc nimbleReleaseToJson(r: NimbleRelease, opt: ToJsonOptions): JsonNode =
     result["o"] = toJson(r.namedBin, opt)
   if r.backend != "":
     result["e"] = toJson(r.backend, opt)
-  if r.hasBin:
-    result["g"] = toJson(r.hasBin, opt)
   result["v"] = toJson(r.version, opt)
   if r.nimVersion != Version"":
     result["m"] = toJson(r.nimVersion, opt)

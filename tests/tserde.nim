@@ -139,7 +139,7 @@ suite "json serde":
       @[(VersionTag(v: Version"1.0.0", c: current).toPkgVer, release)]
     )
     let cache = parseFile($packageReleaseCachePath(pkg))
-    check cache["cv"].getInt() == 15
+    check cache["cv"].getInt() == 16
     check "cacheVersion" notin cache
     check cache["name"].getStr() == "foobar"
     check cache["fqn"].getStr() == "foobar.nimble-test.github.com"
@@ -247,7 +247,7 @@ suite "json serde":
 
     savePackageReleaseCache(pkg, current, @[(version, release)])
     let regeneratedCache = parseFile($cachePath)
-    check regeneratedCache["cv"].getInt() == 14
+    check regeneratedCache["cv"].getInt() == 16
 
   test "json serde nimble release requirements use combined strings":
     let starDep = createUrlSkipPatterns("https://github.com/nimble-test/mummy", skipDirTest = true)
@@ -396,7 +396,7 @@ suite "json serde":
     check cache["bin"].len == 2
     check cache["namedBin"]["main"].getStr() == "myfoo"
     check cache["backend"].getStr() == "c"
-    check cache["hasBin"].getBool()
+    check "hasBin" notin cache
     check "author" notin cache["releases"][0]
     check "description" notin cache["releases"][0]
     check "license" notin cache["releases"][0]
@@ -422,7 +422,7 @@ suite "json serde":
     check cache["releases"][1]["p"].len == 0
     check cache["releases"][1]["o"].len == 0
     check cache["releases"][1]["e"].getStr() == ""
-    check cache["releases"][1]["g"].getBool() == false
+    check "g" notin cache["releases"][1]
     check cache["releases"][2]["a"].getStr() == "Other Tester"
     check cache["releases"][2]["m"].getStr() == "2.2.0"
     check cache["releases"][2]["s"].getStr() == "lib"

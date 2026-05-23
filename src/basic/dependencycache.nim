@@ -41,13 +41,12 @@ type
     bin*: seq[string]
     namedBin*: Table[string, string]
     backend*: string
-    hasBin*: bool
     includeTagsAndNimbleCommits*: bool
     nimbleCommitsMax*: bool
     releases*: seq[PackageReleaseCacheEntry]
 
 const
-  PackageReleaseCacheVersion* = 15
+  PackageReleaseCacheVersion* = 16
 
 proc sanitizeCacheStem(stem: var string) =
   for c in mitems(stem):
@@ -171,14 +170,6 @@ proc firstNonEmptyMetadata(
       result = field(release)
       if result.len > 0:
         return
-
-proc firstTrueMetadata(
-    versions: seq[(PackageVersion, NimbleRelease)];
-    field: proc (release: NimbleRelease): bool
-): bool =
-  for (_, release) in versions:
-    if not release.isNil and field(release):
-      return true
 
 proc toPackageReleaseCacheJson(cache: PackageReleaseCache; opt: ToJsonOptions): JsonNode =
   result = newJObject()
@@ -355,8 +346,7 @@ proc loadPackageReleaseCacheJson(cache: var PackageReleaseCache; jn: JsonNode) =
         entry.release.namedBin = cache.namedBin
       if not entryJson.hasKey("e"):
         entry.release.backend = cache.backend
-      if not entryJson.hasKey("g"):
-        entry.release.hasBin = cache.hasBin
+      entry.release.hasBin = entry.release.bin.len > 0 or entry.release.namedBin.len > 0
 
 proc loadPackageReleaseCache*(
     pkg: Package;
@@ -424,7 +414,6 @@ proc savePackageReleaseCache*(
     bin: firstNonEmptyMetadata(versions, proc (release: NimbleRelease): seq[string] = release.bin),
     namedBin: firstNonEmptyMetadata(versions, proc (release: NimbleRelease): Table[string, string] = release.namedBin),
     backend: firstNonEmptyMetadata(versions, proc (release: NimbleRelease): string = release.backend),
-    hasBin: firstTrueMetadata(versions, proc (release: NimbleRelease): bool = release.hasBin),
     includeTagsAndNimbleCommits: includeTagsAndNimbleCommitsFlag(),
     nimbleCommitsMax: nimbleCommitsMaxFlag()
   )
