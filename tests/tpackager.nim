@@ -439,9 +439,13 @@ suite "packager allDeps metadata":
     ]
 
 suite "packager release metadata comparison":
-  test "local project archive names use release suffix":
-    check localArchiveBaseName("atlas") == "atlas-release"
-    check localArchiveBaseName("foo/bar") == "foo-bar-release"
+  test "local project release files match packager naming":
+    let pkg = Package(name: "atlas")
+    let info = PackageInfo(kind: pkPackage, name: "atlas")
+    let ver = VersionTag(v: Version"0.14.3", c: initCommitHash("d85ba9fb", FromGitTag)).toPkgVer()
+    let release = NimbleRelease(version: Version"0.14.3", status: Normal)
+    check projectReleaseStem(pkg, info, ver, release, "122f443a7178") == "atlas-0.14.3-d85ba9fb-122f443a"
+    check projectReleaseMetadataFileName(pkg, info, ver, release, "122f443a7178") == "atlas-0.14.3-d85ba9fb-122f443a.json"
 
   test "latest packaged release selector skips head and prefers highest version":
     let headRelease = (

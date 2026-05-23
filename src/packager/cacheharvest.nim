@@ -130,6 +130,14 @@ proc relativeIndexPath(baseDir: Path; path: Path): string =
   else:
     $path
 
+proc relativeToCurrentDir*(path: Path): string =
+  let cwd = os.getCurrentDir().Path
+  let absolutePath = path.absolutePath()
+  if absolutePath.isRelativeTo(cwd):
+    $(absolutePath.relativePath(cwd))
+  else:
+    $absolutePath
+
 proc loadReleaseVtags(releasesPath: Path): HashSet[string] =
   if not fileExists($releasesPath):
     return
@@ -450,11 +458,13 @@ proc collectReleaseArchives(
                 rootSubdir,
                 release
               )
+              notice "atlas:pkger", "tarball:", relativeToCurrentDir(archivePath)
               continue
 
         let archiveFile = writeTrackedReleaseArchive(
           pkg, ver, archiveDir, rootStem, rootArchiveFiles, compression, siblingTempPath
         )
+        let archivePath = archiveDir / Path(archiveFile)
         referencedFiles.incl(archiveFile)
         addTarballEntry result, label, initArchiveEntry(
           label,
@@ -463,6 +473,7 @@ proc collectReleaseArchives(
           rootSubdir,
           release
         )
+        notice "atlas:pkger", "tarball:", relativeToCurrentDir(archivePath)
     except CatchableError as e:
       warn "atlas:pkger",
         "skipping release archive:",
@@ -605,7 +616,11 @@ proc mergePackageReleaseMetadata*(
     )
     metadata["generatedAt"] = %now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
     writeTextFileAtomic(releasesMetadataPath, $metadata)
-    notice "atlas:pkger", "updated metadata:", $releasesMetadataPath, "reason:", reason
+    notice "atlas:pkger",
+      "updated metadata:",
+      relativeToCurrentDir(releasesMetadataPath),
+      "reason:",
+      reason
   let digestPath = packageDigestFile(workspaceRoot)
   if fileExists($digestPath):
     removeFile($digestPath)

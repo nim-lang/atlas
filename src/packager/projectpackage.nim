@@ -18,6 +18,16 @@ type
     prmLatestRelease
     prmHead
 
+  ProjectReleaseLayout = object
+    label: string
+    baseName: string
+    commitSuffix: string
+    contentHash: string
+    contentHashSuffix: string
+    archiveStem: string
+    rootSubdir: Path
+    rootArchiveFiles: seq[string]
+
   ProjectPackageCliOptions* = object
     projectDir*: Path
     outputDir*: Path
@@ -138,12 +148,27 @@ proc findProjectNimbleFile(projectDir: Path): Path =
     raise newException(IOError, "ambiguous Nimble files found in: " & $projectDir)
   nimbleFiles[0]
 
-proc localArchiveBaseName*(packageName: string): string =
-  let sanitized = sanitizeArchiveComponent(packageName)
-  if sanitized.len > 0:
-    sanitized & "-release"
-  else:
-    "package-release"
+proc projectReleaseStem*(
+    pkg: Package;
+    info: PackageInfo;
+    ver: PackageVersion;
+    release: NimbleRelease;
+    contentHash: string
+): string =
+  let baseName = archiveBaseName(pkg, info, release)
+  let label = archiveReleaseLabel(ver, release, ver.vtag.version == Version"#head")
+  let commitSuffix = archiveCommitLabel(ver)
+  let contentHashSuffix = sanitizeArchiveComponent(contentHash[0 .. 7])
+  baseName & "-" & label & "-" & commitSuffix & "-" & contentHashSuffix
+
+proc projectReleaseMetadataFileName*(
+    pkg: Package;
+    info: PackageInfo;
+    ver: PackageVersion;
+    release: NimbleRelease;
+    contentHash: string
+): string =
+  projectReleaseStem(pkg, info, ver, release, contentHash) & ".json"
 
 proc projectPkgUrl(nc: var NimbleContext; projectDir: Path): PkgUrl =
   let canonicalUrl = getCanonicalUrl(projectDir)
@@ -272,45 +297,87 @@ proc removeUnreferencedArchives(archiveDir: Path; referencedFiles: seq[string]) 
     if path.Path.splitFile().ext in [".gz", ".xz", ".tar"] and filename notin referencedFiles:
       removeFile(path)
 
+proc collectProjectReleaseLayout(
+    pkg: Package;
+    info: PackageInfo;
+    ver: PackageVersion;
+    release: NimbleRelease
+): ProjectReleaseLayout =
+  result.label = archiveReleaseLabel(ver, release, ver.vtag.version == Version"#head")
+  result.baseName = archiveBaseName(pkg, info, release)
+  result.commitSuffix = archiveCommitLabel(ver)
+  result.rootSubdir = packageRootSubdir(pkg)
+  result.rootArchiveFiles = collectArchiveFiles(pkg, ver, info, release, result.rootSubdir)
+  let hashStem = result.baseName & "-" & result.label & "-" & result.commitSuffix
+  let hashTarPath = siblingTempPath(pkg.ondisk / Path(hashStem & ".hash.tar"))
+  try:
+    writeTrackedReleaseTar(pkg, ver, hashTarPath, hashStem, result.rootArchiveFiles)
+    result.contentHash = archiveContentHash(hashTarPath, hashStem & "/")
+  finally:
+    if fileExists($hashTarPath):
+      removeFile($hashTarPath)
+  result.contentHashSuffix = sanitizeArchiveComponent(result.contentHash[0 .. 7])
+  result.archiveStem =
+    result.baseName & "-" & result.label & "-" & result.commitSuffix & "-" & result.contentHashSuffix
+
 proc collectProjectTarballs(
     pkg: Package;
     info: PackageInfo;
     ver: PackageVersion;
     release: NimbleRelease;
     archiveDir: Path;
-    compressions: openArray[ArchiveCompression]
+    compressions: openArray[ArchiveCompression];
+    layout: ProjectReleaseLayout
 ): JsonNode =
   result = newJObject()
-  let label = archiveReleaseLabel(ver, release, ver.vtag.version == Version"#head")
-  let rootSubdir = packageRootSubdir(pkg)
-  let rootArchiveFiles = collectArchiveFiles(pkg, ver, info, release, rootSubdir)
-  let baseName = localArchiveBaseName(info.name)
-  let commitSuffix = archiveCommitLabel(ver)
-  let hashStem = baseName & "-" & label & "-" & commitSuffix
-  let hashTarPath = siblingTempPath(archiveDir / Path(hashStem & ".hash.tar"))
   createDir($archiveDir)
-
-  var contentHash = ""
-  try:
-    writeTrackedReleaseTar(pkg, ver, hashTarPath, hashStem, rootArchiveFiles)
-    contentHash = archiveContentHash(hashTarPath, hashStem & "/")
-  finally:
-    if fileExists($hashTarPath):
-      removeFile($hashTarPath)
-
-  let contentHashSuffix = sanitizeArchiveComponent(contentHash[0 .. 7])
-  let archiveStem = baseName & "-" & label & "-" & commitSuffix & "-" & contentHashSuffix
   var referencedFiles: seq[string]
-  result[label] = newJArray()
+  result[layout.label] = newJArray()
 
   for compression in compressions:
     let archiveFile = writeTrackedReleaseArchive(
-      pkg, ver, archiveDir, archiveStem, rootArchiveFiles, compression, siblingTempPath
+      pkg, ver, archiveDir, layout.archiveStem, layout.rootArchiveFiles, compression, siblingTempPath
     )
     referencedFiles.add archiveFile
-    result[label].add initArchiveEntry(label, contentHash, archiveFile, rootSubdir, release)
+    result[layout.label].add initArchiveEntry(
+      layout.label, layout.contentHash, archiveFile, layout.rootSubdir, release
+    )
 
   removeUnreferencedArchives(archiveDir, referencedFiles)
+
+proc writeProjectReleaseMetadata(
+    releasesDir: Path;
+    info: PackageInfo;
+    releaseMetadata: JsonNode;
+    tarballEntries: JsonNode;
+    metadataFileName: string
+) =
+  var metadata =
+    if releaseMetadata.isNil or releaseMetadata.kind != JObject:
+      newJObject()
+    else:
+      releaseMetadata.copy()
+  metadata["name"] = %info.name
+  if tarballEntries.isNil or tarballEntries.kind == JNull:
+    if metadata.hasKey("tarballs"):
+      metadata.delete("tarballs")
+  else:
+    metadata["tarballs"] = tarballEntries
+  metadata["generatedAt"] = %now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
+
+  createDir($releasesDir)
+  let legacyRootCache = releasesDir.parentDir() / Path"releases.json"
+  if fileExists($legacyRootCache):
+    removeFile($legacyRootCache)
+  for kind, path in walkDir($releasesDir):
+    if kind != pcFile:
+      continue
+    let filePath = path.Path
+    let filename = $filePath.splitPath().tail
+    if filePath.splitFile().ext == ".json" and filename != metadataFileName:
+      removeFile(path)
+
+  writeFile($(releasesDir / Path(metadataFileName)), $metadata)
 
 proc packageProject*(
     projectDir: Path;
@@ -341,6 +408,8 @@ proc packageProject*(
   var pkg = nc.initProjectPackage(absProjectDir, nimbleFile)
   let (ver, release, currentCommit) = nc.selectedProjectRelease(pkg, releaseMode)
   let info = PackageInfo(kind: pkPackage, name: pkg.name, subdir: $pkg.subdir)
+  let layout = collectProjectReleaseLayout(pkg, info, ver, release)
+  let releasesDir = absOutputDir / Path"releases"
 
   let versions = @[(ver, release)]
   savePackageReleaseCache(pkg, currentCommit, versions)
@@ -352,13 +421,16 @@ proc packageProject*(
         info,
         ver,
         release,
-        absOutputDir / Path"releases",
-        compressions
+        releasesDir,
+        compressions,
+        layout
       )
     else:
       newJNull()
-
-  mergePackageReleaseMetadata(absOutputDir, info, releaseMetadata, tarballs)
+  let metadataFileName = projectReleaseMetadataFileName(
+    pkg, info, ver, release, layout.contentHash
+  )
+  writeProjectReleaseMetadata(releasesDir, info, releaseMetadata, tarballs, metadataFileName)
 
 proc runAtlasPackageOnce*(
     opts: ProjectPackageCliOptions;
