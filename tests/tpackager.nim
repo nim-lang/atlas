@@ -9,6 +9,7 @@ import basic/context
 import basic/dependencycache
 import basic/deptypes
 import basic/gitops
+import basic/packageinfos
 import basic/versions
 
 proc withEnvVar(name: string; value: string; body: proc() {.closure.}) =
@@ -500,6 +501,74 @@ suite "packager release metadata comparison":
       }
     }
     check comparableReleaseMetadata(base) == comparableReleaseMetadata(same)
+
+  test "merge release metadata drops retained tarballs when tarballs disabled":
+    let root = createTempDir("atlas-packager", "no-tarballs-")
+    defer: removeDir(root)
+
+    let workspaceRoot = Path(root)
+    writeFile(root / "releases.json", $(%*{
+      "name": "alpha",
+      "releases": [{"v": "1.0.0@aaaa"}],
+      "tarballs": {
+        "1.0.0": [{
+          "s": "old",
+          "f": "alpha-1.tar.xz"
+        }]
+      }
+    }))
+
+    mergePackageReleaseMetadata(
+      workspaceRoot,
+      PackageInfo(name: "alpha"),
+      %*{
+        "releases": [{"v": "1.0.0@aaaa"}]
+      },
+      newJNull()
+    )
+
+    let rewritten = parseFile(root / "releases.json")
+    check "tarballs" notin rewritten
+
+  test "merge release metadata rewrites tarballs to canonical entries":
+    let root = createTempDir("atlas-packager", "canonical-tarballs-")
+    defer: removeDir(root)
+
+    let workspaceRoot = Path(root)
+    writeFile(root / "releases.json", $(%*{
+      "name": "alpha",
+      "releases": [{"v": "1.0.0@aaaa"}],
+      "tarballs": {
+        "1.0.0": [{
+          "s": "old",
+          "f": "alpha-1.tar.xz",
+          "size": 123,
+          "createdAt": "2026-05-20T00:00:00Z",
+          "archiveRoot": "alpha-1.0.0"
+        }]
+      }
+    }))
+
+    mergePackageReleaseMetadata(
+      workspaceRoot,
+      PackageInfo(name: "alpha"),
+      %*{
+        "releases": [{"v": "1.0.0@aaaa"}]
+      },
+      %*{
+        "1.0.0": [{
+          "s": "old",
+          "f": "alpha-1.tar.xz"
+        }]
+      }
+    )
+
+    let rewritten = parseFile(root / "releases.json")
+    check rewritten["tarballs"]["1.0.0"][0]["s"].getStr() == "old"
+    check rewritten["tarballs"]["1.0.0"][0]["f"].getStr() == "alpha-1.tar.xz"
+    check "size" notin rewritten["tarballs"]["1.0.0"][0]
+    check "createdAt" notin rewritten["tarballs"]["1.0.0"][0]
+    check "archiveRoot" notin rewritten["tarballs"]["1.0.0"][0]
 
   test "matching digest entries include content hash when present":
     let entries = %*{

@@ -563,7 +563,7 @@ proc metadataChangeReason(
   else:
     result = reasons.join(", ")
 
-proc mergePackageReleaseMetadata(
+proc mergePackageReleaseMetadata*(
     workspaceRoot: Path;
     info: PackageInfo;
     releaseMetadata: JsonNode;
@@ -587,7 +587,11 @@ proc mergePackageReleaseMetadata(
     else:
       releaseMetadata.copy()
   metadata["name"] = %info.name
-  metadata["tarballs"] = tarballEntries
+  if tarballEntries.isNil or tarballEntries.kind == JNull:
+    if metadata.hasKey("tarballs"):
+      metadata.delete("tarballs")
+  else:
+    metadata["tarballs"] = tarballEntries
 
   let existingComparable = comparableReleaseMetadata(existingMetadata)
   let metadataComparable = comparableReleaseMetadata(metadata)
@@ -783,7 +787,7 @@ proc harvestPackage(
           regenerateTarballs
         )
       else:
-        loadExistingArchiveEntries(packageReleasesMetadataFile(workspaceRoot))
+        newJNull()
     var releaseCount = 0
     var hasGitTags = false
     for (ver, _) in releaseInfo.releases:
