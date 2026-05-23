@@ -62,7 +62,7 @@ proc popPackage(queue: ptr PackageQueue; info: var PackageInfo): bool {.gcsafe.}
     release(queue.lock)
 
 proc packageWorkspaceRoot(metadataDir: Path; info: PackageInfo): Path =
-  resolvePackageWorkspaceRoot(metadataDir, info, migrateLegacy = false)
+  resolvePackageWorkspaceRoot(metadataDir, info)
 
 proc packageReleasesMetadataFile(workspaceRoot: Path): Path =
   workspaceRoot / Path"releases.json"

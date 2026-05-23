@@ -92,8 +92,7 @@ proc packageWorkspaceRoot(harvestRoot: Path; info: PackageInfo): Path =
 
 proc resolvePackageWorkspaceRoot*(
     harvestRoot: Path;
-    info: PackageInfo;
-    migrateLegacy = true
+    info: PackageInfo
 ): Path =
   let bucketedRoot = packageWorkspaceRoot(harvestRoot, info)
   let legacyRoot = packageWorkspaceRootLegacy(harvestRoot, info)
@@ -104,15 +103,6 @@ proc resolvePackageWorkspaceRoot*(
     return bucketedRoot
 
   if dirExists($legacyRoot):
-    if migrateLegacy:
-      createDir($(bucketedRoot.parentDir()))
-      notice "atlas:pkger",
-        "migrating legacy package workspace:",
-        $legacyRoot,
-        "to:",
-        $bucketedRoot
-      moveDir($legacyRoot, $bucketedRoot)
-      return bucketedRoot
     return legacyRoot
 
   bucketedRoot

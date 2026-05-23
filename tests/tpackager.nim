@@ -359,8 +359,8 @@ suite "packager allDeps metadata":
     check packageBucketDir("alpha") == Path"a"
     check packageBucketDir("Beta") == Path"b"
 
-  test "legacy flat package workspace migrates to bucketed layout":
-    let root = createTempDir("atlas-packager", "legacy-migrate-")
+  test "legacy flat package workspace remains in place for compatibility":
+    let root = createTempDir("atlas-packager", "legacy-compat-")
     defer: removeDir(root)
 
     let info = PackageInfo(kind: pkPackage, name: "alpha")
@@ -373,10 +373,10 @@ suite "packager allDeps metadata":
     }))
 
     let resolved = resolvePackageWorkspaceRoot(Path(root), info)
-    check resolved == Path(bucketedRoot).absolutePath()
-    check dirExists(bucketedRoot)
-    check not dirExists(legacyRoot)
-    check fileExists(bucketedRoot / "releases.json")
+    check resolved == Path(legacyRoot).absolutePath()
+    check dirExists(legacyRoot)
+    check not dirExists(bucketedRoot)
+    check fileExists(legacyRoot / "releases.json")
 
   test "allDeps reads legacy flat package metadata without migration":
     let root = createTempDir("atlas-packager", "legacy-alldeps-")
