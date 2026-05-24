@@ -101,6 +101,13 @@ proc matchesPackageFilters*(
       return true
   false
 
+proc shouldUpdatePackageRepo*(
+    updateRepos: bool;
+    skipRepoUpdatePackages: HashSet[string];
+    packageName: string
+): bool =
+  updateRepos and packageName notin skipRepoUpdatePackages
+
 proc packageWorkspaceRoot(harvestRoot: Path; info: PackageInfo): Path =
   (harvestRoot / packageBucketDir(info.name) / Path(info.name)).absolutePath()
 
@@ -563,18 +570,53 @@ proc comparableTarballs(tarballs: JsonNode): JsonNode =
     for entry in entries:
       result[version].add entry
 
+proc forgeReleaseSortKey(entry: JsonNode): string =
+  if entry.kind != JObject:
+    return $entry
+  entry{"version"}.getStr() & "\t" & entry{"tag"}.getStr()
+
+proc comparableForgeReleases(forgeReleases: JsonNode): JsonNode =
+  if forgeReleases.kind != JObject:
+    return forgeReleases.copy()
+
+  result = newJObject()
+  let archives = forgeReleases.metadataField("archives")
+  result["archives"] =
+    if archives.isNil:
+      newJNull()
+    else:
+      archives.copy()
+
+  let releases = forgeReleases.metadataField("releases")
+  if releases.kind != JArray:
+    result["releases"] = releases.copy()
+    return
+
+  var entries: seq[JsonNode]
+  for entry in releases:
+    entries.add entry.copy()
+  entries.sort do (a, b: JsonNode) -> int:
+    cmp(forgeReleaseSortKey(a), forgeReleaseSortKey(b))
+
+  result["releases"] = newJArray()
+  for entry in entries:
+    result["releases"].add entry
+
 proc comparableReleaseMetadata*(metadata: JsonNode): JsonNode =
   ## Normalize package release metadata down to the harvested fields that
   ## should trigger a releases.json rewrite on subsequent packager runs.
   result = newJObject()
-  for key in ["name", "releases", "tarballs"]:
+  for key in ["name", "releases", "tarballs", "forgeReleases"]:
     let value = metadata.metadataField(key)
     result[key] =
       if value.isNil:
         newJNull()
       else:
-        if key == "tarballs":
+        case key
+        of "tarballs":
           comparableTarballs(value)
+        of "forgeReleases":
+          comparableForgeReleases(value)
         else:
           value.copy()
 
@@ -590,7 +632,8 @@ proc metadataChangeReason(
   for field in [
       ("name", "name"),
       ("releases", "releases"),
-      ("tarballs", "tarballs")
+      ("tarballs", "tarballs"),
+      ("forgeReleases", "forge releases")
   ]:
     let key = field[0]
     let label = field[1]
@@ -606,7 +649,8 @@ proc mergePackageReleaseMetadata*(
     workspaceRoot: Path;
     info: PackageInfo;
     releaseMetadata: JsonNode;
-    tarballEntries: JsonNode
+    tarballEntries: JsonNode;
+    forgeReleases: JsonNode = nil
 ) =
   let releasesMetadataPath = packageReleasesMetadataFile(workspaceRoot)
   createDir($workspaceRoot)
@@ -631,6 +675,12 @@ proc mergePackageReleaseMetadata*(
       metadata.delete("tarballs")
   else:
     metadata["tarballs"] = tarballEntries
+  if not forgeReleases.isNil:
+    if forgeReleases.kind == JNull:
+      if metadata.hasKey("forgeReleases"):
+        metadata.delete("forgeReleases")
+    else:
+      metadata["forgeReleases"] = forgeReleases
 
   let existingComparable = comparableReleaseMetadata(existingMetadata)
   let metadataComparable = comparableReleaseMetadata(metadata)
@@ -652,6 +702,31 @@ proc mergePackageReleaseMetadata*(
   let digestPath = packageDigestFile(workspaceRoot)
   if fileExists($digestPath):
     removeFile($digestPath)
+
+proc mergePackageForgeReleaseMetadata*(
+    workspaceRoot: Path;
+    info: PackageInfo;
+    forgeReleases: JsonNode
+) =
+  let releasesMetadataPath = packageReleasesMetadataFile(workspaceRoot)
+  if not fileExists($releasesMetadataPath):
+    return
+
+  var existingMetadata =
+    try:
+      parseFile($releasesMetadataPath)
+    except CatchableError:
+      return
+  if existingMetadata.isNil or existingMetadata.kind != JObject:
+    return
+
+  mergePackageReleaseMetadata(
+    workspaceRoot,
+    info,
+    existingMetadata,
+    existingMetadata.metadataField("tarballs"),
+    forgeReleases
+  )
 
 proc summarizeErrorLine(message: string): string =
   result = message.replace('\n', ' ').replace('\r', ' ')
@@ -800,6 +875,7 @@ proc harvestPackage(
     metadataDir: Path;
     ephemeral: bool;
     updateRepos: bool;
+    skipRepoUpdatePackages: HashSet[string];
     compressions: openArray[ArchiveCompression];
     harvestRoot: Path;
     regenerateTarballs: bool;
@@ -818,7 +894,12 @@ proc harvestPackage(
   try:
     pkg = nc.initRegistryPackage(info)
     primeReleaseCacheFromRetainedMetadata(pkg, workspaceRoot)
-    prepareMirroredPackageRepo(pkg, info, workspaceRoot, updateRepos)
+    prepareMirroredPackageRepo(
+      pkg,
+      info,
+      workspaceRoot,
+      shouldUpdatePackageRepo(updateRepos, skipRepoUpdatePackages, info.name)
+    )
 
     let releaseInfo = nc.loadPackageReleaseInfo(pkg, AllReleases, @[])
     let releaseMetadata = loadPackageReleaseMetadata(pkg, releaseInfo)
@@ -866,6 +947,7 @@ proc harvestWorker(
     metadataDir: Path;
     ephemeral: bool;
     updateRepos: bool;
+    skipRepoUpdatePackages: HashSet[string];
     compressions: seq[ArchiveCompression];
     regenerateTarballs: bool;
     createTarballs: bool
@@ -885,6 +967,7 @@ proc harvestWorker(
             metadataDir,
             ephemeral,
             updateRepos,
+            skipRepoUpdatePackages,
             compressions,
             harvestRoot,
             regenerateTarballs,
@@ -916,6 +999,7 @@ proc harvestRegistryCaches*(
     metadataDir: Path;
     ephemeral: bool,
     updateRepos: bool,
+    skipRepoUpdatePackages: HashSet[string];
     pkgNames: seq[string];
     pkgPrefixes: seq[string];
     ignoredPkgNames: seq[string];
@@ -959,6 +1043,7 @@ proc harvestRegistryCaches*(
       metadataDir,
       ephemeral,
       updateRepos,
+      skipRepoUpdatePackages,
       compressionList,
       regenerateTarballs,
       createTarballs
@@ -1004,6 +1089,7 @@ proc harvestRegistryCaches*(
         metadataDir,
         ephemeral,
         updateRepos,
+        skipRepoUpdatePackages,
         compressionList,
         regenerateTarballs,
         createTarballs

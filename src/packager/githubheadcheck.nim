@@ -7,13 +7,14 @@
 
 import std/[algorithm, httpclient, json, os, paths, sets, streams, strutils, tables]
 
-import ../basic/[dependencycache, httpclientutils, packageinfos, pkgurls, reporters]
+import ../basic/[dependencycache, httpclientutils, packageinfos, pkgurls, reporters, versions]
 import ./cacheharvest
 
 const
   GitHubGraphqlEndpoint* = "https://api.github.com/graphql"
   DefaultGitHubGraphqlBatchSize* = 80
   DefaultGitHubTagProbeCount* = 80
+  DefaultGitHubReleaseProbeCount* = 80
   DefaultGitHubGraphqlRetries* = 3
 
 type
@@ -32,10 +33,18 @@ type
     repo: string
     latestCommit: string
     retainedVersions: HashSet[string]
+    retainedForgeReleases: JsonNode
 
-  GitHubRepoState = object
-    headOid: string
-    tagNames: seq[string]
+  GitHubForgeRelease* = object
+    tagName*: string
+    version*: string
+    prerelease*: bool
+    latest*: bool
+
+  GitHubRepoState* = object
+    headOid*: string
+    tagNames*: seq[string]
+    forgeReleases*: seq[GitHubForgeRelease]
 
   GitHubProbeFatalError = object of CatchableError
 
@@ -116,6 +125,36 @@ proc loadRetainedVersions(metadataDir: Path; state: RetainedPackageState): HashS
   except CatchableError:
     discard
 
+proc loadRetainedForgeReleases(metadataDir: Path; state: RetainedPackageState): JsonNode =
+  let releasesPath = metadataDir / Path(state.releasesMetadataPath)
+  if not fileExists($releasesPath):
+    return newJNull()
+
+  try:
+    let root = parseFile($releasesPath)
+    let forgeReleases = root{"forgeReleases"}
+    if forgeReleases.isNil:
+      return newJNull()
+    forgeReleases.copy()
+  except CatchableError:
+    newJNull()
+
+proc normalizeReleaseTagVersion(tagName: string): string =
+  let raw = tagName.strip()
+  if raw.len == 0:
+    return
+
+  var start = 0
+  while start < raw.len and raw[start] notin Digits:
+    inc start
+  if start >= raw.len:
+    return
+
+  let parsed = toVersion(raw[start .. ^1])
+  let normalized = $parsed
+  if normalized.len > 0 and normalized != "~" and not normalized.startsWith("#"):
+    result = $parsed
+
 proc toGitHubRepoTarget(
     info: PackageInfo;
     metadataDir: Path;
@@ -134,8 +173,22 @@ proc toGitHubRepoTarget(
     owner: owner,
     repo: repo,
     latestCommit: state.latestCommit,
-    retainedVersions: loadRetainedVersions(metadataDir, state)
+    retainedVersions: loadRetainedVersions(metadataDir, state),
+    retainedForgeReleases: loadRetainedForgeReleases(metadataDir, state)
   )
+
+proc toGitHubRepoTarget(info: PackageInfo): GitHubRepoTarget =
+  let url = createUrlSkipPatterns(info.url, skipDirTest = true)
+  let host = url.cloneUri().hostname.toLowerAscii()
+  if host != "github.com":
+    return
+  let owner = url.qualifiedName.user.strip(chars = {'/', '\\'})
+  let repo = url.qualifiedName.name
+  if owner.len == 0 or repo.len == 0:
+    return
+  result.packageName = info.name
+  result.owner = owner
+  result.repo = repo
 
 proc graphqlEscape(value: string): string =
   result = value.replace("\\", "\\\\")
@@ -150,9 +203,40 @@ proc buildGitHubHeadQuery(targets: openArray[GitHubRepoTarget]): string =
       "\", name: \"" & graphqlEscape(target.repo) &
       "\") { defaultBranchRef { target { ... on Commit { oid } } } refs(refPrefix: \"refs/tags/\", first: " &
       $DefaultGitHubTagProbeCount &
-      ", orderBy: {field: TAG_COMMIT_DATE, direction: DESC}) { nodes { name } } }\n"
+      ", orderBy: {field: TAG_COMMIT_DATE, direction: DESC}) { nodes { name } } releases(first: " &
+      $DefaultGitHubReleaseProbeCount &
+      ", orderBy: {field: CREATED_AT, direction: DESC}) { nodes { tagName isDraft isPrerelease isLatest } } }\n"
     )
   result.add("}")
+
+proc buildForgeReleaseMetadata*(state: GitHubRepoState): JsonNode =
+  if state.forgeReleases.len == 0:
+    return newJNull()
+
+  result = newJObject()
+  result["archives"] = %*{
+    "tar.gz": "/archive/refs/tags/{tag}.tar.gz",
+    "zip": "/archive/refs/tags/{tag}.zip"
+  }
+  result["releases"] = newJArray()
+
+  var releases = state.forgeReleases
+  releases.sort do (a, b: GitHubForgeRelease) -> int:
+    let versionCmp = cmp(a.version, b.version)
+    if versionCmp != 0:
+      return versionCmp
+    cmp(a.tagName, b.tagName)
+
+  for release in releases:
+    var entry = newJObject()
+    entry["tag"] = %release.tagName
+    if release.version.len > 0:
+      entry["version"] = %release.version
+    if release.prerelease:
+      entry["prerelease"] = %true
+    if release.latest:
+      entry["latest"] = %true
+    result["releases"].add entry
 
 proc fetchGitHubHeadBatch(
     targets: openArray[GitHubRepoTarget];
@@ -220,7 +304,19 @@ proc fetchGitHubHeadBatch(
           let tagName = tag{"name"}.getStr()
           if tagName.len > 0:
             state.tagNames.add tagName
-      if state.headOid.len > 0 or state.tagNames.len > 0:
+      let releases = repoNode{"releases", "nodes"}
+      if not releases.isNil and releases.kind == JArray:
+        for release in releases:
+          let tagName = release{"tagName"}.getStr()
+          if tagName.len == 0 or release{"isDraft"}.getBool():
+            continue
+          state.forgeReleases.add GitHubForgeRelease(
+            tagName: tagName,
+            version: normalizeReleaseTagVersion(tagName),
+            prerelease: release{"isPrerelease"}.getBool(),
+            latest: release{"isLatest"}.getBool()
+          )
+      if state.headOid.len > 0 or state.tagNames.len > 0 or state.forgeReleases.len > 0:
         result[target.packageName] = state
   finally:
     client.close()
@@ -302,20 +398,48 @@ proc batchedGitHubHeads(
       result[packageName] = oid
     i = j
 
+proc fetchGitHubRepoStates*(
+    packagesFile: Path;
+    packageNames: seq[string];
+    packagePrefixes: seq[string];
+    ignoredPackageNames: seq[string];
+    batchSize = DefaultGitHubGraphqlBatchSize
+): Table[string, GitHubRepoState] =
+  let token = getEnv("GITHUB_API_KEY")
+  if token.len == 0:
+    info "atlas:pkger", "github api check skipped: missing GITHUB_API_KEY"
+    return
+
+  let ignored = ignoredPackageNames.toHashSet()
+  var targets: seq[GitHubRepoTarget]
+  for info in loadPackageList(packagesFile):
+    if info.kind != pkPackage:
+      continue
+    if not matchesPackageFilters(info.name, packageNames, packagePrefixes):
+      continue
+    if info.name in ignored:
+      continue
+    let target = toGitHubRepoTarget(info)
+    if target.packageName.len > 0:
+      targets.add target
+
+  targets.sort(proc (a, b: GitHubRepoTarget): int = cmp(a.packageName, b.packageName))
+  if targets.len == 0:
+    info "atlas:pkger", "github api check skipped: no eligible github packages"
+    return
+
+  notice "atlas:pkger", "github api check: probing", $targets.len, "package(s)"
+  result = batchedGitHubHeads(targets, token, batchSize)
+
 proc findUnchangedGitHubPackages*(
     packagesFile: Path;
     metadataDir: Path;
     packageNames: seq[string];
     packagePrefixes: seq[string];
     ignoredPackageNames: seq[string];
+    repoStates: Table[string, GitHubRepoState];
     currentCompressions: openArray[string];
-    batchSize = DefaultGitHubGraphqlBatchSize
 ): seq[string] =
-  let token = getEnv("GITHUB_API_KEY")
-  if token.len == 0:
-    info "atlas:pkger", "github api check skipped: missing GITHUB_API_KEY"
-    return
-
   let retainedIndex = loadRetainedIndexState(metadataDir)
   if retainedIndex.packages.len == 0:
     info "atlas:pkger", "github api check skipped: missing retained index package state"
@@ -330,14 +454,13 @@ proc findUnchangedGitHubPackages*(
     info "atlas:pkger", "github api check skipped: compressions changed"
     return
 
-  let ignored = ignoredPackageNames.toHashSet()
   var targets: seq[GitHubRepoTarget]
   for info in loadPackageList(packagesFile):
     if info.kind != pkPackage:
       continue
     if not matchesPackageFilters(info.name, packageNames, packagePrefixes):
       continue
-    if info.name in ignored:
+    if info.name in ignoredPackageNames:
       continue
     if not retainedIndex.packages.hasKey(info.name):
       continue
@@ -350,19 +473,13 @@ proc findUnchangedGitHubPackages*(
 
   targets.sort(proc (a, b: GitHubRepoTarget): int = cmp(a.packageName, b.packageName))
 
-  if targets.len == 0:
-    info "atlas:pkger", "github api check skipped: no eligible github packages"
-    return
-
-  notice "atlas:pkger", "github api check: probing", $targets.len, "package(s)"
-  let heads = batchedGitHubHeads(targets, token, batchSize)
   for target in targets:
-    if not heads.hasKey(target.packageName):
+    if not repoStates.hasKey(target.packageName):
       info "atlas:pkger",
         "github api check unavailable:",
         target.packageName
       continue
-    let remoteState = heads.getOrDefault(target.packageName)
+    let remoteState = repoStates.getOrDefault(target.packageName)
     if remoteState.headOid != target.latestCommit:
       info "atlas:pkger",
         "github api check refresh:",
@@ -391,3 +508,11 @@ proc findUnchangedGitHubPackages*(
         target.packageName,
         "new tag:", unseenTag,
         "cached head:", target.latestCommit
+      continue
+    let remoteForgeReleases = buildForgeReleaseMetadata(remoteState)
+    if remoteForgeReleases != target.retainedForgeReleases:
+      info "atlas:pkger",
+        "github api check refresh:",
+        target.packageName,
+        "forge releases changed"
+      continue

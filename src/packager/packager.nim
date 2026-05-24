@@ -8,7 +8,7 @@
 
 ## CLI for harvesting Atlas package release caches from a packages.json list.
 
-import std / [algorithm, cpuinfo, json, monotimes, parseopt, os, paths, strutils, times]
+import std / [algorithm, cpuinfo, json, monotimes, parseopt, os, paths, sets, strutils, tables, times]
 when defined(posix):
   import std / posix
 import ../basic / [context, dependencycache, packageinfos, reporters]
@@ -536,6 +536,35 @@ proc daemonSleepMilliseconds*(remaining: Duration): int =
   else:
     result = int(remainingMilliseconds)
 
+proc updateForgeReleaseMetadata(
+    packagesFile: Path;
+    metadataDir: Path;
+    packageNames: seq[string];
+    packagePrefixes: seq[string];
+    ignoredPackageNames: seq[string];
+    repoStates: Table[string, GitHubRepoState]
+) =
+  if repoStates.len == 0:
+    return
+
+  for info in loadPackageList(packagesFile):
+    if info.kind != pkPackage:
+      continue
+    if not matchesPackageFilters(info.name, packageNames, packagePrefixes):
+      continue
+    if info.name in ignoredPackageNames:
+      continue
+    let forgeReleases =
+      if repoStates.hasKey(info.name):
+        buildForgeReleaseMetadata(repoStates[info.name])
+      else:
+        newJNull()
+    mergePackageForgeReleaseMetadata(
+      resolvePackageWorkspaceRoot(metadataDir, info),
+      info,
+      forgeReleases
+    )
+
 proc runPackagerOnce*(
     opts: PackagerCliOptions
 ): bool =
@@ -559,6 +588,17 @@ proc runPackagerOnce*(
 
   writeSettings(packagesFile, metadataDir, opts)
   var ignoredPackages = opts.ignoredPackageNames
+  let githubRepoStates =
+    if getEnv("GITHUB_API_KEY").len > 0:
+      fetchGitHubRepoStates(
+        packagesFile,
+        opts.packageNames,
+        opts.packagePrefixes,
+        ignoredPackages,
+        opts.githubApiChunkSize
+      )
+    else:
+      initTable[string, GitHubRepoState]()
   let includeMissingAutoSkips = not opts.retryMissing
   let includeOtherAutoSkips = not opts.updateRepos and not opts.regenerateTarballs
   if includeMissingAutoSkips or includeOtherAutoSkips:
@@ -580,26 +620,28 @@ proc runPackagerOnce*(
     notice "atlas:pkger",
       "release cache version changed; reprocessing all packages",
       "current:", $PackageReleaseCacheVersion
-  if opts.updateRepos and not opts.regenerateTarballs and not refreshAllPackages:
+  var skipRepoUpdatePackages = initHashSet[string]()
+  if opts.updateRepos and githubRepoStates.len > 0 and
+      not opts.regenerateTarballs and not refreshAllPackages:
     let githubSkipped = findUnchangedGitHubPackages(
       packagesFile,
       metadataDir,
       opts.packageNames,
       opts.packagePrefixes,
       ignoredPackages,
+      githubRepoStates,
       archiveCompressionNames(opts.compressions),
-      opts.githubApiChunkSize
     )
     if githubSkipped.len > 0:
       for packageName in githubSkipped:
-        if packageName notin ignoredPackages:
-          ignoredPackages.add packageName
-      notice "atlas:pkger", "auto-skipping unchanged github packages:", $githubSkipped.len()
+        skipRepoUpdatePackages.incl packageName
+      notice "atlas:pkger", "auto-skipping repo updates for unchanged github packages:", $githubSkipped.len()
   let summary = harvestRegistryCaches(
     packagesFile,
     metadataDir,
     opts.ephemeral,
     opts.updateRepos,
+    skipRepoUpdatePackages,
     opts.packageNames,
     opts.packagePrefixes,
     ignoredPackages,
@@ -622,6 +664,14 @@ proc runPackagerOnce*(
     "updated", $allDepsSummary.packagesUpdated,
     "missing", $allDepsSummary.packagesSkipped,
     "failed", $allDepsSummary.packagesFailed
+  updateForgeReleaseMetadata(
+    packagesFile,
+    metadataDir,
+    opts.packageNames,
+    opts.packagePrefixes,
+    ignoredPackages,
+    githubRepoStates
+  )
   stdout.writeLine(
     "processed " & $summary.packagesProcessed &
     " packages, failed " & $summary.packagesFailed &

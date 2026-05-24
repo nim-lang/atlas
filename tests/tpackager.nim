@@ -1,4 +1,4 @@
-import std/[algorithm, json, os, osproc, paths, sequtils, strutils, tempfiles, times, unittest, uri]
+import std/[algorithm, json, os, osproc, paths, sequtils, sets, strutils, tempfiles, times, unittest, uri]
 
 import packager/packager
 import packager/alldeps
@@ -240,6 +240,14 @@ suite "packager mirrored repo helpers":
     initPackagerWorkspace(metadataDir, packagesFile)
 
     check packageInfosFile() == packagesFile
+
+  test "unchanged github packages still harvest but skip repo update":
+    var skipRepoUpdatePackages = initHashSet[string]()
+    skipRepoUpdatePackages.incl "alpha"
+
+    check shouldUpdatePackageRepo(true, skipRepoUpdatePackages, "beta")
+    check not shouldUpdatePackageRepo(true, skipRepoUpdatePackages, "alpha")
+    check not shouldUpdatePackageRepo(false, skipRepoUpdatePackages, "beta")
 
   test "package filters match exact names and prefixes":
     check matchesPackageFilters("alpha", @[], @[])
@@ -657,6 +665,41 @@ suite "packager release metadata comparison":
     }
     check comparableReleaseMetadata(base) != comparableReleaseMetadata(changed)
 
+  test "comparable release metadata still detects forge release changes":
+    let base = %*{
+      "name": "alpha",
+      "releases": [],
+      "forgeReleases": {
+        "archives": {
+          "tar.gz": "/archive/refs/tags/{tag}.tar.gz",
+          "zip": "/archive/refs/tags/{tag}.zip"
+        },
+        "releases": [
+          {
+            "tag": "v1.0.0",
+            "version": "1.0.0"
+          }
+        ]
+      }
+    }
+    let changed = %*{
+      "name": "alpha",
+      "releases": [],
+      "forgeReleases": {
+        "archives": {
+          "tar.gz": "/archive/refs/tags/{tag}.tar.gz",
+          "zip": "/archive/refs/tags/{tag}.zip"
+        },
+        "releases": [
+          {
+            "tag": "v1.1.0",
+            "version": "1.1.0"
+          }
+        ]
+      }
+    }
+    check comparableReleaseMetadata(base) != comparableReleaseMetadata(changed)
+
   test "comparable release metadata normalizes tarball order":
     let base = %*{
       "name": "alpha",
@@ -687,6 +730,19 @@ suite "packager release metadata comparison":
       }
     }
     check comparableReleaseMetadata(base) == comparableReleaseMetadata(same)
+
+  test "github forge release metadata uses relative archive paths":
+    let metadata = buildForgeReleaseMetadata(GitHubRepoState(
+      forgeReleases: @[
+        GitHubForgeRelease(tagName: "v2.0.0", version: "2.0.0"),
+        GitHubForgeRelease(tagName: "v1.0.0", version: "1.0.0", prerelease: true)
+      ]
+    ))
+    check metadata["archives"]["tar.gz"].getStr() == "/archive/refs/tags/{tag}.tar.gz"
+    check metadata["archives"]["zip"].getStr() == "/archive/refs/tags/{tag}.zip"
+    check metadata["releases"][0]["tag"].getStr() == "v1.0.0"
+    check metadata["releases"][0]["prerelease"].getBool()
+    check metadata["releases"][1]["tag"].getStr() == "v2.0.0"
 
   test "merge release metadata drops retained tarballs when tarballs disabled":
     let root = createTempDir("atlas-packager", "no-tarballs-")
@@ -755,6 +811,38 @@ suite "packager release metadata comparison":
     check "size" notin rewritten["tarballs"]["1.0.0"][0]
     check "createdAt" notin rewritten["tarballs"]["1.0.0"][0]
     check "archiveRoot" notin rewritten["tarballs"]["1.0.0"][0]
+
+  test "merge package forge release metadata stores forge releases separately":
+    let root = createTempDir("atlas-packager", "forge-releases-")
+    defer: removeDir(root)
+
+    let workspaceRoot = Path(root)
+    writeFile(root / "releases.json", $(%*{
+      "name": "alpha",
+      "releases": [{"v": "1.0.0@aaaa"}]
+    }))
+
+    mergePackageForgeReleaseMetadata(
+      workspaceRoot,
+      PackageInfo(name: "alpha"),
+      %*{
+        "archives": {
+          "tar.gz": "/archive/refs/tags/{tag}.tar.gz",
+          "zip": "/archive/refs/tags/{tag}.zip"
+        },
+        "releases": [
+          {
+            "tag": "v1.0.0",
+            "version": "1.0.0"
+          }
+        ]
+      }
+    )
+
+    let rewritten = parseFile(root / "releases.json")
+    check rewritten["forgeReleases"]["releases"][0]["tag"].getStr() == "v1.0.0"
+    check rewritten["forgeReleases"]["archives"]["tar.gz"].getStr() ==
+      "/archive/refs/tags/{tag}.tar.gz"
 
   test "matching digest entries include content hash when present":
     let entries = %*{
