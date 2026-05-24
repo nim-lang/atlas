@@ -63,6 +63,7 @@ type
     projectDir*: Path = Path"."
     depsDir*: Path = Path"deps"
     cacheDir*: Path = Path""
+    packagesFileOverride*: Path = Path""
     confDirOverride*: Path = Path""
     flags*: set[Flag] = {}
     nameOverrides*: Patterns

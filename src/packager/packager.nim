@@ -435,10 +435,11 @@ proc resolveMetadataDir*(opts: PackagerCliOptions): Path =
   else:
     result = Path"pkgs".absolutePath()
 
-proc initPackagerWorkspace*(metadataDir: Path) =
+proc initPackagerWorkspace*(metadataDir: Path; packagesFile = Path"") =
   var ctx = AtlasContext()
   ctx.depsDir = metadataDir
   ctx.cacheDir = metadataDir
+  ctx.packagesFileOverride = packagesFile
   createDir($metadataDir)
   setContext(ctx)
 
@@ -540,17 +541,18 @@ proc runPackagerOnce*(
 ): bool =
   let startedAt = getMonoTime()
   let metadataDir = resolveMetadataDir(opts)
-  initPackagerWorkspace(metadataDir)
-  configurePackagerContext(opts)
-  configureNonInteractiveGit()
   let packagesFile =
     if opts.packagesFile.len == 0:
       metadataDir / Path"packages.json"
     else:
       resolvePackagesFile(opts)
+  initPackagerWorkspace(metadataDir, packagesFile)
+  configurePackagerContext(opts)
+  configureNonInteractiveGit()
 
   if not fileExists($packagesFile):
-    updatePackages()
+    if opts.packagesFile.len == 0:
+      updatePackages()
   if not fileExists($packagesFile):
     stderr.writeLine("packages.json not found: " & $packagesFile)
     return false

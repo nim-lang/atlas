@@ -231,6 +231,16 @@ suite "local project packager options":
     check opts.selectionMode == psmAllReleases
 
 suite "packager mirrored repo helpers":
+  test "packager workspace uses explicit packages file override":
+    let root = createTempDir("atlas-packager", "packages-file-override-")
+    defer: removeDir(root)
+
+    let metadataDir = Path(root / "pkgs")
+    let packagesFile = Path(root / "packages.json")
+    initPackagerWorkspace(metadataDir, packagesFile)
+
+    check packageInfosFile() == packagesFile
+
   test "package filters match exact names and prefixes":
     check matchesPackageFilters("alpha", @[], @[])
     check matchesPackageFilters("alpha", @["alpha"], @[])

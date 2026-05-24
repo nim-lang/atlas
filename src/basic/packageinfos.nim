@@ -100,7 +100,10 @@ proc toTags*(j: JsonNode): seq[string] =
       result.add elem.getStr("")
 
 proc packageInfosFile*(cacheDir = cachesDirectory()): Path =
-  cacheDir / Path"packages.json"
+  if context().packagesFileOverride.len > 0:
+    context().packagesFileOverride
+  else:
+    cacheDir / Path"packages.json"
 
 proc removeLegacyPackageCaches*(gitDir = packagesDirectory()) =
   let oldNimbleCachesDir = depsDir() / Path"_nimble"
