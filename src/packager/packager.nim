@@ -562,6 +562,7 @@ proc updateForgeReleaseMetadata(
     mergePackageForgeReleaseMetadata(
       resolvePackageWorkspaceRoot(metadataDir, info),
       info,
+      repoStates.hasKey(info.name) and repoStates[info.name].tagNames.len > 0,
       forgeReleases
     )
 

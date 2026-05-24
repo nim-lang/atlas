@@ -707,6 +707,10 @@ proc comparableReleaseMetadata*(metadata: JsonNode): JsonNode =
   result = newJObject()
   result["name"] = metadata.metadataField("name").copy()
   result["releases"] = metadata.metadataField("releases").copy()
+  let tags = metadata.metadataField("tags")
+  result["tags"] =
+    if tags.isNil: newJNull()
+    else: tags.copy()
   let tarballs = metadata.metadataField("tarballs")
   result["tarballs"] =
     if tarballs.isNil: newJNull()
@@ -728,6 +732,7 @@ proc metadataChangeReason(
   for field in [
       ("name", "name"),
       ("releases", "releases"),
+      ("tags", "tags"),
       ("tarballs", "tarballs"),
       ("forge", "forge releases")
   ]:
@@ -746,6 +751,7 @@ proc mergePackageReleaseMetadata*(
     info: PackageInfo;
     releaseMetadata: JsonNode;
     tarballEntries: JsonNode;
+    tags: bool = false;
     forgeReleases: JsonNode = nil
 ) =
   let releasesMetadataPath = packageReleasesMetadataFile(workspaceRoot)
@@ -766,6 +772,7 @@ proc mergePackageReleaseMetadata*(
     else:
       releaseMetadata.copy()
   metadata["name"] = %info.name
+  metadata["tags"] = %tags
   if tarballEntries.isNil or tarballEntries.kind == JNull:
     if metadata.hasKey("tarballs"):
       metadata.delete("tarballs")
@@ -806,6 +813,7 @@ proc mergePackageReleaseMetadata*(
 proc mergePackageForgeReleaseMetadata*(
     workspaceRoot: Path;
     info: PackageInfo;
+    tags: bool;
     forgeReleases: JsonNode
 ) =
   let releasesMetadataPath = packageReleasesMetadataFile(workspaceRoot)
@@ -825,6 +833,7 @@ proc mergePackageForgeReleaseMetadata*(
     info,
     existingMetadata,
     existingMetadata.metadataField("tarballs"),
+    tags,
     forgeReleases
   )
 
@@ -1028,7 +1037,8 @@ proc harvestPackage(
       workspaceRoot,
       info,
       releaseMetadata,
-      tarballEntries
+      tarballEntries,
+      hasGitTags
     )
     result.ok = true
     result.packageName = info.name

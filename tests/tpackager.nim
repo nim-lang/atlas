@@ -669,6 +669,7 @@ suite "packager release metadata comparison":
     let base = %*{
       "name": "alpha",
       "releases": [],
+      "tags": true,
       "forge": {
         "archives": {
           "tar.gz": "/archive/refs/tags/{tag}.tar.gz",
@@ -687,6 +688,7 @@ suite "packager release metadata comparison":
     let changed = %*{
       "name": "alpha",
       "releases": [],
+      "tags": true,
       "forge": {
         "archives": {
           "tar.gz": "/archive/refs/tags/{tag}.tar.gz",
@@ -700,6 +702,37 @@ suite "packager release metadata comparison":
         },
         "latest": "v1.1.0",
         "prerelease": ["v1.1.0"]
+      }
+    }
+    check comparableReleaseMetadata(base) != comparableReleaseMetadata(changed)
+
+  test "comparable release metadata still detects tag presence changes":
+    let base = %*{
+      "name": "alpha",
+      "releases": [],
+      "tags": false,
+      "forge": {
+        "archives": {
+          "tar.gz": "/archive/refs/tags/{tag}.tar.gz",
+          "zip": "/archive/refs/tags/{tag}.zip"
+        },
+        "releases": [],
+        "latest": "",
+        "prerelease": []
+      }
+    }
+    let changed = %*{
+      "name": "alpha",
+      "releases": [],
+      "tags": true,
+      "forge": {
+        "archives": {
+          "tar.gz": "/archive/refs/tags/{tag}.tar.gz",
+          "zip": "/archive/refs/tags/{tag}.zip"
+        },
+        "releases": [],
+        "latest": "",
+        "prerelease": []
       }
     }
     check comparableReleaseMetadata(base) != comparableReleaseMetadata(changed)
@@ -831,6 +864,7 @@ suite "packager release metadata comparison":
     mergePackageForgeReleaseMetadata(
       workspaceRoot,
       PackageInfo(name: "alpha"),
+      true,
       %*{
         "archives": {
           "tar.gz": "/archive/refs/tags/{tag}.tar.gz",
@@ -848,6 +882,7 @@ suite "packager release metadata comparison":
     )
 
     let rewritten = parseFile(root / "releases.json")
+    check rewritten["tags"].getBool()
     check rewritten["forge"]["releases"][0].getStr() == "v1.0.0"
     check rewritten["forge"]["tagVersions"]["v1.0.0"].getStr() == "1.0.0"
     check rewritten["forge"]["latest"].getStr() == "v1.0.0"
