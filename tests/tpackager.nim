@@ -163,6 +163,15 @@ suite "packager env options":
                     check opts.threadCount == 5
                     check opts.ephemeral
 
+  test "packager options parse only-starts-with filters":
+    var args: seq[string]
+    let opts = parseAtlasPackagerOptions(
+      @["--only-starts-with=boo", "--only-starts-with=a,b"],
+      "test",
+      args
+    )
+    check opts.packagePrefixes == @["boo", "a", "b"]
+
   test "regenerate tarballs overrides no tarballs when set later":
     var args: seq[string]
     let opts = parseAtlasPackagerOptions(
@@ -203,6 +212,15 @@ suite "local project packager options":
     check opts.selectionMode == psmAllReleases
 
 suite "packager mirrored repo helpers":
+  test "package filters match exact names and prefixes":
+    check matchesPackageFilters("alpha", @[], @[])
+    check matchesPackageFilters("alpha", @["alpha"], @[])
+    check not matchesPackageFilters("alpha", @["beta"], @[])
+    check matchesPackageFilters("boop", @[], @["boo"])
+    check not matchesPackageFilters("alpha", @[], @["boo"])
+    check matchesPackageFilters("boop", @["boop"], @["boo"])
+    check not matchesPackageFilters("alpha", @["alpha"], @["boo"])
+
   test "alphabetical workspace layout handles single-character package names":
     let root = createTempDir("atlas-packager", "single-char-layout-")
     defer: removeDir(root)
@@ -456,7 +474,7 @@ suite "packager allDeps metadata":
       ]
     }))
 
-    let summary = updatePackageAllDeps(Path(packagesFile), Path(root), @["alpha"], @[], 2)
+    let summary = updatePackageAllDeps(Path(packagesFile), Path(root), @["alpha"], @[], @[], 2)
     check summary.packagesProcessed == 1
     check summary.packagesUpdated == 1
     check summary.packagesFailed == 0
@@ -474,6 +492,61 @@ suite "packager allDeps metadata":
       "delta",
       "missing"
     ]
+
+  test "allDeps prefix filter processes matching packages only":
+    let root = createTempDir("atlas-packager", "all-deps-prefix-")
+    defer: removeDir(root)
+
+    let packagesFile = root / "packages.json"
+    writeText(packagesFile, pretty(%*[
+      {
+        "name": "alpha",
+        "url": "https://example.com/alpha",
+        "method": "git",
+        "tags": [],
+        "description": "alpha package",
+        "license": "MIT"
+      },
+      {
+        "name": "alpine",
+        "url": "https://example.com/alpine",
+        "method": "git",
+        "tags": [],
+        "description": "alpine package",
+        "license": "MIT"
+      },
+      {
+        "name": "beta",
+        "url": "https://example.com/beta",
+        "method": "git",
+        "tags": [],
+        "description": "beta package",
+        "license": "MIT"
+      }
+    ]))
+
+    writeText(bucketedPkgPath(root, "alpha") / "releases.json", pretty(%*{
+      "name": "alpha",
+      "releases": [{"v": "1.0.0@aaaa", "r": ["beta"]}]
+    }))
+    writeText(bucketedPkgPath(root, "alpine") / "releases.json", pretty(%*{
+      "name": "alpine",
+      "releases": [{"v": "1.0.0@bbbb", "r": ["beta"]}]
+    }))
+    writeText(bucketedPkgPath(root, "beta") / "releases.json", pretty(%*{
+      "name": "beta",
+      "releases": [{"v": "1.0.0@cccc", "r": ["alpha"]}]
+    }))
+
+    let summary = updatePackageAllDeps(Path(packagesFile), Path(root), @[], @["alp"], @[], 2)
+    check summary.packagesProcessed == 2
+    check summary.packagesUpdated == 2
+    check summary.packagesFailed == 0
+
+    check allDeps(bucketedPkgPath(root, "alpha") / "releases.json").kind == JObject
+    check allDeps(bucketedPkgPath(root, "alpine") / "releases.json").kind == JObject
+    let betaRoot = parseFile(bucketedPkgPath(root, "beta") / "releases.json")
+    check "allDeps" notin betaRoot
 
 suite "packager release metadata comparison":
   test "local project release files match packager naming":

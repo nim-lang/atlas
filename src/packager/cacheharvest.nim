@@ -84,6 +84,23 @@ proc packageBucketDir*(packageName: string): Path =
     return Path"_"
   Path($toLowerAscii(packageName[0]))
 
+proc matchesPackageFilters*(
+    packageName: string;
+    packageNames: openArray[string];
+    packagePrefixes: openArray[string]
+): bool =
+  let matchesNames = packageNames.len == 0 or packageName in packageNames
+  if not matchesNames:
+    return false
+
+  if packagePrefixes.len == 0:
+    return true
+
+  for prefix in packagePrefixes:
+    if packageName.startsWith(prefix):
+      return true
+  false
+
 proc packageWorkspaceRoot(harvestRoot: Path; info: PackageInfo): Path =
   (harvestRoot / packageBucketDir(info.name) / Path(info.name)).absolutePath()
 
@@ -734,7 +751,8 @@ proc writeIndex(
     ephemeral: bool;
     compressions: openArray[ArchiveCompression];
     packageName = "";
-    packageNames: seq[string] = @[]
+    packageNames: seq[string] = @[];
+    packagePrefixes: seq[string] = @[]
 ) =
   var index = newJObject()
   index["generatedAt"] = %now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
@@ -747,6 +765,8 @@ proc writeIndex(
     index["package"] = %packageName
   elif packageNames.len > 0:
     index["packages"] = %(packageNames)
+  if packagePrefixes.len > 0:
+    index["packagePrefixes"] = %(packagePrefixes)
   index["packagesSeen"] = %summary.packagesSeen
   index["aliasesSkipped"] = %summary.aliasesSkipped
   index["packagesProcessed"] = %summary.packagesProcessed
@@ -897,6 +917,7 @@ proc harvestRegistryCaches*(
     ephemeral: bool,
     updateRepos: bool,
     pkgNames: seq[string];
+    pkgPrefixes: seq[string];
     ignoredPkgNames: seq[string];
     compressions: openArray[ArchiveCompression];
     threadCount: int;
@@ -920,7 +941,7 @@ proc harvestRegistryCaches*(
     if info.kind == pkAlias:
       inc result.aliasesSkipped
       continue
-    elif pkgNames.len() > 0 and info.name notin pkgNames:
+    elif not matchesPackageFilters(info.name, pkgNames, pkgPrefixes):
       continue
     elif info.name in ignoredPkgNames:
       continue
@@ -1030,6 +1051,7 @@ proc harvestRegistryCaches*(
     succeededPackages,
     ephemeral,
     compressions,
-    packageNames = pkgNames
+    packageNames = pkgNames,
+    packagePrefixes = pkgPrefixes
   )
   cleanupDanglingReleaseCaches(metadataDir)

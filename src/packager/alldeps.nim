@@ -494,6 +494,7 @@ proc updatePackageAllDeps*(
     packagesFile: Path;
     metadataDir: Path;
     pkgNames: seq[string];
+    pkgPrefixes: seq[string];
     ignoredPkgNames: seq[string];
     threadCount: int
 ): AllDepsSummary =
@@ -503,7 +504,7 @@ proc updatePackageAllDeps*(
   for info in packageList:
     if info.kind == pkAlias:
       continue
-    if pkgNames.len > 0 and info.name notin pkgNames:
+    if not matchesPackageFilters(info.name, pkgNames, pkgPrefixes):
       continue
     if info.name in ignoredPkgNames:
       continue

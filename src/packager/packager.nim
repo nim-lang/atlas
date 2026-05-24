@@ -30,6 +30,7 @@ Options:
   --version, -v         show the version
   --packages=path       write copied cache files to the given directory
   --only=name[,name]    process only the named package(s) from packages.json
+  --only-starts-with=s  process only package(s) whose names start with prefix s
   --ignore=name[,name]  skip the named package(s) from packages.json
   --update-repos, -u    run `gitops.updateRepo` for existing repos before harvest
   --regenerate-tarballs rebuild all tarballs instead of reusing matching archives
@@ -69,6 +70,7 @@ type
     packagesFile*: Path
     metadataDir*: Path
     packageNames*: seq[string]
+    packagePrefixes*: seq[string]
     ignoredPackageNames*: seq[string]
     compressions*: seq[ArchiveCompression]
     githubApiChunkSize*: int
@@ -170,6 +172,17 @@ proc addPackageNames*(dest: var seq[string]; value: string) =
   for packageName in parsePackageNames(value):
     if packageName notin dest:
       dest.add packageName
+
+proc parsePackagePrefixes*(value: string): seq[string] =
+  for rawPrefix in value.split(','):
+    let prefix = rawPrefix.strip()
+    if prefix.len > 0 and prefix notin result:
+      result.add prefix
+
+proc addPackagePrefixes*(dest: var seq[string]; value: string) =
+  for prefix in parsePackagePrefixes(value):
+    if prefix notin dest:
+      dest.add prefix
 
 proc parseArchiveCompression*(value: string): ArchiveCompression =
   case value.normalize()
@@ -320,6 +333,7 @@ proc parseAtlasPackagerOptions*(
     writeHelp(versionString)
   var compressionWasSet = false
   var onlyWasSet = false
+  var onlyStartsWithWasSet = false
   var ignoreWasSet = false
   for kind, key, val in getopt(params):
     case kind
@@ -340,6 +354,13 @@ proc parseAtlasPackagerOptions*(
           result.packageNames.setLen(0)
           onlyWasSet = true
         result.packageNames.addPackageNames(val)
+      of "only-starts-with", "onlystartswith":
+        if val.len == 0:
+          writeHelp(versionString)
+        if not onlyStartsWithWasSet:
+          result.packagePrefixes.setLen(0)
+          onlyStartsWithWasSet = true
+        result.packagePrefixes.addPackagePrefixes(val)
       of "ignore":
         if val.len == 0:
           writeHelp(versionString)
@@ -469,6 +490,10 @@ proc writeSettings*(
     notice "atlas:pkger", "only filter:", opts.packageNames.join(",")
   else:
     notice "atlas:pkger", "only filter:", "all"
+  if opts.packagePrefixes.len > 0:
+    notice "atlas:pkger", "only starts with:", opts.packagePrefixes.join(",")
+  else:
+    notice "atlas:pkger", "only starts with:", "all"
   if opts.ignoredPackageNames.len > 0:
     notice "atlas:pkger", "ignore filter:", opts.ignoredPackageNames.join(",")
   else:
@@ -557,6 +582,7 @@ proc runPackagerOnce*(
       packagesFile,
       metadataDir,
       opts.packageNames,
+      opts.packagePrefixes,
       ignoredPackages,
       archiveCompressionNames(opts.compressions),
       opts.githubApiChunkSize
@@ -572,6 +598,7 @@ proc runPackagerOnce*(
     opts.ephemeral,
     opts.updateRepos,
     opts.packageNames,
+    opts.packagePrefixes,
     ignoredPackages,
     opts.compressions,
     opts.threadCount,
@@ -582,6 +609,7 @@ proc runPackagerOnce*(
     packagesFile,
     metadataDir,
     opts.packageNames,
+    opts.packagePrefixes,
     opts.ignoredPackageNames,
     opts.threadCount
   )

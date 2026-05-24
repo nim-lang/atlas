@@ -8,6 +8,7 @@
 import std/[algorithm, httpclient, json, os, paths, sets, streams, strutils, tables]
 
 import ../basic/[dependencycache, httpclientutils, packageinfos, pkgurls, reporters]
+import ./cacheharvest
 
 const
   GitHubGraphqlEndpoint* = "https://api.github.com/graphql"
@@ -305,6 +306,7 @@ proc findUnchangedGitHubPackages*(
     packagesFile: Path;
     metadataDir: Path;
     packageNames: seq[string];
+    packagePrefixes: seq[string];
     ignoredPackageNames: seq[string];
     currentCompressions: openArray[string];
     batchSize = DefaultGitHubGraphqlBatchSize
@@ -333,7 +335,7 @@ proc findUnchangedGitHubPackages*(
   for info in loadPackageList(packagesFile):
     if info.kind != pkPackage:
       continue
-    if packageNames.len > 0 and info.name notin packageNames:
+    if not matchesPackageFilters(info.name, packageNames, packagePrefixes):
       continue
     if info.name in ignored:
       continue
