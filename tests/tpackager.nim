@@ -95,13 +95,15 @@ suite "packager daemon options":
   test "packager options parse daemon schedule":
     var args: seq[string]
     let opts = parseAtlasPackagerOptions(
-      @["--daemon", "--interval=20m", "packages.json", "pkgs"],
+      @["--daemon", "--interval=20m", "--packages-file=packages.json", "--packages=pkgs"],
       "test",
       args
     )
     check opts.daemon.enabled
     check opts.daemon.intervalSeconds == 20 * 60
-    check args == @["packages.json", "pkgs"]
+    check opts.packagesFile == Path("packages.json")
+    check opts.metadataDir == Path("pkgs")
+    check args.len == 0
 
   test "daemon sleep floors elapsed and overrun intervals":
     check daemonSleepMilliseconds(initDuration(milliseconds = 3_000)) == 3_000
@@ -142,6 +144,7 @@ suite "packager env options":
                     var args: seq[string]
                     let opts = parseAtlasPackagerOptions(@[
                       "--packages=cli-pkgs",
+                      "--packages-file=cli-packages.json",
                       "--only=delta",
                       "--ignore=epsilon,zeta",
                       "--update-repos",
@@ -153,6 +156,7 @@ suite "packager env options":
                       "--ephemeral"
                     ], "test", args)
                     check opts.metadataDir == Path("cli-pkgs")
+                    check opts.packagesFile == Path("cli-packages.json")
                     check opts.packageNames == @["delta"]
                     check opts.ignoredPackageNames == @["epsilon", "zeta"]
                     check opts.updateRepos
@@ -171,6 +175,21 @@ suite "packager env options":
       args
     )
     check opts.packagePrefixes == @["boo", "a", "b"]
+
+  test "packager defaults packages file to metadata dir packages.json":
+    var args: seq[string]
+    let opts = parseAtlasPackagerOptions(@["--packages=cache"], "test", args)
+    check resolveMetadataDir(opts) == Path("cache").absolutePath()
+    check resolvePackagesFile(opts).len == 0
+
+  test "packager options parse explicit packages file":
+    var args: seq[string]
+    let opts = parseAtlasPackagerOptions(
+      @["--packages-file=./packages.json"],
+      "test",
+      args
+    )
+    check opts.packagesFile == Path("./packages.json")
 
   test "regenerate tarballs overrides no tarballs when set later":
     var args: seq[string]

@@ -23,12 +23,13 @@ Experimental packager based on Atlas package parser.
 
   (c) 2026 Atlas Contributors
 Usage:
-  atlas-packager [options] [packages.json] [packages-dir]
+  atlas-packager [options]
 
 Options:
   --help, -h            show this help
   --version, -v         show the version
   --packages=path       write copied cache files to the given directory
+  --packages-file=path  read package definitions from the given packages.json
   --only=name[,name]    process only the named package(s) from packages.json
   --only-starts-with=s  process only package(s) whose names start with prefix s
   --ignore=name[,name]  skip the named package(s) from packages.json
@@ -347,6 +348,10 @@ proc parseAtlasPackagerOptions*(
         if val.len == 0:
           writeHelp(versionString)
         result.metadataDir = Path(val)
+      of "packages-file", "packagesfile":
+        if val.len == 0:
+          writeHelp(versionString)
+        result.packagesFile = Path(val)
       of "only":
         if val.len == 0:
           writeHelp(versionString)
@@ -416,20 +421,17 @@ proc parseAtlasPackagerOptions*(
         writeHelp(versionString)
     of cmdArgument:
       positional.add key
+      writeHelp(versionString)
     of cmdEnd:
       assert false, "cannot happen"
 
-proc resolvePackagesFile*(opts: PackagerCliOptions; args: seq[string]): Path =
+proc resolvePackagesFile*(opts: PackagerCliOptions): Path =
   if opts.packagesFile.len > 0:
     result = opts.packagesFile.absolutePath()
-  elif args.len >= 1:
-    result = Path(args[0]).absolutePath()
 
-proc resolveMetadataDir*(opts: PackagerCliOptions; args: seq[string]): Path =
+proc resolveMetadataDir*(opts: PackagerCliOptions): Path =
   if opts.metadataDir.len > 0:
     result = opts.metadataDir.absolutePath()
-  elif args.len >= 2:
-    result = Path(args[1]).absolutePath()
   else:
     result = Path"pkgs".absolutePath()
 
@@ -534,19 +536,18 @@ proc daemonSleepMilliseconds*(remaining: Duration): int =
     result = int(remainingMilliseconds)
 
 proc runPackagerOnce*(
-    opts: PackagerCliOptions;
-    args: seq[string]
+    opts: PackagerCliOptions
 ): bool =
   let startedAt = getMonoTime()
-  let metadataDir = resolveMetadataDir(opts, args)
+  let metadataDir = resolveMetadataDir(opts)
   initPackagerWorkspace(metadataDir)
   configurePackagerContext(opts)
   configureNonInteractiveGit()
   let packagesFile =
-    if opts.packagesFile.len == 0 and args.len == 0:
+    if opts.packagesFile.len == 0:
       metadataDir / Path"packages.json"
     else:
-      resolvePackagesFile(opts, args)
+      resolvePackagesFile(opts)
 
   if not fileExists($packagesFile):
     updatePackages()
@@ -640,13 +641,13 @@ proc main*(versionString = "unknown") =
   installControlCHandler()
   var args: seq[string]
   let opts = parseAtlasPackagerOptions(commandLineParams(), versionString, args)
-  if args.len > 2:
+  if args.len > 0:
     writeHelp(versionString)
 
   var nextRunAt = getMonoTime()
   let daemonInterval = initDuration(seconds = opts.daemon.intervalSeconds)
   while true:
-    let runOk = runPackagerOnce(opts, args)
+    let runOk = runPackagerOnce(opts)
     if not opts.daemon.enabled:
       if not runOk:
         quit(1)
