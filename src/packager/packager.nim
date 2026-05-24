@@ -536,34 +536,13 @@ proc daemonSleepMilliseconds*(remaining: Duration): int =
   else:
     result = int(remainingMilliseconds)
 
-proc updateForgeReleaseMetadata(
-    packagesFile: Path;
-    metadataDir: Path;
-    packageNames: seq[string];
-    packagePrefixes: seq[string];
-    ignoredPackageNames: seq[string];
+proc buildPackageForgeMetadata(
     repoStates: Table[string, GitHubRepoState]
-) =
-  if repoStates.len == 0:
-    return
-
-  for info in loadPackageList(packagesFile):
-    if info.kind != pkPackage:
-      continue
-    if not matchesPackageFilters(info.name, packageNames, packagePrefixes):
-      continue
-    if info.name in ignoredPackageNames:
-      continue
-    let forgeReleases =
-      if repoStates.hasKey(info.name):
-        buildForgeReleaseMetadata(repoStates[info.name])
-      else:
-        newJNull()
-    mergePackageForgeReleaseMetadata(
-      resolvePackageWorkspaceRoot(metadataDir, info),
-      info,
-      repoStates.hasKey(info.name) and repoStates[info.name].tagNames.len > 0,
-      forgeReleases
+): Table[string, PackageForgeMetadata] =
+  for packageName, repoState in repoStates.pairs:
+    result[packageName] = PackageForgeMetadata(
+      tags: repoState.tagNames.len > 0,
+      forgeReleases: buildForgeReleaseMetadata(repoState)
     )
 
 proc runPackagerOnce*(
@@ -602,6 +581,7 @@ proc runPackagerOnce*(
       initTable[string, GitHubRepoState]()
   let includeMissingAutoSkips = not opts.retryMissing
   let includeOtherAutoSkips = not opts.updateRepos and not opts.regenerateTarballs
+  let packageForgeMetadata = buildPackageForgeMetadata(githubRepoStates)
   if includeMissingAutoSkips or includeOtherAutoSkips:
     for packageName in loadAutoIgnoredPackages(
         metadataDir,
@@ -643,6 +623,7 @@ proc runPackagerOnce*(
     opts.ephemeral,
     opts.updateRepos,
     skipRepoUpdatePackages,
+    packageForgeMetadata,
     opts.packageNames,
     opts.packagePrefixes,
     ignoredPackages,
@@ -665,14 +646,6 @@ proc runPackagerOnce*(
     "updated", $allDepsSummary.packagesUpdated,
     "missing", $allDepsSummary.packagesSkipped,
     "failed", $allDepsSummary.packagesFailed
-  updateForgeReleaseMetadata(
-    packagesFile,
-    metadataDir,
-    opts.packageNames,
-    opts.packagePrefixes,
-    ignoredPackages,
-    githubRepoStates
-  )
   stdout.writeLine(
     "processed " & $summary.packagesProcessed &
     " packages, failed " & $summary.packagesFailed &

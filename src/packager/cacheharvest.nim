@@ -44,6 +44,10 @@ type
     packageName*: string
     errorMessage*: string
 
+  PackageForgeMetadata* = object
+    tags*: bool
+    forgeReleases*: JsonNode
+
   HarvestWorkerResult = object
     packagesProcessed: int
     packagesFailed: int
@@ -985,6 +989,7 @@ proc harvestPackage(
     ephemeral: bool;
     updateRepos: bool;
     skipRepoUpdatePackages: HashSet[string];
+    packageForgeMetadata: Table[string, PackageForgeMetadata];
     compressions: openArray[ArchiveCompression];
     harvestRoot: Path;
     regenerateTarballs: bool;
@@ -1040,6 +1045,14 @@ proc harvestPackage(
       tarballEntries,
       hasGitTags
     )
+    if packageForgeMetadata.hasKey(info.name):
+      let forgeMetadata = packageForgeMetadata[info.name]
+      mergePackageForgeReleaseMetadata(
+        workspaceRoot,
+        info,
+        forgeMetadata.tags,
+        forgeMetadata.forgeReleases
+      )
     result.ok = true
     result.packageName = info.name
     result.latestCommit = releaseInfo.currentCommit.h
@@ -1058,6 +1071,7 @@ proc harvestWorker(
     ephemeral: bool;
     updateRepos: bool;
     skipRepoUpdatePackages: HashSet[string];
+    packageForgeMetadata: Table[string, PackageForgeMetadata];
     compressions: seq[ArchiveCompression];
     regenerateTarballs: bool;
     createTarballs: bool
@@ -1078,6 +1092,7 @@ proc harvestWorker(
             ephemeral,
             updateRepos,
             skipRepoUpdatePackages,
+            packageForgeMetadata,
             compressions,
             harvestRoot,
             regenerateTarballs,
@@ -1110,6 +1125,7 @@ proc harvestRegistryCaches*(
     ephemeral: bool,
     updateRepos: bool,
     skipRepoUpdatePackages: HashSet[string];
+    packageForgeMetadata: Table[string, PackageForgeMetadata];
     pkgNames: seq[string];
     pkgPrefixes: seq[string];
     ignoredPkgNames: seq[string];
@@ -1154,6 +1170,7 @@ proc harvestRegistryCaches*(
       ephemeral,
       updateRepos,
       skipRepoUpdatePackages,
+      packageForgeMetadata,
       compressionList,
       regenerateTarballs,
       createTarballs
@@ -1200,6 +1217,7 @@ proc harvestRegistryCaches*(
         ephemeral,
         updateRepos,
         skipRepoUpdatePackages,
+        packageForgeMetadata,
         compressionList,
         regenerateTarballs,
         createTarballs
