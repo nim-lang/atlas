@@ -132,7 +132,9 @@ proc loadRetainedForgeReleases(metadataDir: Path; state: RetainedPackageState): 
 
   try:
     let root = parseFile($releasesPath)
-    let forgeReleases = root{"forgeReleases"}
+    let forgeReleases =
+      if root.hasKey("forge"): root["forge"]
+      else: root{"forgeReleases"}
     if forgeReleases.isNil:
       return newJNull()
     forgeReleases.copy()
@@ -219,6 +221,9 @@ proc buildForgeReleaseMetadata*(state: GitHubRepoState): JsonNode =
     "zip": "/archive/refs/tags/{tag}.zip"
   }
   result["releases"] = newJArray()
+  result["tagVersions"] = newJObject()
+  var latestTag = ""
+  var prereleaseTags: seq[string]
 
   var releases = state.forgeReleases
   releases.sort do (a, b: GitHubForgeRelease) -> int:
@@ -228,15 +233,21 @@ proc buildForgeReleaseMetadata*(state: GitHubRepoState): JsonNode =
     cmp(a.tagName, b.tagName)
 
   for release in releases:
-    var entry = newJObject()
-    entry["tag"] = %release.tagName
-    if release.version.len > 0:
-      entry["version"] = %release.version
-    if release.prerelease:
-      entry["prerelease"] = %true
+    let entry = %release.tagName
     if release.latest:
-      entry["latest"] = %true
+      latestTag = release.tagName
+    if release.prerelease:
+      prereleaseTags.add release.tagName
     result["releases"].add entry
+    if release.version.len > 0 and release.version != release.tagName:
+      result["tagVersions"][release.tagName] = %release.version
+  if result["tagVersions"].len == 0:
+    result.delete("tagVersions")
+  if latestTag.len > 0:
+    result["latest"] = %latestTag
+  if prereleaseTags.len > 0:
+    prereleaseTags.sort(cmp)
+    result["prerelease"] = %prereleaseTags
 
 proc fetchGitHubHeadBatch(
     targets: openArray[GitHubRepoTarget];
@@ -495,14 +506,7 @@ proc findUnchangedGitHubPackages*(
         hasUnseenTag = true
         unseenTag = tagName
         break
-    if not hasUnseenTag:
-      notice "atlas:pkger",
-        "github api check up to date:",
-        target.packageName,
-        "head:", remoteState.headOid,
-        "tags checked:", $remoteState.tagNames.len
-      result.add target.packageName
-    else:
+    if hasUnseenTag:
       info "atlas:pkger",
         "github api check refresh:",
         target.packageName,
@@ -516,3 +520,9 @@ proc findUnchangedGitHubPackages*(
         target.packageName,
         "forge releases changed"
       continue
+    notice "atlas:pkger",
+      "github api check up to date:",
+      target.packageName,
+      "head:", remoteState.headOid,
+      "tags checked:", $remoteState.tagNames.len
+    result.add target.packageName

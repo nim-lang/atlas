@@ -669,33 +669,37 @@ suite "packager release metadata comparison":
     let base = %*{
       "name": "alpha",
       "releases": [],
-      "forgeReleases": {
+      "forge": {
         "archives": {
           "tar.gz": "/archive/refs/tags/{tag}.tar.gz",
           "zip": "/archive/refs/tags/{tag}.zip"
         },
         "releases": [
-          {
-            "tag": "v1.0.0",
-            "version": "1.0.0"
-          }
-        ]
+          "v1.0.0"
+        ],
+        "tagVersions": {
+          "v1.0.0": "1.0.0"
+        },
+        "latest": "v1.0.0",
+        "prerelease": ["v1.0.0"]
       }
     }
     let changed = %*{
       "name": "alpha",
       "releases": [],
-      "forgeReleases": {
+      "forge": {
         "archives": {
           "tar.gz": "/archive/refs/tags/{tag}.tar.gz",
           "zip": "/archive/refs/tags/{tag}.zip"
         },
         "releases": [
-          {
-            "tag": "v1.1.0",
-            "version": "1.1.0"
-          }
-        ]
+          "v1.1.0"
+        ],
+        "tagVersions": {
+          "v1.1.0": "1.1.0"
+        },
+        "latest": "v1.1.0",
+        "prerelease": ["v1.1.0"]
       }
     }
     check comparableReleaseMetadata(base) != comparableReleaseMetadata(changed)
@@ -734,15 +738,17 @@ suite "packager release metadata comparison":
   test "github forge release metadata uses relative archive paths":
     let metadata = buildForgeReleaseMetadata(GitHubRepoState(
       forgeReleases: @[
-        GitHubForgeRelease(tagName: "v2.0.0", version: "2.0.0"),
-        GitHubForgeRelease(tagName: "v1.0.0", version: "1.0.0", prerelease: true)
+        GitHubForgeRelease(tagName: "v2.0.0", version: "2.0.0", latest: true),
+        GitHubForgeRelease(tagName: "1.5.0", version: "1.5.0", prerelease: true)
       ]
     ))
     check metadata["archives"]["tar.gz"].getStr() == "/archive/refs/tags/{tag}.tar.gz"
     check metadata["archives"]["zip"].getStr() == "/archive/refs/tags/{tag}.zip"
-    check metadata["releases"][0]["tag"].getStr() == "v1.0.0"
-    check metadata["releases"][0]["prerelease"].getBool()
-    check metadata["releases"][1]["tag"].getStr() == "v2.0.0"
+    check metadata["releases"][0].getStr() == "1.5.0"
+    check metadata["releases"][1].getStr() == "v2.0.0"
+    check metadata["tagVersions"]["v2.0.0"].getStr() == "2.0.0"
+    check metadata["latest"].getStr() == "v2.0.0"
+    check metadata["prerelease"][0].getStr() == "1.5.0"
 
   test "merge release metadata drops retained tarballs when tarballs disabled":
     let root = createTempDir("atlas-packager", "no-tarballs-")
@@ -831,17 +837,22 @@ suite "packager release metadata comparison":
           "zip": "/archive/refs/tags/{tag}.zip"
         },
         "releases": [
-          {
-            "tag": "v1.0.0",
-            "version": "1.0.0"
-          }
-        ]
+          "v1.0.0"
+        ],
+        "tagVersions": {
+          "v1.0.0": "1.0.0"
+        },
+        "latest": "v1.0.0",
+        "prerelease": ["v1.0.0"]
       }
     )
 
     let rewritten = parseFile(root / "releases.json")
-    check rewritten["forgeReleases"]["releases"][0]["tag"].getStr() == "v1.0.0"
-    check rewritten["forgeReleases"]["archives"]["tar.gz"].getStr() ==
+    check rewritten["forge"]["releases"][0].getStr() == "v1.0.0"
+    check rewritten["forge"]["tagVersions"]["v1.0.0"].getStr() == "1.0.0"
+    check rewritten["forge"]["latest"].getStr() == "v1.0.0"
+    check rewritten["forge"]["prerelease"][0].getStr() == "v1.0.0"
+    check rewritten["forge"]["archives"]["tar.gz"].getStr() ==
       "/archive/refs/tags/{tag}.tar.gz"
 
   test "matching digest entries include content hash when present":

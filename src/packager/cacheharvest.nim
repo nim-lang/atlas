@@ -544,6 +544,13 @@ proc tarballSortKey(entry: JsonNode): string =
     return $entry
   entry{"s"}.getStr() & "\t" & entry{"f"}.getStr()
 
+proc metadataFieldAny(node: JsonNode; keys: openArray[string]): JsonNode =
+  for key in keys:
+    let value = node.metadataField(key)
+    if not value.isNil:
+      return value
+  newJNull()
+
 proc comparableTarballs(tarballs: JsonNode): JsonNode =
   if tarballs.kind != JObject:
     return tarballs.copy()
@@ -570,10 +577,32 @@ proc comparableTarballs(tarballs: JsonNode): JsonNode =
     for entry in entries:
       result[version].add entry
 
-proc forgeReleaseSortKey(entry: JsonNode): string =
-  if entry.kind != JObject:
-    return $entry
-  entry{"version"}.getStr() & "\t" & entry{"tag"}.getStr()
+proc canonicalForgeReleaseTag(entry: JsonNode): string =
+  case entry.kind
+  of JString:
+    entry.getStr()
+  of JObject:
+    let tag = entry{"t"}.getStr()
+    if tag.len > 0: tag
+    else: entry{"v"}.getStr()
+  else:
+    $entry
+
+proc forgeReleaseVersion(entry: JsonNode): string =
+  case entry.kind
+  of JString:
+    ""
+  of JObject:
+    let tag = entry{"t"}.getStr()
+    let version =
+      if entry.hasKey("v"): entry["v"].getStr()
+      else: tag
+    if version.len > 0 and version != tag:
+      version
+    else:
+      ""
+  else:
+    ""
 
 proc comparableForgeReleases(forgeReleases: JsonNode): JsonNode =
   if forgeReleases.kind != JObject:
@@ -588,37 +617,104 @@ proc comparableForgeReleases(forgeReleases: JsonNode): JsonNode =
       archives.copy()
 
   let releases = forgeReleases.metadataField("releases")
+  let tagVersions = forgeReleases.metadataField("tagVersions")
   if releases.kind != JArray:
     result["releases"] = releases.copy()
+    if tagVersions.kind == JObject:
+      var normalizedTagVersions = newJObject()
+      var tags: seq[string]
+      for tag, version in tagVersions:
+        let normalizedVersion = version.getStr()
+        if tag.len > 0 and normalizedVersion.len > 0 and normalizedVersion != tag:
+          tags.add tag
+      tags.sort(cmp)
+      for tag in tags:
+        normalizedTagVersions[tag] = %tagVersions[tag].getStr()
+      if normalizedTagVersions.len > 0:
+        result["tagVersions"] = normalizedTagVersions
+    elif not tagVersions.isNil:
+      result["tagVersions"] = tagVersions.copy()
+    let latest = forgeReleases.metadataField("latest")
+    if not latest.isNil:
+      result["latest"] = latest.copy()
+    let prerelease = forgeReleases.metadataField("prerelease")
+    if prerelease.kind == JArray:
+      var tags: seq[string]
+      for entry in prerelease:
+        if entry.kind == JString:
+          tags.add entry.getStr()
+      tags.sort(cmp)
+      result["prerelease"] = %tags
+    elif not prerelease.isNil:
+      result["prerelease"] = prerelease.copy()
     return
 
-  var entries: seq[JsonNode]
+  var releaseTags: seq[string]
+  var normalizedTagVersions = newJObject()
+  var latestTag = forgeReleases{"latest"}.getStr()
+  var prereleaseTags: seq[string]
+  if tagVersions.kind == JObject:
+    for tag, version in tagVersions:
+      let normalizedVersion = version.getStr()
+      if tag.len > 0 and normalizedVersion.len > 0 and normalizedVersion != tag:
+        normalizedTagVersions[tag] = %normalizedVersion
+  let prerelease = forgeReleases.metadataField("prerelease")
+  if prerelease.kind == JArray:
+    for entry in prerelease:
+      if entry.kind == JString:
+        prereleaseTags.add entry.getStr()
   for entry in releases:
-    entries.add entry.copy()
-  entries.sort do (a, b: JsonNode) -> int:
-    cmp(forgeReleaseSortKey(a), forgeReleaseSortKey(b))
+    let tag = canonicalForgeReleaseTag(entry)
+    if tag.len == 0:
+      continue
+    if entry.kind == JObject and entry{"latest"}.getBool():
+      latestTag = tag
+    if entry.kind == JObject and entry{"prerelease"}.getBool():
+      prereleaseTags.add tag
+    let version = forgeReleaseVersion(entry)
+    if version.len > 0:
+      normalizedTagVersions[tag] = %version
+    releaseTags.add tag
+  releaseTags.sort(cmp)
+  var uniqueReleaseTags: seq[string]
+  for tag in releaseTags:
+    if uniqueReleaseTags.len == 0 or uniqueReleaseTags[^1] != tag:
+      uniqueReleaseTags.add tag
 
   result["releases"] = newJArray()
-  for entry in entries:
-    result["releases"].add entry
+  for tag in uniqueReleaseTags:
+    result["releases"].add %tag
+  if normalizedTagVersions.len > 0:
+    var sortedTagVersions = newJObject()
+    for tag in uniqueReleaseTags:
+      if normalizedTagVersions.hasKey(tag):
+        sortedTagVersions[tag] = normalizedTagVersions[tag]
+    if sortedTagVersions.len > 0:
+      result["tagVersions"] = sortedTagVersions
+  if latestTag.len > 0:
+    result["latest"] = %latestTag
+  if prereleaseTags.len > 0:
+    prereleaseTags.sort(cmp)
+    var uniqueTags: seq[string]
+    for tag in prereleaseTags:
+      if uniqueTags.len == 0 or uniqueTags[^1] != tag:
+        uniqueTags.add tag
+    result["prerelease"] = %uniqueTags
 
 proc comparableReleaseMetadata*(metadata: JsonNode): JsonNode =
   ## Normalize package release metadata down to the harvested fields that
   ## should trigger a releases.json rewrite on subsequent packager runs.
   result = newJObject()
-  for key in ["name", "releases", "tarballs", "forgeReleases"]:
-    let value = metadata.metadataField(key)
-    result[key] =
-      if value.isNil:
-        newJNull()
-      else:
-        case key
-        of "tarballs":
-          comparableTarballs(value)
-        of "forgeReleases":
-          comparableForgeReleases(value)
-        else:
-          value.copy()
+  result["name"] = metadata.metadataField("name").copy()
+  result["releases"] = metadata.metadataField("releases").copy()
+  let tarballs = metadata.metadataField("tarballs")
+  result["tarballs"] =
+    if tarballs.isNil: newJNull()
+    else: comparableTarballs(tarballs)
+  let forge = metadataFieldAny(metadata, ["forge", "forgeReleases"])
+  result["forge"] =
+    if forge.isNil: newJNull()
+    else: comparableForgeReleases(forge)
 
 proc metadataChangeReason(
     hadExistingMetadata: bool;
@@ -633,7 +729,7 @@ proc metadataChangeReason(
       ("name", "name"),
       ("releases", "releases"),
       ("tarballs", "tarballs"),
-      ("forgeReleases", "forge releases")
+      ("forge", "forge releases")
   ]:
     let key = field[0]
     let label = field[1]
@@ -677,10 +773,14 @@ proc mergePackageReleaseMetadata*(
     metadata["tarballs"] = tarballEntries
   if not forgeReleases.isNil:
     if forgeReleases.kind == JNull:
+      if metadata.hasKey("forge"):
+        metadata.delete("forge")
       if metadata.hasKey("forgeReleases"):
         metadata.delete("forgeReleases")
     else:
-      metadata["forgeReleases"] = forgeReleases
+      if metadata.hasKey("forgeReleases"):
+        metadata.delete("forgeReleases")
+      metadata["forge"] = comparableForgeReleases(forgeReleases)
 
   let existingComparable = comparableReleaseMetadata(existingMetadata)
   let metadataComparable = comparableReleaseMetadata(metadata)
