@@ -353,11 +353,9 @@ proc loadDependency*(
         let head = loadCacheHead(cachePath)
         if head.len > 0:
           pkg.originHead = initCommitHash(head, FromHead)
-        return
-    if onClone == DoNothing:
+    elif onClone == DoNothing:
       pkg.state = Error
       pkg.errors.add "Not found"
-      return
     else:
       clonePackage(pkg, officialUrl, isFork)
   of DoNothing:
