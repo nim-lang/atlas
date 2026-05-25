@@ -12,9 +12,9 @@ import ./cacheharvest
 
 const
   GitHubGraphqlEndpoint* = "https://api.github.com/graphql"
-  DefaultGitHubGraphqlBatchSize* = 80
-  DefaultGitHubTagProbeCount* = 80
-  DefaultGitHubReleaseProbeCount* = 80
+  DefaultGitHubGraphqlBatchSize* = 60
+  DefaultGitHubTagProbeCount* = 60
+  DefaultGitHubReleaseProbeCount* = 60
   DefaultGitHubGraphqlRetries* = 3
 
 type
