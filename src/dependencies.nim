@@ -449,7 +449,7 @@ proc processPendingPackages(
     if cloneJobs.len > 0:
       firstCloneEpoch = false
 
-proc syncSharedPackagesRepo() =
+proc syncSharedPackagesRepo*() =
   ## Ensure the shared packages repo is cloned and up to date before
   ## dependency processing so forge release metadata is available early.
   createDir($atlasHomeDirectory())
@@ -506,8 +506,6 @@ proc expandGraph*(
 
   result = DepGraph(root: root, mode: mode)
   nc.packageToDependency[root.url] = root
-
-  syncSharedPackagesRepo()
 
   notice "atlas:expand", "Expanding packages for:", $root.projectName
 

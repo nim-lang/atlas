@@ -465,7 +465,7 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
           writeHelp()
       of "dumpgraphs":
         context().flags.incl DumpGraphs
-      of "gitonly":
+      of "onlygit":
         context().flags.incl GitOnly
       of "forcegittohttps":
         context().flags.incl ForceGitToHttps
@@ -532,6 +532,9 @@ proc atlasRun*(params: seq[string]) =
 
   if action in ["install", "update", "use"]:
     context().flags.incl ListVersions
+
+  if action in ["install", "use", "update", "search", "outdated"]:
+    syncSharedPackagesRepo()
 
   case action
   of "":
