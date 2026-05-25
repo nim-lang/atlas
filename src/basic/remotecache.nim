@@ -44,10 +44,12 @@ proc copySharedReleaseCache*(pkg: Package; repoDir: Path): bool =
   ## Returns true when the cache file was created or already exists.
   let packageName = pkg.projectName()
   if not pkg.isOfficial or pkg.isFork or pkg.isLocalOnly or pkg.isRoot:
+    warn packageName, "shared release cache miss", $pkg.isOfficial, $pkg.isFork, $pkg.isLocalOnly, $pkg.isRoot
     return false
 
   let sourcePath = sharedPackageReleasePath(packageName, repoDir)
   if sourcePath.len == 0 or not fileExists($sourcePath):
+    warn packageName, "shared release cache missing"
     return false
 
   try:
