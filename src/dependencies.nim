@@ -377,12 +377,11 @@ proc processPendingPackages(
   ## Processes all packages currently known to the context until no immediate work remains.
   ## Lazy packages are represented in the graph without loading their full release history.
   var processing = true
-  var firstEpoch = true
+  var firstCloneEpoch = true
   while processing:
     processing = false
     let pkgUrls = nc.packageToDependency.keys().toSeq()
     var cloneJobs: seq[PendingCloneJob]
-    let sharedRepoPlan = buildSharedRepoSyncPlan(firstEpoch)
 
     # Build concise package lists for progress logging.
     var initializingPkgs: seq[string]
@@ -514,10 +513,16 @@ proc processPendingPackages(
         discard
         info pkg.projectName, "Skipping package:", $pkg.url, "state:", $pkg.state
 
+    let sharedRepoPlan =
+      if cloneJobs.len > 0:
+        buildSharedRepoSyncPlan(firstCloneEpoch)
+      else:
+        SharedRepoSyncPlan()
     let sharedRepoReady = nc.processCloneEpoch(root, cloneJobs, sharedRepoPlan)
     if sharedRepoReady:
       nc.seedClonedPackagesFromSharedRepo(cloneJobs, sharedRepoPlan.repoDir)
-    firstEpoch = false
+    if cloneJobs.len > 0:
+      firstCloneEpoch = false
 
 proc expandGraph*(
     path: Path,
