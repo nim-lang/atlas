@@ -48,6 +48,7 @@ proc copySharedReleaseCache*(pkg: Package; repoDir: Path): bool =
     createDir($cachesDirectory())
     let cachePath = packageReleaseCachePath(pkg)
     if fileExists($cachePath) and readFile($cachePath) == contents:
+      notice packageName, "cache hit from shared repo:", $sourcePath
       return true
 
     let tmpPath = cachesDirectory() / Path(packageCacheStem(pkg) & ".json.tmp")
