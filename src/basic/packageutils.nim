@@ -94,20 +94,41 @@ proc shouldCloneToTemp(pkg: Package): bool =
     not pkg.url.isFileProtocol and
     pkg.url.cloneUri().scheme notin ["link", "atlas"]
 
+proc markForgePackage(pkg: var Package; cachePath: Path) =
+  notice pkg.url.projectName, "using forge release tarball instead of git clone"
+  pkg.isForgePackage = true
+  let head = loadCacheHead(cachePath)
+  if head.len > 0:
+    pkg.originHead = initCommitHash(head, FromHead)
+
 proc checkForgeMetadata(pkg: var Package): bool =
   ## Check for forge release metadata and mark the package if found.
   if pkg.isLocalOnly:
     return false
   let cachePath = packageReleaseCachePath(pkg)
-  if not fileExists($cachePath):
-    discard downloadReleaseCache(pkg.projectName())
   if hasForgeMetadata(cachePath):
-    notice pkg.url.projectName, "using forge release tarball instead of git clone"
-    pkg.isForgePackage = true
-    let head = loadCacheHead(cachePath)
-    if head.len > 0:
-      pkg.originHead = initCommitHash(head, FromHead)
+    markForgePackage(pkg, cachePath)
     return true
+  # Try the shared packages repo.
+  let sharedPath = sharedPackageReleasePath(pkg.projectName(), sharedPackagesRepoDir())
+  if hasForgeMetadata(sharedPath):
+    createDir($cachesDirectory())
+    try:
+      copyFile($sharedPath, $cachePath)
+    except CatchableError:
+      discard
+    if hasForgeMetadata(cachePath):
+      markForgePackage(pkg, cachePath)
+      return true
+  # Fall back to remote download.
+  if not fileExists($cachePath) and downloadReleaseCache(pkg.projectName()):
+    let altStem = cacheStemFromPackageName(pkg.projectName())
+    let altPath = cachesDirectory() / Path(altStem & ".json")
+    if altPath != cachePath and fileExists($altPath) and not fileExists($cachePath):
+      try: moveFile($altPath, $cachePath) except CatchableError: discard
+    if hasForgeMetadata(cachePath):
+      markForgePackage(pkg, cachePath)
+      return true
   return false
 
 proc resolveExistingPackageDir*(pkg: var Package): bool =
