@@ -32,3 +32,4 @@ nimble.paths
 tests/ws_link_integration/deps/atlas.config
 pkgs-meta/
 pkgs/
+.claude

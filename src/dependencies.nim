@@ -369,12 +369,12 @@ proc processPendingPackages(
     root: Package;
     traversalMode: TraversalMode;
     onClone: PackageAction;
-    deferChildDeps: bool
+    deferChildDeps: bool;
+    firstCloneEpoch: var bool
 ) =
   ## Processes all packages currently known to the context until no immediate work remains.
   ## Lazy packages are represented in the graph without loading their full release history.
   var processing = true
-  var firstCloneEpoch = true
   while processing:
     processing = false
     let pkgUrls = nc.packageToDependency.keys().toSeq()
@@ -543,9 +543,10 @@ proc expandGraph*(
   # Explicit-version traversal can discover additional dependencies.
   # Re-run package processing until no new packages are introduced.
   var graphChanged = true
+  var firstCloneEpoch = true
   while graphChanged:
     graphChanged = false
-    result.processPendingPackages(nc, root, mode, onClone, deferChildDeps)
+    result.processPendingPackages(nc, root, mode, onClone, deferChildDeps, firstCloneEpoch)
 
     let pkgCountBeforeExplicit = nc.packageToDependency.len
     let explicitCountBeforeExplicit = nc.explicitVersions.len
