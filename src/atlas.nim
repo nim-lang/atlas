@@ -80,6 +80,8 @@ Options:
   --proxy=url           use the given proxy URL for all git operations
   --dumbProxy           use a dumb proxy without smart git protocol
   --packagesRepo        use the nim-lang/packages git repo (legacy behavior)
+  --packages-repo=url   use the given URL for the shared packages metadata repo
+                        default: https://github.com/elcritch/nim-packages
   --forceGitToHttps     force git:// URLs to https://
   --ignoreUrls          don't error on mismatching urls
   --colors=on|off       turn on|off colored output
@@ -456,6 +458,11 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
         context().flags.incl DumbProxy
       of "packagesrepo":
         context().flags.incl PackagesGit
+      of "packages-repo":
+        if val.len > 0:
+          context().packagesRepoUrl = val
+        else:
+          writeHelp()
       of "dumpgraphs":
         context().flags.incl DumpGraphs
       of "forcegittohttps":

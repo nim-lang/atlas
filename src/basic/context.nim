@@ -70,6 +70,7 @@ type
     urlOverrides*: Patterns
     pkgOverrides*: Table[string, Uri]
     defaultAlgo*: ResolutionAlgorithm = SemVer
+    packagesRepoUrl*: string = ""
     plugins*: PluginInfo
     overridesFile*: Path
     pluginsFile*: Path

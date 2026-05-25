@@ -55,8 +55,9 @@ proc cloneProgressJob(pkg: Package; checkoutDir: Path): GitProgressJob =
   result.args.add $checkoutDir
 
 proc sharedRepoCloneProgressJob(repoDir: Path): GitProgressJob =
-  let canonicalUrl = parseUri(DefaultRemotePackagesRepo)
-  let remote = gitops.remoteNameFromGitUrl(DefaultRemotePackagesRepo)
+  let repoUrl = packagesRepoUrl()
+  let canonicalUrl = parseUri(repoUrl)
+  let remote = gitops.remoteNameFromGitUrl(repoUrl)
   let effectiveUrl = gitops.maybeUrlProxy(canonicalUrl)
   result = GitProgressJob(
     label: "atlas:packages",
@@ -103,16 +104,6 @@ proc buildSharedRepoSyncPlan(firstEpoch: bool): SharedRepoSyncPlan =
       progressJob: sharedRepoCloneProgressJob(repoDir)
     )
 
-proc seedClonedPackagesFromSharedRepo(
-    nc: var NimbleContext;
-    cloneJobs: seq[PendingCloneJob];
-    repoDir: Path
-) =
-  for job in cloneJobs:
-    var pkg = nc.packageToDependency[job.pkgUrl]
-    if pkg.state == Found:
-      discard copySharedReleaseCache(pkg, repoDir)
-
 proc markCloneFailure(pkg: var Package; details: string) =
   pkg.state = Error
   if details.len > 0:
@@ -139,7 +130,7 @@ proc processCloneEpoch(
     root: Package;
     cloneJobs: seq[PendingCloneJob];
     sharedRepoPlan: SharedRepoSyncPlan
-): bool =
+) =
   if cloneJobs.len == 0 and not sharedRepoPlan.enabled:
     return
 
@@ -170,8 +161,8 @@ proc processCloneEpoch(
 
   if sharedRepoPlan.enabled:
     let sharedRepoResult = cloneResults[packageJobCount]
-    result = sharedRepoResult.exitCode == 0 and dirExists($sharedRepoPlan.repoDir)
-    if not result:
+    let ok = sharedRepoResult.exitCode == 0 and dirExists($sharedRepoPlan.repoDir)
+    if not ok:
       var details = sharedRepoResult.output.strip()
       if details.len == 0:
         details = "shared packages sync failed"
@@ -272,6 +263,11 @@ proc traverseDependency*(
   ## Resolves the set of package releases for a found dependency.
   ## Release metadata is loaded separately, then enriched into traversal state.
   doAssert pkg.ondisk.dirExists() and pkg.state != NotInitialized, "Package should've been found or cloned at this point. Package: " & $pkg.url & " on disk: " & $pkg.ondisk
+
+  # Try to seed the release cache from the shared packages repo so
+  # loadPackageReleaseInfo can skip expensive tag scanning when the
+  # HEAD matches.
+  discard copySharedReleaseCache(pkg, sharedPackagesRepoDir())
 
   let releaseInfo = nc.loadPackageReleaseInfo(pkg, mode, explicitVersions)
   if releaseInfo.repoError:
@@ -518,9 +514,7 @@ proc processPendingPackages(
         buildSharedRepoSyncPlan(firstCloneEpoch)
       else:
         SharedRepoSyncPlan()
-    let sharedRepoReady = nc.processCloneEpoch(root, cloneJobs, sharedRepoPlan)
-    if sharedRepoReady:
-      nc.seedClonedPackagesFromSharedRepo(cloneJobs, sharedRepoPlan.repoDir)
+    nc.processCloneEpoch(root, cloneJobs, sharedRepoPlan)
     if cloneJobs.len > 0:
       firstCloneEpoch = false
 

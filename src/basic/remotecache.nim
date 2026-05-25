@@ -17,6 +17,13 @@ const
   DefaultRemotePackagesRepo* = "https://github.com/elcritch/nim-packages"
   ## Default base URL for the remote packages metadata repo.
 
+proc packagesRepoUrl*(): string =
+  ## Return the configured packages repo URL, or the default.
+  if context().packagesRepoUrl.len > 0:
+    context().packagesRepoUrl
+  else:
+    DefaultRemotePackagesRepo
+
 proc atlasHomeDirectory*(): Path =
   Path(getHomeDir()) / Path".atlas"
 
@@ -30,10 +37,15 @@ proc sharedPackageReleasePath*(packageName: string; repoDir: Path): Path =
   repoDir / Path"pkgs" / Path(bucket) / Path(packageName) / Path"releases.json"
 
 proc copySharedReleaseCache*(pkg: Package; repoDir: Path): bool =
+  ## Copy the per-package releases.json from a shared packages repo into the
+  ## project's deps/.cache directory. Only applies to official (packages.json)
+  ## packages that are not forks, local links, or the project root.
+  ##
+  ## Returns true when the cache file was created or already exists.
+  let packageName = pkg.projectName()
   if not pkg.isOfficial or pkg.isFork or pkg.isLocalOnly or pkg.isRoot:
     return false
 
-  let packageName = pkg.projectName()
   let sourcePath = sharedPackageReleasePath(packageName, repoDir)
   if sourcePath.len == 0 or not fileExists($sourcePath):
     return false
@@ -48,7 +60,6 @@ proc copySharedReleaseCache*(pkg: Package; repoDir: Path): bool =
     createDir($cachesDirectory())
     let cachePath = packageReleaseCachePath(pkg)
     if fileExists($cachePath) and readFile($cachePath) == contents:
-      notice packageName, "cache hit from shared repo:", $sourcePath
       return true
 
     let tmpPath = cachesDirectory() / Path(packageCacheStem(pkg) & ".json.tmp")
@@ -56,13 +67,12 @@ proc copySharedReleaseCache*(pkg: Package; repoDir: Path): bool =
     if fileExists($cachePath):
       removeFile($cachePath)
     moveFile($tmpPath, $cachePath)
-    info packageName, "seeded release cache from shared repo:", $cachePath
     return true
   except CatchableError as e:
     warn packageName, "failed to seed shared release cache:", e.msg
     return false
 
-proc remoteReleaseCacheUrl*(packageName: string; baseUrl = DefaultRemotePackagesRepo): string =
+proc remoteReleaseCacheUrl*(packageName: string; baseUrl = ""): string =
   ## Build the raw.githubusercontent.com URL for a package's releases.json.
   ##
   ## The remote repo layout is: ``pkgs/<bucket>/<packageName>/releases.json``
@@ -73,7 +83,7 @@ proc remoteReleaseCacheUrl*(packageName: string; baseUrl = DefaultRemotePackages
 
   # Convert github.com URLs to raw.githubusercontent.com for direct download.
   # e.g. https://github.com/elcritch/nim-packages → raw.githubusercontent.com/elcritch/nim-packages/main
-  var rawBase = baseUrl
+  var rawBase = if baseUrl.len > 0: baseUrl else: packagesRepoUrl()
   if rawBase.contains("github.com") and not rawBase.contains("raw.githubusercontent.com"):
     rawBase = rawBase.replace("github.com", "raw.githubusercontent.com")
     if not rawBase.endsWith("/main") and not rawBase.endsWith("/refs/heads/main"):
@@ -123,7 +133,6 @@ proc downloadReleaseCache*(packageName: string): bool =
     try:
       let existing = parseFile($cachePath)
       if existing.hasKey("cv") and existing["cv"].getInt() == PackageReleaseCacheVersion:
-        # Cache is current — no need to re-download.
         return true
     except CatchableError:
       discard
@@ -133,12 +142,10 @@ proc downloadReleaseCache*(packageName: string): bool =
     info packageName, "downloading release cache from:", url
     let response = client.get(url)
     if response.code.is4xx or response.code.is5xx:
-      warn packageName, "release cache not available (HTTP ", $response.code, "): ", url
       return false
 
     let contents = response.bodyStream.readAll()
     if contents.len == 0:
-      warn packageName, "empty release cache from:", url
       return false
 
     # Validate that it's parseable JSON and has a "releases" array.
@@ -159,7 +166,6 @@ proc downloadReleaseCache*(packageName: string): bool =
 
     # Extract a head field from the releases if not already present.
     if not jn.hasKey("head") or jn["head"].getStr().len == 0:
-      # Look for #head@<commit> entry or the latest tagged release.
       var headCommit = ""
       for entry in jn["releases"]:
         if entry.kind != JObject or not entry.hasKey("v"):
@@ -174,12 +180,10 @@ proc downloadReleaseCache*(packageName: string): bool =
     let tmpPath = cachePath.parentDir() / Path(".tmp." & stem & ".json")
     createDir($cachePath.parentDir())
     writeFile($tmpPath, pretty(jn))
-    # Atomic replace.
     if fileExists($cachePath):
       removeFile($cachePath)
     moveFile($tmpPath, $cachePath)
 
-    info packageName, "release cache saved:", $cachePath
     return true
 
   except CatchableError as e:
