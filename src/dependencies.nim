@@ -15,7 +15,7 @@
 ## dependencies during traversal.
 
 import std / [os, strutils, uri, tables, sequtils, sets, paths, dirs]
-import basic/[context, deptypes, versions, osutils, reporters, gitops, pkgurls, nimblecontext, deptypesjson, packageutils, gitprogresspool, remotecache]
+import basic/[context, deptypes, versions, osutils, reporters, gitops, pkgurls, nimblecontext, deptypesjson, packageutils, gitprogresspool, remotecache, forgetarball, dependencycache]
 import releaseinfo
 
 export deptypes, versions, deptypesjson, releaseinfo, packageutils
@@ -338,6 +338,21 @@ proc loadDependency*(
     todo = DoNothing
 
   debug pkg.url.projectName, "loading dependency todo:", $todo, "ondisk:", $pkg.ondisk, "isLinked:", $pkg.url.isFileProtocol, "isLazyDeferred:", $(pkg.state == LazyDeferred)
+
+  if todo == DoClone and not pkg.isLocalOnly:
+    let cachePath = packageReleaseCachePath(pkg)
+    if not fileExists($cachePath):
+      discard downloadReleaseCache(pkg.projectName())
+    if hasForgeMetadata(cachePath):
+      notice pkg.url.projectName, "using forge release tarball instead of git clone"
+      pkg.isForgePackage = true
+      createDir($pkg.ondisk)
+      todo = DoNothing
+      pkg.state = Found
+      let head = loadCacheHead(cachePath)
+      if head.len > 0:
+        pkg.originHead = initCommitHash(head, FromHead)
+
   case todo
   of DoClone:
     if onClone == DoNothing:
@@ -349,16 +364,16 @@ proc loadDependency*(
   of DoNothing:
     if pkg.ondisk.dirExists():
       pkg.state = Found
-      if not pkg.isLocalOnly:
+      if not pkg.isLocalOnly and not pkg.isForgePackage:
         discard gitops.loadRepoMetadata(pkg.ondisk, expectedCanonicalUrl = $pkg.url.cloneUri())
         if isFork:
           discard gitops.ensureRemoteForUrl(pkg.ondisk, officialUrl.cloneUri())
-      if UpdateRepos in context().flags:
+      if UpdateRepos in context().flags and not pkg.isForgePackage:
         gitops.updateRepo(pkg.ondisk)
         if not pkg.isLocalOnly:
           var repo = gitops.loadRepoMetadata(pkg.ondisk, expectedCanonicalUrl = $pkg.url.cloneUri())
           discard gitops.fetchRemoteTags(repo)
-        
+
     else:
       pkg.state = Error
       pkg.errors.add "ondisk location missing"
@@ -442,6 +457,21 @@ proc processPendingPackages(
           todo = DoNothing
 
         debug pkg.url.projectName, "loading dependency todo:", $todo, "ondisk:", $pkg.ondisk, "isLinked:", $pkg.url.isFileProtocol, "isLazyDeferred:", $(pkg.state == LazyDeferred)
+
+        if todo == DoClone and not pkg.isLocalOnly:
+          let cachePath = packageReleaseCachePath(pkg)
+          if not fileExists($cachePath):
+            discard downloadReleaseCache(pkg.projectName())
+          if hasForgeMetadata(cachePath):
+            notice pkg.url.projectName, "using forge release tarball instead of git clone"
+            pkg.isForgePackage = true
+            createDir($pkg.ondisk)
+            todo = DoNothing
+            pkg.state = Found
+            let head = loadCacheHead(cachePath)
+            if head.len > 0:
+              pkg.originHead = initCommitHash(head, FromHead)
+
         case todo
         of DoClone:
           if onClone == DoNothing:
@@ -462,11 +492,11 @@ proc processPendingPackages(
         of DoNothing:
           if pkg.ondisk.dirExists():
             pkg.state = Found
-            if not pkg.isLocalOnly:
+            if not pkg.isLocalOnly and not pkg.isForgePackage:
               discard gitops.loadRepoMetadata(pkg.ondisk, expectedCanonicalUrl = $pkg.url.cloneUri())
               if isFork:
                 discard gitops.ensureRemoteForUrl(pkg.ondisk, officialUrl.cloneUri())
-            if UpdateRepos in context().flags:
+            if UpdateRepos in context().flags and not pkg.isForgePackage:
               gitops.updateRepo(pkg.ondisk)
               if not pkg.isLocalOnly:
                 var repo = gitops.loadRepoMetadata(pkg.ondisk, expectedCanonicalUrl = $pkg.url.cloneUri())

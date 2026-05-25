@@ -32,6 +32,7 @@ type
     isAtlasProject*: bool # true if the package is an atlas project
     isFork*: bool
     isRoot*, isLocalOnly*: bool
+    isForgePackage*: bool
     errors*: seq[string]
     originHead*: CommitHash
 

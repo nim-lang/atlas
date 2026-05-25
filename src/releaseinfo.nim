@@ -160,6 +160,20 @@ proc loadPackageReleaseInfo*(
   ## Results may come from cache, git tags, Nimble-file history, or explicit commits.
   result.expandedExplicitVersions = explicitVersions
 
+  if pkg.isForgePackage:
+    result.currentCommit = initCommitHash("", FromNone)
+    var cachedReleases: seq[PackageReleaseCacheEntry]
+    let (cacheOk, cacheReason) = loadPackageReleaseCache(pkg, cachedReleases)
+    if cacheOk:
+      info pkg.url.projectName, "using cached releases for forge package"
+      for entry in cachedReleases:
+        result.releases.add((entry.vtag.toPkgVer(), entry.release))
+      result.loadedFromCache = true
+    else:
+      warn pkg.url.projectName, "forge package cache unavailable:", cacheReason
+      result.repoError = true
+    return
+
   var repo = loadRepoMetadata(
     pkg.ondisk,
     expectedCanonicalUrl = if pkg.isLocalOnly: "" else: $pkg.url.cloneUri(),
@@ -283,5 +297,5 @@ proc loadPackageReleaseInfo*(
   if not result.releases.hasReleaseAtCommit(result.currentCommit):
     result.headRelease = nc.loadHeadRelease(pkg, result.currentCommit)
 
-  if canUsePackageReleaseCache(pkg, mode, result.expandedExplicitVersions):
+  if canUsePackageReleaseCache(pkg, mode, result.expandedExplicitVersions) and not pkg.isForgePackage:
     savePackageReleaseCache(pkg, result.currentCommit, result.releases)

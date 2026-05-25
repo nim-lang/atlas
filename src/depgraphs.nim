@@ -1,6 +1,6 @@
-import std / [sets, tables, sequtils, paths, files, os, strutils, json, jsonutils, algorithm]
+import std / [sets, tables, sequtils, paths, files, os, strutils, json, jsonutils, algorithm, options]
 
-import basic/[deptypes, versions, depgraphtypes, osutils, context, gitops, reporters, nimblecontext, pkgurls, deptypesjson, sattypes]
+import basic/[deptypes, versions, depgraphtypes, osutils, context, gitops, reporters, nimblecontext, pkgurls, deptypesjson, sattypes, dependencycache, forgetarball]
 import dependencies, runners 
 
 export depgraphtypes, deptypesjson
@@ -791,6 +791,20 @@ proc activateGraph*(graph: DepGraph): tuple[paths: seq[CfgPath], features: seq[s
         if pkg.url.isNimbleLink():
           continue
         let pkgUri = pkg.url.cloneUri()
+        if pkg.isForgePackage:
+          let cachePath = packageReleaseCachePath(pkg)
+          let forge = loadForgeMetadata(cachePath)
+          if forge.isSome:
+            let tag = resolveTagFromVersion(forge.get, pkg.activeVersion.vtag.v)
+            if tag.len > 0:
+              if installForgePackage(pkg, forge.get, tag):
+                continue
+              warn pkg.url.projectName, "forge tarball install failed for version:", $pkg.activeVersion.vtag.v
+            else:
+              warn pkg.url.projectName, "no forge release tag found for version:", $pkg.activeVersion.vtag.v
+          else:
+            warn pkg.url.projectName, "forge metadata missing from cache"
+          continue
         if pkgUri.scheme notin ["file", "link", "atlas"]:
           discard gitops.ensureCanonicalOrigin(pkg.ondisk, pkgUri)
         notice pkg.url.projectName, "Checked out to:", $pkg.activeVersion.commit().short(), "at:", pkg.ondisk.relativeToWorkspace()

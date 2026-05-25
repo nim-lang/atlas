@@ -38,7 +38,7 @@ proc tmpCheckoutDir(pkg: Package): Path =
   depsDir() / Path(".tmp") / Path(pkg.url.projectName() & "-" & $hash(pkg.url))
 
 proc matchesPackageUrl(path: Path; pkg: Package): bool =
-  dirExists(path) and gitops.getCanonicalUrl(path) == $pkg.url.cloneUri()
+  dirExists(path) and isGitDir(path) and gitops.getCanonicalUrl(path) == $pkg.url.cloneUri()
 
 proc disambiguatedDirectoryPath(pkg: Package): Path =
   let baseName =
@@ -101,6 +101,8 @@ proc resolveExistingPackageDir*(pkg: var Package): bool =
   ## filename after cloning. If another unofficial package with the same nimble
   ## filename already owns that directory, look for this package's deterministic
   ## disambiguated directory instead of reusing the wrong checkout.
+  if pkg.isForgePackage:
+    return dirExists(pkg.ondisk)
   if not dirExists(pkg.ondisk):
     return false
   if not pkg.shouldCloneToTemp():
