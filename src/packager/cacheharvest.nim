@@ -462,6 +462,39 @@ proc collectReleaseArchives(
       let label = archiveReleaseLabel(ver, release, releaseEntry.isHead)
       let commitSuffix = archiveCommitLabel(ver)
       let rootSubdir = packageRootSubdir(pkg)
+      var commitMatchedEntries = initTable[string, JsonNode]()
+      if not regenerateTarballs:
+        for compression in compressions:
+          let compressionName = archiveCompressionName(compression)
+          let existingEntry = matchingCommitEntry(
+            existingEntries,
+            label,
+            ver.vtag.commit.h,
+            compressionName
+          )
+          if existingEntry != nil and "f" in existingEntry:
+            let archiveFile = existingEntry["f"].getStr()
+            let archivePath = archiveDir / Path(archiveFile)
+            if fileExists($archivePath):
+              commitMatchedEntries[compressionName] = existingEntry
+
+      if commitMatchedEntries.len == compressions.len:
+        for compression in compressions:
+          let compressionName = archiveCompressionName(compression)
+          let existingEntry = commitMatchedEntries[compressionName]
+          let archiveFile = existingEntry["f"].getStr()
+          let archivePath = archiveDir / Path(archiveFile)
+          referencedFiles.incl(archiveFile)
+          addTarballEntry result, label, initArchiveEntry(
+            label,
+            existingEntry{"s"}.getStr(),
+            archiveFile,
+            rootSubdir,
+            release
+          )
+          notice "atlas:pkger", "tarball:", relativeToCurrentDir(archivePath)
+        continue
+
       let rootArchiveFiles = collectArchiveFiles(pkg, ver, info, release, rootSubdir)
       let hashStem = baseName & "-" & label & "-" & commitSuffix
       let hashTarPath = siblingTempPath(archiveDir / Path(hashStem & ".hash.tar"))
@@ -484,6 +517,20 @@ proc collectReleaseArchives(
 
       for compression in compressions:
         let compressionName = archiveCompressionName(compression)
+        if commitMatchedEntries.hasKey(compressionName):
+          let existingEntry = commitMatchedEntries[compressionName]
+          let archiveFile = existingEntry["f"].getStr()
+          let archivePath = archiveDir / Path(archiveFile)
+          referencedFiles.incl(archiveFile)
+          addTarballEntry result, label, initArchiveEntry(
+            label,
+            existingEntry{"s"}.getStr(),
+            archiveFile,
+            rootSubdir,
+            release
+          )
+          notice "atlas:pkger", "tarball:", relativeToCurrentDir(archivePath)
+          continue
         if not regenerateTarballs:
           let existingEntry = matchingDigestEntry(
             existingEntries,
