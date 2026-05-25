@@ -29,11 +29,6 @@ type
     checkoutDir: Path
     progressJob: GitProgressJob
 
-  SharedRepoSyncPlan = object
-    enabled: bool
-    repoDir: Path
-    progressJob: GitProgressJob
-
 proc cloneProgressJob(pkg: Package; checkoutDir: Path): GitProgressJob =
   let canonicalUrl = pkg.url.cloneUri()
   let remote = gitops.remoteNameFromGitUrl($canonicalUrl)
@@ -53,56 +48,6 @@ proc cloneProgressJob(pkg: Package; checkoutDir: Path): GitProgressJob =
   result.args.add "--progress"
   result.args.add $effectiveUrl
   result.args.add $checkoutDir
-
-proc sharedRepoCloneProgressJob(repoDir: Path): GitProgressJob =
-  let repoUrl = packagesRepoUrl()
-  let canonicalUrl = parseUri(repoUrl)
-  let remote = gitops.remoteNameFromGitUrl(repoUrl)
-  let effectiveUrl = gitops.maybeUrlProxy(canonicalUrl)
-  result = GitProgressJob(
-    label: "atlas:packages",
-    command: "git",
-    args: @["clone"]
-  )
-  if ShallowClones in context().flags:
-    result.args.add "--depth=1"
-  if remote.len > 0:
-    result.args.add "--origin"
-    result.args.add remote
-  result.args.add "--no-tags"
-  result.args.add "--progress"
-  result.args.add $effectiveUrl
-  result.args.add $repoDir
-
-proc sharedRepoPullProgressJob(repoDir: Path): GitProgressJob =
-  GitProgressJob(
-    label: "atlas:packages",
-    command: "git",
-    args: @["pull", "--ff-only", "--progress"],
-    workingDir: $repoDir
-  )
-
-proc buildSharedRepoSyncPlan(firstEpoch: bool): SharedRepoSyncPlan =
-  if not firstEpoch:
-    return
-
-  createDir($atlasHomeDirectory())
-  let repoDir = sharedPackagesRepoDir()
-  if dirExists($repoDir):
-    if not isGitDir(repoDir):
-      warn "atlas:cache", "shared packages path is not a git repo:", $repoDir
-      return
-    result = SharedRepoSyncPlan(
-      enabled: true,
-      repoDir: repoDir,
-      progressJob: sharedRepoPullProgressJob(repoDir)
-    )
-  else:
-    result = SharedRepoSyncPlan(
-      enabled: true,
-      repoDir: repoDir,
-      progressJob: sharedRepoCloneProgressJob(repoDir)
-    )
 
 proc markCloneFailure(pkg: var Package; details: string) =
   pkg.state = Error
@@ -128,18 +73,13 @@ proc finishClonedDependency(
 proc processCloneEpoch(
     nc: var NimbleContext;
     root: Package;
-    cloneJobs: seq[PendingCloneJob];
-    sharedRepoPlan: SharedRepoSyncPlan
+    cloneJobs: seq[PendingCloneJob]
 ) =
-  if cloneJobs.len == 0 and not sharedRepoPlan.enabled:
+  if cloneJobs.len == 0:
     return
 
   var jobs = cloneJobs.mapIt(it.progressJob)
-  let packageJobCount = jobs.len
-  if sharedRepoPlan.enabled:
-    jobs.add sharedRepoPlan.progressJob
-
-  notice root.projectName, "Cloning packages in parallel:", $packageJobCount
+  notice root.projectName, "Cloning packages in parallel:", $jobs.len
   let cloneResults = runGitProgressJobs(
     jobs,
     title = "atlas:clone",
@@ -158,15 +98,6 @@ proc processCloneEpoch(
       if details.len == 0:
         details = "clone failed for " & $pkg.url.cloneUri()
       pkg.markCloneFailure(details)
-
-  if sharedRepoPlan.enabled:
-    let sharedRepoResult = cloneResults[packageJobCount]
-    let ok = sharedRepoResult.exitCode == 0 and dirExists($sharedRepoPlan.repoDir)
-    if not ok:
-      var details = sharedRepoResult.output.strip()
-      if details.len == 0:
-        details = "shared packages sync failed"
-      warn "atlas:cache", details
 
 proc childDependencyState(pkg: Package; deferChildDeps: bool): PackageState =
   ## Returns the initial state for newly discovered child dependencies.
@@ -514,14 +445,21 @@ proc processPendingPackages(
         discard
         info pkg.projectName, "Skipping package:", $pkg.url, "state:", $pkg.state
 
-    let sharedRepoPlan =
-      if cloneJobs.len > 0:
-        buildSharedRepoSyncPlan(firstCloneEpoch)
-      else:
-        SharedRepoSyncPlan()
-    nc.processCloneEpoch(root, cloneJobs, sharedRepoPlan)
+    nc.processCloneEpoch(root, cloneJobs)
     if cloneJobs.len > 0:
       firstCloneEpoch = false
+
+proc syncSharedPackagesRepo() =
+  ## Ensure the shared packages repo is cloned and up to date before
+  ## dependency processing so forge release metadata is available early.
+  createDir($atlasHomeDirectory())
+  let repoDir = sharedPackagesRepoDir()
+  if not dirExists($repoDir):
+    let (status, msg) = gitops.clone(parseUri(packagesRepoUrl()), repoDir)
+    if status != Ok:
+      warn "atlas:cache", "failed to clone shared packages repo:", msg
+  elif isGitDir(repoDir):
+    gitops.updateRepo(repoDir)
 
 proc expandGraph*(
     path: Path,
@@ -533,7 +471,7 @@ proc expandGraph*(
 ): DepGraph =
   ## Expands a workspace root into a dependency graph.
   ## Explicit commit requirements can add new work, so processing repeats to a fixed point.
-  
+
   doAssert path.string != "."
   let url = nc.createUrlFromPath(path, isLinkPath)
   notice url.projectName, "expanding root package at:", $path, "url:", $url
@@ -541,6 +479,8 @@ proc expandGraph*(
 
   result = DepGraph(root: root, mode: mode)
   nc.packageToDependency[root.url] = root
+
+  syncSharedPackagesRepo()
 
   notice "atlas:expand", "Expanding packages for:", $root.projectName
 
