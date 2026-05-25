@@ -1,6 +1,6 @@
-import std / [sets, tables, sequtils, paths, files, os, strutils, json, jsonutils, algorithm, options]
+import std / [sets, tables, sequtils, paths, files, os, strutils, json, jsonutils, algorithm, options, httpclient]
 
-import basic/[deptypes, versions, depgraphtypes, osutils, context, gitops, reporters, nimblecontext, pkgurls, deptypesjson, sattypes, dependencycache, forgetarball]
+import basic/[deptypes, versions, depgraphtypes, osutils, context, gitops, reporters, nimblecontext, pkgurls, deptypesjson, sattypes, dependencycache, forgetarball, httpclientutils]
 import dependencies, runners 
 
 export depgraphtypes, deptypesjson
@@ -782,6 +782,8 @@ proc runBuildSteps*(graph: DepGraph) =
 
 proc activateGraph*(graph: DepGraph): tuple[paths: seq[CfgPath], features: seq[string]] =
   notice "atlas:graph", "Activating project deps for resolved dependency graph"
+  let httpClient = newAtlasHttpClient()
+  defer: httpClient.close()
   for pkg in allActiveNodes(graph):
     if pkg.isRoot: continue
     if not pkg.activeVersion.commit().isEmpty():
@@ -803,7 +805,7 @@ proc activateGraph*(graph: DepGraph): tuple[paths: seq[CfgPath], features: seq[s
                 notice pkg.url.projectName, "forge release already installed:", $versionedDir
                 pkg.ondisk = versionedDir
                 continue
-              if installForgePackage(pkg, forge.get, tag, versionedDir):
+              if installForgePackage(pkg, forge.get, tag, versionedDir, client=httpClient):
                 pkg.ondisk = versionedDir
                 continue
               warn pkg.url.projectName, "forge tarball install failed for version:", $pkg.activeVersion.vtag.v

@@ -112,18 +112,20 @@ proc loadForgeMetadata*(cachePath: Path): Option[ForgeMetadata] =
   except CatchableError:
     result = none(ForgeMetadata)
 
-proc downloadForgeTarball*(url: string; destPath: Path): bool =
+proc downloadForgeTarball*(url: string; destPath: Path; client: HttpClient = nil): bool =
   ## Download a forge release tarball from ``url`` to ``destPath``.
   ## Writes atomically via .tmp + rename.
+  ## Uses the provided ``client`` when given; otherwise creates a one-shot client.
   if url.len == 0:
     return false
 
   createDir($destPath.parentDir())
 
-  let client = newAtlasHttpClient()
+  let ownedClient = if client == nil: newAtlasHttpClient() else: nil
+  let c = if client != nil: client else: ownedClient
   try:
     notice "forge tarball", "downloading:", url
-    let response = client.get(url)
+    let response = c.get(url)
     if response.code.is4xx or response.code.is5xx:
       warn "forge tarball", "HTTP error:", $response.code, "url:", url
       return false
@@ -145,7 +147,8 @@ proc downloadForgeTarball*(url: string; destPath: Path): bool =
     warn "forge tarball", "download failed:", e.msg, "url:", url
     return false
   finally:
-    client.close()
+    if ownedClient != nil:
+      ownedClient.close()
 
 proc extractForgeTarball*(tarballPath: Path; destDir: Path): bool =
   ## Extract a .tar.gz tarball into ``destDir``, stripping the top-level component.
@@ -169,9 +172,11 @@ proc installForgePackage*(
     forge: ForgeMetadata;
     tagName: string;
     destDir: Path;
-    archiveType = "tar.gz"
+    archiveType = "tar.gz";
+    client: HttpClient = nil
 ): bool =
   ## Download (if not cached) and extract a forge release tarball into ``destDir``.
+  ## Uses the provided ``client`` when given; otherwise creates a one-shot client.
   let cacheDir = forgeTarballCacheDir(pkg.url.projectName())
   let cachePath = cacheDir / Path(tagName & "." & archiveType)
   let baseUrl = $pkg.url.cloneUri()
@@ -181,7 +186,7 @@ proc installForgePackage*(
     return false
 
   if not fileExists($cachePath):
-    if not downloadForgeTarball(tarballUrl, cachePath):
+    if not downloadForgeTarball(tarballUrl, cachePath, client):
       warn pkg.url.projectName, "forge tarball: download failed for tag:", tagName
       return false
 
