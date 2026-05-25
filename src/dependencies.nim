@@ -15,7 +15,7 @@
 ## dependencies during traversal.
 
 import std / [os, strutils, uri, tables, sequtils, sets, paths, dirs]
-import basic/[context, deptypes, versions, osutils, reporters, gitops, pkgurls, nimblecontext, deptypesjson, packageutils, gitprogresspool]
+import basic/[context, deptypes, versions, osutils, reporters, gitops, pkgurls, nimblecontext, deptypesjson, packageutils, gitprogresspool, remotecache]
 import releaseinfo
 
 export deptypes, versions, deptypesjson, releaseinfo, packageutils
@@ -269,6 +269,10 @@ proc loadDependency*(
       pkg.errors.add "Not found"
       return
     else:
+      # Seed the per-project release cache before cloning so post-clone release
+      # discovery can reuse mirrored metadata when the mirrored HEAD still
+      # matches the package checkout.
+      discard seedProjectReleaseCache(pkg)
       clonePackage(pkg, officialUrl, isFork)
   of DoNothing:
     if pkg.ondisk.dirExists():
@@ -375,6 +379,7 @@ proc processPendingPackages(
             trace pkg.projectName, "expanded pkg:", pkg.repr
             processing = true
           else:
+            discard seedProjectReleaseCache(pkg)
             let checkoutDir = pkg.prepareCloneCheckoutDir()
             cloneJobs.add PendingCloneJob(
               pkgUrl: pkgUrl,

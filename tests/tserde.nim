@@ -1,5 +1,5 @@
 import std/[unittest, json, jsonutils, sets, tables, os, times, paths, sequtils]
-import basic/[context, sattypes, pkgurls, deptypes, nimblecontext, dependencycache]
+import basic/[context, sattypes, pkgurls, deptypes, nimblecontext, dependencycache, remotecache]
 import basic/[deptypesjson, versions]
 import confighandler
 
@@ -139,7 +139,7 @@ suite "json serde":
       @[(VersionTag(v: Version"1.0.0", c: current).toPkgVer, release)]
     )
     let cache = parseFile($packageReleaseCachePath(pkg))
-    check cache["cv"].getInt() == 16
+    check cache["cv"].getInt() == PackageReleaseCacheVersion
     check "cacheVersion" notin cache
     check cache["name"].getStr() == "foobar"
     check cache["fqn"].getStr() == "foobar.nimble-test.github.com"
@@ -247,7 +247,43 @@ suite "json serde":
 
     savePackageReleaseCache(pkg, current, @[(version, release)])
     let regeneratedCache = parseFile($cachePath)
-    check regeneratedCache["cv"].getInt() == 16
+    check regeneratedCache["cv"].getInt() == PackageReleaseCacheVersion
+
+  test "shared release cache copies into project cache":
+    let oldCtx = context()
+    let ws = Path(getTempDir()) / Path("atlas_shared_release_cache_" & $int(epochTime()))
+    let mirror = ws / Path"mirror"
+    defer:
+      setContext(oldCtx)
+      if dirExists($ws):
+        removeDir($ws)
+
+    setContext(AtlasContext(projectDir: ws, depsDir: Path"deps"))
+    let url = nc.createUrl("foobar")
+    let pkg = Package(url: url, name: "foobar", isOfficial: true)
+    let sourcePath = sharedPackageReleasePath("foobar", mirror)
+    createDir($sourcePath.parentDir())
+    writeFile($sourcePath, pretty(%*{
+      "cv": PackageReleaseCacheVersion,
+      "name": "foobar",
+      "fqn": "foobar.nimble-test.github.com",
+      "head": "24870f48c40da2146ce12ff1e675e6e7b9748355",
+      "releases": [
+        {
+          "v": {
+            "v": "1.0.0",
+            "c": "24870f48c40da2146ce12ff1e675e6e7b9748355"
+          }
+        }
+      ]
+    }))
+
+    check copySharedReleaseCache(pkg, mirror)
+    let cachePath = packageReleaseCachePath(pkg)
+    check fileExists($cachePath)
+    let cache = parseFile($cachePath)
+    check cache["name"].getStr() == "foobar"
+    check cache["releases"].len == 1
 
   test "json serde nimble release requirements use combined strings":
     let starDep = createUrlSkipPatterns("https://github.com/nimble-test/mummy", skipDirTest = true)
