@@ -168,9 +168,10 @@ proc installForgePackage*(
     pkg: Package;
     forge: ForgeMetadata;
     tagName: string;
+    destDir: Path;
     archiveType = "tar.gz"
 ): bool =
-  ## Download (if not cached) and extract a forge release tarball into ``pkg.ondisk``.
+  ## Download (if not cached) and extract a forge release tarball into ``destDir``.
   let cacheDir = forgeTarballCacheDir(pkg.url.projectName())
   let cachePath = cacheDir / Path(tagName & "." & archiveType)
   let baseUrl = $pkg.url.cloneUri()
@@ -184,14 +185,11 @@ proc installForgePackage*(
       warn pkg.url.projectName, "forge tarball: download failed for tag:", tagName
       return false
 
-  # Clean and recreate the target directory.
-  if dirExists($pkg.ondisk):
-    removeDir($pkg.ondisk)
-  createDir($pkg.ondisk)
+  createDir($destDir)
 
-  if not extractForgeTarball(cachePath, pkg.ondisk):
+  if not extractForgeTarball(cachePath, destDir):
     warn pkg.url.projectName, "forge tarball: extraction failed for:", $cachePath
     return false
 
-  notice pkg.url.projectName, "installed from forge tarball:", tagName, "at:", $pkg.ondisk
+  notice pkg.url.projectName, "installed from forge tarball:", tagName, "at:", $destDir
   return true

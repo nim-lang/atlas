@@ -797,7 +797,14 @@ proc activateGraph*(graph: DepGraph): tuple[paths: seq[CfgPath], features: seq[s
           if forge.isSome:
             let tag = resolveTagFromVersion(forge.get, pkg.activeVersion.vtag.v)
             if tag.len > 0:
-              if installForgePackage(pkg, forge.get, tag):
+              let commitShort = pkg.activeVersion.vtag.c.short()
+              let versionedDir = depsDir() / Path(pkg.projectName & "-" & $tag & "-" & commitShort)
+              if dirExists($versionedDir):
+                notice pkg.url.projectName, "forge release already installed:", $versionedDir
+                pkg.ondisk = versionedDir
+                continue
+              if installForgePackage(pkg, forge.get, tag, versionedDir):
+                pkg.ondisk = versionedDir
                 continue
               warn pkg.url.projectName, "forge tarball install failed for version:", $pkg.activeVersion.vtag.v
             else:
