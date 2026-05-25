@@ -778,7 +778,8 @@ proc mergePackageReleaseMetadata*(
     else:
       releaseMetadata.copy()
   metadata["name"] = %info.name
-  metadata["tags"] = %tags
+  let existingTags = existingMetadata.metadataField("tags")
+  metadata["tags"] = %(tags or existingTags.getBool())
   if tarballEntries.isNil or tarballEntries.kind == JNull:
     if metadata.hasKey("tarballs"):
       metadata.delete("tarballs")

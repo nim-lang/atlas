@@ -737,6 +737,30 @@ suite "packager release metadata comparison":
     }
     check comparableReleaseMetadata(base) != comparableReleaseMetadata(changed)
 
+  test "merge release metadata preserves existing tags when no new tag evidence exists":
+    let root = createTempDir("atlas-packager", "preserve-tags-")
+    defer: removeDir(root)
+
+    let workspaceRoot = Path(root)
+    writeFile(root / "releases.json", pretty(%*{
+      "name": "alpha",
+      "releases": [{"v": "1.0.0@aaaa"}],
+      "tags": true
+    }))
+
+    mergePackageReleaseMetadata(
+      workspaceRoot,
+      PackageInfo(name: "alpha"),
+      %*{
+        "releases": [{"v": "1.0.0@aaaa"}]
+      },
+      newJNull(),
+      false
+    )
+
+    let rewritten = parseFile(root / "releases.json")
+    check rewritten["tags"].getBool()
+
   test "comparable release metadata normalizes tarball order":
     let base = %*{
       "name": "alpha",
