@@ -342,13 +342,13 @@ proc addHeadToRetainedReleaseMetadata(
       continue
     if vtag.version == Version"#head":
       return
-    if matchingReleaseJson.isNil and vtag.commit == releaseInfo.currentCommit:
+    if matchingReleaseJson.isNil and vtag.commit.h == releaseInfo.currentCommit.h:
       matchingReleaseJson = entry.copy()
 
   var headRelease: NimbleRelease
   if matchingReleaseJson.isNil:
     for (ver, release) in releaseInfo.releases:
-      if not ver.isNil and ver.vtag.commit == releaseInfo.currentCommit:
+      if not ver.isNil and ver.vtag.commit.h == releaseInfo.currentCommit.h:
         headRelease = release
         break
     if headRelease.isNil:
@@ -407,7 +407,7 @@ proc headReleaseEntry(releaseInfo: PackageReleaseInfo): ArchiveReleaseEntry =
   result.isHead = true
 
   for (ver, release) in releaseInfo.releases:
-    if not ver.isNil and ver.vtag.commit == releaseInfo.currentCommit:
+    if not ver.isNil and ver.vtag.commit.h == releaseInfo.currentCommit.h:
       result.release = release
       return
 
@@ -491,10 +491,15 @@ proc collectReleaseArchives(
             let archiveFile = existingEntry["f"].getStr()
             let archivePath = archiveDir / Path(archiveFile)
             if fileExists($archivePath):
+              let entryContentHash =
+                if label == "head" and existingEntry{"s"}.getStr().len > 0:
+                  existingEntry{"s"}.getStr()
+                else:
+                  contentHash
               referencedFiles.incl(archiveFile)
               addTarballEntry result, label, initArchiveEntry(
                 label,
-                contentHash,
+                entryContentHash,
                 archiveFile,
                 rootSubdir,
                 release
