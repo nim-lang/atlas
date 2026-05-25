@@ -415,6 +415,8 @@ proc headReleaseEntry(releaseInfo: PackageReleaseInfo): ArchiveReleaseEntry =
 
 proc archiveReleaseEntries(releaseInfo: PackageReleaseInfo): seq[ArchiveReleaseEntry] =
   for (ver, release) in releaseInfo.releases:
+    if not ver.isNil and ver.vtag.version == Version"#head":
+      continue
     result.add ArchiveReleaseEntry(ver: ver, release: release)
   if releaseInfo.currentCommit.isEmpty():
     return
