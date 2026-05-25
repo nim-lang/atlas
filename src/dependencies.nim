@@ -15,7 +15,7 @@
 ## dependencies during traversal.
 
 import std / [os, strutils, uri, tables, sequtils, sets, paths, dirs]
-import basic/[context, deptypes, versions, osutils, reporters, gitops, pkgurls, nimblecontext, deptypesjson, packageutils, gitprogresspool, remotecache, forgetarball, dependencycache]
+import basic/[context, deptypes, versions, osutils, reporters, gitops, pkgurls, nimblecontext, deptypesjson, packageutils, gitprogresspool, remotecache]
 import releaseinfo
 
 export deptypes, versions, deptypesjson, releaseinfo, packageutils
@@ -332,17 +332,6 @@ proc loadDependency*(
   pkg.isAtlasProject = pkg.url.isAtlasProject()
   pkg.isLocalOnly = pkg.url.isNimbleLink()
 
-  if not pkg.isLocalOnly:
-    let cachePath = packageReleaseCachePath(pkg)
-    if not fileExists($cachePath):
-      discard downloadReleaseCache(pkg.projectName())
-    if hasForgeMetadata(cachePath):
-      notice pkg.url.projectName, "using forge release tarball instead of git clone"
-      pkg.isForgePackage = true
-      let head = loadCacheHead(cachePath)
-      if head.len > 0:
-        pkg.originHead = initCommitHash(head, FromHead)
-
   var todo = if pkg.resolveExistingPackageDir(): DoNothing else: DoClone
   if pkg.isLocalOnly:
     todo = DoNothing
@@ -357,9 +346,6 @@ proc loadDependency*(
       pkg.state = Error
       pkg.errors.add "Not found"
       return
-    elif pkg.isForgePackage:
-      createDir($pkg.ondisk)
-      pkg.state = Found
     else:
       clonePackage(pkg, officialUrl, isFork)
   of DoNothing:
@@ -452,17 +438,6 @@ proc processPendingPackages(
         pkg.isAtlasProject = pkg.url.isAtlasProject()
         pkg.isLocalOnly = pkg.url.isNimbleLink()
 
-        if not pkg.isLocalOnly:
-          let cachePath = packageReleaseCachePath(pkg)
-          if not fileExists($cachePath):
-            discard downloadReleaseCache(pkg.projectName())
-          if hasForgeMetadata(cachePath):
-            notice pkg.url.projectName, "using forge release tarball instead of git clone"
-            pkg.isForgePackage = true
-            let head = loadCacheHead(cachePath)
-            if head.len > 0:
-              pkg.originHead = initCommitHash(head, FromHead)
-
         var todo = if pkg.resolveExistingPackageDir(): DoNothing else: DoClone
         if pkg.isLocalOnly:
           todo = DoNothing
@@ -476,9 +451,6 @@ proc processPendingPackages(
           if onClone == DoNothing:
             pkg.state = Error
             pkg.errors.add "Not found"
-          elif pkg.isForgePackage:
-            createDir($pkg.ondisk)
-            pkg.state = Found
           elif pkg.url.isFileProtocol:
             nc.loadDependency(pkg, onClone)
             trace pkg.projectName, "expanded pkg:", pkg.repr

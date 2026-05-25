@@ -12,7 +12,7 @@
 ## handles the clone/copy step and finalizes the on-disk package directory name.
 
 import std/[os, paths, dirs, strutils]
-import context, deptypes, pkgurls, reporters, nimblecontext, gitops
+import context, deptypes, versions, pkgurls, reporters, nimblecontext, gitops, dependencycache, forgetarball, remotecache
 
 proc copyFromDisk*(pkg: Package, dest: Path): (CloneStatus, string) =
   let source = pkg.url.toOriginalPath()
@@ -94,6 +94,22 @@ proc shouldCloneToTemp(pkg: Package): bool =
     not pkg.url.isFileProtocol and
     pkg.url.cloneUri().scheme notin ["link", "atlas"]
 
+proc checkForgeMetadata(pkg: var Package): bool =
+  ## Check for forge release metadata and mark the package if found.
+  if pkg.isLocalOnly:
+    return false
+  let cachePath = packageReleaseCachePath(pkg)
+  if not fileExists($cachePath):
+    discard downloadReleaseCache(pkg.projectName())
+  if hasForgeMetadata(cachePath):
+    notice pkg.url.projectName, "using forge release tarball instead of git clone"
+    pkg.isForgePackage = true
+    let head = loadCacheHead(cachePath)
+    if head.len > 0:
+      pkg.originHead = initCommitHash(head, FromHead)
+    return true
+  return false
+
 proc resolveExistingPackageDir*(pkg: var Package): bool =
   ## Returns true when `pkg.ondisk` already contains the correct checkout.
   ##
@@ -101,18 +117,27 @@ proc resolveExistingPackageDir*(pkg: var Package): bool =
   ## filename after cloning. If another unofficial package with the same nimble
   ## filename already owns that directory, look for this package's deterministic
   ## disambiguated directory instead of reusing the wrong checkout.
-  if pkg.isForgePackage:
-    return dirExists(pkg.ondisk)
-  if not dirExists(pkg.ondisk):
+  ##
+  ## When the directory is absent and forge release metadata is available in the
+  ## release cache, the package is marked as a forge package and the directory
+  ## is created as a placeholder.
+  if dirExists(pkg.ondisk):
+    if pkg.isForgePackage:
+      return true
+    if not isGitDir(pkg.ondisk) and pkg.checkForgeMetadata():
+      return true
+    if not pkg.shouldCloneToTemp():
+      return true
+    if matchesPackageUrl(pkg.ondisk, pkg):
+      return true
+    let alternateDir = disambiguatedDirectoryPath(pkg)
+    if dirExists(alternateDir) and matchesPackageUrl(alternateDir, pkg):
+      pkg.ondisk = alternateDir
+      return true
     return false
-  if not pkg.shouldCloneToTemp():
-    return true
-  if matchesPackageUrl(pkg.ondisk, pkg):
-    return true
 
-  let alternateDir = disambiguatedDirectoryPath(pkg)
-  if dirExists(alternateDir) and matchesPackageUrl(alternateDir, pkg):
-    pkg.ondisk = alternateDir
+  if pkg.checkForgeMetadata():
+    createDir($pkg.ondisk)
     return true
 
   false
