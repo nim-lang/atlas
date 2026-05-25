@@ -454,12 +454,39 @@ proc syncSharedPackagesRepo() =
   ## dependency processing so forge release metadata is available early.
   createDir($atlasHomeDirectory())
   let repoDir = sharedPackagesRepoDir()
+  var job: GitProgressJob
   if not dirExists($repoDir):
-    let (status, msg) = gitops.clone(parseUri(packagesRepoUrl()), repoDir)
-    if status != Ok:
-      warn "atlas:cache", "failed to clone shared packages repo:", msg
+    let repoUrl = packagesRepoUrl()
+    let canonicalUrl = parseUri(repoUrl)
+    let remote = gitops.remoteNameFromGitUrl(repoUrl)
+    let effectiveUrl = gitops.maybeUrlProxy(canonicalUrl)
+    var cloneArgs = @["clone", "--depth=1"]
+    if remote.len > 0:
+      cloneArgs.add "--origin"
+      cloneArgs.add remote
+    cloneArgs.add "--no-tags"
+    cloneArgs.add "--progress"
+    cloneArgs.add $effectiveUrl
+    cloneArgs.add $repoDir
+    job = GitProgressJob(
+      label: "atlas:packages",
+      command: "git",
+      args: cloneArgs
+    )
   elif isGitDir(repoDir):
-    gitops.updateRepo(repoDir)
+    job = GitProgressJob(
+      label: "atlas:packages",
+      command: "git",
+      args: @["pull", "--ff-only", "--progress"],
+      workingDir: $repoDir
+    )
+  else:
+    warn "atlas:cache", "shared packages path is not a git repo:", $repoDir
+    return
+
+  let results = runGitProgressJobs([job], title = "atlas:cache", workerCount = 1)
+  if results.len > 0 and results[0].exitCode != 0:
+    warn "atlas:cache", "shared packages sync failed:", results[0].output.strip()
 
 proc expandGraph*(
     path: Path,
