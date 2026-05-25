@@ -270,6 +270,7 @@ proc traverseDependency*(
   discard copySharedReleaseCache(pkg, sharedPackagesRepoDir())
 
   let releaseInfo = nc.loadPackageReleaseInfo(pkg, mode, explicitVersions)
+  notice pkg.url.projectName, "releaseInfo", "loadedFromCache:", releaseInfo.loadedFromCache
   if releaseInfo.repoError:
     pkg.state = Error
     return
