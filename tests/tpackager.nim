@@ -761,6 +761,59 @@ suite "packager release metadata comparison":
     let rewritten = parseFile(root / "releases.json")
     check rewritten["tags"].getBool()
 
+  test "merge release metadata compacts duplicated release fields":
+    let root = createTempDir("atlas-packager", "compact-release-fields-")
+    defer: removeDir(root)
+
+    let workspaceRoot = Path(root)
+    mergePackageReleaseMetadata(
+      workspaceRoot,
+      PackageInfo(name: "alpha"),
+      %*{
+        "author": "Atlas Tester",
+        "description": "Test package",
+        "license": "MIT",
+        "nim": "2.0.0",
+        "srcDir": "src",
+        "releases": [
+          {
+            "v": "#head@aaaaaaaa",
+            "r": [],
+            "a": "Atlas Tester",
+            "d": "Test package",
+            "l": "MIT",
+            "m": "2.0.0",
+            "s": "src"
+          },
+          {
+            "v": "1.0.0@bbbbbbbb",
+            "r": [],
+            "a": "Other Tester",
+            "d": "Test package",
+            "l": "MIT",
+            "m": "2.2.0",
+            "s": "lib"
+          }
+        ]
+      },
+      newJNull()
+    )
+
+    let rewritten = parseFile(root / "releases.json")
+    let head = rewritten["releases"][0]
+    check "a" notin head
+    check "d" notin head
+    check "l" notin head
+    check "m" notin head
+    check "s" notin head
+
+    let tagged = rewritten["releases"][1]
+    check tagged["a"].getStr() == "Other Tester"
+    check "d" notin tagged
+    check "l" notin tagged
+    check tagged["m"].getStr() == "2.2.0"
+    check tagged["s"].getStr() == "lib"
+
   test "comparable release metadata normalizes tarball order":
     let base = %*{
       "name": "alpha",

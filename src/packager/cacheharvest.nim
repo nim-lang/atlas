@@ -317,6 +317,21 @@ proc loadPackageList*(packagesFile: Path): seq[PackageInfo] =
     if info != nil:
       result.add info
 
+proc compactReleaseMetadata*(metadata: var JsonNode) =
+  if metadata.isNil or metadata.kind != JObject:
+    return
+  if not metadata.hasKey("releases") or metadata["releases"].kind != JArray:
+    return
+
+  for entry in metadata["releases"]:
+    var release: NimbleRelease
+    release.fromJsonHook(entry, Joptions(allowMissingKeys: true, allowExtraKeys: true))
+    entry.compactLiftedReleaseMetadata(
+      release,
+      metadata,
+      ToJsonOptions(enumMode: joptEnumString)
+    )
+
 proc addHeadToRetainedReleaseMetadata(
     retained: var JsonNode;
     releaseInfo: PackageReleaseInfo
@@ -363,6 +378,13 @@ proc addHeadToRetainedReleaseMetadata(
   for key, value in matchingReleaseJson:
     if key != "v":
       headEntry[key] = value.copy()
+  var headEntryRelease: NimbleRelease
+  headEntryRelease.fromJsonHook(headEntry, Joptions(allowMissingKeys: true, allowExtraKeys: true))
+  headEntry.compactLiftedReleaseMetadata(
+    headEntryRelease,
+    retained,
+    ToJsonOptions(enumMode: joptEnumString)
+  )
   releases.add headEntry
 
 proc loadPackageReleaseMetadata(pkg: Package; releaseInfo: PackageReleaseInfo): JsonNode =
@@ -858,6 +880,8 @@ proc mergePackageReleaseMetadata*(
       notice "atlas:pkger",
         "forge metadata: set forge for:", info.name,
         "releases:", $forgeReleaseCount
+
+  metadata.compactReleaseMetadata()
 
   let existingComparable = comparableReleaseMetadata(existingMetadata)
   let metadataComparable = comparableReleaseMetadata(metadata)

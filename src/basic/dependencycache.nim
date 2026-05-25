@@ -171,6 +171,70 @@ proc firstNonEmptyMetadata(
       if result.len > 0:
         return
 
+proc compactLiftedReleaseMetadata*(
+    releaseJson: JsonNode;
+    release: NimbleRelease;
+    cache: JsonNode;
+    opt: ToJsonOptions = ToJsonOptions(enumMode: joptEnumString)
+) =
+  if releaseJson.isNil or releaseJson.kind != JObject:
+    return
+  if cache.isNil or cache.kind != JObject:
+    return
+
+  template removeMatching(entryKey, cacheKey: string) =
+    if releaseJson.hasKey(entryKey) and cache.hasKey(cacheKey) and
+        releaseJson[entryKey] == cache[cacheKey]:
+      releaseJson.delete(entryKey)
+
+  template addEmptyOverride(entryKey, cacheKey: string, value: untyped) =
+    if not releaseJson.hasKey(entryKey) and cache.hasKey(cacheKey):
+      releaseJson[entryKey] = toJson(value, opt)
+
+  removeMatching("n", "name")
+  removeMatching("a", "author")
+  removeMatching("d", "description")
+  removeMatching("l", "license")
+  removeMatching("m", "nim")
+  removeMatching("s", "srcDir")
+  removeMatching("b", "binDir")
+  removeMatching("x", "skipDirs")
+  removeMatching("y", "skipFiles")
+  removeMatching("z", "skipExt")
+  removeMatching("i", "installDirs")
+  removeMatching("j", "installFiles")
+  removeMatching("k", "installExt")
+  removeMatching("p", "bin")
+  removeMatching("o", "namedBin")
+  removeMatching("e", "backend")
+
+  if release.isNil:
+    return
+  if release.nimVersion == Version"":
+    addEmptyOverride("m", "nim", release.nimVersion)
+  if release.srcDir.len == 0:
+    addEmptyOverride("s", "srcDir", release.srcDir)
+  if release.binDir.len == 0:
+    addEmptyOverride("b", "binDir", release.binDir)
+  if release.skipDirs.len == 0:
+    addEmptyOverride("x", "skipDirs", release.skipDirs)
+  if release.skipFiles.len == 0:
+    addEmptyOverride("y", "skipFiles", release.skipFiles)
+  if release.skipExt.len == 0:
+    addEmptyOverride("z", "skipExt", release.skipExt)
+  if release.installDirs.len == 0:
+    addEmptyOverride("i", "installDirs", release.installDirs)
+  if release.installFiles.len == 0:
+    addEmptyOverride("j", "installFiles", release.installFiles)
+  if release.installExt.len == 0:
+    addEmptyOverride("k", "installExt", release.installExt)
+  if release.bin.len == 0:
+    addEmptyOverride("p", "bin", release.bin)
+  if release.namedBin.len == 0:
+    addEmptyOverride("o", "namedBin", release.namedBin)
+  if release.backend.len == 0:
+    addEmptyOverride("e", "backend", release.backend)
+
 proc toPackageReleaseCacheJson(cache: PackageReleaseCache; opt: ToJsonOptions): JsonNode =
   result = newJObject()
   result["cv"] = toJson(cache.cacheVersion, opt)
@@ -228,60 +292,7 @@ proc toPackageReleaseCacheJson(cache: PackageReleaseCache; opt: ToJsonOptions): 
         releaseJson.delete("v")
       if releaseJson.hasKey("g"):
         releaseJson.delete("g")  # hasBin is reconstructed from bin/namedBin on load
-      if entry.release.nimVersion == cache.nimVersion and releaseJson.hasKey("m"):
-        releaseJson.delete("m")
-      elif entry.release.nimVersion == Version"" and cache.nimVersion != Version"":
-        releaseJson["m"] = toJson(entry.release.nimVersion, opt)
-      if entry.release.author == cache.author and releaseJson.hasKey("a"):
-        releaseJson.delete("a")
-      if entry.release.description == cache.description and releaseJson.hasKey("d"):
-        releaseJson.delete("d")
-      if entry.release.license == cache.license and releaseJson.hasKey("l"):
-        releaseJson.delete("l")
-      if entry.release.srcDir == cache.srcDir and releaseJson.hasKey("s"):
-        releaseJson.delete("s")
-      elif entry.release.srcDir.len == 0 and cache.srcDir.len > 0:
-        releaseJson["s"] = toJson(entry.release.srcDir, opt)
-      if entry.release.binDir == cache.binDir and releaseJson.hasKey("b"):
-        releaseJson.delete("b")
-      elif entry.release.binDir.len == 0 and cache.binDir.len > 0:
-        releaseJson["b"] = toJson(entry.release.binDir, opt)
-      if entry.release.skipDirs == cache.skipDirs and releaseJson.hasKey("x"):
-        releaseJson.delete("x")
-      elif entry.release.skipDirs.len == 0 and cache.skipDirs.len > 0:
-        releaseJson["x"] = toJson(entry.release.skipDirs, opt)
-      if entry.release.skipFiles == cache.skipFiles and releaseJson.hasKey("y"):
-        releaseJson.delete("y")
-      elif entry.release.skipFiles.len == 0 and cache.skipFiles.len > 0:
-        releaseJson["y"] = toJson(entry.release.skipFiles, opt)
-      if entry.release.skipExt == cache.skipExt and releaseJson.hasKey("z"):
-        releaseJson.delete("z")
-      elif entry.release.skipExt.len == 0 and cache.skipExt.len > 0:
-        releaseJson["z"] = toJson(entry.release.skipExt, opt)
-      if entry.release.installDirs == cache.installDirs and releaseJson.hasKey("i"):
-        releaseJson.delete("i")
-      elif entry.release.installDirs.len == 0 and cache.installDirs.len > 0:
-        releaseJson["i"] = toJson(entry.release.installDirs, opt)
-      if entry.release.installFiles == cache.installFiles and releaseJson.hasKey("j"):
-        releaseJson.delete("j")
-      elif entry.release.installFiles.len == 0 and cache.installFiles.len > 0:
-        releaseJson["j"] = toJson(entry.release.installFiles, opt)
-      if entry.release.installExt == cache.installExt and releaseJson.hasKey("k"):
-        releaseJson.delete("k")
-      elif entry.release.installExt.len == 0 and cache.installExt.len > 0:
-        releaseJson["k"] = toJson(entry.release.installExt, opt)
-      if entry.release.bin == cache.bin and releaseJson.hasKey("p"):
-        releaseJson.delete("p")
-      elif entry.release.bin.len == 0 and cache.bin.len > 0:
-        releaseJson["p"] = toJson(entry.release.bin, opt)
-      if entry.release.namedBin == cache.namedBin and releaseJson.hasKey("o"):
-        releaseJson.delete("o")
-      elif entry.release.namedBin.len == 0 and cache.namedBin.len > 0:
-        releaseJson["o"] = toJson(entry.release.namedBin, opt)
-      if entry.release.backend == cache.backend and releaseJson.hasKey("e"):
-        releaseJson.delete("e")
-      elif entry.release.backend.len == 0 and cache.backend.len > 0:
-        releaseJson["e"] = toJson(entry.release.backend, opt)
+      releaseJson.compactLiftedReleaseMetadata(entry.release, result, opt)
     var entryJson = newJObject()
     entryJson["v"] = toJson(entry.vtag, opt)
     for key, value in releaseJson:
