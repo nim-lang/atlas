@@ -150,7 +150,7 @@ jobs:
           fi
 
       - name: Upload release artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.target.artifact }}
           path: dist/${{ matrix.target.archive }}
@@ -207,7 +207,7 @@ jobs:
           build_target atlas-linux-arm32 atlas-linux-arm32.tar.gz arm arm-linux-gnueabihf-gcc
 
       - name: Upload Linux ARM release artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: atlas-linux-arm
           path: |
