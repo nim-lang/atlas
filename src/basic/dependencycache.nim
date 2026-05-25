@@ -226,6 +226,8 @@ proc toPackageReleaseCacheJson(cache: PackageReleaseCache; opt: ToJsonOptions): 
         releaseJson.delete("n")
       if releaseJson.hasKey("v"):
         releaseJson.delete("v")
+      if releaseJson.hasKey("g"):
+        releaseJson.delete("g")  # hasBin is reconstructed from bin/namedBin on load
       if entry.release.nimVersion == cache.nimVersion and releaseJson.hasKey("m"):
         releaseJson.delete("m")
       elif entry.release.nimVersion == Version"" and cache.nimVersion != Version"":

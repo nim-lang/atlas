@@ -198,6 +198,8 @@ proc nimbleReleaseToJson(r: NimbleRelease, opt: ToJsonOptions): JsonNode =
   result["r"] = requirementsToJson(r.requirements)
   if r.hasInstallHooks:
     result["h"] = toJson(r.hasInstallHooks, opt)
+  if r.hasBin:
+    result["g"] = toJson(r.hasBin, opt)
   if r.author != "":
     result["a"] = toJson(r.author, opt)
   if r.description != "":
