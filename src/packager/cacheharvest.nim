@@ -352,6 +352,8 @@ proc addHeadToRetainedReleaseMetadata(
         headRelease = release
         break
     if headRelease.isNil:
+      headRelease = releaseInfo.headRelease
+    if headRelease.isNil:
       headRelease = NimbleRelease(version: Version"#head", status: Normal)
     matchingReleaseJson = toJsonHook(headRelease, ToJsonOptions(enumMode: joptEnumString))
 
@@ -411,7 +413,10 @@ proc headReleaseEntry(releaseInfo: PackageReleaseInfo): ArchiveReleaseEntry =
       result.release = release
       return
 
-  result.release = NimbleRelease(version: Version"#head", status: Normal)
+  if not releaseInfo.headRelease.isNil:
+    result.release = releaseInfo.headRelease
+  else:
+    result.release = NimbleRelease(version: Version"#head", status: Normal)
 
 proc archiveReleaseEntries(releaseInfo: PackageReleaseInfo): seq[ArchiveReleaseEntry] =
   for (ver, release) in releaseInfo.releases:
@@ -491,15 +496,10 @@ proc collectReleaseArchives(
             let archiveFile = existingEntry["f"].getStr()
             let archivePath = archiveDir / Path(archiveFile)
             if fileExists($archivePath):
-              let entryContentHash =
-                if label == "head" and existingEntry{"s"}.getStr().len > 0:
-                  existingEntry{"s"}.getStr()
-                else:
-                  contentHash
               referencedFiles.incl(archiveFile)
               addTarballEntry result, label, initArchiveEntry(
                 label,
-                entryContentHash,
+                contentHash,
                 archiveFile,
                 rootSubdir,
                 release

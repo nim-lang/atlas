@@ -21,8 +21,39 @@ type
     currentCommit*: CommitHash
     expandedExplicitVersions*: seq[VersionTag]
     releases*: seq[(PackageVersion, NimbleRelease)]
+    headRelease*: NimbleRelease
     loadedFromCache*: bool
     repoError*: bool
+
+proc processNimbleRelease*(
+    nc: var NimbleContext;
+    pkg: Package,
+    release: VersionTag;
+): NimbleRelease
+
+proc hasReleaseAtCommit(
+    releases: openArray[(PackageVersion, NimbleRelease)];
+    commit: CommitHash
+): bool =
+  if commit.isEmpty():
+    return false
+  for (ver, _) in releases:
+    if not ver.isNil and ver.vtag.commit.h == commit.h:
+      return true
+
+proc loadHeadRelease(
+    nc: var NimbleContext;
+    pkg: Package;
+    currentCommit: CommitHash
+): NimbleRelease =
+  if currentCommit.isEmpty():
+    return
+  let headVtag = VersionTag(v: Version"#head", c: initCommitHash(currentCommit, FromHead))
+  try:
+    result = nc.processNimbleRelease(pkg, headVtag)
+  except CatchableError as e:
+    info pkg.url.projectName, "error processing head release:", $headVtag, "error:", e.msg
+    result = NimbleRelease(version: Version"#head", status: HasBrokenRelease, err: e.msg)
 
 proc collectNimbleVersions*(nc: NimbleContext; pkg: Package; repo: RepoMetadata): seq[VersionTag] =
   ## Collects commits that modified the package's Nimble file.
@@ -237,6 +268,8 @@ proc loadPackageReleaseInfo*(
         info pkg.url.projectName, "traverseDependency error loading versions reverting to ", $result.currentCommit
 
   result.releases = deduplicateReleases(pkg, result.releases)
+  if not result.releases.hasReleaseAtCommit(result.currentCommit):
+    result.headRelease = nc.loadHeadRelease(pkg, result.currentCommit)
 
   if canUsePackageReleaseCache(pkg, mode, result.expandedExplicitVersions):
     savePackageReleaseCache(pkg, result.currentCommit, result.releases)

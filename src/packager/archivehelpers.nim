@@ -535,10 +535,8 @@ proc matchingDigestEntry*(
     compression: string;
     contentSha: string
 ): JsonNode =
+  discard gitSha
   let compressionExtension = archiveCompressionExtension(compression)
-  let commitShort =
-    if gitSha.len >= 8: gitSha[0 .. 7]
-    else: gitSha
 
   proc matches(entry: JsonNode; releaseKey: string): bool =
     if entry.kind != JObject:
@@ -547,15 +545,7 @@ proc matchingDigestEntry*(
     let entryContentSha = entry{"s"}.getStr()
     result = releaseKey == versionLabel and
         (compressionExtension.len == 0 or archiveFile.endsWith(compressionExtension)) and
-        (
-          entryContentSha == "" or
-          entryContentSha == contentSha or
-          (
-            versionLabel == "head" and
-            commitShort.len > 0 and
-            commitShort in archiveFile
-          )
-        )
+        (entryContentSha == "" or entryContentSha == contentSha)
 
   if entries.kind == JObject:
     for releaseKey, value in entries:
