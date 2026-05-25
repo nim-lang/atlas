@@ -184,11 +184,10 @@ proc loadPackageReleaseInfo*(
     var reasons: seq[string]
     if mode != AllReleases: reasons.add("mode not AllReleases")
     if explicitVersions.len != 0: reasons.add("has explicit versions")
-    if pkg.isRoot: reasons.add("is root")
-    if pkg.isAtlasProject: reasons.add("is atlas project")
     if pkg.url.isNimbleLink(): reasons.add("is nimble link")
     if pkg.isLocalOnly: reasons.add("is local only")
-    notice pkg.url.projectName, "releaseInfo loadedFromCache: false (reason: " & reasons.join(", ") & ")"
+    if not pkg.isRoot and not pkg.isAtlasProject:
+      notice pkg.url.projectName, "releaseInfo loadedFromCache: false (reason: " & reasons.join(", ") & ")"
 
   if mode == CurrentCommit and result.currentCommit.isEmpty():
     discard
