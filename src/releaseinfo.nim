@@ -171,7 +171,8 @@ proc loadPackageReleaseInfo*(
 
   if canUsePackageReleaseCache(pkg, mode, result.expandedExplicitVersions):
     var cachedReleases: seq[PackageReleaseCacheEntry]
-    if loadPackageReleaseCache(pkg, result.currentCommit, cachedReleases):
+    let (cacheOk, cacheReason) = loadPackageReleaseCache(pkg, result.currentCommit, cachedReleases)
+    if cacheOk:
       info pkg.url.projectName, "using cached releases for current commit:", $result.currentCommit
       for entry in cachedReleases:
         result.releases.add((entry.vtag.toPkgVer(), entry.release))
@@ -179,7 +180,7 @@ proc loadPackageReleaseInfo*(
       notice pkg.url.projectName, "releaseInfo loadedFromCache: true"
       return
     else:
-      notice pkg.url.projectName, "releaseInfo loadedFromCache: false (cache file missing or stale)"
+      notice pkg.url.projectName, "releaseInfo loadedFromCache: false (reason: " & cacheReason & ")"
   else:
     var reasons: seq[string]
     if mode != AllReleases: reasons.add("mode not AllReleases")

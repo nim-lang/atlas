@@ -354,27 +354,27 @@ proc loadPackageReleaseCache*(
     pkg: Package;
     currentCommit: CommitHash;
     entries: var seq[PackageReleaseCacheEntry]
-): bool =
+): (bool, string) =
   if pkg.originHead.isEmpty():
-    return false
+    return (false, "empty origin head")
 
   let cachePath = packageReleaseCachePath(pkg)
   if not fileExists($cachePath):
-    return false
+    return (false, "cache file missing")
 
   var cache: PackageReleaseCache
   try:
     cache.loadPackageReleaseCacheJson(parseFile($cachePath))
   except CatchableError as e:
     warn pkg.url.projectName, "ignoring invalid dependency cache:", $cachePath, "error:", e.msg
-    return false
+    return (false, "invalid cache json")
 
   if cache.cacheVersion != PackageReleaseCacheVersion:
     debug pkg.url.projectName, "ignoring stale dependency cache:", $cachePath,
       "version:", $cache.cacheVersion, "expected:", $PackageReleaseCacheVersion
-    return false
+    return (false, "stale cache version")
 
-  result =
+  let matches =
     (cache.fqn.len == 0 or cache.fqn == pkg.url.fullName()) and
     cache.subdir == (if pkg.subdir.len > 0: pkg.subdir else: pkg.url.subdir()) and
     cache.head == pkg.originHead and
@@ -382,9 +382,12 @@ proc loadPackageReleaseCache*(
     cache.includeTagsAndNimbleCommits == includeTagsAndNimbleCommitsFlag() and
     cache.nimbleCommitsMax == nimbleCommitsMaxFlag()
 
-  if result:
-    entries = cache.releases
-    debug pkg.url.projectName, "loaded dependency cache:", $cachePath, "releases:", $entries.len
+  if not matches:
+    return (false, "cache metadata mismatch")
+
+  entries = cache.releases
+  debug pkg.url.projectName, "loaded dependency cache:", $cachePath, "releases:", $entries.len
+  return (true, "")
 
 proc savePackageReleaseCache*(
     pkg: Package;
