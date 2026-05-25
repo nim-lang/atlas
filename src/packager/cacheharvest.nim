@@ -804,7 +804,7 @@ proc mergePackageReleaseMetadata*(
       metadataComparable
     )
     metadata["generatedAt"] = %now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
-    writeTextFileAtomic(releasesMetadataPath, $metadata)
+    writeTextFileAtomic(releasesMetadataPath, pretty(metadata))
     notice "atlas:pkger",
       "updated metadata:",
       relativeToCurrentDir(releasesMetadataPath),

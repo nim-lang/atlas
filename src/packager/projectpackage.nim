@@ -411,7 +411,7 @@ proc writeProjectReleaseMetadata(
       removeFile(path)
 
   result = releasesDir / Path(metadataFileName)
-  writeFile($result, $metadata)
+  writeFile($result, pretty(metadata))
 
 proc formatTarballSizeKb(tarballPath: Path): string =
   let fileSize = getFileSize($tarballPath)
