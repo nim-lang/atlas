@@ -843,10 +843,21 @@ proc mergePackageReleaseMetadata*(
         metadata.delete("forge")
       if metadata.hasKey("forgeReleases"):
         metadata.delete("forgeReleases")
+      notice "atlas:pkger",
+        "forge metadata: cleared forge for:", info.name
     else:
       if metadata.hasKey("forgeReleases"):
         metadata.delete("forgeReleases")
-      metadata["forge"] = comparableForgeReleases(forgeReleases)
+      let comparable = comparableForgeReleases(forgeReleases)
+      metadata["forge"] = comparable
+      let forgeReleaseCount =
+        if comparable.hasKey("releases") and comparable["releases"].kind == JArray:
+          comparable["releases"].len
+        else:
+          0
+      notice "atlas:pkger",
+        "forge metadata: set forge for:", info.name,
+        "releases:", $forgeReleaseCount
 
   let existingComparable = comparableReleaseMetadata(existingMetadata)
   let metadataComparable = comparableReleaseMetadata(metadata)
@@ -877,14 +888,22 @@ proc mergePackageForgeReleaseMetadata*(
 ) =
   let releasesMetadataPath = packageReleasesMetadataFile(workspaceRoot)
   if not fileExists($releasesMetadataPath):
+    warn "atlas:pkger",
+      "forge metadata: releases.json not found, skipping forge merge for:", info.name,
+      "expected path:", $releasesMetadataPath
     return
 
   var existingMetadata =
     try:
       parseFile($releasesMetadataPath)
-    except CatchableError:
+    except CatchableError as e:
+      warn "atlas:pkger",
+        "forge metadata: failed to parse releases.json for:", info.name,
+        "error:", e.msg
       return
   if existingMetadata.isNil or existingMetadata.kind != JObject:
+    warn "atlas:pkger",
+      "forge metadata: invalid releases.json for:", info.name
     return
 
   mergePackageReleaseMetadata(
@@ -1102,6 +1121,18 @@ proc harvestPackage(
     )
     if packageForgeMetadata.hasKey(info.name):
       let forgeMetadata = packageForgeMetadata[info.name]
+      let forgeReleaseCount =
+        if not forgeMetadata.forgeReleases.isNil and
+           forgeMetadata.forgeReleases.kind == JObject and
+           forgeMetadata.forgeReleases.hasKey("releases") and
+           forgeMetadata.forgeReleases["releases"].kind == JArray:
+          forgeMetadata.forgeReleases["releases"].len
+        else:
+          0
+      notice "atlas:pkger",
+        "merging forge metadata for:", info.name,
+        "tags:", $forgeMetadata.tags,
+        "forge releases:", $forgeReleaseCount
       mergePackageForgeReleaseMetadata(
         workspaceRoot,
         info,

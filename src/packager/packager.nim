@@ -539,11 +539,22 @@ proc daemonSleepMilliseconds*(remaining: Duration): int =
 proc buildPackageForgeMetadata(
     repoStates: Table[string, GitHubRepoState]
 ): Table[string, PackageForgeMetadata] =
+  var forgeCount = 0
+  var forgeReleaseTotal = 0
   for packageName, repoState in repoStates.pairs:
+    let forgeReleases = buildForgeReleaseMetadata(repoState)
     result[packageName] = PackageForgeMetadata(
       tags: repoState.tagNames.len > 0,
-      forgeReleases: buildForgeReleaseMetadata(repoState)
+      forgeReleases: forgeReleases
     )
+    if not forgeReleases.isNil and forgeReleases.kind != JNull:
+      forgeCount += 1
+      if forgeReleases.hasKey("releases") and forgeReleases["releases"].kind == JArray:
+        forgeReleaseTotal += forgeReleases["releases"].len
+  notice "atlas:pkger",
+    "forge metadata summary:",
+    "packages with forge releases:", $forgeCount,
+    "total forge releases:", $forgeReleaseTotal
 
 proc runPackagerOnce*(
     opts: PackagerCliOptions

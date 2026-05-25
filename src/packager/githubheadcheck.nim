@@ -138,7 +138,10 @@ proc loadRetainedForgeReleases(metadataDir: Path; state: RetainedPackageState): 
     if forgeReleases.isNil:
       return newJNull()
     forgeReleases.copy()
-  except CatchableError:
+  except CatchableError as e:
+    warn "atlas:pkger",
+      "failed to load retained forge releases from:", $releasesPath,
+      "error:", e.msg
     newJNull()
 
 proc normalizeReleaseTagVersion(tagName: string): string =
@@ -214,6 +217,10 @@ proc buildGitHubHeadQuery(targets: openArray[GitHubRepoTarget]): string =
 proc buildForgeReleaseMetadata*(state: GitHubRepoState): JsonNode =
   if state.forgeReleases.len == 0:
     return newJNull()
+
+  notice "atlas:pkger",
+    "building forge release metadata:",
+    "releases:", $state.forgeReleases.len
 
   result = newJObject()
   result["archives"] = %*{
