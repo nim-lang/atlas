@@ -465,6 +465,8 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
           writeHelp()
       of "dumpgraphs":
         context().flags.incl DumpGraphs
+      of "gitonly":
+        context().flags.incl GitOnly
       of "forcegittohttps":
         context().flags.incl ForceGitToHttps
       of "resolver":

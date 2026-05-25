@@ -58,6 +58,7 @@ type
     KeepFeatures
     IncludeTagsAndNimbleCommits # include nimble commits and tags in the solver
     NimbleCommitsMax # takes the newest commit for each version
+    GitOnly # disable forge release tarball downloads
 
   AtlasContext* = object
     projectDir*: Path = Path"."
