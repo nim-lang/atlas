@@ -557,6 +557,36 @@ proc matchingDigestEntry*(
         return value
   nil
 
+proc matchingCommitEntry*(
+    entries: JsonNode;
+    versionLabel: string;
+    gitSha: string;
+    compression: string
+): JsonNode =
+  let compressionExtension = archiveCompressionExtension(compression)
+  let commitShort =
+    if gitSha.len >= 8: gitSha[0 .. 7]
+    else: gitSha
+
+  proc matches(entry: JsonNode; releaseKey: string): bool =
+    if entry.kind != JObject:
+      return false
+    let archiveFile = entry{"f"}.getStr()
+    result = releaseKey == versionLabel and
+      commitShort.len > 0 and
+      (compressionExtension.len == 0 or archiveFile.endsWith(compressionExtension)) and
+      commitShort in archiveFile
+
+  if entries.kind == JObject:
+    for releaseKey, value in entries:
+      if value.kind == JArray:
+        for entry in value:
+          if entry.matches(releaseKey):
+            return entry
+      elif value.matches(releaseKey):
+        return value
+  nil
+
 proc initArchiveEntry*(
     versionLabel: string;
     contentSha: string;
