@@ -376,17 +376,18 @@ proc loadPackageReleaseCache*(
 
   var mismatches: seq[string]
   if cache.fqn.len > 0 and cache.fqn != pkg.url.fullName():
-    mismatches.add("fqn")
+    mismatches.add("fqn cache=" & cache.fqn & " pkg=" & pkg.url.fullName())
   if cache.subdir != (if pkg.subdir.len > 0: pkg.subdir else: pkg.url.subdir()):
-    mismatches.add("subdir")
+    let pkgSubdir = if pkg.subdir.len > 0: pkg.subdir else: pkg.url.subdir()
+    mismatches.add("subdir cache=" & $cache.subdir & " pkg=" & $pkgSubdir)
   if cache.head != pkg.originHead:
-    mismatches.add("originHead")
+    mismatches.add("originHead cache=" & cache.head.short() & "/" & $cache.head.orig & " pkg=" & pkg.originHead.short() & "/" & $pkg.originHead.orig)
   if cache.head != currentCommit:
-    mismatches.add("currentCommit")
+    mismatches.add("currentCommit cache=" & cache.head.short() & "/" & $cache.head.orig & " cur=" & currentCommit.short() & "/" & $currentCommit.orig)
   if cache.includeTagsAndNimbleCommits != includeTagsAndNimbleCommitsFlag():
-    mismatches.add("includeTagsAndNimbleCommits")
+    mismatches.add("includeTagsAndNimbleCommits cache=" & $cache.includeTagsAndNimbleCommits & " pkg=" & $includeTagsAndNimbleCommitsFlag())
   if cache.nimbleCommitsMax != nimbleCommitsMaxFlag():
-    mismatches.add("nimbleCommitsMax")
+    mismatches.add("nimbleCommitsMax cache=" & $cache.nimbleCommitsMax & " pkg=" & $nimbleCommitsMaxFlag())
 
   if mismatches.len > 0:
     return (false, "cache metadata mismatch: " & mismatches.join(", "))
