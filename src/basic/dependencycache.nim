@@ -352,7 +352,6 @@ proc loadPackageReleaseCacheJson(cache: var PackageReleaseCache; jn: JsonNode) =
 
 proc loadPackageReleaseCache*(
     pkg: Package;
-    currentCommit: CommitHash;
     entries: var seq[PackageReleaseCacheEntry]
 ): (bool, string) =
   if pkg.originHead.isEmpty():
@@ -382,8 +381,6 @@ proc loadPackageReleaseCache*(
     mismatches.add("subdir cache=" & $cache.subdir & " pkg=" & $pkgSubdir)
   if cache.head != pkg.originHead:
     mismatches.add("originHead cache=" & cache.head.short() & "/" & $cache.head.orig & " pkg=" & pkg.originHead.short() & "/" & $pkg.originHead.orig)
-  if cache.head != currentCommit:
-    mismatches.add("currentCommit cache=" & cache.head.short() & "/" & $cache.head.orig & " cur=" & currentCommit.short() & "/" & $currentCommit.orig)
   if cache.includeTagsAndNimbleCommits != includeTagsAndNimbleCommitsFlag():
     mismatches.add("includeTagsAndNimbleCommits cache=" & $cache.includeTagsAndNimbleCommits & " pkg=" & $includeTagsAndNimbleCommitsFlag())
   if cache.nimbleCommitsMax != nimbleCommitsMaxFlag():

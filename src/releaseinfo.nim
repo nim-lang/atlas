@@ -171,7 +171,7 @@ proc loadPackageReleaseInfo*(
 
   if canUsePackageReleaseCache(pkg, mode, result.expandedExplicitVersions):
     var cachedReleases: seq[PackageReleaseCacheEntry]
-    let (cacheOk, cacheReason) = loadPackageReleaseCache(pkg, result.currentCommit, cachedReleases)
+    let (cacheOk, cacheReason) = loadPackageReleaseCache(pkg, cachedReleases)
     if cacheOk:
       info pkg.url.projectName, "using cached releases for current commit:", $result.currentCommit
       for entry in cachedReleases:
