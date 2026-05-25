@@ -29,6 +29,11 @@ type
     checkoutDir: Path
     progressJob: GitProgressJob
 
+  SharedRepoSyncPlan = object
+    enabled: bool
+    repoDir: Path
+    progressJob: GitProgressJob
+
 proc cloneProgressJob(pkg: Package; checkoutDir: Path): GitProgressJob =
   let canonicalUrl = pkg.url.cloneUri()
   let remote = gitops.remoteNameFromGitUrl($canonicalUrl)
@@ -48,6 +53,65 @@ proc cloneProgressJob(pkg: Package; checkoutDir: Path): GitProgressJob =
   result.args.add "--progress"
   result.args.add $effectiveUrl
   result.args.add $checkoutDir
+
+proc sharedRepoCloneProgressJob(repoDir: Path): GitProgressJob =
+  let canonicalUrl = parseUri(DefaultRemotePackagesRepo)
+  let remote = gitops.remoteNameFromGitUrl(DefaultRemotePackagesRepo)
+  let effectiveUrl = gitops.maybeUrlProxy(canonicalUrl)
+  result = GitProgressJob(
+    label: "atlas:packages",
+    command: "git",
+    args: @["clone"]
+  )
+  if ShallowClones in context().flags:
+    result.args.add "--depth=1"
+  if remote.len > 0:
+    result.args.add "--origin"
+    result.args.add remote
+  result.args.add "--no-tags"
+  result.args.add "--progress"
+  result.args.add $effectiveUrl
+  result.args.add $repoDir
+
+proc sharedRepoPullProgressJob(repoDir: Path): GitProgressJob =
+  GitProgressJob(
+    label: "atlas:packages",
+    command: "git",
+    args: @["pull", "--ff-only", "--progress"],
+    workingDir: $repoDir
+  )
+
+proc buildSharedRepoSyncPlan(firstEpoch: bool): SharedRepoSyncPlan =
+  if not firstEpoch:
+    return
+
+  createDir($atlasHomeDirectory())
+  let repoDir = sharedPackagesRepoDir()
+  if dirExists($repoDir):
+    if not isGitDir(repoDir):
+      warn "atlas:cache", "shared packages path is not a git repo:", $repoDir
+      return
+    result = SharedRepoSyncPlan(
+      enabled: true,
+      repoDir: repoDir,
+      progressJob: sharedRepoPullProgressJob(repoDir)
+    )
+  else:
+    result = SharedRepoSyncPlan(
+      enabled: true,
+      repoDir: repoDir,
+      progressJob: sharedRepoCloneProgressJob(repoDir)
+    )
+
+proc seedClonedPackagesFromSharedRepo(
+    nc: var NimbleContext;
+    cloneJobs: seq[PendingCloneJob];
+    repoDir: Path
+) =
+  for job in cloneJobs:
+    var pkg = nc.packageToDependency[job.pkgUrl]
+    if pkg.state == Found:
+      discard copySharedReleaseCache(pkg, repoDir)
 
 proc markCloneFailure(pkg: var Package; details: string) =
   pkg.state = Error
@@ -73,14 +137,20 @@ proc finishClonedDependency(
 proc processCloneEpoch(
     nc: var NimbleContext;
     root: Package;
-    cloneJobs: seq[PendingCloneJob]
-) =
-  if cloneJobs.len == 0:
+    cloneJobs: seq[PendingCloneJob];
+    sharedRepoPlan: SharedRepoSyncPlan
+): bool =
+  if cloneJobs.len == 0 and not sharedRepoPlan.enabled:
     return
 
-  notice root.projectName, "Cloning packages in parallel:", $cloneJobs.len
+  var jobs = cloneJobs.mapIt(it.progressJob)
+  let packageJobCount = jobs.len
+  if sharedRepoPlan.enabled:
+    jobs.add sharedRepoPlan.progressJob
+
+  notice root.projectName, "Cloning packages in parallel:", $packageJobCount
   let cloneResults = runGitProgressJobs(
-    cloneJobs.mapIt(it.progressJob),
+    jobs,
     title = "atlas:clone",
     workerCount = context().parallelCloneWorkers
   )
@@ -97,6 +167,15 @@ proc processCloneEpoch(
       if details.len == 0:
         details = "clone failed for " & $pkg.url.cloneUri()
       pkg.markCloneFailure(details)
+
+  if sharedRepoPlan.enabled:
+    let sharedRepoResult = cloneResults[packageJobCount]
+    result = sharedRepoResult.exitCode == 0 and dirExists($sharedRepoPlan.repoDir)
+    if not result:
+      var details = sharedRepoResult.output.strip()
+      if details.len == 0:
+        details = "shared packages sync failed"
+      warn "atlas:cache", details
 
 proc childDependencyState(pkg: Package; deferChildDeps: bool): PackageState =
   ## Returns the initial state for newly discovered child dependencies.
@@ -269,10 +348,6 @@ proc loadDependency*(
       pkg.errors.add "Not found"
       return
     else:
-      # Seed the per-project release cache before cloning so post-clone release
-      # discovery can reuse mirrored metadata when the mirrored HEAD still
-      # matches the package checkout.
-      discard seedProjectReleaseCache(pkg)
       clonePackage(pkg, officialUrl, isFork)
   of DoNothing:
     if pkg.ondisk.dirExists():
@@ -302,10 +377,12 @@ proc processPendingPackages(
   ## Processes all packages currently known to the context until no immediate work remains.
   ## Lazy packages are represented in the graph without loading their full release history.
   var processing = true
+  var firstEpoch = true
   while processing:
     processing = false
     let pkgUrls = nc.packageToDependency.keys().toSeq()
     var cloneJobs: seq[PendingCloneJob]
+    let sharedRepoPlan = buildSharedRepoSyncPlan(firstEpoch)
 
     # Build concise package lists for progress logging.
     var initializingPkgs: seq[string]
@@ -379,7 +456,6 @@ proc processPendingPackages(
             trace pkg.projectName, "expanded pkg:", pkg.repr
             processing = true
           else:
-            discard seedProjectReleaseCache(pkg)
             let checkoutDir = pkg.prepareCloneCheckoutDir()
             cloneJobs.add PendingCloneJob(
               pkgUrl: pkgUrl,
@@ -438,7 +514,10 @@ proc processPendingPackages(
         discard
         info pkg.projectName, "Skipping package:", $pkg.url, "state:", $pkg.state
 
-    nc.processCloneEpoch(root, cloneJobs)
+    let sharedRepoReady = nc.processCloneEpoch(root, cloneJobs, sharedRepoPlan)
+    if sharedRepoReady:
+      nc.seedClonedPackagesFromSharedRepo(cloneJobs, sharedRepoPlan.repoDir)
+    firstEpoch = false
 
 proc expandGraph*(
     path: Path,

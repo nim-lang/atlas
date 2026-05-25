@@ -12,8 +12,7 @@
 import std / [parseopt, files, dirs, strutils, os, options, osproc, tables, sets, json, uri, paths]
 import basic / [versions, context, osutils, configutils, reporters,
                 nimbleparser, gitops, pkgurls, nimblecontext,
-                compiledpatterns, packageinfos, sattypes, atlasversion,
-                remotecache]
+                compiledpatterns, packageinfos, sattypes, atlasversion]
 import depgraphs, nimenv, lockfiles, confighandler, dependencies, pkgsearch
 
 
@@ -382,9 +381,6 @@ proc update(filter: string) =
   if updatedAny:
     notice project(), "dependency refs updated, run `atlas install` to update"
 
-proc prepareSharedReleaseCacheRepo() =
-  discard ensureSharedPackagesRepo()
-
 proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[string]) =
   var autoinit = true
   if existsEnv("NO_COLOR") or not isatty(stdout) or (getEnv("TERM") == "dumb"):
@@ -527,7 +523,6 @@ proc atlasRun*(params: seq[string]) =
 
   if action in ["install", "update", "use"]:
     context().flags.incl ListVersions
-    prepareSharedReleaseCacheRepo()
 
   case action
   of "":

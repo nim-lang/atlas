@@ -5,26 +5,17 @@
 
 ## Shared package release cache support.
 ##
-## Maintains a local clone of a harvested packages repo under
-## ``~/.atlas/packages`` and copies per-package ``releases.json`` files into a
-## project's ``deps/.cache`` before dependency clones start. Atlas still
-## validates the copied cache against the cloned repo HEAD, so stale mirrored
-## caches fall back to the normal regeneration path.
+## Locates a harvested packages repo under ``~/.atlas/packages`` and copies
+## per-package ``releases.json`` files into a project's ``deps/.cache``.
+## Atlas still validates the copied cache against the cloned repo HEAD, so
+## stale mirrored caches fall back to the normal regeneration path.
 
 import std / [json, os, paths, strutils, uri, httpclient, streams]
-import context, dependencycache, deptypes, gitops, httpclientutils, reporters
+import context, dependencycache, deptypes, httpclientutils, reporters
 
 const
   DefaultRemotePackagesRepo* = "https://github.com/elcritch/nim-packages"
   ## Default base URL for the remote packages metadata repo.
-
-type
-  SharedPackagesRepoState = enum
-    sprUnknown, sprReady, sprUnavailable
-
-var
-  sharedPackagesRepoState {.threadvar.}: SharedPackagesRepoState
-  sharedPackagesRepoPath {.threadvar.}: Path
 
 proc atlasHomeDirectory*(): Path =
   Path(getHomeDir()) / Path".atlas"
@@ -37,39 +28,6 @@ proc sharedPackageReleasePath*(packageName: string; repoDir: Path): Path =
     return Path""
   let bucket = $packageName[0].toLowerAscii()
   repoDir / Path"pkgs" / Path(bucket) / Path(packageName) / Path"releases.json"
-
-proc ensureSharedPackagesRepo*(): bool =
-  let repoDir = sharedPackagesRepoDir()
-  if sharedPackagesRepoPath != repoDir:
-    sharedPackagesRepoPath = repoDir
-    sharedPackagesRepoState = sprUnknown
-
-  case sharedPackagesRepoState
-  of sprReady:
-    return true
-  of sprUnavailable:
-    return false
-  of sprUnknown:
-    discard
-
-  createDir($atlasHomeDirectory())
-  if dirExists($repoDir):
-    if not isGitDir(repoDir):
-      warn "atlas:cache", "shared packages path is not a git repo:", $repoDir
-      sharedPackagesRepoState = sprUnavailable
-      return false
-    updateRepo(repoDir)
-    sharedPackagesRepoState = sprReady
-    return true
-
-  let (status, msg) = clone(parseUri(DefaultRemotePackagesRepo), repoDir)
-  if status != Ok:
-    warn "atlas:cache", "cannot clone shared packages repo:", DefaultRemotePackagesRepo, msg
-    sharedPackagesRepoState = sprUnavailable
-    return false
-
-  sharedPackagesRepoState = sprReady
-  true
 
 proc copySharedReleaseCache*(pkg: Package; repoDir: Path): bool =
   if not pkg.isOfficial or pkg.isFork or pkg.isLocalOnly or pkg.isRoot:
@@ -102,11 +60,6 @@ proc copySharedReleaseCache*(pkg: Package; repoDir: Path): bool =
   except CatchableError as e:
     warn packageName, "failed to seed shared release cache:", e.msg
     return false
-
-proc seedProjectReleaseCache*(pkg: Package): bool =
-  if not ensureSharedPackagesRepo():
-    return false
-  copySharedReleaseCache(pkg, sharedPackagesRepoDir())
 
 proc remoteReleaseCacheUrl*(packageName: string; baseUrl = DefaultRemotePackagesRepo): string =
   ## Build the raw.githubusercontent.com URL for a package's releases.json.
