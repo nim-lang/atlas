@@ -331,6 +331,18 @@ proc loadDependency*(
 
   pkg.isAtlasProject = pkg.url.isAtlasProject()
   pkg.isLocalOnly = pkg.url.isNimbleLink()
+
+  if not pkg.isLocalOnly:
+    let cachePath = packageReleaseCachePath(pkg)
+    if not fileExists($cachePath):
+      discard downloadReleaseCache(pkg.projectName())
+    if hasForgeMetadata(cachePath):
+      notice pkg.url.projectName, "using forge release tarball instead of git clone"
+      pkg.isForgePackage = true
+      let head = loadCacheHead(cachePath)
+      if head.len > 0:
+        pkg.originHead = initCommitHash(head, FromHead)
+
   var todo = if pkg.resolveExistingPackageDir(): DoNothing else: DoClone
   if pkg.isLocalOnly:
     todo = DoNothing
@@ -341,21 +353,13 @@ proc loadDependency*(
 
   case todo
   of DoClone:
-    if not pkg.isLocalOnly:
-      let cachePath = packageReleaseCachePath(pkg)
-      if not fileExists($cachePath):
-        discard downloadReleaseCache(pkg.projectName())
-      if hasForgeMetadata(cachePath):
-        notice pkg.url.projectName, "using forge release tarball instead of git clone"
-        pkg.isForgePackage = true
-        createDir($pkg.ondisk)
-        pkg.state = Found
-        let head = loadCacheHead(cachePath)
-        if head.len > 0:
-          pkg.originHead = initCommitHash(head, FromHead)
-    elif onClone == DoNothing:
+    if onClone == DoNothing:
       pkg.state = Error
       pkg.errors.add "Not found"
+      return
+    elif pkg.isForgePackage:
+      createDir($pkg.ondisk)
+      pkg.state = Found
     else:
       clonePackage(pkg, officialUrl, isFork)
   of DoNothing:
@@ -447,6 +451,18 @@ proc processPendingPackages(
 
         pkg.isAtlasProject = pkg.url.isAtlasProject()
         pkg.isLocalOnly = pkg.url.isNimbleLink()
+
+        if not pkg.isLocalOnly:
+          let cachePath = packageReleaseCachePath(pkg)
+          if not fileExists($cachePath):
+            discard downloadReleaseCache(pkg.projectName())
+          if hasForgeMetadata(cachePath):
+            notice pkg.url.projectName, "using forge release tarball instead of git clone"
+            pkg.isForgePackage = true
+            let head = loadCacheHead(cachePath)
+            if head.len > 0:
+              pkg.originHead = initCommitHash(head, FromHead)
+
         var todo = if pkg.resolveExistingPackageDir(): DoNothing else: DoClone
         if pkg.isLocalOnly:
           todo = DoNothing
@@ -457,36 +473,24 @@ proc processPendingPackages(
 
         case todo
         of DoClone:
-          var usedForge = false
-          if not pkg.isLocalOnly:
-            let cachePath = packageReleaseCachePath(pkg)
-            if not fileExists($cachePath):
-              discard downloadReleaseCache(pkg.projectName())
-            if hasForgeMetadata(cachePath):
-              notice pkg.url.projectName, "using forge release tarball instead of git clone"
-              pkg.isForgePackage = true
-              createDir($pkg.ondisk)
-              pkg.state = Found
-              let head = loadCacheHead(cachePath)
-              if head.len > 0:
-                pkg.originHead = initCommitHash(head, FromHead)
-              usedForge = true
-          if not usedForge:
-            if onClone == DoNothing:
-              pkg.state = Error
-              pkg.errors.add "Not found"
-            elif pkg.url.isFileProtocol:
-              nc.loadDependency(pkg, onClone)
-              trace pkg.projectName, "expanded pkg:", pkg.repr
-              processing = true
-            else:
-              let checkoutDir = pkg.prepareCloneCheckoutDir()
-              cloneJobs.add PendingCloneJob(
-                pkgUrl: pkgUrl,
-                checkoutDir: checkoutDir,
-                progressJob: cloneProgressJob(pkg, checkoutDir)
-              )
-              processing = true
+          if onClone == DoNothing:
+            pkg.state = Error
+            pkg.errors.add "Not found"
+          elif pkg.isForgePackage:
+            createDir($pkg.ondisk)
+            pkg.state = Found
+          elif pkg.url.isFileProtocol:
+            nc.loadDependency(pkg, onClone)
+            trace pkg.projectName, "expanded pkg:", pkg.repr
+            processing = true
+          else:
+            let checkoutDir = pkg.prepareCloneCheckoutDir()
+            cloneJobs.add PendingCloneJob(
+              pkgUrl: pkgUrl,
+              checkoutDir: checkoutDir,
+              progressJob: cloneProgressJob(pkg, checkoutDir)
+            )
+            processing = true
         of DoNothing:
           if pkg.ondisk.dirExists():
             pkg.state = Found
