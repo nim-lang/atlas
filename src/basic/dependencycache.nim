@@ -374,16 +374,22 @@ proc loadPackageReleaseCache*(
       "version:", $cache.cacheVersion, "expected:", $PackageReleaseCacheVersion
     return (false, "stale cache version")
 
-  let matches =
-    (cache.fqn.len == 0 or cache.fqn == pkg.url.fullName()) and
-    cache.subdir == (if pkg.subdir.len > 0: pkg.subdir else: pkg.url.subdir()) and
-    cache.head == pkg.originHead and
-    cache.head == currentCommit and
-    cache.includeTagsAndNimbleCommits == includeTagsAndNimbleCommitsFlag() and
-    cache.nimbleCommitsMax == nimbleCommitsMaxFlag()
+  var mismatches: seq[string]
+  if cache.fqn.len > 0 and cache.fqn != pkg.url.fullName():
+    mismatches.add("fqn")
+  if cache.subdir != (if pkg.subdir.len > 0: pkg.subdir else: pkg.url.subdir()):
+    mismatches.add("subdir")
+  if cache.head != pkg.originHead:
+    mismatches.add("originHead")
+  if cache.head != currentCommit:
+    mismatches.add("currentCommit")
+  if cache.includeTagsAndNimbleCommits != includeTagsAndNimbleCommitsFlag():
+    mismatches.add("includeTagsAndNimbleCommits")
+  if cache.nimbleCommitsMax != nimbleCommitsMaxFlag():
+    mismatches.add("nimbleCommitsMax")
 
-  if not matches:
-    return (false, "cache metadata mismatch")
+  if mismatches.len > 0:
+    return (false, "cache metadata mismatch: " & mismatches.join(", "))
 
   entries = cache.releases
   debug pkg.url.projectName, "loaded dependency cache:", $cachePath, "releases:", $entries.len
