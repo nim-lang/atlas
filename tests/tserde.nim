@@ -2,6 +2,7 @@ import std/[unittest, json, jsonutils, sets, tables, os, times, paths, sequtils]
 import basic/[context, sattypes, pkgurls, deptypes, nimblecontext, dependencycache, remotecache]
 import basic/[deptypesjson, versions]
 import confighandler
+import releaseinfo
 
 proc p(s: string): VersionInterval =
   var err = false
@@ -219,6 +220,37 @@ suite "json serde":
       current,
       entries
     )
+
+  test "forge package release info loads cache without current checkout":
+    let oldCtx = context()
+    let ws = Path(getTempDir()) / Path("atlas_forge_release_cache_" & $int(epochTime()))
+    defer:
+      setContext(oldCtx)
+      if dirExists($ws):
+        removeDir($ws)
+
+    setContext(AtlasContext(projectDir: ws, depsDir: Path"deps"))
+    let url = nc.createUrl("foobar")
+    let head = initCommitHash("24870f48c40da2146ce12ff1e675e6e7b9748355", FromHead)
+    var pkg = Package(
+      url: url,
+      originHead: head,
+      name: "foobar",
+      isForgePackage: true
+    )
+    let release = NimbleRelease(version: Version"1.0.0", requirements: @[], status: Normal)
+    savePackageReleaseCache(
+      pkg,
+      head,
+      @[(VersionTag(v: Version"1.0.0", c: head).toPkgVer, release)]
+    )
+
+    var nc2 = createUnfilledNimbleContext()
+    let info = nc2.loadPackageReleaseInfo(pkg, AllReleases, @[])
+    check info.loadedFromCache
+    check not info.repoError
+    check info.currentCommit.isEmpty()
+    check info.releases.len == 1
 
   test "package release cache rejects old cache version":
     let oldCtx = context()

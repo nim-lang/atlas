@@ -163,7 +163,7 @@ proc loadPackageReleaseInfo*(
   if pkg.isForgePackage:
     result.currentCommit = initCommitHash("", FromNone)
     var cachedReleases: seq[PackageReleaseCacheEntry]
-    let (cacheOk, cacheReason) = loadPackageReleaseCacheWithReason(pkg, result.currentCommit, cachedReleases)
+    let (cacheOk, cacheReason) = loadPackageReleaseCacheWithReason(pkg, pkg.originHead, cachedReleases)
     if cacheOk:
       info pkg.url.projectName, "using cached releases for forge package"
       for entry in cachedReleases:
