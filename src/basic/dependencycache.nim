@@ -404,6 +404,17 @@ proc loadPackageReleaseCache*(
   debug pkg.url.projectName, "loaded dependency cache:", $cachePath, "releases:", $entries.len
   return (true, "")
 
+proc loadPackageReleaseCache*(
+    pkg: Package;
+    currentCommit: CommitHash;
+    entries: var seq[PackageReleaseCacheEntry]
+): bool =
+  var pkgWithHead = pkg
+  if pkgWithHead.originHead.isEmpty():
+    pkgWithHead.originHead = currentCommit
+  let (ok, _) = loadPackageReleaseCache(pkgWithHead, entries)
+  ok
+
 proc savePackageReleaseCache*(
     pkg: Package;
     currentCommit: CommitHash;

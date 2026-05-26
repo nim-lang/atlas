@@ -178,6 +178,8 @@ proc projectReleaseMetadataFileName*(
     release: NimbleRelease;
     contentHash: string
 ): string =
+  if not ver.isNil and ver.vtag.version == Version"#head":
+    return "release-head.json"
   projectReleaseStem(pkg, info, ver, release, contentHash) & ".json"
 
 proc projectPkgUrl(nc: var NimbleContext; projectDir: Path): PkgUrl =
@@ -383,35 +385,28 @@ proc writeProjectReleaseMetadata(
     info: PackageInfo;
     releaseMetadata: JsonNode;
     tarballEntries: JsonNode;
-    metadataFileName: string
+    releaseHeadMetadata: JsonNode
 ): Path =
-  var metadata =
-    if releaseMetadata.isNil or releaseMetadata.kind != JObject:
-      newJObject()
-    else:
-      releaseMetadata.copy()
-  metadata["name"] = %info.name
-  if tarballEntries.isNil or tarballEntries.kind == JNull:
-    if metadata.hasKey("tarballs"):
-      metadata.delete("tarballs")
-  else:
-    metadata["tarballs"] = tarballEntries
-  metadata["generatedAt"] = %now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
-
   createDir($releasesDir)
   let legacyRootCache = releasesDir.parentDir() / Path"releases.json"
   if fileExists($legacyRootCache):
     removeFile($legacyRootCache)
-  for kind, path in walkDir($releasesDir):
-    if kind != pcFile:
-      continue
-    let filePath = path.Path
-    let filename = $filePath.splitPath().tail
-    if filePath.splitFile().ext == ".json" and filename != metadataFileName:
-      removeFile(path)
-
-  result = releasesDir / Path(metadataFileName)
-  writeFile($result, pretty(metadata))
+  mergePackageReleaseMetadata(
+    releasesDir.parentDir(),
+    info,
+    releaseMetadata,
+    tarballEntries,
+    releaseHeadMetadata = releaseHeadMetadata,
+    updateHeadMetadata = not releaseHeadMetadata.isNil
+  )
+  let releasesMetadataPath = releasesDir.parentDir() / Path"releases.json"
+  let releaseHeadPath = releasesDir.parentDir() / Path"release-head.json"
+  if fileExists($releasesMetadataPath):
+    result = releasesMetadataPath
+  elif fileExists($releaseHeadPath):
+    result = releaseHeadPath
+  else:
+    result = releasesMetadataPath
 
 proc formatTarballSizeKb(tarballPath: Path): string =
   let fileSize = getFileSize($tarballPath)
@@ -452,26 +447,22 @@ proc packageProject*(
 
   savePackageReleaseCache(pkg, releasePlan.currentCommit, releasePlan.allReleases)
   let releaseMetadata = parseFile($packageReleaseCachePath(pkg))
+  let releaseInfo = PackageReleaseInfo(
+    currentCommit: releasePlan.currentCommit,
+    releases: releasePlan.allReleases
+  )
+  let releaseHeadMetadata = releaseMetadata.headReleaseMetadata(releaseInfo)
   let tarballs =
     if createTarballs:
       collectProjectTarballs(pkg, info, releasePlan.selected, releasesDir, compressions)
     else:
       (newJNull(), @[], "releases.json")
-  let metadataFileName =
-    if tarballs.metadataFileName.len > 0:
-      tarballs.metadataFileName
-    elif releasePlan.selected.len > 0:
-      let (ver, release) = releasePlan.selected[0]
-      let layout = collectProjectReleaseLayout(pkg, info, ver, release)
-      projectReleaseMetadataFileName(pkg, info, ver, release, layout.contentHash)
-    else:
-      "releases.json"
   result.jsonPath = writeProjectReleaseMetadata(
     releasesDir,
     info,
     releaseMetadata,
     tarballs.entries,
-    metadataFileName
+    releaseHeadMetadata
   )
   result.tarballPaths = tarballs.paths
 

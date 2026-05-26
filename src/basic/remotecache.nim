@@ -36,6 +36,36 @@ proc sharedPackageReleasePath*(packageName: string; repoDir: Path): Path =
   let bucket = $packageName[0].toLowerAscii()
   repoDir / Path"pkgs" / Path(bucket) / Path(packageName) / Path"releases.json"
 
+proc sharedPackageReleaseHeadPath*(packageName: string; repoDir: Path): Path =
+  if packageName.len == 0:
+    return Path""
+  let bucket = $packageName[0].toLowerAscii()
+  repoDir / Path"pkgs" / Path(bucket) / Path(packageName) / Path"release-head.json"
+
+proc addHeadRelease(cacheJson: JsonNode; headJson: JsonNode) =
+  if cacheJson.isNil or cacheJson.kind != JObject:
+    return
+  if headJson.isNil or headJson.kind != JObject or not headJson.hasKey("v"):
+    return
+  if not cacheJson.hasKey("releases") or cacheJson["releases"].kind != JArray:
+    cacheJson["releases"] = newJArray()
+
+  proc isHeadVtag(value: JsonNode): bool =
+    case value.kind
+    of JString:
+      value.getStr().startsWith("#head@") or value.getStr() == "#head"
+    of JObject:
+      value{"v"}.getStr() == "#head"
+    else:
+      false
+
+  if not isHeadVtag(headJson["v"]):
+    return
+  for entry in cacheJson["releases"]:
+    if entry.kind == JObject and entry.hasKey("v") and isHeadVtag(entry["v"]):
+      return
+  cacheJson["releases"].add headJson
+
 proc copySharedReleaseCache*(pkg: Package; repoDir: Path): bool =
   ## Copy the per-package releases.json from a shared packages repo into the
   ## project's deps/.cache directory. Only applies to official (packages.json)
@@ -55,14 +85,20 @@ proc copySharedReleaseCache*(pkg: Package; repoDir: Path): bool =
     return false
 
   try:
-    let contents = readFile($sourcePath)
-    let cacheJson = parseJson(contents)
+    var cacheJson = parseFile($sourcePath)
     if not cacheJson.hasKey("releases") or cacheJson["releases"].kind != JArray:
       warn packageName, "shared release cache missing 'releases' array:", $sourcePath
       return false
+    let headPath = sharedPackageReleaseHeadPath(packageName, repoDir)
+    if fileExists($headPath):
+      try:
+        cacheJson.addHeadRelease(parseFile($headPath))
+      except CatchableError as e:
+        warn packageName, "shared release head cache invalid:", $headPath, "error:", e.msg
 
     createDir($cachesDirectory())
     let cachePath = packageReleaseCachePath(pkg)
+    let contents = pretty(cacheJson)
     if fileExists($cachePath) and readFile($cachePath) == contents:
       return true
 
@@ -100,6 +136,15 @@ proc remoteReleaseCacheUrl*(packageName: string; baseUrl = ""): string =
       rawBase = $url
 
   result = rawBase.strip(chars={'/'}) & "/pkgs/" & bucket & "/" & packageName & "/releases.json"
+
+proc remoteReleaseHeadCacheUrl*(packageName: string; baseUrl = ""): string =
+  ## Build the raw URL for a package's release-head.json.
+  if packageName.len == 0:
+    return ""
+  let releasesUrl = remoteReleaseCacheUrl(packageName, baseUrl)
+  if releasesUrl.len == 0:
+    return ""
+  result = releasesUrl.replace("/releases.json", "/release-head.json")
 
 proc cacheStemFromPackageName*(packageName: string): string =
   ## Build a plausible cache stem from just a package name.
@@ -163,6 +208,17 @@ proc downloadReleaseCache*(packageName: string): bool =
     if not jn.hasKey("releases") or jn["releases"].kind != JArray:
       warn packageName, "release cache missing 'releases' array"
       return false
+
+    let headUrl = remoteReleaseHeadCacheUrl(packageName)
+    if headUrl.len > 0:
+      try:
+        let headResponse = client.get(headUrl)
+        if not headResponse.code.is4xx and not headResponse.code.is5xx:
+          let headContents = headResponse.bodyStream.readAll()
+          if headContents.len > 0:
+            jn.addHeadRelease(parseJson(headContents))
+      except CatchableError as e:
+        debug packageName, "failed to download release head cache:", e.msg
 
     # Ensure cv field is present for cache version validation.
     if not jn.hasKey("cv"):

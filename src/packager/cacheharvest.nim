@@ -127,6 +127,9 @@ proc packageReleasesDir(workspaceRoot: Path): Path =
 proc packageReleasesMetadataFile(workspaceRoot: Path): Path =
   workspaceRoot / Path"releases.json"
 
+proc packageReleaseHeadMetadataFile(workspaceRoot: Path): Path =
+  workspaceRoot / Path"release-head.json"
+
 proc packageReleasesMetadataRelPath(info: PackageInfo): string =
   $(packageBucketDir(info.name) / Path(info.name) / Path"releases.json")
 
@@ -332,10 +335,32 @@ proc compactReleaseMetadata*(metadata: var JsonNode) =
       ToJsonOptions(enumMode: joptEnumString)
     )
 
-proc addHeadToRetainedReleaseMetadata(
-    retained: var JsonNode;
+proc isHeadReleaseEntry(entry: JsonNode): bool =
+  if entry.kind != JObject or not entry.hasKey("v"):
+    return false
+  var vtag: VersionTag
+  try:
+    vtag.fromJson(entry["v"])
+  except CatchableError:
+    return false
+  vtag.version == Version"#head"
+
+proc removeHeadFromReleaseMetadata(metadata: var JsonNode) =
+  if metadata.isNil or metadata.kind != JObject:
+    return
+  if not metadata.hasKey("releases") or metadata["releases"].kind != JArray:
+    return
+
+  var releases = newJArray()
+  for entry in metadata["releases"]:
+    if not entry.isHeadReleaseEntry():
+      releases.add entry
+  metadata["releases"] = releases
+
+proc headReleaseMetadata*(
+    retained: JsonNode;
     releaseInfo: PackageReleaseInfo
-) =
+): JsonNode =
   if retained.isNil or retained.kind != JObject:
     return
   if releaseInfo.currentCommit.isEmpty():
@@ -356,7 +381,8 @@ proc addHeadToRetainedReleaseMetadata(
     except CatchableError:
       continue
     if vtag.version == Version"#head":
-      return
+      matchingReleaseJson = entry.copy()
+      break
     if matchingReleaseJson.isNil and vtag.commit.h == releaseInfo.currentCommit.h:
       matchingReleaseJson = entry.copy()
 
@@ -373,33 +399,52 @@ proc addHeadToRetainedReleaseMetadata(
     matchingReleaseJson = toJsonHook(headRelease, ToJsonOptions(enumMode: joptEnumString))
 
   let headVtag = VersionTag(v: Version"#head", c: initCommitHash(releaseInfo.currentCommit, FromHead))
-  var headEntry = newJObject()
-  headEntry["v"] = toJson(headVtag, ToJsonOptions(enumMode: joptEnumString))
+  result = newJObject()
+  result["v"] = toJson(headVtag, ToJsonOptions(enumMode: joptEnumString))
   for key, value in matchingReleaseJson:
     if key != "v":
-      headEntry[key] = value.copy()
+      result[key] = value.copy()
   var headEntryRelease: NimbleRelease
-  headEntryRelease.fromJsonHook(headEntry, Joptions(allowMissingKeys: true, allowExtraKeys: true))
-  headEntry.compactLiftedReleaseMetadata(
+  headEntryRelease.fromJsonHook(result, Joptions(allowMissingKeys: true, allowExtraKeys: true))
+  result.compactLiftedReleaseMetadata(
     headEntryRelease,
     retained,
     ToJsonOptions(enumMode: joptEnumString)
   )
-  releases.add headEntry
 
 proc loadPackageReleaseMetadata(pkg: Package; releaseInfo: PackageReleaseInfo): JsonNode =
   let cachePath = packageReleaseCachePath(pkg)
   if not fileExists($cachePath):
     raise newException(IOError, "missing release cache: " & $cachePath)
   result = parseFile($cachePath)
-  result.addHeadToRetainedReleaseMetadata(releaseInfo)
+  result.removeHeadFromReleaseMetadata()
 
 proc primeReleaseCacheFromRetainedMetadata(pkg: Package; workspaceRoot: Path) =
   let retainedPath = packageReleasesMetadataFile(workspaceRoot)
   if not fileExists($retainedPath):
     return
+  var retained = parseFile($retainedPath)
+  let headPath = packageReleaseHeadMetadataFile(workspaceRoot)
+  if fileExists($headPath):
+    try:
+      let head = parseFile($headPath)
+      if head.kind == JObject and head.hasKey("v"):
+        if not retained.hasKey("releases") or retained["releases"].kind != JArray:
+          retained["releases"] = newJArray()
+        var hasHead = false
+        for entry in retained["releases"]:
+          if entry.isHeadReleaseEntry():
+            hasHead = true
+        if not hasHead:
+          retained["releases"].add head
+    except CatchableError as e:
+      warn "atlas:pkger",
+        "failed to load retained head metadata:",
+        $headPath,
+        "error:",
+        e.msg
   let cachePath = packageReleaseCachePath(pkg)
-  writeTextFileAtomic(cachePath, readFile($retainedPath))
+  writeTextFileAtomic(cachePath, pretty(retained))
 
 proc cleanupTransientReleaseCache(pkg: Package) =
   if pkg.isNil:
@@ -657,6 +702,19 @@ proc comparableTarballs(tarballs: JsonNode): JsonNode =
     for entry in entries:
       result[version].add entry
 
+proc splitHeadTarballs(tarballs: JsonNode): tuple[regular: JsonNode, head: JsonNode] =
+  if tarballs.isNil or tarballs.kind == JNull:
+    return (tarballs, newJNull())
+  if tarballs.kind != JObject:
+    return (tarballs, newJNull())
+
+  result.regular = tarballs.copy()
+  if result.regular.hasKey("head"):
+    result.head = result.regular["head"].copy()
+    result.regular.delete("head")
+  else:
+    result.head = newJNull()
+
 proc canonicalForgeReleaseTag(entry: JsonNode): string =
   case entry.kind
   of JString:
@@ -832,9 +890,12 @@ proc mergePackageReleaseMetadata*(
     releaseMetadata: JsonNode;
     tarballEntries: JsonNode;
     tags: bool = false;
-    forgeReleases: JsonNode = nil
+    forgeReleases: JsonNode = nil;
+    releaseHeadMetadata: JsonNode = nil;
+    updateHeadMetadata = false
 ) =
   let releasesMetadataPath = packageReleasesMetadataFile(workspaceRoot)
+  let releaseHeadMetadataPath = packageReleaseHeadMetadataFile(workspaceRoot)
   createDir($workspaceRoot)
   var hadExistingMetadata = fileExists($releasesMetadataPath)
   var existingMetadata =
@@ -854,11 +915,12 @@ proc mergePackageReleaseMetadata*(
   metadata["name"] = %info.name
   let existingTags = existingMetadata.metadataField("tags")
   metadata["tags"] = %(tags or existingTags.getBool())
-  if tarballEntries.isNil or tarballEntries.kind == JNull:
+  let splitTarballs = splitHeadTarballs(tarballEntries)
+  if splitTarballs.regular.isNil or splitTarballs.regular.kind == JNull:
     if metadata.hasKey("tarballs"):
       metadata.delete("tarballs")
   else:
-    metadata["tarballs"] = tarballEntries
+    metadata["tarballs"] = splitTarballs.regular
   if not forgeReleases.isNil:
     if forgeReleases.kind == JNull:
       if metadata.hasKey("forge"):
@@ -882,6 +944,7 @@ proc mergePackageReleaseMetadata*(
         "releases:", $forgeReleaseCount
 
   metadata.compactReleaseMetadata()
+  metadata.removeHeadFromReleaseMetadata()
 
   let existingComparable = comparableReleaseMetadata(existingMetadata)
   let metadataComparable = comparableReleaseMetadata(metadata)
@@ -900,6 +963,46 @@ proc mergePackageReleaseMetadata*(
       relativeToCurrentDir(releasesMetadataPath),
       "reason:",
       reason
+
+  if updateHeadMetadata:
+    let mergedHeadMetadata =
+      if releaseHeadMetadata.isNil or releaseHeadMetadata.kind == JNull:
+        newJNull()
+      elif releaseHeadMetadata.kind == JObject:
+        releaseHeadMetadata.copy()
+      else:
+        newJObject()
+    if mergedHeadMetadata.kind == JObject:
+      var headEntryRelease: NimbleRelease
+      headEntryRelease.fromJsonHook(
+        mergedHeadMetadata,
+        Joptions(allowMissingKeys: true, allowExtraKeys: true)
+      )
+      mergedHeadMetadata.compactLiftedReleaseMetadata(
+        headEntryRelease,
+        metadata,
+        ToJsonOptions(enumMode: joptEnumString)
+      )
+    if mergedHeadMetadata.kind == JObject and splitTarballs.head.kind != JNull:
+      mergedHeadMetadata["tarballs"] = splitTarballs.head
+
+    if mergedHeadMetadata.kind == JNull:
+      if fileExists($releaseHeadMetadataPath):
+        removeFile($releaseHeadMetadataPath)
+        notice "atlas:pkger",
+          "removed head metadata:",
+          relativeToCurrentDir(releaseHeadMetadataPath)
+    else:
+      let existingHeadMetadata =
+        try:
+          parseFile($releaseHeadMetadataPath)
+        except CatchableError:
+          newJNull()
+      if mergedHeadMetadata != existingHeadMetadata:
+        writeTextFileAtomic(releaseHeadMetadataPath, pretty(mergedHeadMetadata))
+        notice "atlas:pkger",
+          "updated head metadata:",
+          relativeToCurrentDir(releaseHeadMetadataPath)
   let digestPath = packageDigestFile(workspaceRoot)
   if fileExists($digestPath):
     removeFile($digestPath)
@@ -1115,6 +1218,7 @@ proc harvestPackage(
 
     let releaseInfo = nc.loadPackageReleaseInfo(pkg, AllReleases, @[])
     let releaseMetadata = loadPackageReleaseMetadata(pkg, releaseInfo)
+    let releaseHeadMetadata = releaseMetadata.headReleaseMetadata(releaseInfo)
     let tarballEntries =
       if createTarballs:
         collectReleaseArchives(
@@ -1141,7 +1245,9 @@ proc harvestPackage(
       info,
       releaseMetadata,
       tarballEntries,
-      hasGitTags
+      hasGitTags,
+      releaseHeadMetadata = releaseHeadMetadata,
+      updateHeadMetadata = true
     )
     if packageForgeMetadata.hasKey(info.name):
       let forgeMetadata = packageForgeMetadata[info.name]

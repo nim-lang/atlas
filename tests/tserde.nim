@@ -262,6 +262,7 @@ suite "json serde":
     let url = nc.createUrl("foobar")
     let pkg = Package(url: url, name: "foobar", isOfficial: true)
     let sourcePath = sharedPackageReleasePath("foobar", mirror)
+    let headPath = sharedPackageReleaseHeadPath("foobar", mirror)
     createDir($sourcePath.parentDir())
     writeFile($sourcePath, pretty(%*{
       "cv": PackageReleaseCacheVersion,
@@ -277,13 +278,21 @@ suite "json serde":
         }
       ]
     }))
+    writeFile($headPath, pretty(%*{
+      "v": "#head@ffffffffffffffffffffffffffffffffffffffff",
+      "b": "headbin",
+      "p": ["foobar-head"]
+    }))
 
     check copySharedReleaseCache(pkg, mirror)
     let cachePath = packageReleaseCachePath(pkg)
     check fileExists($cachePath)
     let cache = parseFile($cachePath)
     check cache["name"].getStr() == "foobar"
-    check cache["releases"].len == 1
+    check cache["releases"].len == 2
+    check cache["releases"][1]["v"].getStr() == "#head@ffffffffffffffffffffffffffffffffffffffff"
+    check cache["releases"][1]["b"].getStr() == "headbin"
+    check cache["releases"][1]["p"][0].getStr() == "foobar-head"
 
   test "json serde nimble release requirements use combined strings":
     let starDep = createUrlSkipPatterns("https://github.com/nimble-test/mummy", skipDirTest = true)

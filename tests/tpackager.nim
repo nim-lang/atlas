@@ -479,12 +479,6 @@ suite "packager allDeps metadata":
               "https://example.com/feature-only"
             ]
           }
-        },
-        {
-          "v": "#head@eeee",
-          "r": [
-            "gamma"
-          ]
         }
       ]
     }))
@@ -620,6 +614,14 @@ suite "packager release metadata comparison":
     let release = NimbleRelease(version: Version"1.0.0", status: Normal)
     check projectReleaseMetadataFileName(pkg, info, ver, release, "deadbeefcafebabe") ==
       "atlas-1.0.0-aaaaaaaa-deadbeef.json"
+
+  test "projectReleaseMetadataFileName uses release-head for head":
+    let pkg = Package(name: "atlas")
+    let info = PackageInfo(kind: pkPackage, name: "atlas")
+    let ver = VersionTag(v: Version"#head", c: initCommitHash("aaaaaaaa", FromHead)).toPkgVer()
+    let release = NimbleRelease(version: Version"#head", status: Normal)
+    check projectReleaseMetadataFileName(pkg, info, ver, release, "deadbeefcafebabe") ==
+      "release-head.json"
 
   test "comparable release metadata ignores derived allDeps and timestamps":
     let harvested = %*{
@@ -796,23 +798,89 @@ suite "packager release metadata comparison":
           }
         ]
       },
-      newJNull()
+      newJNull(),
+      releaseHeadMetadata = %*{
+        "v": "#head@aaaaaaaa",
+        "r": [],
+        "a": "Atlas Tester",
+        "d": "Test package",
+        "l": "MIT",
+        "m": "2.0.0",
+        "s": "src"
+      },
+      updateHeadMetadata = true
     )
 
     let rewritten = parseFile(root / "releases.json")
-    let head = rewritten["releases"][0]
+    let head = parseFile(root / "release-head.json")
     check "a" notin head
     check "d" notin head
     check "l" notin head
     check "m" notin head
     check "s" notin head
 
-    let tagged = rewritten["releases"][1]
+    check rewritten["releases"].len == 1
+    let tagged = rewritten["releases"][0]
     check tagged["a"].getStr() == "Other Tester"
     check "d" notin tagged
     check "l" notin tagged
     check tagged["m"].getStr() == "2.2.0"
     check tagged["s"].getStr() == "lib"
+
+  test "merge release metadata writes head separately":
+    let root = createTempDir("atlas-packager", "separate-head-")
+    defer: removeDir(root)
+
+    let workspaceRoot = Path(root)
+    mergePackageReleaseMetadata(
+      workspaceRoot,
+      PackageInfo(name: "alpha"),
+      %*{
+        "author": "Atlas Tester",
+        "binDir": "bin",
+        "bin": ["alpha"],
+        "releases": [
+          {
+            "v": "#head@aaaaaaaa",
+            "b": "headbin",
+            "p": ["alpha-head"]
+          },
+          {
+            "v": "1.0.0@bbbbbbbb"
+          }
+        ]
+      },
+      %*{
+        "head": [{
+          "s": "headhash",
+          "f": "alpha-head.tar.gz"
+        }],
+        "1.0.0": [{
+          "s": "stablehash",
+          "f": "alpha-1.0.0.tar.gz"
+        }]
+      },
+      releaseHeadMetadata = %*{
+        "v": "#head@aaaaaaaa",
+        "b": "headbin",
+        "p": ["alpha-head"]
+      },
+      updateHeadMetadata = true
+    )
+
+    let releases = parseFile(root / "releases.json")
+    check releases["releases"].len == 1
+    check releases["releases"][0]["v"].getStr() == "1.0.0@bbbbbbbb"
+    check "head" notin releases["tarballs"]
+    check releases["tarballs"]["1.0.0"][0]["f"].getStr() == "alpha-1.0.0.tar.gz"
+
+    let head = parseFile(root / "release-head.json")
+    check head["v"].getStr() == "#head@aaaaaaaa"
+    check head["b"].getStr() == "headbin"
+    check head["p"][0].getStr() == "alpha-head"
+    check head["tarballs"][0]["f"].getStr() == "alpha-head.tar.gz"
+    check "name" notin head
+    check "generatedAt" notin head
 
   test "comparable release metadata normalizes tarball order":
     let base = %*{
