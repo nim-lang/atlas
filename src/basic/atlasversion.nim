@@ -20,7 +20,7 @@ const AtlasIsDirty* =
   if AtlasInstalledWithNimble:
     false
   elif dirExists(AtlasGitDir):
-    staticExec("git -C " & quoteShell(AtlasRootDir) & " status --porcelain").strip().len > 0
+    staticExec("git -C " & quoteShell(AtlasRootDir) & " status --porcelain --untracked-files=no").strip().len > 0
   else:
     false
 
