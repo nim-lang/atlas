@@ -134,6 +134,11 @@ suite "test features":
         graphRoot.fromJson(jnRoot)
         echo "graphRoot: ", $graphRoot.toJson(ToJsonOptions(enumMode: joptEnumString))
 
+        let treeOutput = formatSelectedDepsTree(toActivationCache(graph))
+        check treeOutput.startsWith("ws_features ")
+        check "\n\\-- proj_a " in treeOutput
+        check "proj_feature_dep " in treeOutput
+
         # check graph.toJson(ToJsonOptions(enumMode: joptEnumString)) == graph2.toJson(ToJsonOptions(enumMode: joptEnumString))
 
 suite "test global features":
@@ -303,6 +308,10 @@ suite "test global features":
         check featurePkgs.len == 1
         if featurePkgs.len == 1:
           check featurePkgs[0].version.startsWith("1.0.0@")
+
+        let depsOutput = formatSelectedDeps(cache)
+        check "proj_a " in depsOutput
+        check "proj_feature_dep " in depsOutput
 
   test "atlasRun install activates package feature deps from --features":
       setAtlasVerbosity(Error)

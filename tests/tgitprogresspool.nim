@@ -1,5 +1,13 @@
-import std/[dirs, os, osproc, paths, unittest]
+import std/[dirs, os, osproc, paths, strutils, unittest]
 import basic/gitprogresspool
+
+template withDir(dir: string; body: untyped) =
+  let old = os.getCurrentDir()
+  try:
+    os.setCurrentDir(dir)
+    body
+  finally:
+    os.setCurrentDir(old)
 
 proc runGit(args: string; cwd: Path) =
   let cmd = "git -C " & quoteShell($cwd) & " " & args
@@ -15,6 +23,10 @@ proc createLocalRepo(root: Path; name: string): Path =
   writeFile($(result / Path"README.md"), "# " & name & "\n")
   runGit("add .", result)
   runGit("commit -m init", result)
+
+proc readGit(cwd: Path; args: string): string =
+  let cmd = "git -C " & quoteShell($cwd) & " " & args
+  result = execProcess(cmd).strip()
 
 suite "git progress pool":
   test "parse git progress lines":
@@ -83,5 +95,50 @@ suite "git progress pool":
       check dirExists(root / Path"beta")
       check fileExists($(root / Path"beta" / Path"beta.nimble"))
       check results[1].progress.percent == 100
+    else:
+      skip()
+
+  test "run progress jobs fetches remote updates":
+    when defined(posix):
+      let root = (getTempDir() / "atlas-gitprogresspool-fetch-test").Path.absolutePath()
+      if dirExists(root):
+        removeDir(root)
+      createDir(root)
+      defer:
+        if dirExists(root):
+          removeDir(root)
+
+      let alphaSrc = createLocalRepo(root, "alpha")
+      runGit(
+        "clone " & quoteShell($alphaSrc) & " " & quoteShell($(root / Path"alpha-clone")),
+        root
+      )
+
+      withDir $alphaSrc:
+        writeFile("CHANGELOG.md", "updated\n")
+        runGit("add CHANGELOG.md", alphaSrc)
+        runGit("commit -m update", alphaSrc)
+        runGit("tag v0.2.0", alphaSrc)
+
+      let jobs = @[
+        GitProgressJob(
+          label: "alpha-clone",
+          command: "git",
+          args: @["fetch", "--all", "--tags", "--progress"],
+          workingDir: $(root / Path"alpha-clone")
+        )
+      ]
+
+      let results = runGitProgressJobs(
+        jobs,
+        title = "test:fetch",
+        workerCount = 1,
+        showProgress = true
+      )
+
+      check results.len == 1
+      check results[0].label == "alpha-clone"
+      check results[0].exitCode == 0
+      check "v0.2.0" in readGit(root / Path"alpha-clone", "tag -l")
     else:
       skip()

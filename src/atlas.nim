@@ -9,10 +9,11 @@
 ## Simple tool to automate frequent workflows: Can "clone"
 ## a Nimble dependency and its dependencies recursively.
 
-import std / [parseopt, files, dirs, strutils, os, options, osproc, tables, sets, json, uri, paths]
+import std / [parseopt, files, dirs, strutils, os, options, osproc, tables, sets, json, uri, paths, algorithm, sequtils]
 import basic / [versions, context, osutils, configutils, reporters,
                 nimbleparser, gitops, pkgurls, nimblecontext,
-                compiledpatterns, packageinfos, sattypes, atlasversion]
+                compiledpatterns, packageinfos, sattypes, atlasversion,
+                gitprogresspool]
 import depgraphs, nimenv, lockfiles, confighandler, dependencies, pkgsearch
 
 
@@ -48,6 +49,7 @@ Commands:
                         alias of `rep`
   changed [atlas.lock]  list any packages that differ from the lock file
   outdated              list the packages that are outdated
+  deps                  list the currently selected dependencies
   env <nimversion>      setup a Nim virtual environment
 
 Options:
@@ -71,6 +73,8 @@ Options:
   --dumpformular        dump SAT formula for debugging
   --dumpgraphs          dump dependency graphs for debugging
   --showGraph           show the dependency graph
+  --tree                show `atlas deps` output as a dependency tree
+  --update              for `install`, update dependency repos before solving
   --noexec              do not perform any action that may run arbitrary code
   --autoenv             detect the minimal Nim $version and setup a
                         corresponding Nim virtual environment
@@ -219,6 +223,117 @@ proc generateDepGraph(g: DepGraph) =
          "see https://graphviz.org/download for downloading")
   else:
     discard execShellCmd("dot -Tpng -odeps.png " & quoteShell($dotFile))
+
+proc formatActivatedDep(pkg: ActivatedPackage): string =
+  let commit =
+    if pkg.commit.isEmpty():
+      "-"
+    else:
+      $pkg.commit
+  result = pkg.url.projectName & " " & pkg.version & " " & commit
+
+proc formatSelectedDeps*(cache: ActivationCache): string =
+  var lines: seq[string]
+  for pkg in cache.packages:
+    if pkg.isRoot:
+      continue
+    lines.add(formatActivatedDep(pkg))
+  lines.sort()
+  result = lines.join("\n")
+
+proc findActivatedPackage(cache: ActivationCache; depUrl: PkgUrl): int =
+  for i, pkg in cache.packages:
+    if $pkg.url == $depUrl or
+       pkg.url.projectName == depUrl.projectName or
+       pkg.url.shortName == depUrl.shortName:
+      return i
+  return -1
+
+proc activeDirectDependencies(cache: ActivationCache; pkg: ActivatedPackage): seq[ActivatedPackage] =
+  let nimbleFiles = findNimbleFile(pkg.ondisk, "")
+  if nimbleFiles.len != 1:
+    return @[]
+
+  var nc = createNimbleContext()
+  let rel = nc.parseNimbleFile(nimbleFiles[0])
+  var seen = initHashSet[int]()
+  for (depUrl, _) in rel.requirements:
+    let idx = cache.findActivatedPackage(depUrl)
+    if idx >= 0 and not cache.packages[idx].isRoot and not seen.containsOrIncl(idx):
+      result.add(cache.packages[idx])
+  for feature in pkg.features:
+    if feature in rel.features:
+      for (depUrl, _) in rel.features[feature]:
+        let idx = cache.findActivatedPackage(depUrl)
+        if idx >= 0 and not cache.packages[idx].isRoot and not seen.containsOrIncl(idx):
+          result.add(cache.packages[idx])
+  result.sort(proc (a, b: ActivatedPackage): int = cmp(a.url.projectName, b.url.projectName))
+
+proc formatSelectedDepsTree*(cache: ActivationCache): string =
+  proc render(pkg: ActivatedPackage; prefix: string; isLast: bool; showBranch: bool;
+              seen: var HashSet[string]; lines: var seq[string]) =
+    let branch =
+      if not showBranch:
+        ""
+      elif isLast:
+        "\\-- "
+      else:
+        "|-- "
+    lines.add(prefix & branch & formatActivatedDep(pkg))
+    if seen.containsOrIncl($pkg.url):
+      return
+    let children = activeDirectDependencies(cache, pkg)
+    let nextPrefix =
+      if not showBranch:
+        ""
+      elif isLast:
+        prefix & "    "
+      else:
+        prefix & "|   "
+    for i, child in children:
+      render(child, nextPrefix, i == children.high, true, seen, lines)
+
+  var rootIdx = -1
+  for i, pkg in cache.packages:
+    if pkg.isRoot:
+      rootIdx = i
+      break
+  if rootIdx < 0:
+    return ""
+  var lines: seq[string]
+  var seen = initHashSet[string]()
+  render(cache.packages[rootIdx], "", true, false, seen, lines)
+  result = lines.join("\n")
+
+proc showSelectedDeps() =
+  let nimbleFile = findProjectNimbleFile().absolutePath
+  let activationPath = activationCacheFile()
+  if not fileExists($activationPath):
+    fatal "No activation cache found. Run `atlas install` first."
+    return
+  let cache = loadActivationCache(nimbleFile)
+
+  if TreeView in context().flags:
+    stdout.write(formatSelectedDepsTree(cache) & "\n")
+  else:
+    stdout.write(formatSelectedDeps(cache) & "\n")
+  stdout.flushFile()
+
+type
+  PendingUpdateJob = object
+    repoName: string
+    repoPath: Path
+
+proc updateProgressJob(repoName: string; repoPath: Path): GitProgressJob =
+  var args = @["fetch", "--all", "--tags", "--progress"]
+  if ShallowClones in context().flags:
+    args.insert("--depth=1", 1)
+  GitProgressJob(
+    label: repoName,
+    command: "git",
+    args: args,
+    workingDir: $repoPath
+  )
 
 proc afterGraphActions(g: DepGraph) =
   ## perform any actions after the dependency graph has been generated
@@ -384,7 +499,7 @@ proc update(filter: string) =
     warn "atlas:update", "deps directory not found:", $depsRoot
     return
 
-  var updatedAny = false
+  var updateJobs: seq[PendingUpdateJob]
   for repoPath in findProjects(depsRoot):
     let repoName = $repoPath.splitPath().tail
     info "atlas:update", "checking package:", repoName
@@ -397,8 +512,36 @@ proc update(filter: string) =
       info repoName, "filter not matched; skipping..."
       continue
 
-    info repoName, "updating remote refs"
-    gitops.updateRepo(repoPath)
+    updateJobs.add PendingUpdateJob(repoName: repoName, repoPath: repoPath)
+
+  if ParallelClones in context().flags:
+    if updateJobs.len > 0:
+      notice "atlas:update", "updating packages in parallel:", $updateJobs.len
+    let updateResults = runGitProgressJobs(
+      updateJobs.mapIt(updateProgressJob(it.repoName, it.repoPath)),
+      title = "atlas:update",
+      workerCount = context().parallelCloneWorkers
+    )
+
+    var updatedAny = false
+    for i, job in updateJobs:
+      let updateResult = updateResults[i]
+      if updateResult.exitCode == 0:
+        notice job.repoName, "updated remote refs"
+        updatedAny = true
+      else:
+        var details = updateResult.output.strip()
+        if details.len == 0:
+          details = "git fetch failed"
+        error job.repoName, details
+    if updatedAny:
+      notice project(), "dependency refs updated, run `atlas install` to update"
+    return
+
+  var updatedAny = false
+  for job in updateJobs:
+    info job.repoName, "updating remote refs"
+    gitops.updateRepo(job.repoPath)
     updatedAny = true
   
   if updatedAny:
@@ -442,6 +585,8 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
       of "ignoreerrors": context().flags.incl IgnoreErrors
       of "dumpformular": context().flags.incl DumpFormular
       of "showgraph": context().flags.incl ShowGraph
+      of "tree": context().flags.incl TreeView
+      of "update": context().flags.incl UpdateBeforeInstall
       of "ignoreurls": context().flags.incl IgnoreGitRemoteUrls
       of "keepworkspace": context().flags.incl KeepWorkspace
       of "autoenv": context().flags.incl AutoEnv
@@ -533,6 +678,9 @@ proc atlasRun*(params: seq[string]) =
 
   parseAtlasOptions(params, action, args)
 
+  if UpdateBeforeInstall in context().flags and action != "install":
+    fatal "--update option is only valid with `install`"
+
   if action notin ["init", "tag", "search", "list"]:
     doAssert project().string != "" and project().dirExists(), "project was not set"
 
@@ -553,6 +701,8 @@ proc atlasRun*(params: seq[string]) =
     singleArg()
     tag(args[0])
   of "install":
+    if UpdateBeforeInstall in context().flags:
+      update("")
     let nimbleFile = findProjectNimbleFile()
 
     var nc = createNimbleContext()
@@ -615,6 +765,10 @@ proc atlasRun*(params: seq[string]) =
   of "changed":
     optSingleArg($LockFileName)
     listChanged(Path(args[0]))
+  of "deps":
+    if args.len != 0:
+      fatal "deps command takes no arguments"
+    showSelectedDeps()
   of "env":
     singleArg()
     setupNimEnv args[0], KeepNimEnv in context().flags

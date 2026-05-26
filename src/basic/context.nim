@@ -55,8 +55,10 @@ type
     ForceGitToHttps
     NoLazyDeps
     ParallelClones
+    UpdateBeforeInstall
     KeepFeatures
     AllFeatures
+    TreeView
     IncludeTagsAndNimbleCommits # include nimble commits and tags in the solver
     NimbleCommitsMax # takes the newest commit for each version
 
