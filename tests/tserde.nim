@@ -460,8 +460,8 @@ suite "json serde":
     check "e" notin cache["releases"][0]
     check "g" notin cache["releases"][0]
     check "author" notin cache["releases"][1]
-    check cache["releases"][1]["m"].getStr() == "~"
-    check cache["releases"][1]["s"].getStr() == ""
+    check "m" notin cache["releases"][1]
+    check "s" notin cache["releases"][1]
     check cache["releases"][1]["b"].getStr() == ""
     check cache["releases"][1]["y"].len == 0
     check cache["releases"][1]["p"].len == 0
@@ -491,10 +491,10 @@ suite "json serde":
     check entries[0].release.license == "MIT"
     check entries[2].release.license == "MIT"
     check entries[0].release.nimVersion == Version"2.0.0"
-    check entries[1].release.nimVersion == Version""
+    check entries[1].release.nimVersion == Version"2.0.0"
     check entries[2].release.nimVersion == Version"2.2.0"
     check entries[0].release.srcDir == Path"src"
-    check entries[1].release.srcDir == Path""
+    check entries[1].release.srcDir == Path"src"
     check entries[2].release.srcDir == Path"lib"
     check entries[0].release.binDir == Path"bin"
     check entries[1].release.binDir == Path""

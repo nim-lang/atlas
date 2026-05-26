@@ -58,6 +58,7 @@ Options:
   --all                 package tarballs for all discovered releases
   --compression=type    archive compression(s): gzip, xz, zip, or comma-separated list
                         default: xz,gzip,zip
+  --tarballs            create tarballs alongside releases.json
   --no-tarballs         refresh releases.json without creating tarballs
 """
 
@@ -105,7 +106,7 @@ proc parseAtlasPackageOptions*(
     positional: var seq[string]
 ): ProjectPackageCliOptions =
   result.compressions = @[acXz, acGzip, acZip]
-  result.createTarballs = true
+  result.createTarballs = false
   var compressionWasSet = false
   for kind, key, val in getopt(params):
     case kind
@@ -137,6 +138,8 @@ proc parseAtlasPackageOptions*(
           result.compressions.addArchiveCompressions(val)
         except ValueError:
           writeHelp(versionString)
+      of "tarballs":
+        result.createTarballs = true
       of "no-tarballs", "notarballs":
         result.createTarballs = false
       else:

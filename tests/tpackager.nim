@@ -212,11 +212,22 @@ suite "local project packager options":
     var args: seq[string]
     let opts = parseAtlasPackageOptions(@[], "test", args)
     check opts.releaseMode == prmLatestRelease
+    check not opts.createTarballs
 
   test "atlas-package parses head mode":
     var args: seq[string]
     let opts = parseAtlasPackageOptions(@["--head"], "test", args)
     check opts.releaseMode == prmHead
+
+  test "atlas-package enables tarballs when requested":
+    var args: seq[string]
+    let opts = parseAtlasPackageOptions(@["--tarballs"], "test", args)
+    check opts.createTarballs
+
+  test "atlas-package keeps no-tarballs option":
+    var args: seq[string]
+    let opts = parseAtlasPackageOptions(@["--tarballs", "--no-tarballs"], "test", args)
+    check not opts.createTarballs
 
   test "atlas-package parses all selection mode":
     var args: seq[string]

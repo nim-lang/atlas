@@ -210,10 +210,6 @@ proc compactLiftedReleaseMetadata*(
 
   if release.isNil:
     return
-  if release.nimVersion == Version"":
-    addEmptyOverride("m", "nim", release.nimVersion)
-  if release.srcDir.len == 0:
-    addEmptyOverride("s", "srcDir", release.srcDir)
   if release.binDir.len == 0:
     addEmptyOverride("b", "binDir", release.binDir)
   if release.skipDirs.len == 0:
