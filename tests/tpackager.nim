@@ -1,5 +1,6 @@
 import std/[algorithm, json, os, osproc, paths, sequtils, sets, strutils, tempfiles, times, unittest, uri]
 
+import atlas_packager
 import packager/packager
 import packager/alldeps
 import packager/archivehelpers
