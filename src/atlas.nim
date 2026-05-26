@@ -59,6 +59,8 @@ Options:
   --feature=<feature>   enables the given feature, pass multiple for multiple features
                         for project specific use: `<project>.<feature>`
                         (note always be passed when you want to use features)
+  --features=<list>     enables one or more features separated by commas or spaces
+  --allFeatures         enables every declared feature
   --keepFeatures, -k    reuse feature defines from the current nim.cfg
   --resolver=minver|semver|maxver
                         which resolution algorithm to use, default is semver
@@ -106,6 +108,27 @@ proc parseParallelCloneWorkers(value: string): int =
   except ValueError:
     writeHelp()
   if result < 1:
+    writeHelp()
+
+proc addRequestedFeature(rawFeature: string) =
+  # Package-scoped features use `<pkg>.<feature>` and are normalized to
+  # `feature.<pkg>.<feature>` internally for nim.cfg defines.
+  let raw = rawFeature.strip().toLowerAscii()
+  if raw.len == 0:
+    writeHelp()
+  elif raw.startsWith("feature."):
+    context().features.incl raw
+  elif '.' in raw:
+    context().features.incl "feature." & raw
+  else:
+    # Root-package feature shorthand.
+    context().features.incl raw
+
+proc addRequestedFeatures(rawFeatures: string) =
+  let normalized = rawFeatures.multiReplace((",", " "), ("\n", " "), ("\t", " "))
+  for raw in normalized.splitWhitespace():
+    addRequestedFeature(raw)
+  if normalized.strip().len == 0:
     writeHelp()
 
 proc tag(tag: string) =
@@ -398,6 +421,7 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
       of "version", "v": writeVersion()
       of "keepcommits": context().flags.incl KeepCommits
       of "keepfeatures", "k": context().flags.incl KeepFeatures
+      of "allfeatures": context().flags.incl AllFeatures
       of "project", "p":
         context().flags.incl(ManualProjectArg)
         if val == ".":
@@ -425,18 +449,9 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
       of "confdir":
         context().confDirOverride = Path val
       of "feature":
-        # Package-scoped features use `<pkg>.<feature>` and are normalized to
-        # `feature.<pkg>.<feature>` internally for nim.cfg defines.
-        let raw = val.strip().toLowerAscii()
-        if raw.len == 0:
-          writeHelp()
-        elif raw.startsWith("feature."):
-          context().features.incl raw
-        elif '.' in raw:
-          context().features.incl "feature." & raw
-        else:
-          # Root-package feature shorthand.
-          context().features.incl raw
+        addRequestedFeature(val)
+      of "features":
+        addRequestedFeatures(val)
       of "list":
         if val.normalize in ["on", ""]:
           context().flags.incl ListVersions

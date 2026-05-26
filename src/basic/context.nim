@@ -56,6 +56,7 @@ type
     NoLazyDeps
     ParallelClones
     KeepFeatures
+    AllFeatures
     IncludeTagsAndNimbleCommits # include nimble commits and tags in the solver
     NimbleCommitsMax # takes the newest commit for each version
 
@@ -110,6 +111,22 @@ proc depsDir*(ctx: AtlasContext, relative = false): Path =
 proc depsDir*(relative = false): Path =
   initAtlasContext()
   depsDir(atlasContext, relative)
+
+proc allFeaturesRequested*(): bool =
+  initAtlasContext()
+  AllFeatures in atlasContext.flags
+
+proc hasRequestedFeature*(pkgShortName, pkgProjectName, feature: string): bool =
+  initAtlasContext()
+  if AllFeatures in atlasContext.flags:
+    return true
+  if feature in atlasContext.features:
+    return true
+  let scopedByShortName = "feature." & pkgShortName & "." & feature
+  let scopedByProjectName = "feature." & pkgProjectName & "." & feature
+  result =
+    scopedByShortName in atlasContext.features or
+    scopedByProjectName in atlasContext.features
 
 proc packagesDirectory*(): Path =
   depsDir() / DefaultPackagesSubDir

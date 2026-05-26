@@ -137,12 +137,12 @@ proc registerReleaseDependencies(
         nc.explicitVersions.mgetOrPut(pkgUrl, initHashSet[VersionTag]()).incl(VersionTag(v: Version($(interval)), c: commit))
       if pkgUrl notin nc.packageToDependency:
         let state =
-          if feature notin context().features: LazyDeferred
+          if not hasRequestedFeature(pkg.url.shortName, pkg.url.projectName, feature): LazyDeferred
           else: childDependencyState(pkg, deferChildDeps)
         debug pkg.url.projectName, "Found new feature pkg:", pkgUrl.projectName, "url:", $pkgUrl.url, "projectName:", $pkgUrl.projectName, "state:", $state
         let pkgDep = nc.initPackage(pkgUrl, state)
         nc.packageToDependency[pkgUrl] = pkgDep
-      elif feature in context().features and nc.packageToDependency[pkgUrl].state == LazyDeferred and childDependencyState(pkg, deferChildDeps) != LazyDeferred:
+      elif hasRequestedFeature(pkg.url.shortName, pkg.url.projectName, feature) and nc.packageToDependency[pkgUrl].state == LazyDeferred and childDependencyState(pkg, deferChildDeps) != LazyDeferred:
         warn pkg.url.projectName, "Changing LazyDeferred feature pkg to DoLoad:", $pkgUrl.url
         nc.packageToDependency[pkgUrl].state = DoLoad
 
@@ -161,23 +161,25 @@ proc addFeatureDependencies(pkg: Package) =
   ## This can reopen root processing so newly enabled feature dependencies are traversed.
 
   var featuresAdded = false
-  warn pkg.url.projectName, "adding feature dependencies for root package; features:", $(context().features.toSeq().join(", ")), "versions:", $(pkg.versions.keys().toSeq().mapIt($it).join(", "))
-  for flag in items(context().features):
-    for ver, rel in pkg.versions:
+  let requested =
+    if allFeaturesRequested(): "all"
+    else: context().features.toSeq().join(", ")
+  warn pkg.url.projectName, "adding feature dependencies for root package; features:", requested, "versions:", $(pkg.versions.keys().toSeq().mapIt($it).join(", "))
+  for ver, rel in pkg.versions:
+    for flag in rel.features.keys():
+      if not hasRequestedFeature(pkg.url.shortName, pkg.url.projectName, flag):
+        continue
       info pkg.url.projectName, "checking feature:", $flag, "in version:", $rel.version
-      if flag in rel.features:
-        let fdep = rel.features[flag]
-        for pkgUrl, interval in items(fdep):
-          info pkg.url.projectName, "adding feature reqsByFeatures:", $flag, "for:", $pkgUrl.url
-          withValue(rel.reqsByFeatures, pkgUrl, reqsByFeatures):
-            if flag notin reqsByFeatures[]:
-              reqsByFeatures[].incl(flag)
-              featuresAdded = true
-          do:
-            rel.reqsByFeatures[pkgUrl] = initHashSet[string]()
-            rel.reqsByFeatures[pkgUrl].incl(flag)
-      else:
-        info pkg.url.projectName, "feature:", $flag, "not found for:", $rel.version
+      let fdep = rel.features[flag]
+      for pkgUrl, interval in items(fdep):
+        info pkg.url.projectName, "adding feature reqsByFeatures:", $flag, "for:", $pkgUrl.url
+        withValue(rel.reqsByFeatures, pkgUrl, reqsByFeatures):
+          if flag notin reqsByFeatures[]:
+            reqsByFeatures[].incl(flag)
+            featuresAdded = true
+        do:
+          rel.reqsByFeatures[pkgUrl] = initHashSet[string]()
+          rel.reqsByFeatures[pkgUrl].incl(flag)
   
   if featuresAdded:
     warn pkg.url.projectName, "feature dependencies added"
@@ -216,7 +218,7 @@ proc traverseDependency*(
 
   nc.enrichPackageDependencies(pkg, deferChildDeps)
 
-  if pkg.isRoot and context().features.len > 0:
+  if pkg.isRoot and (context().features.len > 0 or allFeaturesRequested()):
     addFeatureDependencies(pkg)
 
 proc loadDependency*(

@@ -83,11 +83,7 @@ proc addCompatibleVersionChoice(b: var Builder; compatibleVersions: seq[VarId]) 
   b.addCompatibleVersionChoice(compatibleVersions, featureVersions)
 
 proc hasContextFeature(pkg: Package; feature: string): bool =
-  if pkg.isRoot and feature in context().features:
-    return true
-  let scopedByShortName = "feature." & pkg.url.shortName & "." & feature
-  let scopedByProjectName = "feature." & pkg.url.projectName & "." & feature
-  result = scopedByShortName in context().features or scopedByProjectName in context().features
+  result = hasRequestedFeature(pkg.url.shortName, pkg.url.projectName, feature)
 
 proc requirementMatches*(query: VersionInterval; depVer: PackageVersion; depRel: NimbleRelease): bool =
   ## Match semver constraints against nimble-declared release versions, while
@@ -97,32 +93,41 @@ proc requirementMatches*(query: VersionInterval; depVer: PackageVersion; depRel:
   else:
     result = query.matches(depRel.version)
 
-proc collectUnsatisfiedContextFeatures(graph: DepGraph): seq[string] =
-  ## Compare requested `--feature` flags with SAT-selected package features.
-  proc hasSatisfiedFeatureDeps(rel: NimbleRelease; featName: string): bool =
-    if featName notin rel.features:
-      return false
+proc hasSatisfiedFeatureDeps(graph: DepGraph; rel: NimbleRelease; featName: string): bool =
+  if featName notin rel.features:
+    return false
 
-    let reqs = rel.features[featName]
-    if reqs.len == 0:
-      return true
-
-    for depReq in items(reqs):
-      let (depUrl, query) = depReq
-      if depUrl notin graph.pkgs:
-        return false
-      let depPkg = graph.pkgs[depUrl]
-      if not depPkg.active or depPkg.activeVersion.isNil:
-        return false
-      let depRel = depPkg.activeNimbleRelease()
-      if depRel.isNil:
-        return false
-      if not requirementMatches(query, depPkg.activeVersion, depRel):
-        return false
-
+  let reqs = rel.features[featName]
+  if reqs.len == 0:
     return true
 
-  var requested = context().features.toSeq()
+  for depReq in items(reqs):
+    let (depUrl, query) = depReq
+    if depUrl notin graph.pkgs:
+      return false
+    let depPkg = graph.pkgs[depUrl]
+    if not depPkg.active or depPkg.activeVersion.isNil:
+      return false
+    let depRel = depPkg.activeNimbleRelease()
+    if depRel.isNil:
+      return false
+    if not requirementMatches(query, depPkg.activeVersion, depRel):
+      return false
+
+  true
+
+proc collectUnsatisfiedContextFeatures(graph: DepGraph): seq[string] =
+  ## Compare requested `--feature` flags with SAT-selected package features.
+  var requested: seq[string]
+  if allFeaturesRequested():
+    for pkg in allActiveNodes(graph):
+      let rel = pkg.activeNimbleRelease()
+      if rel.isNil:
+        continue
+      for featName in rel.features.keys():
+        requested.addUnique("feature." & pkg.url.projectName & "." & featName)
+  else:
+    requested = context().features.toSeq()
   requested.sort()
   for raw in requested:
     let qualified =
@@ -153,7 +158,7 @@ proc collectUnsatisfiedContextFeatures(graph: DepGraph): seq[string] =
           continue
         if featName in rel.features:
           declaredInNimble = true
-          if featName in pkg.activeFeatures or hasSatisfiedFeatureDeps(rel, featName):
+          if featName in pkg.activeFeatures or hasSatisfiedFeatureDeps(graph, rel, featName):
             featureSatisfied = true
             break
 
@@ -816,18 +821,19 @@ proc activateGraph*(graph: DepGraph): tuple[paths: seq[CfgPath], features: seq[s
       result.features.addUnique "feature." & graph.root.url.projectName & "." & feature
 
   # Apply global feature flags to activeFeatures for introspection/tests.
-  for feature in context().features:
-    if feature.startsWith("feature."):
-      let parts = feature.split(".")
-      if parts.len >= 3:
-        let pkgName = parts[1]
-        let featName = parts[2 .. ^1].join(".")
-        for pkg in graph.pkgs.values():
-          if pkg.active and (pkg.url.shortName == pkgName or pkg.url.projectName == pkgName):
-            pkg.activeFeatures.addUnique(featName)
-    else:
-      if not graph.root.isNil and graph.root.active:
-        graph.root.activeFeatures.addUnique(feature)
+  for pkg in graph.pkgs.values():
+    if not pkg.active:
+      continue
+    let rel = pkg.activeNimbleRelease()
+    if rel.isNil:
+      continue
+    for featName in rel.features.keys():
+      if hasContextFeature(pkg, featName) and hasSatisfiedFeatureDeps(graph, rel, featName):
+        pkg.activeFeatures.addUnique(featName)
+
+  if not graph.root.isNil and graph.root.active:
+    for feature in graph.root.activeFeatures:
+      result.features.addUnique "feature." & graph.root.url.projectName & "." & feature
 
   for pkg in allActiveNodes(graph):
     if pkg.isRoot: continue
