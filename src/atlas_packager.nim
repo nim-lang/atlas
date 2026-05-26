@@ -67,6 +67,7 @@ Options:
   --only-starts-with=s  process only package(s) whose names start with prefix s
   --ignore=name[,name]  skip the named package(s) from packages.json
   --update-repos, -u    run `gitops.updateRepo` for existing repos before harvest
+  --tarballs            create tarballs alongside package metadata
   --regenerate-tarballs rebuild all tarballs instead of reusing matching archives
   --no-tarballs        refresh metadata without creating or pruning tarballs
   --retry-missing       retry repos previously classified as missing
@@ -134,7 +135,8 @@ proc applyPackagerEnvDefaults*(opts: var PackagerCliOptions) =
     opts.updateRepos = parseEnvBool(getEnv(EnvUpdateRepos), "update repos env var")
 
   if existsEnv(EnvNoTarballs):
-    opts.createTarballs = not parseEnvBool(getEnv(EnvNoTarballs), "no tarballs env var")
+    if parseEnvBool(getEnv(EnvNoTarballs), "no tarballs env var"):
+      opts.createTarballs = false
 
   if existsEnv(EnvGitHubApiChunkSize):
     opts.githubApiChunkSize =
@@ -157,7 +159,7 @@ proc parseAtlasPackagerOptions*(
     positional: var seq[string]
 ): PackagerCliOptions =
   result.compressions = @[parseArchiveCompression("xz")]
-  result.createTarballs = true
+  result.createTarballs = false
   result.githubApiChunkSize = DefaultGitHubGraphqlBatchSize
   result.threadCount = max(1, cpuinfo.countProcessors())
   result.daemon.intervalSeconds = DefaultDaemonIntervalSeconds
@@ -208,6 +210,8 @@ proc parseAtlasPackagerOptions*(
         result.ignoredPackageNames.addPackageNames(val)
       of "update-repos", "u":
         result.updateRepos = true
+      of "tarballs":
+        result.createTarballs = true
       of "regenerate-tarballs", "regeneratetarballs":
         result.regenerateTarballs = true
         result.createTarballs = true

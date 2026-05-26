@@ -88,6 +88,7 @@ suite "packager daemon options":
     var args: seq[string]
     let opts = parseAtlasPackagerOptions(@[], "test", args)
     check opts.compressions == @[acXz]
+    check not opts.createTarballs
 
   test "atlas-package options default archive compressions to xz gzip zip":
     var args: seq[string]
@@ -128,7 +129,7 @@ suite "packager env options":
                     check opts.packageNames == @["alpha", "beta"]
                     check opts.ignoredPackageNames == @["gamma"]
                     check opts.updateRepos
-                    check opts.createTarballs
+                    check not opts.createTarballs
                     check opts.githubApiChunkSize == 17
                     check opts.compressions == @[acXz]
                     check opts.threadCount == 3
@@ -203,8 +204,19 @@ suite "packager env options":
     check opts.createTarballs
     check opts.regenerateTarballs
 
+  test "packager enables tarballs when requested":
+    var args: seq[string]
+    let opts = parseAtlasPackagerOptions(@["--tarballs"], "test", args)
+    check opts.createTarballs
+
   test "no tarballs can be set from env":
     withEnvVar(EnvNoTarballs, "true") do:
+      var args: seq[string]
+      let opts = parseAtlasPackagerOptions(@[], "test", args)
+      check not opts.createTarballs
+
+  test "false no-tarballs env leaves tarballs disabled by default":
+    withEnvVar(EnvNoTarballs, "false") do:
       var args: seq[string]
       let opts = parseAtlasPackagerOptions(@[], "test", args)
       check not opts.createTarballs
