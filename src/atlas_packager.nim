@@ -8,7 +8,7 @@
 import std/[algorithm, cpuinfo, monotimes, os, osproc, parseopt, paths, strutils, times]
 
 import basic/[reporters, subprocessgroups]
-import packager/packager
+import packager/[githubheadcheck, packager]
 
 const
   AtlasRootDir = currentSourcePath().parentDir().parentDir()
@@ -156,10 +156,10 @@ proc parseAtlasPackagerOptions*(
     versionString: string;
     positional: var seq[string]
 ): PackagerCliOptions =
-  result.compressions = @[acXz]
+  result.compressions = @[parseArchiveCompression("xz")]
   result.createTarballs = true
   result.githubApiChunkSize = DefaultGitHubGraphqlBatchSize
-  result.threadCount = max(1, countProcessors())
+  result.threadCount = max(1, cpuinfo.countProcessors())
   result.daemon.intervalSeconds = DefaultDaemonIntervalSeconds
   try:
     result.applyPackagerEnvDefaults()
