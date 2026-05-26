@@ -912,6 +912,8 @@ proc mergePackageReleaseMetadata*(
       newJObject()
     else:
       releaseMetadata.copy()
+  if metadata.hasKey("head"):
+    metadata.delete("head")
   metadata["name"] = %info.name
   let existingTags = existingMetadata.metadataField("tags")
   metadata["tags"] = %(tags or existingTags.getBool())
@@ -948,21 +950,29 @@ proc mergePackageReleaseMetadata*(
 
   let existingComparable = comparableReleaseMetadata(existingMetadata)
   let metadataComparable = comparableReleaseMetadata(metadata)
+  let legacyHeadFieldRemoved = existingMetadata.hasKey("head")
 
-  let metadataChanged = metadataComparable != existingComparable
+  let metadataChanged = legacyHeadFieldRemoved or metadataComparable != existingComparable
   if metadataChanged:
     let reason = metadataChangeReason(
       hadExistingMetadata,
       existingComparable,
       metadataComparable
     )
+    let writeReason =
+      if legacyHeadFieldRemoved and reason.len > 0:
+        reason & ", removed legacy head field"
+      elif legacyHeadFieldRemoved:
+        "removed legacy head field"
+      else:
+        reason
     metadata["generatedAt"] = %now().utc().format("yyyy-MM-dd'T'HH:mm:ss'Z'")
     writeTextFileAtomic(releasesMetadataPath, pretty(metadata))
     notice "atlas:pkger",
       "updated metadata:",
       relativeToCurrentDir(releasesMetadataPath),
       "reason:",
-      reason
+      writeReason
 
   if updateHeadMetadata:
     let mergedHeadMetadata =
@@ -999,7 +1009,7 @@ proc mergePackageReleaseMetadata*(
         except CatchableError:
           newJNull()
       if mergedHeadMetadata != existingHeadMetadata:
-        writeTextFileAtomic(releaseHeadMetadataPath, pretty(mergedHeadMetadata))
+        writeTextFileAtomic(releaseHeadMetadataPath, $mergedHeadMetadata)
         notice "atlas:pkger",
           "updated head metadata:",
           relativeToCurrentDir(releaseHeadMetadataPath)

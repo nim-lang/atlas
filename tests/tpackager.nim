@@ -871,6 +871,7 @@ suite "packager release metadata comparison":
     let releases = parseFile(root / "releases.json")
     check releases["releases"].len == 1
     check releases["releases"][0]["v"].getStr() == "1.0.0@bbbbbbbb"
+    check "head" notin releases
     check "head" notin releases["tarballs"]
     check releases["tarballs"]["1.0.0"][0]["f"].getStr() == "alpha-1.0.0.tar.gz"
 
@@ -881,6 +882,75 @@ suite "packager release metadata comparison":
     check head["tarballs"][0]["f"].getStr() == "alpha-head.tar.gz"
     check "name" notin head
     check "generatedAt" notin head
+
+  test "merge release metadata keeps releases json stable for head-only changes":
+    let root = createTempDir("atlas-packager", "head-only-change-")
+    defer: removeDir(root)
+
+    let workspaceRoot = Path(root)
+    writeFile(root / "releases.json", pretty(%*{
+      "name": "alpha",
+      "generatedAt": "2026-05-26T00:00:00Z",
+      "binDir": "bin",
+      "bin": ["alpha"],
+      "releases": [
+        {
+          "v": "1.0.0@bbbbbbbb"
+        }
+      ],
+      "tarballs": {
+        "1.0.0": [{
+          "s": "stablehash",
+          "f": "alpha-1.0.0.tar.gz"
+        }]
+      }
+    }))
+    writeFile(root / "release-head.json", "{\"v\":\"#head@aaaaaaaa\",\"b\":\"headbin\",\"tarballs\":[{\"s\":\"headhash-a\",\"f\":\"alpha-head-a.tar.gz\"}]}")
+
+    let releasesBefore = readFile(root / "releases.json")
+    mergePackageReleaseMetadata(
+      workspaceRoot,
+      PackageInfo(name: "alpha"),
+      %*{
+        "name": "alpha",
+        "head": "cccccccc",
+        "binDir": "bin",
+        "bin": ["alpha"],
+        "releases": [
+          {
+            "v": "#head@cccccccc",
+            "b": "headbin2"
+          },
+          {
+            "v": "1.0.0@bbbbbbbb"
+          }
+        ]
+      },
+      %*{
+        "head": [{
+          "s": "headhash-b",
+          "f": "alpha-head-b.tar.gz"
+        }],
+        "1.0.0": [{
+          "s": "stablehash",
+          "f": "alpha-1.0.0.tar.gz"
+        }]
+      },
+      releaseHeadMetadata = %*{
+        "v": "#head@cccccccc",
+        "b": "headbin2"
+      },
+      updateHeadMetadata = true
+    )
+
+    check readFile(root / "releases.json") == releasesBefore
+    check "head" notin parseFile(root / "releases.json")
+    let headContents = readFile(root / "release-head.json")
+    check '\n' notin headContents
+    let head = parseJson(headContents)
+    check head["v"].getStr() == "#head@cccccccc"
+    check head["b"].getStr() == "headbin2"
+    check head["tarballs"][0]["f"].getStr() == "alpha-head-b.tar.gz"
 
   test "comparable release metadata normalizes tarball order":
     let base = %*{
