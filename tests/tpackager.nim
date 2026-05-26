@@ -1,13 +1,13 @@
 import std/[algorithm, json, os, osproc, paths, sequtils, sets, strutils, tempfiles, times, unittest, uri]
 
-import atlas_package
+import atlas_pkg
 import atlas_packager
 import packager/packager
 import packager/alldeps
 import packager/archivehelpers
 import packager/cacheharvest
 import packager/githubheadcheck
-import packager/projectpackage
+import packager/projpkg
 import basic/context
 import basic/dependencycache
 import basic/deptypes

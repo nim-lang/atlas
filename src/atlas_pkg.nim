@@ -9,7 +9,7 @@ import std/[algorithm, cpuinfo, monotimes, os, osproc, parseopt, paths, strutils
 
 import basic/[reporters, subprocessgroups]
 import packager/packager
-import packager/projectpackage
+import packager/projpkg
 
 const
   AtlasRootDir = currentSourcePath().parentDir().parentDir()
