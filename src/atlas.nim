@@ -255,6 +255,11 @@ proc activeDirectDependencies(cache: ActivationCache; pkg: ActivatedPackage): se
     return @[]
 
   var nc = createNimbleContext()
+  for cachedPkg in cache.packages:
+    if cachedPkg.url.projectName.len > 0:
+      nc.put(cachedPkg.url.projectName, toPkgUriRaw(cachedPkg.url.url))
+    if cachedPkg.url.shortName.len > 0 and cachedPkg.url.shortName != cachedPkg.url.projectName:
+      nc.put(cachedPkg.url.shortName, toPkgUriRaw(cachedPkg.url.url))
   let rel = nc.parseNimbleFile(nimbleFiles[0])
   var seen = initHashSet[int]()
   for (depUrl, _) in rel.requirements:

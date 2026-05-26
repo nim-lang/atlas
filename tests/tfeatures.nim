@@ -42,6 +42,7 @@ proc isProjFeatureDep(pkg: Package): bool =
 
 suite "test features":
   setup:
+    resetAtlasReporter()
     # setAtlasVerbosity(Trace)
     context().nameOverrides = Patterns()
     context().urlOverrides = Patterns()
@@ -49,6 +50,8 @@ suite "test features":
     context().flags.incl DumbProxy
     context().depsDir = Path "deps"
     setAtlasErrorsColor(fgMagenta)
+  teardown:
+    resetAtlasReporter()
 
   test "setup and test target project":
       # setAtlasVerbosity(Info)
@@ -143,6 +146,7 @@ suite "test features":
 
 suite "test global features":
   setup:
+    resetAtlasReporter()
     # setAtlasVerbosity(Trace)
     context().nameOverrides = Patterns()
     context().urlOverrides = Patterns()
@@ -150,6 +154,8 @@ suite "test global features":
     context().flags.incl DumbProxy
     context().depsDir = Path "deps"
     setAtlasErrorsColor(fgMagenta)
+  teardown:
+    resetAtlasReporter()
 
   test "setup and test target project":
       # setAtlasVerbosity(Info)

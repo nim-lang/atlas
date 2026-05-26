@@ -44,6 +44,11 @@ proc setAtlasAssertOnError*(err: bool) =
 proc atlasErrors*(): int =
   atlasReporter.errors
 
+proc resetAtlasReporter*() =
+  atlasReporter.warnings = 0
+  atlasReporter.errors = 0
+  atlasReporter.messages.setLen 0
+
 proc setAtlasErrorsColor*(color: ForegroundColor) =
   atlasReporter.errorsColor = color
 
