@@ -175,7 +175,8 @@ proc compactLiftedReleaseMetadata*(
     releaseJson: JsonNode;
     release: NimbleRelease;
     cache: JsonNode;
-    opt: ToJsonOptions = ToJsonOptions(enumMode: joptEnumString)
+    opt: ToJsonOptions = ToJsonOptions(enumMode: joptEnumString);
+    allowEmptyOverrides = true
 ) =
   if releaseJson.isNil or releaseJson.kind != JObject:
     return
@@ -210,6 +211,9 @@ proc compactLiftedReleaseMetadata*(
 
   if release.isNil:
     return
+  if not allowEmptyOverrides:
+    return
+
   if release.binDir.len == 0:
     addEmptyOverride("b", "binDir", release.binDir)
   if release.skipDirs.len == 0:

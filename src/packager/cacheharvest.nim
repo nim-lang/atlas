@@ -332,7 +332,8 @@ proc compactReleaseMetadata*(metadata: var JsonNode) =
     entry.compactLiftedReleaseMetadata(
       release,
       metadata,
-      ToJsonOptions(enumMode: joptEnumString)
+      ToJsonOptions(enumMode: joptEnumString),
+      allowEmptyOverrides = false
     )
 
 proc isHeadReleaseEntry(entry: JsonNode): bool =
@@ -409,7 +410,8 @@ proc headReleaseMetadata*(
   result.compactLiftedReleaseMetadata(
     headEntryRelease,
     retained,
-    ToJsonOptions(enumMode: joptEnumString)
+    ToJsonOptions(enumMode: joptEnumString),
+    allowEmptyOverrides = false
   )
 
 proc loadPackageReleaseMetadata(pkg: Package; releaseInfo: PackageReleaseInfo): JsonNode =
@@ -847,7 +849,7 @@ proc comparableReleaseMetadata*(metadata: JsonNode): JsonNode =
   result["releases"] = metadata.metadataField("releases").copy()
   let tags = metadata.metadataField("tags")
   result["tags"] =
-    if tags.isNil: newJNull()
+    if tags.isNil or tags.kind == JNull or (tags.kind == JBool and not tags.getBool()): %false
     else: tags.copy()
   let tarballs = metadata.metadataField("tarballs")
   result["tarballs"] =
@@ -991,7 +993,8 @@ proc mergePackageReleaseMetadata*(
       mergedHeadMetadata.compactLiftedReleaseMetadata(
         headEntryRelease,
         metadata,
-        ToJsonOptions(enumMode: joptEnumString)
+        ToJsonOptions(enumMode: joptEnumString),
+        allowEmptyOverrides = false
       )
     if mergedHeadMetadata.kind == JObject and splitTarballs.head.kind != JNull:
       mergedHeadMetadata["tarballs"] = splitTarballs.head
