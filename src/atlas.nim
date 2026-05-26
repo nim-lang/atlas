@@ -415,7 +415,9 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
         else:
           writeHelp()
       of "shallow": context().flags.incl ShallowClones
-      of "full": context().flags.excl ShallowClones
+      of "full":
+        context().flags.excl ShallowClones
+        context().flags.incl GitOnly
       of "noautoinit": autoinit = false
       of "ignoreerrors": context().flags.incl IgnoreErrors
       of "dumpformular": context().flags.incl DumpFormular

@@ -144,7 +144,7 @@ suite "json serde":
     check cache["name"].getStr() == "foobar"
     check cache["fqn"].getStr() == "foobar.nimble-test.github.com"
     check "url" notin cache
-    check "current" notin cache
+    check cache["current"].getStr() == "24870f48c40da2146ce12ff1e675e6e7b9748355"
     check "shortName" notin cache
     check "nim" notin cache
     check "includeTagsAndNimbleCommits" notin cache

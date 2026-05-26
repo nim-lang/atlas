@@ -245,6 +245,7 @@ proc toPackageReleaseCacheJson(cache: PackageReleaseCache; opt: ToJsonOptions): 
   if cache.fqn.len > 0:
     result["fqn"] = toJson(cache.fqn, opt)
   result["head"] = toJson(cache.head, opt)
+  result["current"] = toJson(cache.current, opt)
   if cache.author.len > 0:
     result["author"] = toJson(cache.author, opt)
   if cache.description.len > 0:
@@ -361,12 +362,15 @@ proc loadPackageReleaseCacheJson(cache: var PackageReleaseCache; jn: JsonNode) =
         entry.release.backend = cache.backend
       entry.release.hasBin = entry.release.bin.len > 0 or entry.release.namedBin.len > 0
 
-proc loadPackageReleaseCache*(
+proc loadPackageReleaseCacheWithReason*(
     pkg: Package;
+    currentCommit: CommitHash;
     entries: var seq[PackageReleaseCacheEntry]
 ): (bool, string) =
   if pkg.originHead.isEmpty():
     return (false, "empty origin head")
+  if currentCommit.isEmpty():
+    return (false, "empty current commit")
 
   let cachePath = packageReleaseCachePath(pkg)
   if not fileExists($cachePath):
@@ -392,6 +396,8 @@ proc loadPackageReleaseCache*(
     mismatches.add("subdir cache=" & $cache.subdir & " pkg=" & $pkgSubdir)
   if cache.head != pkg.originHead:
     mismatches.add("originHead cache=" & cache.head.short() & "/" & $cache.head.orig & " pkg=" & pkg.originHead.short() & "/" & $pkg.originHead.orig)
+  if cache.current != currentCommit:
+    mismatches.add("current cache=" & cache.current.short() & "/" & $cache.current.orig & " pkg=" & currentCommit.short() & "/" & $currentCommit.orig)
   if cache.includeTagsAndNimbleCommits != includeTagsAndNimbleCommitsFlag():
     mismatches.add("includeTagsAndNimbleCommits cache=" & $cache.includeTagsAndNimbleCommits & " pkg=" & $includeTagsAndNimbleCommitsFlag())
   if cache.nimbleCommitsMax != nimbleCommitsMaxFlag():
@@ -403,17 +409,6 @@ proc loadPackageReleaseCache*(
   entries = cache.releases
   debug pkg.url.projectName, "loaded dependency cache:", $cachePath, "releases:", $entries.len
   return (true, "")
-
-proc loadPackageReleaseCache*(
-    pkg: Package;
-    currentCommit: CommitHash;
-    entries: var seq[PackageReleaseCacheEntry]
-): bool =
-  var pkgWithHead = pkg
-  if pkgWithHead.originHead.isEmpty():
-    pkgWithHead.originHead = currentCommit
-  let (ok, _) = loadPackageReleaseCache(pkgWithHead, entries)
-  ok
 
 proc savePackageReleaseCache*(
     pkg: Package;
@@ -430,6 +425,7 @@ proc savePackageReleaseCache*(
     subdir: if pkg.subdir.len > 0: pkg.subdir else: pkg.url.subdir(),
     fqn: pkg.url.fullName(),
     head: pkg.originHead,
+    current: currentCommit,
     author: firstNonEmptyMetadata(versions, proc (release: NimbleRelease): string = release.author),
     description: firstNonEmptyMetadata(versions, proc (release: NimbleRelease): string = release.description),
     license: firstNonEmptyMetadata(versions, proc (release: NimbleRelease): string = release.license),
@@ -462,3 +458,11 @@ proc savePackageReleaseCache*(
     removeFile($cachePath)
   moveFile($tmpPath, $cachePath)
   debug pkg.url.projectName, "wrote dependency cache:", $cachePath, "releases:", $cache.releases.len
+
+proc loadPackageReleaseCache*(
+    pkg: Package;
+    currentCommit: CommitHash;
+    entries: var seq[PackageReleaseCacheEntry]
+): bool =
+  let (ok, _) = loadPackageReleaseCacheWithReason(pkg, currentCommit, entries)
+  ok

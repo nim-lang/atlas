@@ -89,6 +89,21 @@ proc hasContextFeature(pkg: Package; feature: string): bool =
   let scopedByProjectName = "feature." & pkg.url.projectName & "." & feature
   result = scopedByShortName in context().features or scopedByProjectName in context().features
 
+proc requestedContextFeatures(pkg: Package): seq[string] =
+  ## Return scoped `feature.$pkg.$name` requests for this package.
+  ## Bare root features are handled by root release requirements instead.
+  for raw in context().features:
+    if not raw.startsWith("feature."):
+      continue
+
+    let parts = raw.split(".")
+    if parts.len < 3:
+      continue
+
+    let pkgName = parts[1]
+    if pkg.url.shortName == pkgName or pkg.url.projectName == pkgName:
+      result.addUnique(parts[2 .. ^1].join("."))
+
 proc requirementMatches*(query: VersionInterval; depVer: PackageVersion; depRel: NimbleRelease): bool =
   ## Match semver constraints against nimble-declared release versions, while
   ## preserving special ref semantics (#head/#branch/#commit) on package tags.
@@ -165,6 +180,7 @@ proc collectUnsatisfiedContextFeatures(graph: DepGraph): seq[string] =
 
 proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
   var anyReleaseSatisfied = false
+  let requestedFeatures = requestedContextFeatures(pkg)
 
   proc checkDeps(graph: var DepGraph, ver: PackageVersion, reqs: seq[(PkgUrl, VersionInterval)]): tuple[allDepsCompatible: bool, unmatchedDeps: seq[string]] =
     result.allDepsCompatible = true
@@ -200,6 +216,11 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
         debug pkg.url.projectName, "a compatible version matched requirements for the dependency version:", $depNode.url.projectName
 
   for ver, rel in validVersions(pkg):
+    for feature in requestedFeatures:
+      if feature notin rel.features:
+        warn pkg.url.projectName, "version missing requested feature:", feature, "version:", $ver
+        b.addNegated(ver.vid)
+
     let depCheck = checkDeps(graph, ver, rel.requirements)
 
     # If any dependency can't be satisfied, make this version unsatisfiable

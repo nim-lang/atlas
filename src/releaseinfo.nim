@@ -163,7 +163,7 @@ proc loadPackageReleaseInfo*(
   if pkg.isForgePackage:
     result.currentCommit = initCommitHash("", FromNone)
     var cachedReleases: seq[PackageReleaseCacheEntry]
-    let (cacheOk, cacheReason) = loadPackageReleaseCache(pkg, cachedReleases)
+    let (cacheOk, cacheReason) = loadPackageReleaseCacheWithReason(pkg, result.currentCommit, cachedReleases)
     if cacheOk:
       info pkg.url.projectName, "using cached releases for forge package"
       for entry in cachedReleases:
@@ -185,7 +185,7 @@ proc loadPackageReleaseInfo*(
 
   if canUsePackageReleaseCache(pkg, mode, result.expandedExplicitVersions):
     var cachedReleases: seq[PackageReleaseCacheEntry]
-    let (cacheOk, cacheReason) = loadPackageReleaseCache(pkg, cachedReleases)
+    let (cacheOk, cacheReason) = loadPackageReleaseCacheWithReason(pkg, result.currentCommit, cachedReleases)
     if cacheOk:
       info pkg.url.projectName, "using cached releases for current commit:", $result.currentCommit
       for entry in cachedReleases:

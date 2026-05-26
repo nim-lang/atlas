@@ -37,7 +37,7 @@ task unitTests, "Runs unit tests":
       let name = splitFile(path).name
       if not name.startsWith("t"): continue # run only t*.nim files
       echo fmt"[sigils] Running {path}"
-      exec fmt"nim c -r {path}"
+      exec fmt"nim c --nimcache:.nimcache/tests/{name} -r {path}"
 
 task testPackager, "Runs packager smoke tests":
   installSatTask()
