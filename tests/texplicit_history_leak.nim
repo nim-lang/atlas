@@ -195,10 +195,12 @@ suite "historical explicit transitive pins":
           initGitRepo()
           commitAll("bearssl-old")
           oldBearsslCommit = gitHead()
+          exec("git tag v0.1.5")
 
           writePackage("bearssl", "0.2.8")
           commitAll("bearssl-new")
           newBearsslCommit = gitHead()
+          exec("git tag v0.2.8")
 
         createDir("bearssl_pkey_decoder")
         withDir "bearssl_pkey_decoder":

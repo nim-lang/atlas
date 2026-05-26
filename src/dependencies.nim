@@ -105,6 +105,13 @@ proc childDependencyState(pkg: Package; deferChildDeps: bool): PackageState =
   if deferChildDeps and not pkg.isRoot: LazyDeferred
   else: NotInitialized
 
+proc hasContextFeature(pkg: Package; feature: string): bool =
+  if pkg.isRoot and feature in context().features:
+    return true
+  let scopedByShortName = "feature." & pkg.url.shortName & "." & feature
+  let scopedByProjectName = "feature." & pkg.url.projectName & "." & feature
+  result = scopedByShortName in context().features or scopedByProjectName in context().features
+
 proc registerReleaseDependencies(
     nc: var NimbleContext;
     pkg: Package;
@@ -138,12 +145,12 @@ proc registerReleaseDependencies(
         nc.explicitVersions.mgetOrPut(pkgUrl, initHashSet[VersionTag]()).incl(VersionTag(v: Version($(interval)), c: commit))
       if pkgUrl notin nc.packageToDependency:
         let state =
-          if feature notin context().features: LazyDeferred
+          if not hasContextFeature(pkg, feature): LazyDeferred
           else: childDependencyState(pkg, deferChildDeps)
         debug pkg.url.projectName, "Found new feature pkg:", pkgUrl.projectName, "url:", $pkgUrl.url, "projectName:", $pkgUrl.projectName, "state:", $state
         let pkgDep = nc.initPackage(pkgUrl, state)
         nc.packageToDependency[pkgUrl] = pkgDep
-      elif feature in context().features and nc.packageToDependency[pkgUrl].state == LazyDeferred and childDependencyState(pkg, deferChildDeps) != LazyDeferred:
+      elif hasContextFeature(pkg, feature) and nc.packageToDependency[pkgUrl].state == LazyDeferred and childDependencyState(pkg, deferChildDeps) != LazyDeferred:
         warn pkg.url.projectName, "Changing LazyDeferred feature pkg to DoLoad:", $pkgUrl.url
         nc.packageToDependency[pkgUrl].state = DoLoad
 

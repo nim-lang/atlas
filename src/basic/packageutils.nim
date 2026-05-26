@@ -103,7 +103,8 @@ proc markForgePackage(pkg: var Package; cachePath: Path) =
 
 proc checkForgeMetadata(pkg: var Package): bool =
   ## Check for forge release metadata and mark the package if found.
-  if GitOnly in context().flags or pkg.isLocalOnly:
+  if GitOnly in context().flags or pkg.isLocalOnly or pkg.url.isFileProtocol or
+      pkg.url.cloneUri().scheme == "atlas":
     return false
   let cachePath = packageReleaseCachePath(pkg)
   if hasForgeMetadata(cachePath):
