@@ -845,6 +845,7 @@ proc comparableReleaseMetadata*(metadata: JsonNode): JsonNode =
   ## Normalize package release metadata down to the harvested fields that
   ## should trigger a releases.json rewrite on subsequent packager runs.
   result = newJObject()
+  result["releaseCacheVersion"] = metadata.metadataField("releaseCacheVersion").copy()
   result["name"] = metadata.metadataField("name").copy()
   result["releases"] = metadata.metadataField("releases").copy()
   let tags = metadata.metadataField("tags")
@@ -916,6 +917,7 @@ proc mergePackageReleaseMetadata*(
       releaseMetadata.copy()
   if metadata.hasKey("head"):
     metadata.delete("head")
+  metadata["releaseCacheVersion"] = %PackageReleaseCacheVersion
   metadata["name"] = %info.name
   let existingTags = existingMetadata.metadataField("tags")
   metadata["tags"] = %(tags or existingTags.getBool())

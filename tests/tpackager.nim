@@ -441,6 +441,159 @@ suite "packager retained index versioning":
     }))
     check not retainedReleaseCacheVersionMatches(Path(root))
 
+suite "packager github unchanged checks":
+  test "unchanged github packages are skipped only for current release cache version":
+    let root = createTempDir("atlas-packager", "github-unchanged-current-")
+    defer: removeDir(root)
+
+    let packagesFile = root / "packages.json"
+    writeText(packagesFile, pretty(%*[
+      {
+        "name": "alpha",
+        "url": "https://github.com/example/alpha",
+        "method": "git",
+        "tags": [],
+        "description": "alpha"
+      }
+    ]))
+    writeText(bucketedPkgPath(root, "alpha") / "releases.json", pretty(%*{
+      "releaseCacheVersion": PackageReleaseCacheVersion,
+      "name": "alpha",
+      "releases": [
+        {"v": "1.0.0@aaaaaaaa"}
+      ]
+    }))
+    writeText(root / "index.json", pretty(%*{
+      "releaseCacheVersion": PackageReleaseCacheVersion,
+      "compressions": ["xz"],
+      "packages": [
+        {
+          "name": "alpha",
+          "latestCommit": "deadbeef",
+          "releasesMetadata": "a/alpha/releases.json"
+        }
+      ]
+    }))
+
+    var repoStates = initTable[string, GitHubRepoState]()
+    repoStates["alpha"] = GitHubRepoState(
+      headOid: "deadbeef",
+      tagNames: @["1.0.0"],
+      forgeReleases: @[]
+    )
+
+    let skipped = findUnchangedGitHubPackages(
+      Path(packagesFile),
+      Path(root),
+      @[],
+      @[],
+      @[],
+      repoStates,
+      @["xz"]
+    )
+    check skipped == @["alpha"]
+
+  test "stale release cache version disables unchanged github package skipping":
+    let root = createTempDir("atlas-packager", "github-unchanged-stale-")
+    defer: removeDir(root)
+
+    let packagesFile = root / "packages.json"
+    writeText(packagesFile, pretty(%*[
+      {
+        "name": "alpha",
+        "url": "https://github.com/example/alpha",
+        "method": "git",
+        "tags": [],
+        "description": "alpha"
+      }
+    ]))
+    writeText(bucketedPkgPath(root, "alpha") / "releases.json", pretty(%*{
+      "releaseCacheVersion": PackageReleaseCacheVersion,
+      "name": "alpha",
+      "releases": [
+        {"v": "1.0.0@aaaaaaaa"}
+      ]
+    }))
+    writeText(root / "index.json", pretty(%*{
+      "releaseCacheVersion": PackageReleaseCacheVersion - 1,
+      "compressions": ["xz"],
+      "packages": [
+        {
+          "name": "alpha",
+          "latestCommit": "deadbeef",
+          "releasesMetadata": "a/alpha/releases.json"
+        }
+      ]
+    }))
+
+    var repoStates = initTable[string, GitHubRepoState]()
+    repoStates["alpha"] = GitHubRepoState(
+      headOid: "deadbeef",
+      tagNames: @["1.0.0"],
+      forgeReleases: @[]
+    )
+
+    let skipped = findUnchangedGitHubPackages(
+      Path(packagesFile),
+      Path(root),
+      @[],
+      @[],
+      @[],
+      repoStates,
+      @["xz"]
+    )
+    check skipped.len == 0
+
+  test "missing retained releases cache version disables unchanged github package skipping":
+    let root = createTempDir("atlas-packager", "github-unchanged-missing-release-version-")
+    defer: removeDir(root)
+
+    let packagesFile = root / "packages.json"
+    writeText(packagesFile, pretty(%*[
+      {
+        "name": "alpha",
+        "url": "https://github.com/example/alpha",
+        "method": "git",
+        "tags": [],
+        "description": "alpha"
+      }
+    ]))
+    writeText(bucketedPkgPath(root, "alpha") / "releases.json", pretty(%*{
+      "name": "alpha",
+      "releases": [
+        {"v": "1.0.0@aaaaaaaa"}
+      ]
+    }))
+    writeText(root / "index.json", pretty(%*{
+      "releaseCacheVersion": PackageReleaseCacheVersion,
+      "compressions": ["xz"],
+      "packages": [
+        {
+          "name": "alpha",
+          "latestCommit": "deadbeef",
+          "releasesMetadata": "a/alpha/releases.json"
+        }
+      ]
+    }))
+
+    var repoStates = initTable[string, GitHubRepoState]()
+    repoStates["alpha"] = GitHubRepoState(
+      headOid: "deadbeef",
+      tagNames: @["1.0.0"],
+      forgeReleases: @[]
+    )
+
+    let skipped = findUnchangedGitHubPackages(
+      Path(packagesFile),
+      Path(root),
+      @[],
+      @[],
+      @[],
+      repoStates,
+      @["xz"]
+    )
+    check skipped.len == 0
+
 suite "packager allDeps metadata":
   test "package bucket dir uses first package letter":
     check packageBucketDir("alpha") == Path"a"
@@ -916,8 +1069,10 @@ suite "packager release metadata comparison":
     writeFile(root / "releases.json", pretty(%*{
       "name": "alpha",
       "generatedAt": "2026-05-26T00:00:00Z",
+      "releaseCacheVersion": PackageReleaseCacheVersion,
       "binDir": "bin",
       "bin": ["alpha"],
+      "tags": false,
       "releases": [
         {
           "v": "1.0.0@bbbbbbbb"

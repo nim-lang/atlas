@@ -96,6 +96,23 @@ proc hasRetainedArtifacts(metadataDir: Path; state: RetainedPackageState): bool 
     state.releasesMetadataPath.len > 0 and
     fileExists($(metadataDir / Path(state.releasesMetadataPath)))
 
+proc retainedReleaseMetadataVersionMatches(
+    metadataDir: Path;
+    state: RetainedPackageState
+): bool =
+  if state.releasesMetadataPath.len == 0:
+    return false
+
+  let releasesPath = metadataDir / Path(state.releasesMetadataPath)
+  if not fileExists($releasesPath):
+    return false
+
+  try:
+    let root = parseFile($releasesPath)
+    root{"releaseCacheVersion"}.getInt() == PackageReleaseCacheVersion
+  except CatchableError:
+    false
+
 proc retainedReleaseCacheVersionMatches*(metadataDir: Path): bool =
   let retainedIndex = loadRetainedIndexState(metadataDir)
   retainedIndex.releaseCacheVersion == PackageReleaseCacheVersion
@@ -484,6 +501,12 @@ proc findUnchangedGitHubPackages*(
       continue
     let state = retainedIndex.packages[info.name]
     if not hasRetainedArtifacts(metadataDir, state):
+      continue
+    if not retainedReleaseMetadataVersionMatches(metadataDir, state):
+      info "atlas:pkger",
+        "github api check refresh:",
+        info.name,
+        "retained releases.json cache version stale"
       continue
     let target = toGitHubRepoTarget(info, metadataDir, state)
     if target.packageName.len > 0:
