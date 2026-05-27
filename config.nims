@@ -15,6 +15,7 @@ else:
 --path:"$nim"
 --nimcache:".nimcache"
 --d:ssl
+--d:useMalloc
 --gc:atomicArc
 --threads:on
 

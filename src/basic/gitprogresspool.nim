@@ -53,6 +53,7 @@ type
   GitProgressWorkerArgs = object
     jobs: seq[IndexedGitProgressJob]
     events: ptr GitProgressEventQueue
+    startLock: ptr Lock
 
   GitProgressJobState = object
     label: string
@@ -251,11 +252,11 @@ proc renderProgressBlock(
 proc clearInteractiveBlock(lastLines: var int) =
   if lastLines <= 0:
     return
-  for _ in 0..<lastLines:
+  let lineCount = lastLines
+  for idx in 0..<lineCount:
     stdout.write "\r\27[2K"
-    if lastLines > 1:
+    if idx < lineCount - 1:
       stdout.write "\27[1A"
-    dec lastLines
   stdout.write "\r\27[2K\r"
   stdout.flushFile()
   lastLines = 0
@@ -380,13 +381,19 @@ proc gitProgressWorker(args: GitProgressWorkerArgs) {.thread.} =
       label: job.label
     )
 
-    var process = startProcess(
-      job.command,
-      workingDir = job.workingDir,
-      args = job.args,
-      options = {poUsePath, poStdErrToStdOut}
-    )
+    var process: Process
     try:
+      acquire(args.startLock[])
+      try:
+        process = startProcess(
+          job.command,
+          workingDir = job.workingDir,
+          args = job.args,
+          options = {poUsePath, poStdErrToStdOut}
+        )
+      finally:
+        release(args.startLock[])
+
       let readResult = readGitProgressOutput(process, indexedJob.index, job.label, args.events)
       let exitCode = waitForExit(process)
       args.events.pushEvent GitProgressEvent(
@@ -397,8 +404,22 @@ proc gitProgressWorker(args: GitProgressWorkerArgs) {.thread.} =
         exitCode: exitCode,
         progress: readResult.progress
       )
+    except CatchableError as exc:
+      args.events.pushEvent GitProgressEvent(
+        kind: gpFinished,
+        jobIndex: indexedJob.index,
+        label: job.label,
+        output: $exc.name & ": " & exc.msg,
+        exitCode: 1,
+        progress: GitProgressSnapshot(phase: "failed", percent: -1)
+      )
     finally:
-      close(process)
+      if process != nil:
+        acquire(args.startLock[])
+        try:
+          close(process)
+        finally:
+          release(args.startLock[])
 
 proc runGitProgressJobs*(
     jobs: openArray[GitProgressJob];
@@ -423,6 +444,8 @@ proc runGitProgressJobs*(
   let renderInteractive = interactiveProgressEnabled(showProgress)
   var eventQueue: GitProgressEventQueue
   initLock(eventQueue.lock)
+  var startLock: Lock
+  initLock(startLock)
 
   var workerSlices = splitJobs(jobsSeq, effectiveWorkers)
   var threads = newSeq[Thread[GitProgressWorkerArgs]](effectiveWorkers)
@@ -430,7 +453,11 @@ proc runGitProgressJobs*(
     createThread(
       threads[idx],
       gitProgressWorker,
-      GitProgressWorkerArgs(jobs: workerSlices[idx], events: addr eventQueue)
+      GitProgressWorkerArgs(
+        jobs: workerSlices[idx],
+        events: addr eventQueue,
+        startLock: addr startLock
+      )
     )
 
   var finished = 0
@@ -501,3 +528,4 @@ proc runGitProgressJobs*(
     stdout.flushFile()
 
   deinitLock(eventQueue.lock)
+  deinitLock(startLock)
