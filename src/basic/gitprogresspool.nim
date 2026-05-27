@@ -252,11 +252,11 @@ proc renderProgressBlock(
 proc clearInteractiveBlock(lastLines: var int) =
   if lastLines <= 0:
     return
-  for _ in 0..<lastLines:
+  let lineCount = lastLines
+  for idx in 0..<lineCount:
     stdout.write "\r\27[2K"
-    if lastLines > 1:
+    if idx < lineCount - 1:
       stdout.write "\27[1A"
-    dec lastLines
   stdout.write "\r\27[2K\r"
   stdout.flushFile()
   lastLines = 0
