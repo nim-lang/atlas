@@ -257,6 +257,10 @@ suite "local project packager options":
 
 suite "packager mirrored repo helpers":
   test "packager workspace uses explicit packages file override":
+    let oldContext = context()
+    defer:
+      setContext(oldContext)
+
     let root = createTempDir("atlas-packager", "packages-file-override-")
     defer: removeDir(root)
 
@@ -420,6 +424,56 @@ suite "packager mirrored repo helpers":
 
     check addWorktreeFromBareRepo(Path(mirrorRepo), Path(worktree))
     check fileExists(worktree / "pkg.nimble")
+
+  test "harvest writes metadata for packages without versioned releases":
+    let root = createTempDir("atlas-packager", "head-only-package-")
+    defer: removeDir(root)
+
+    let srcRepo = root / "source"
+    createDir(srcRepo)
+    discard runGit(["init", "-b", "main"], srcRepo)
+    discard runGit(["config", "user.name", "Atlas Tests"], srcRepo)
+    discard runGit(["config", "user.email", "atlas-tests@example.com"], srcRepo)
+    writeText(srcRepo / "headonly.nimble", "description = \"head only\"\n")
+    discard runGit(["add", "headonly.nimble"], srcRepo)
+    discard runGit(["commit", "-m", "initial"], srcRepo)
+    let headCommit = runGit(["rev-parse", "HEAD"], srcRepo).strip()
+
+    let packagesFile = root / "packages.json"
+    writeText(packagesFile, pretty(%*[
+      {
+        "name": "headonly",
+        "url": $fileUri(Path(srcRepo)),
+        "method": "git",
+        "tags": [],
+        "description": "head only",
+        "license": "MIT"
+      }
+    ]))
+
+    let metadataDir = Path(root / "pkgs")
+    let summary = harvestRegistryCaches(
+      Path(packagesFile),
+      metadataDir,
+      ephemeral = true,
+      updateRepos = false,
+      skipRepoUpdatePackages = initHashSet[string](),
+      packageForgeMetadata = initTable[string, PackageForgeMetadata](),
+      pkgNames = @["headonly"],
+      pkgPrefixes = @[],
+      ignoredPkgNames = @[],
+      compressions = @[acXz],
+      threadCount = 1,
+      createTarballs = false
+    )
+
+    check summary.packagesProcessed == 1
+    check summary.packagesFailed == 0
+    let releases = parseFile(root / "pkgs" / "h" / "headonly" / "releases.json")
+    let head = parseFile(root / "pkgs" / "h" / "headonly" / "release-head.json")
+    check releases["releases"].len == 0
+    check releases["releaseCacheVersion"].getInt() == PackageReleaseCacheVersion
+    check head["v"].getStr() == "#head@" & headCommit
 
 suite "packager retained index versioning":
   test "retained release cache version match requires current cache version":
@@ -1004,6 +1058,36 @@ suite "packager release metadata comparison":
     check "l" notin tagged
     check tagged["m"].getStr() == "2.2.0"
     check tagged["s"].getStr() == "lib"
+
+  test "merge release metadata tolerates legacy unversioned commit entries":
+    let root = createTempDir("atlas-packager", "unversioned-release-entry-")
+    defer: removeDir(root)
+
+    let workspaceRoot = Path(root)
+    mergePackageReleaseMetadata(
+      workspaceRoot,
+      PackageInfo(name: "alpha"),
+      %*{
+        "releases": [
+          {
+            "v": "~@cbbd23c289ac624e2137752f893697d7dd784b17",
+            "r": []
+          }
+        ]
+      },
+      newJNull(),
+      releaseHeadMetadata = %*{
+        "v": "#head@4fa3648fa318c295fa67082df63c804974814772",
+        "r": []
+      },
+      updateHeadMetadata = true
+    )
+
+    let rewritten = parseFile(root / "releases.json")
+    let head = parseFile(root / "release-head.json")
+    check rewritten["releaseCacheVersion"].getInt() == PackageReleaseCacheVersion
+    check rewritten["releases"].len == 0
+    check head["v"].getStr() == "#head@4fa3648fa318c295fa67082df63c804974814772"
 
   test "merge release metadata writes head separately":
     let root = createTempDir("atlas-packager", "separate-head-")

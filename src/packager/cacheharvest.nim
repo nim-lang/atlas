@@ -327,8 +327,10 @@ proc compactReleaseMetadata*(metadata: var JsonNode) =
     return
 
   for entry in metadata["releases"]:
+    var releaseEntry = entry.copy()
+    releaseEntry.delete("v")
     var release: NimbleRelease
-    release.fromJsonHook(entry, Joptions(allowMissingKeys: true, allowExtraKeys: true))
+    release.fromJsonHook(releaseEntry, Joptions(allowMissingKeys: true, allowExtraKeys: true))
     entry.compactLiftedReleaseMetadata(
       release,
       metadata,
@@ -346,6 +348,16 @@ proc isHeadReleaseEntry(entry: JsonNode): bool =
     return false
   vtag.version == Version"#head"
 
+proc isUnversionedReleaseEntry(entry: JsonNode): bool =
+  if entry.kind != JObject or not entry.hasKey("v"):
+    return false
+  var vtag: VersionTag
+  try:
+    vtag.fromJson(entry["v"])
+  except CatchableError:
+    return false
+  vtag.version == Version""
+
 proc removeHeadFromReleaseMetadata(metadata: var JsonNode) =
   if metadata.isNil or metadata.kind != JObject:
     return
@@ -354,7 +366,7 @@ proc removeHeadFromReleaseMetadata(metadata: var JsonNode) =
 
   var releases = newJArray()
   for entry in metadata["releases"]:
-    if not entry.isHeadReleaseEntry():
+    if not entry.isHeadReleaseEntry() and not entry.isUnversionedReleaseEntry():
       releases.add entry
   metadata["releases"] = releases
 
@@ -406,7 +418,9 @@ proc headReleaseMetadata*(
     if key != "v":
       result[key] = value.copy()
   var headEntryRelease: NimbleRelease
-  headEntryRelease.fromJsonHook(result, Joptions(allowMissingKeys: true, allowExtraKeys: true))
+  var headEntry = result.copy()
+  headEntry.delete("v")
+  headEntryRelease.fromJsonHook(headEntry, Joptions(allowMissingKeys: true, allowExtraKeys: true))
   result.compactLiftedReleaseMetadata(
     headEntryRelease,
     retained,
@@ -988,8 +1002,10 @@ proc mergePackageReleaseMetadata*(
         newJObject()
     if mergedHeadMetadata.kind == JObject:
       var headEntryRelease: NimbleRelease
+      var headEntry = mergedHeadMetadata.copy()
+      headEntry.delete("v")
       headEntryRelease.fromJsonHook(
-        mergedHeadMetadata,
+        headEntry,
         Joptions(allowMissingKeys: true, allowExtraKeys: true)
       )
       mergedHeadMetadata.compactLiftedReleaseMetadata(
@@ -1365,6 +1381,14 @@ proc harvestRegistryCaches*(
     regenerateTarballs: bool = false;
     createTarballs: bool = true
 ): HarvestSummary =
+  let previousContext = context()
+  var baseContext = previousContext
+  baseContext.depsDir = metadataDir
+  baseContext.cacheDir = metadataDir
+  baseContext.packagesFileOverride = packagesFile
+  defer:
+    setContext(previousContext)
+
   createDir($metadataDir)
   cleanupDanglingReleaseCaches(metadataDir)
 
@@ -1391,7 +1415,6 @@ proc harvestRegistryCaches*(
   queue.packages.sort(proc (a, b: PackageInfo): int = cmp(a.name, b.name))
 
   let workerCount = max(1, min(threadCount, max(1, queue.packages.len)))
-  let baseContext = context()
   let compressionList = @compressions
   if workerCount == 1:
     let workerResult = harvestWorker(

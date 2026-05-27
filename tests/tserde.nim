@@ -281,6 +281,40 @@ suite "json serde":
     let regeneratedCache = parseFile($cachePath)
     check regeneratedCache["cv"].getInt() == PackageReleaseCacheVersion
 
+  test "package release cache loads compact unversioned tag entries":
+    let oldCtx = context()
+    let ws = Path(getTempDir()) / Path("atlas_unversioned_release_cache_" & $int(epochTime()))
+    defer:
+      setContext(oldCtx)
+      if dirExists($ws):
+        removeDir($ws)
+
+    setContext(AtlasContext(projectDir: ws, depsDir: Path"deps"))
+    let url = nc.createUrl("foobar")
+    let current = initCommitHash("24870f48c40da2146ce12ff1e675e6e7b9748355", FromNone)
+    let unversioned = initCommitHash("cbbd23c289ac624e2137752f893697d7dd784b17", FromNone)
+    let pkg = Package(url: url, originHead: current)
+    createDir($cachesDirectory())
+    writeFile($packageReleaseCachePath(pkg), pretty(%*{
+      "cv": PackageReleaseCacheVersion,
+      "name": "foobar",
+      "head": current.h,
+      "current": current.h,
+      "releases": [
+        {
+          "v": "~@cbbd23c289ac624e2137752f893697d7dd784b17",
+          "r": []
+        }
+      ]
+    }))
+
+    var entries: seq[PackageReleaseCacheEntry]
+    check loadPackageReleaseCache(pkg, current, entries)
+    check entries.len == 1
+    if entries.len == 1:
+      check entries[0].vtag.version == Version""
+      check entries[0].vtag.commit == unversioned
+
   test "shared release cache copies into project cache":
     let oldCtx = context()
     let ws = Path(getTempDir()) / Path("atlas_shared_release_cache_" & $int(epochTime()))

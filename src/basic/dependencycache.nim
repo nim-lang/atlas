@@ -302,7 +302,11 @@ proc toPackageReleaseCacheJson(cache: PackageReleaseCache; opt: ToJsonOptions): 
     result["releases"].add entryJson
 
 proc loadPackageReleaseCacheJson(cache: var PackageReleaseCache; jn: JsonNode) =
-  cache.fromJson(jn, Joptions(allowMissingKeys: true, allowExtraKeys: true))
+  var cacheMetadata = jn
+  if jn.kind == JObject and jn.hasKey("releases"):
+    cacheMetadata = jn.copy()
+    cacheMetadata.delete("releases")
+  cache.fromJson(cacheMetadata, Joptions(allowMissingKeys: true, allowExtraKeys: true))
   if jn.hasKey("cv"):
     cache.cacheVersion = jn["cv"].getInt()
   if jn.hasKey("author"):
@@ -321,7 +325,9 @@ proc loadPackageReleaseCacheJson(cache: var PackageReleaseCache; jn: JsonNode) =
         continue
       var entry: PackageReleaseCacheEntry
       entry.vtag.fromJson(rawEntry["v"])
-      entry.release.fromJsonHook(rawEntry, Joptions(allowMissingKeys: true, allowExtraKeys: true))
+      var releaseJson = rawEntry.copy()
+      releaseJson.delete("v")
+      entry.release.fromJsonHook(releaseJson, Joptions(allowMissingKeys: true, allowExtraKeys: true))
       if entry.release.version == Version"":
         entry.release.version = entry.vtag.version
       cache.releases.add entry

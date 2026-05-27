@@ -121,6 +121,9 @@ proc addRelease(
     if vtag.v.string == "":
       pkgver.vtag.v = release.version
       trace pkg.url.projectName, "updating release tag information:", $pkgver.vtag
+      if release.version == Version"":
+        info pkg.url.projectName, "skipping unversioned release candidate:", $vtag
+        return false
     elif release.version.string == "":
       warn pkg.url.projectName, "nimble file missing version information:", $pkgver.vtag
       release.version = vtag.version
@@ -150,6 +153,9 @@ proc deduplicateReleases(
   for (ver, rel) in versions:
     result.add((ver, uniqueReleases[rel]))
 
+proc isPublicRelease(vtag: VersionTag): bool =
+  vtag.version != Version"" and vtag.version != Version"#head"
+
 proc loadPackageReleaseInfo*(
     nc: var NimbleContext;
     pkg: var Package,
@@ -167,7 +173,8 @@ proc loadPackageReleaseInfo*(
     if cacheOk:
       info pkg.url.projectName, "using cached releases for forge package"
       for entry in cachedReleases:
-        result.releases.add((entry.vtag.toPkgVer(), entry.release))
+        if entry.vtag.isPublicRelease():
+          result.releases.add((entry.vtag.toPkgVer(), entry.release))
       result.loadedFromCache = true
     else:
       warn pkg.url.projectName, "forge package cache unavailable:", cacheReason
@@ -189,7 +196,8 @@ proc loadPackageReleaseInfo*(
     if cacheOk:
       info pkg.url.projectName, "using cached releases for current commit:", $result.currentCommit
       for entry in cachedReleases:
-        result.releases.add((entry.vtag.toPkgVer(), entry.release))
+        if entry.vtag.isPublicRelease():
+          result.releases.add((entry.vtag.toPkgVer(), entry.release))
       result.loadedFromCache = true
       notice pkg.url.projectName, "releaseInfo loadedFromCache: true"
       return
