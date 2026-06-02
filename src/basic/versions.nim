@@ -560,9 +560,12 @@ proc parseTaggedVersions*(outp: string, requireVersions = true): seq[VersionTag]
       peeled = true
       refName = refName[0..^4]
 
+    # parse version from last path component to avoid false matches on digits in usernames
+    let lastSlash = refName.rfind('/')
+    let tagPart = if lastSlash >= 0: refName.substr(lastSlash + 1) else: refName
     var j = 0
-    while j < refName.len and refName[j] notin Digits: inc j
-    let v = parseVersion(refName, j)
+    while j < tagPart.len and tagPart[j] notin Digits: inc j
+    let v = parseVersion(tagPart, j)
     let c = initCommitHash(line.substr(0, commitEnd-1), FromGitTag)
     if c.isEmpty() or (v == Version("") and requireVersions):
       continue
