@@ -30,3 +30,4 @@ nimble.paths
 .nimcache/
 /deps/
 tests/ws_link_integration/deps/atlas.config
+nimbledeps

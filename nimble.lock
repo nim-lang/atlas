@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "packages": {
+    "sat": {
+      "version": "0.1.1",
+      "vcsRevision": "e63eaea8baf00bed8bcd5a29ffd8823abb265b39",
+      "url": "https://github.com/nim-lang/sat",
+      "downloadMethod": "git",
+      "dependencies": [],
+      "checksums": {
+        "sha1": "bb10015e13931637f5055f188e532ef364574939"
+      }
+    }
+  },
+  "tasks": {}
+}
