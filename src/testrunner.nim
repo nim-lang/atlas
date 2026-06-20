@@ -886,13 +886,16 @@ proc runAtlasTests*(options: AtlasTestOptions): int =
   for testResult in runResult.results:
     if testResult.exitCode != 0:
       inc failures
+  let
+    total = runResult.results.len
+    passed = total - failures
 
   if failures == 0:
-    writeAtlasRunStatusLine($runResult.results.len & " tests ", "passed", arsSuccess)
+    writeAtlasRunStatusLine($passed & "/" & $total & " ", "passed", arsSuccess)
     result = 0
   else:
     writeAtlasRunStatusLine(
-      $failures & " of " & $runResult.results.len & " tests ",
+      $passed & "/" & $total & " passed, " & $failures & "/" & $total & " ",
       "failed",
       arsFailed
     )
