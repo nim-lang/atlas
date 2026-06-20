@@ -32,6 +32,8 @@ Options:
   --nimcache=path       test cache root; each test gets a subdirectory
   --no-shuffle          run tests in sorted discovery order
   --shuffle             shuffle test order (default)
+  --failure-output      only print output chunks for failed tests
+  --compiler-output     include compiler output from successful test builds
 
 With no command, atlas-run prints this help and the project's Nimble tasks.
 For compatibility, atlas-run <name> still runs a Nimble task unless <name> is
@@ -52,6 +54,8 @@ type
     jobs: int
     testOptionsSeen: bool
     shuffle: bool
+    failureOutputOnly: bool
+    showCompilerOutput: bool
     task: string
     taskArgs: seq[string]
     testSelectors: seq[string]
@@ -168,6 +172,12 @@ proc parseCliOptions(params: seq[string]): CliOptions =
       of "no-shuffle":
         result.testOptionsSeen = true
         result.shuffle = false
+      of "failure-output":
+        result.testOptionsSeen = true
+        result.failureOutputOnly = true
+      of "compiler-output", "compile-output":
+        result.testOptionsSeen = true
+        result.showCompilerOutput = true
       else:
         quit("atlas-run: unknown option: " & arg, 2)
     elif arg.startsWith("-"):
@@ -249,7 +259,9 @@ proc atlasRunMain(params: seq[string]): int =
       nimcacheDir = opts.nimcacheDir,
       jobs = opts.jobs,
       selectors = opts.testSelectors,
-      shuffle = opts.shuffle
+      shuffle = opts.shuffle,
+      failureOutputOnly = opts.failureOutputOnly,
+      showCompilerOutput = opts.showCompilerOutput
     ))
 
 proc main() =

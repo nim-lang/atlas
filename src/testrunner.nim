@@ -26,12 +26,17 @@ type
     shuffle*: bool
     showProgress*: bool
     showOutput*: bool
+    failureOutputOnly*: bool
+    showCompilerOutput*: bool
 
   AtlasTestResult* = object
     label*: string
     path*: Path
     commandLine*: string
     exitCode*: int
+    compileExitCode*: int
+    compileOutput*: string
+    runOutput*: string
     output*: string
 
   TestStage = enum
@@ -61,8 +66,10 @@ type
     jobIndex: int
     label: string
     stage: TestStage
-    output: string
     exitCode: int
+    compileExitCode: int
+    compileOutput: string
+    runOutput: string
 
   TestProgressEventQueue = object
     lock: Lock
@@ -98,6 +105,7 @@ const
   TestProgressPollSleepMs = 25
   TestProgressQuietMs = 1500
   TestProgressSpinnerFrames = "|/-\\"
+  TestProgressLeftPadding = 2
 
 var testRunCancelled: Atomic[bool]
 
@@ -108,7 +116,9 @@ proc initAtlasTestOptions*(projectDir = Path"";
                            selectors: seq[string] = @[];
                            shuffle = true;
                            showProgress = true;
-                           showOutput = true): AtlasTestOptions =
+                           showOutput = true;
+                           failureOutputOnly = false;
+                           showCompilerOutput = false): AtlasTestOptions =
   AtlasTestOptions(
     projectDir: projectDir,
     nimExe: nimExe,
@@ -117,7 +127,9 @@ proc initAtlasTestOptions*(projectDir = Path"";
     selectors: selectors,
     shuffle: shuffle,
     showProgress: showProgress,
-    showOutput: showOutput
+    showOutput: showOutput,
+    failureOutputOnly: failureOutputOnly,
+    showCompilerOutput: showCompilerOutput
   )
 
 proc pushEvent(events: ptr TestProgressEventQueue; event: sink TestProgressEvent) =
@@ -368,35 +380,75 @@ proc formatIdleDuration(elapsedMs: int64): string =
   let tenths = (elapsedMs mod 1000) div 100
   $seconds & "." & $tenths & "s"
 
+proc terminalColumns(): int =
+  try:
+    result = terminalWidth()
+  except CatchableError:
+    result = 80
+  if result <= 0:
+    result = 80
+
+proc clipText(text: string; width: int): string =
+  if width <= 0:
+    result = ""
+  elif text.len <= width:
+    result = text
+  elif width <= 2:
+    result = text[0 ..< width]
+  else:
+    result = text[0 ..< width - 2] & ".."
+
+proc progressBar(stage: TestStage): string =
+  let
+    percent = stagePercent(stage)
+    filled = min(TestProgressBarWidth, (percent * TestProgressBarWidth) div 100)
+  result = "["
+  if filled > 0:
+    if filled > 1:
+      result.add repeat('=', filled - 1)
+    if filled < TestProgressBarWidth:
+      result.add ">"
+    else:
+      result.add "="
+  if filled < TestProgressBarWidth:
+    result.add repeat(' ', TestProgressBarWidth - filled)
+  result.add "]"
+
+proc progressPhase(state: TestJobState; now: MonoTime): string =
+  result = state.stage.stageName()
+  if state.running:
+    let idleMs = inMilliseconds(now - state.lastActivityAt)
+    if idleMs >= TestProgressQuietMs:
+      result = state.stage.stageName() & " " & formatIdleDuration(idleMs)
+    result.add " "
+    result.add spinnerFrame()
+
 proc renderTestProgressBlock(states: seq[TestJobState];
                              now: MonoTime;
                              includeFinished = false): seq[string] =
+  var rows: seq[tuple[label, bar, phase: string]]
+  var phaseWidth = 0
   for state in states:
     if state.running or state.failed or (includeFinished and state.finished):
-      let
-        percent = stagePercent(state.stage)
-        filled = min(TestProgressBarWidth, (percent * TestProgressBarWidth) div 100)
-      var bar = "["
-      if filled > 0:
-        if filled > 1:
-          bar.add repeat('=', filled - 1)
-        if filled < TestProgressBarWidth:
-          bar.add ">"
-        else:
-          bar.add "="
-      if filled < TestProgressBarWidth:
-        bar.add repeat(' ', TestProgressBarWidth - filled)
-      bar.add "]"
+      let phase = progressPhase(state, now)
+      phaseWidth = max(phaseWidth, phase.len)
+      rows.add (state.label, progressBar(state.stage), phase)
 
-      var phase = state.stage.stageName()
-      if state.running:
-        let idleMs = inMilliseconds(now - state.lastActivityAt)
-        if idleMs >= TestProgressQuietMs:
-          phase = state.stage.stageName() & " " & formatIdleDuration(idleMs)
-        phase.add " "
-        phase.add spinnerFrame()
+  let
+    statusWidth = TestProgressBarWidth + 2 + 1 + phaseWidth
+    labelWidth = max(
+      0,
+      terminalColumns() - TestProgressLeftPadding - 1 - statusWidth
+    )
+    padding = repeat(' ', TestProgressLeftPadding)
 
-      result.add "  " & state.label.alignLeft(24) & " " & bar & " " & phase
+  for row in rows:
+    let status = row.bar & " " & row.phase.alignLeft(phaseWidth)
+    if labelWidth > 0:
+      result.add padding & row.label.clipText(labelWidth).alignLeft(labelWidth) &
+        " " & status
+    else:
+      result.add padding & status
 
 proc clearInteractiveBlock(lastLines: var int) =
   if lastLines > 0:
@@ -425,8 +477,12 @@ proc writeInteractiveBlock(lines: seq[string]; lastLines: var int) =
             fgGreen
           else:
             fgCyan
-      let barStart = line.find('[')
-      let barEnd = line.find(']')
+      let barStart = line.rfind('[')
+      let barEnd =
+        if barStart >= 0:
+          line.find(']', barStart)
+        else:
+          -1
       if barStart >= 0 and barEnd > barStart:
         stdout.write line[0..<barStart]
         stdout.styledWrite(color, styleBright, line[barStart..barEnd], resetStyle)
@@ -580,10 +636,14 @@ proc testWorker(args: TestWorkerArgs) {.thread.} =
       stage: tsCompiling
     )
 
+    var compileOutput = ""
+    var runOutput = ""
+    var compileExitCode = 130
+    var exitCode = 130
+    var currentStage = tsCompiling
     try:
-      var output = ""
-      var exitCode = 130
       if not cancellationRequested():
+        currentStage = tsCompiling
         let compileResult = runTestProcess(
           job,
           indexedJob,
@@ -592,10 +652,12 @@ proc testWorker(args: TestWorkerArgs) {.thread.} =
           tsCompiling,
           args
         )
-        output.add compileResult.output
-        exitCode = compileResult.exitCode
+        compileOutput = compileResult.output
+        compileExitCode = compileResult.exitCode
+        exitCode = compileExitCode
 
       if exitCode == 0 and not cancellationRequested():
+        currentStage = tsRunning
         let runResult = runTestProcess(
           job,
           indexedJob,
@@ -604,7 +666,7 @@ proc testWorker(args: TestWorkerArgs) {.thread.} =
           tsRunning,
           args
         )
-        output.add runResult.output
+        runOutput = runResult.output
         exitCode = runResult.exitCode
 
       args.events.pushEvent TestProgressEvent(
@@ -612,17 +674,26 @@ proc testWorker(args: TestWorkerArgs) {.thread.} =
         jobIndex: indexedJob.index,
         label: job.label,
         stage: if exitCode == 0: tsDone else: tsFailed,
-        output: output,
-        exitCode: exitCode
+        exitCode: exitCode,
+        compileExitCode: compileExitCode,
+        compileOutput: compileOutput,
+        runOutput: runOutput
       )
     except CatchableError as exc:
+      if currentStage == tsCompiling:
+        compileOutput.add $exc.name & ": " & exc.msg & "\n"
+        compileExitCode = 1
+      else:
+        runOutput.add $exc.name & ": " & exc.msg & "\n"
       args.events.pushEvent TestProgressEvent(
         kind: tpFinished,
         jobIndex: indexedJob.index,
         label: job.label,
         stage: tsFailed,
-        output: $exc.name & ": " & exc.msg & "\n",
-        exitCode: 1
+        exitCode: 1,
+        compileExitCode: compileExitCode,
+        compileOutput: compileOutput,
+        runOutput: runOutput
       )
 
 proc effectiveJobs(requested, testCount: int): int =
@@ -631,7 +702,13 @@ proc effectiveJobs(requested, testCount: int): int =
   else:
     max(1, min(countProcessors(), testCount))
 
-proc writeResultChunk(result: AtlasTestResult) =
+proc writeOutputText(output: string) =
+  if output.len > 0:
+    stdout.write output
+    if not output.endsWith("\n"):
+      stdout.write "\n"
+
+proc writeResultChunk(result: AtlasTestResult; showCompilerOutput: bool) =
   let status =
     if result.exitCode == 0:
       "passed"
@@ -639,15 +716,15 @@ proc writeResultChunk(result: AtlasTestResult) =
       "failed"
   stdout.writeLine "[atlas:test] " & result.label & " " & status
   stdout.writeLine "[atlas:test] command: " & result.commandLine
-  if result.output.len > 0:
-    stdout.write result.output
-    if not result.output.endsWith("\n"):
-      stdout.write "\n"
+  if showCompilerOutput or result.compileExitCode != 0:
+    writeOutputText(result.compileOutput)
+  writeOutputText(result.runOutput)
   stdout.flushFile()
 
 proc runTestJobs(jobs: seq[TestJob];
                  workerCount: int;
-                 showProgress, showOutput: bool): tuple[
+                 showProgress, showOutput: bool;
+                 failureOutputOnly, showCompilerOutput: bool): tuple[
                    results: seq[AtlasTestResult],
                    cancelled: bool
                  ] =
@@ -724,13 +801,18 @@ proc runTestJobs(jobs: seq[TestJob];
         states[ev.jobIndex].stage = ev.stage
         states[ev.jobIndex].lastActivityAt = now
         result.results[ev.jobIndex].exitCode = ev.exitCode
-        result.results[ev.jobIndex].output = ev.output
+        result.results[ev.jobIndex].compileExitCode = ev.compileExitCode
+        result.results[ev.jobIndex].compileOutput = ev.compileOutput
+        result.results[ev.jobIndex].runOutput = ev.runOutput
+        result.results[ev.jobIndex].output = ev.compileOutput & ev.runOutput
         inc finished
-        if showOutput and not result.cancelled:
+        let shouldWriteOutput = showOutput and not result.cancelled and
+          (not failureOutputOnly or ev.exitCode != 0)
+        if shouldWriteOutput:
           if renderInteractive:
             clearInteractiveBlock(lastLines)
             lastRenderedBlock = ""
-          writeResultChunk(result.results[ev.jobIndex])
+          writeResultChunk(result.results[ev.jobIndex], showCompilerOutput)
           if renderInteractive:
             if renderInteractiveNow(states, now, lastLines, lastRenderedBlock):
               lastRender = now
@@ -781,7 +863,14 @@ proc runAtlasTests*(options: AtlasTestOptions): int =
   if options.shuffle:
     shuffleJobs(jobs)
 
-  let runResult = runTestJobs(jobs, workerCount, options.showProgress, options.showOutput)
+  let runResult = runTestJobs(
+    jobs,
+    workerCount,
+    options.showProgress,
+    options.showOutput,
+    options.failureOutputOnly,
+    options.showCompilerOutput
+  )
   if runResult.cancelled:
     echo "atlas-run: test run interrupted"
     return 130

@@ -158,13 +158,17 @@ atlas-run --project path/to/project.nimble task test -- --flag
 
 `atlas-run test` is a built-in test runner. It runs project tests matching
 `tests/t*.nim` in parallel and prints each test's captured output as a complete
-chunk when that test finishes:
+chunk when that test finishes. Successful compiler output is hidden by default;
+use `--compiler-output` to include it, and `--failure-output` to print only
+failed test chunks:
 
 ```sh
 atlas-run test
 atlas-run test --jobs:4
 atlas-run test --nimcache:.nimcache/atlas-run
 atlas-run test --no-shuffle
+atlas-run test --failure-output
+atlas-run test --compiler-output
 atlas-run test --list
 atlas-run test tatlasrun
 ```

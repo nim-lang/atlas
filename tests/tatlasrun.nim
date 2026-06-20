@@ -122,7 +122,10 @@ task build, "Builds main":
     expect ValueError:
       discard discoverTestFiles(dir, ["missing"])
 
-    check initAtlasTestOptions().shuffle
+    let defaultOptions = initAtlasTestOptions()
+    check defaultOptions.shuffle
+    check not defaultOptions.failureOutputOnly
+    check not defaultOptions.showCompilerOutput
 
   test "runs discovered tests in parallel":
     let dir = freshDir("atlas_run_parallel_tests")
