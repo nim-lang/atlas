@@ -7,7 +7,7 @@
 #
 
 import basic/context
-import nimscriptexec
+import nimble/nimscriptexec
 
 import std/[os, paths, strutils]
 

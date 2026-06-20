@@ -8,7 +8,7 @@
 
 import std/[files, os, paths, strutils]
 
-import basic/[nimblecontext, parse_requires]
+import ../basic/[nimblecontext, parse_requires]
 import nimscriptexec
 
 type

@@ -1,7 +1,7 @@
 import std/[os, paths, strutils, unittest]
 
-import nimblebuilder
-import nimbletaskrunner
+import nimble/nimblebuilder
+import nimble/nimbletaskrunner
 import testrunner
 
 proc freshDir(name: string): Path =

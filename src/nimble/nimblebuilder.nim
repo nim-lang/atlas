@@ -8,8 +8,8 @@
 
 import std/[algorithm, os, osproc, paths, strutils, tables]
 
-import basic/parse_requires
-import basic/reporters
+import ../basic/parse_requires
+import ../basic/reporters
 
 type
   NimbleBinary* = object

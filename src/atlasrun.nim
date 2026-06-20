@@ -9,8 +9,8 @@
 import std/[os, paths, strutils]
 
 import basic/atlasversion
-import nimblebuilder
-import nimbletaskrunner
+import nimble/nimblebuilder
+import nimble/nimbletaskrunner
 import testrunner
 
 const Usage = "atlas-run - Atlas project runner Version " & AtlasVersion & """
