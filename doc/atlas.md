@@ -224,6 +224,14 @@ atlas-run task docs
 atlas-run --project path/to/project.nimble task test -- --flag
 ```
 
+Use `atlas-run build` to compile every binary declared by the project's
+`.nimble` file:
+
+```
+atlas-run build
+atlas-run build --list
+```
+
 Use `atlas-run tests` to run project tests matching `tests/t*.nim` in parallel.
 Successful compiler output is hidden by default; use `--compiler-output` to
 include it, and `--only-errors` to print only failed test chunks:

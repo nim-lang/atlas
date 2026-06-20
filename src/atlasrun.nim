@@ -9,6 +9,7 @@
 import std/[os, paths, strutils]
 
 import basic/atlasversion
+import nimblebuilder
 import nimbletaskrunner
 import testrunner
 
@@ -16,10 +17,12 @@ const Usage = "atlas-run - Atlas project runner Version " & AtlasVersion & """
 
 Usage:
   atlas-run [options] task [--list | task-name [arguments]]
+  atlas-run [options] build [--list]
   atlas-run [options] tests [--list] [--jobs:N] [selector...]
 
 Commands:
   task                  list or run tasks declared in the project's Nimble file
+  build                 build binaries declared in the project's Nimble file
   tests                 run tests matching tests/t*.nim in parallel
 
 Options:
@@ -36,12 +39,12 @@ Options:
 
 With no command, atlas-run prints this help and the project's Nimble tasks.
 For compatibility, atlas-run <name> still runs a Nimble task unless <name> is
-a built-in command such as tests.
+a built-in command such as build or tests.
 """
 
 type
   CliCommand = enum
-    cmdTask, cmdTests
+    cmdTask, cmdBuild, cmdTests
 
   CliOptions = object
     command: CliCommand
@@ -184,6 +187,9 @@ proc parseCliOptions(params: seq[string]): CliOptions =
         of "task":
           result.command = cmdTask
           result.commandSet = true
+        of "build":
+          result.command = cmdBuild
+          result.commandSet = true
         of "tests":
           result.command = cmdTests
           result.commandSet = true
@@ -198,6 +204,8 @@ proc parseCliOptions(params: seq[string]): CliOptions =
             result.task = arg
           else:
             result.taskArgs.add arg
+        of cmdBuild:
+          quit("atlas-run: build does not accept positional arguments: " & arg, 2)
         of cmdTests:
           result.testSelectors.add arg
     inc i
@@ -229,6 +237,19 @@ proc printTests(projectDir: Path; selectors: openArray[string]) =
   for path in tests:
     echo ($path.relativePath(projectDir, '/')).replace("\\", "/")
 
+proc printBinaries(nimbleFile: Path; nimExe: string) =
+  let binaries = listNimbleBinaries(nimbleFile, nimExe)
+  if binaries.len == 0:
+    echo "No binaries declared in " & $nimbleFile
+    return
+
+  var width = 0
+  for binary in binaries:
+    width = max(width, binary.name.len)
+
+  for binary in binaries:
+    echo alignLeft(binary.name, width + 2), $binary.output
+
 proc atlasRunMain(params: seq[string]): int =
   let opts = parseCliOptions(params)
   case opts.command
@@ -244,6 +265,12 @@ proc atlasRunMain(params: seq[string]): int =
       printTasks(nimbleFile)
       return 0
     result = runNimbleTask(nimbleFile, opts.task, opts.taskArgs, opts.nimExe)
+  of cmdBuild:
+    let nimbleFile = resolveNimbleFile(opts.projectArg)
+    if opts.listOnly:
+      printBinaries(nimbleFile, opts.nimExe)
+      return 0
+    result = runNimbleBuild(nimbleFile, opts.nimExe)
   of cmdTests:
     let projectDir = resolveProjectDir(opts.projectArg)
     if opts.listOnly:

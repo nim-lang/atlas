@@ -710,13 +710,19 @@ proc writeOutputText(output: string) =
       stdout.write "\n"
 
 proc writeResultChunk(result: AtlasTestResult; showCompilerOutput: bool) =
-  let status =
-    if result.exitCode == 0:
-      "success"
-    else:
-      "failed"
-  stdout.writeLine "[atlas:test] " & result.label & " " & status
-  stdout.writeLine "[atlas:test] command: " & result.commandLine
+  let
+    status =
+      if result.exitCode == 0:
+        arsSuccess
+      else:
+        arsFailed
+    statusText =
+      if result.exitCode == 0:
+        "success"
+      else:
+        "failed"
+  writeAtlasRunStatusLine(result.label & " ", statusText, status)
+  writeAtlasRunLine("command: " & result.commandLine)
   if showCompilerOutput or result.compileExitCode != 0:
     writeOutputText(result.compileOutput)
   writeOutputText(result.runOutput)
@@ -781,7 +787,7 @@ proc runTestJobs(jobs: seq[TestJob];
       if renderInteractive:
         clearInteractiveBlock(lastLines)
         lastRenderedBlock = ""
-      stdout.writeLine "atlas-run: interrupted; killing running tests"
+      writeAtlasRunStatusLine("interrupted; killing tests ", "running", arsRunning)
       stdout.flushFile()
       killRegisteredProcesses(addr registry)
 
@@ -873,7 +879,7 @@ proc runAtlasTests*(options: AtlasTestOptions): int =
     options.showCompilerOutput
   )
   if runResult.cancelled:
-    echo "atlas-run: test run interrupted"
+    writeAtlasRunStatusLine("test run ", "interrupted", arsFailed)
     return 130
 
   var failures = 0
@@ -882,8 +888,12 @@ proc runAtlasTests*(options: AtlasTestOptions): int =
       inc failures
 
   if failures == 0:
-    echo "atlas-run: ", runResult.results.len, " tests passed"
+    writeAtlasRunStatusLine($runResult.results.len & " tests ", "passed", arsSuccess)
     result = 0
   else:
-    echo "atlas-run: ", failures, " of ", runResult.results.len, " tests failed"
+    writeAtlasRunStatusLine(
+      $failures & " of " & $runResult.results.len & " tests ",
+      "failed",
+      arsFailed
+    )
     result = 1

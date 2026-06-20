@@ -156,6 +156,13 @@ atlas-run task docs
 atlas-run --project path/to/project.nimble task test -- --flag
 ```
 
+`atlas-run build` builds every binary declared by the project's `.nimble` file:
+
+```sh
+atlas-run build
+atlas-run build --list
+```
+
 `atlas-run tests` is a built-in test runner. It runs project tests matching
 `tests/t*.nim` in parallel and prints each test's captured output as a complete
 chunk when that test finishes. Successful compiler output is hidden by default;

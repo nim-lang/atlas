@@ -1,5 +1,6 @@
 import std/[os, paths, strutils, unittest]
 
+import nimblebuilder
 import nimbletaskrunner
 import testrunner
 
@@ -98,6 +99,51 @@ task build, "Builds main":
 
     check runNimbleTask(nimbleFile, "build") == 0
     check fileExists($(dir / Path outputName))
+
+  test "lists binaries from nimble file":
+    let dir = freshDir("atlas_run_lists_binaries")
+    defer:
+      removeDir($dir)
+
+    let nimbleFile = dir / Path"demo.nimble"
+    writeFile($nimbleFile, """
+version = "0.1.0"
+srcDir = "src"
+binDir = "dist"
+bin = @["main", "tools/helper"]
+namedBin = {"main": "demo"}.toTable
+namedBin["tools/helper"] = "helper"
+""")
+
+    let binaries = listNimbleBinaries(nimbleFile)
+    check binaries.len == 2
+    check binaries[0].name == "main"
+    check binaries[0].source == dir / Path"src" / Path"main.nim"
+    check binaries[0].output == dir / Path"dist" / Path("demo".addFileExt(ExeExt))
+    check binaries[1].name == "tools/helper"
+    check binaries[1].source == dir / Path"src" / Path"tools" / Path"helper.nim"
+    check binaries[1].output == dir / Path"dist" / Path("helper".addFileExt(ExeExt))
+
+  test "builds binaries from nimble file":
+    let dir = freshDir("atlas_run_builds_binaries")
+    defer:
+      removeDir($dir)
+
+    let srcDir = dir / Path"src"
+    createDir($srcDir)
+    writeFile($(srcDir / Path"tool.nim"), "echo \"tool\"\n")
+
+    let nimbleFile = dir / Path"demo.nimble"
+    writeFile($nimbleFile, """
+version = "0.1.0"
+srcDir = "src"
+binDir = "dist"
+bin = @["tool"]
+namedBin = {"tool": "demo-tool"}.toTable
+""")
+
+    check runNimbleBuild(nimbleFile) == 0
+    check fileExists($(dir / Path"dist" / Path("demo-tool".addFileExt(ExeExt))))
 
   test "discovers t-star test files":
     let dir = freshDir("atlas_run_discovers_tests")
