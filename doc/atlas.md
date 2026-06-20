@@ -214,6 +214,16 @@ in its description (or name or list of tags).
 
 Use the project's `.nimble` file to set up dependencies.
 
+### Run Nimble tasks
+
+Use `atlas-run` to list or run tasks from the current project's `.nimble` file:
+
+```
+atlas-run --list
+atlas-run test
+atlas-run --project path/to/project.nimble test -- --flag
+```
+
 ### Update [filter]
 
 Update every dependency that matches `filter` by name or URL. If no filter is given,

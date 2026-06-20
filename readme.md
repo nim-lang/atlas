@@ -12,7 +12,7 @@ Building from source:
 git clone https://github.com/nim-lang/atlas.git
 cd atlas/
 nim build
-# copy bin/atlas[.exe] somewhere in your PATH
+# copy bin/atlas[.exe] and bin/atlas-run[.exe] somewhere in your PATH
 ```
 
 Install with the bootstrap script:
@@ -21,7 +21,7 @@ Install with the bootstrap script:
 curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | bash -
 ```
 
-This clones and builds Atlas in `/tmp` and installs `atlas` into
+This clones and builds Atlas in `/tmp` and installs `atlas` and `atlas-run` into
 `~/.nimble/bin` by default. To install somewhere else:
 
 ```sh
@@ -145,6 +145,16 @@ Now `ws/` contains all the dependencies for `choosenim` such as `zippy`, `checks
 ## Debugging
 
 Sometimes it's helpful to understand what Atlas is doing. You can run commands with `atlas --verbosity=info` (or `--verbosity=debug`) to get more information.
+
+## Running Nimble Tasks
+
+`atlas-run` runs tasks from the current project's `.nimble` file without using Nimble:
+
+```sh
+atlas-run --list
+atlas-run test
+atlas-run --project path/to/project.nimble test -- --flag
+```
 
 ## Installing Nim with Atlas
 

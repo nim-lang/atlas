@@ -6,7 +6,8 @@ license = "MIT"
 srcDir = "src"
 skipDirs = @["doc"]
 binDir = "bin"
-bin = @["atlas"]
+bin = @["atlas", "atlasrun"]
+namedBin = {"atlasrun": "atlas-run"}.toTable
 
 # Dependencies
 

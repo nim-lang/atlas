@@ -128,8 +128,10 @@ jobs:
         run: |
           if [[ -f bin/atlas.exe ]]; then
             ./bin/atlas.exe --version
+            ./bin/atlas-run.exe --version
           else
             ./bin/atlas --version
+            ./bin/atlas-run --version
           fi
 
       - name: Package release artifact
@@ -139,8 +141,10 @@ jobs:
           mkdir -p "$package_dir"
           if [[ -f bin/atlas.exe ]]; then
             cp bin/atlas.exe "$package_dir/"
+            cp bin/atlas-run.exe "$package_dir/"
           else
             cp bin/atlas "$package_dir/"
+            cp bin/atlas-run "$package_dir/"
           fi
           cp license.txt readme.md "$package_dir/"
           if [[ '${{ matrix.target.os }}' == 'windows' ]]; then
@@ -194,11 +198,12 @@ jobs:
             local cc="$4"
             local package_dir="dist/${artifact}"
 
-            rm -f bin/atlas
+            rm -f bin/atlas bin/atlas-run
             OS=linux ARCH="$nim_arch" CC="$cc" nim buildRelease
 
             mkdir -p "$package_dir"
             cp bin/atlas "$package_dir/"
+            cp bin/atlas-run "$package_dir/"
             cp license.txt readme.md "$package_dir/"
             tar -czf "dist/${archive}" -C dist "$artifact"
           }
