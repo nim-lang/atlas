@@ -151,9 +151,22 @@ Sometimes it's helpful to understand what Atlas is doing. You can run commands w
 `atlas-run` runs tasks from the current project's `.nimble` file without using Nimble:
 
 ```sh
-atlas-run --list
+atlas-run task --list
+atlas-run task docs
+atlas-run --project path/to/project.nimble task test -- --flag
+```
+
+`atlas-run test` is a built-in test runner. It runs project tests matching
+`tests/t*.nim` in parallel and prints each test's captured output as a complete
+chunk when that test finishes:
+
+```sh
 atlas-run test
-atlas-run --project path/to/project.nimble test -- --flag
+atlas-run test --jobs:4
+atlas-run test --nimcache:.nimcache/atlas-run
+atlas-run test --no-shuffle
+atlas-run test --list
+atlas-run test tatlasrun
 ```
 
 ## Installing Nim with Atlas

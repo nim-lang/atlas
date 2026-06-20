@@ -219,9 +219,20 @@ Use the project's `.nimble` file to set up dependencies.
 Use `atlas-run` to list or run tasks from the current project's `.nimble` file:
 
 ```
-atlas-run --list
+atlas-run task --list
+atlas-run task docs
+atlas-run --project path/to/project.nimble task test -- --flag
+```
+
+Use `atlas-run test` to run project tests matching `tests/t*.nim` in parallel:
+
+```
 atlas-run test
-atlas-run --project path/to/project.nimble test -- --flag
+atlas-run test --jobs:4
+atlas-run test --nimcache:.nimcache/atlas-run
+atlas-run test --no-shuffle
+atlas-run test --list
+atlas-run test tatlasrun
 ```
 
 ### Update [filter]

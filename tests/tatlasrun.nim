@@ -1,6 +1,7 @@
-import std/[os, paths, unittest]
+import std/[os, paths, strutils, unittest]
 
 import nimbletaskrunner
+import testrunner
 
 proc freshDir(name: string): Path =
   result = Path(getTempDir()) / Path name
@@ -97,3 +98,73 @@ task build, "Builds main":
 
     check runNimbleTask(nimbleFile, "build") == 0
     check fileExists($(dir / Path outputName))
+
+  test "discovers t-star test files":
+    let dir = freshDir("atlas_run_discovers_tests")
+    defer:
+      removeDir($dir)
+
+    let testsDir = dir / Path"tests"
+    createDir($testsDir)
+    writeFile($(testsDir / Path"talpha.nim"), "discard\n")
+    writeFile($(testsDir / Path"tbeta.nim"), "discard\n")
+    writeFile($(testsDir / Path"other.nim"), "discard\n")
+
+    let tests = discoverTestFiles(dir)
+    check tests.len == 2
+    check ($tests[0]).endsWith("tests/talpha.nim")
+    check ($tests[1]).endsWith("tests/tbeta.nim")
+
+    let selected = discoverTestFiles(dir, ["tbeta"])
+    check selected.len == 1
+    check ($selected[0]).endsWith("tests/tbeta.nim")
+
+    expect ValueError:
+      discard discoverTestFiles(dir, ["missing"])
+
+    check initAtlasTestOptions().shuffle
+
+  test "runs discovered tests in parallel":
+    let dir = freshDir("atlas_run_parallel_tests")
+    defer:
+      removeDir($dir)
+
+    let testsDir = dir / Path"tests"
+    createDir($testsDir)
+    writeFile($(testsDir / Path"tone.nim"), """
+writeFile("one.out", "ok")
+""")
+    writeFile($(testsDir / Path"ttwo.nim"), """
+writeFile("two.out", "ok")
+""")
+
+    let code = runAtlasTests(initAtlasTestOptions(
+      projectDir = dir,
+      jobs = 2,
+      showProgress = false,
+      showOutput = false
+    ))
+    check code == 0
+    check readFile($(dir / Path"one.out")) == "ok"
+    check readFile($(dir / Path"two.out")) == "ok"
+    check dirExists($(dir / Path".nimcache" / Path"atlas-run" / Path"tests" / Path"tone"))
+    check dirExists($(dir / Path".nimcache" / Path"atlas-run" / Path"tests" / Path"ttwo"))
+
+  test "uses custom nimcache root with per-test subdirectories":
+    let dir = freshDir("atlas_run_custom_nimcache")
+    defer:
+      removeDir($dir)
+
+    let testsDir = dir / Path"tests"
+    createDir($testsDir)
+    writeFile($(testsDir / Path"tcache.nim"), "discard\n")
+
+    let code = runAtlasTests(initAtlasTestOptions(
+      projectDir = dir,
+      nimcacheDir = Path"custom-cache",
+      shuffle = false,
+      showProgress = false,
+      showOutput = false
+    ))
+    check code == 0
+    check dirExists($(dir / Path"custom-cache" / Path"tests" / Path"tcache"))
