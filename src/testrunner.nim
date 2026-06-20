@@ -26,7 +26,7 @@ type
     shuffle*: bool
     showProgress*: bool
     showOutput*: bool
-    failureOutputOnly*: bool
+    onlyErrors*: bool
     showCompilerOutput*: bool
 
   AtlasTestResult* = object
@@ -117,7 +117,7 @@ proc initAtlasTestOptions*(projectDir = Path"";
                            shuffle = true;
                            showProgress = true;
                            showOutput = true;
-                           failureOutputOnly = false;
+                           onlyErrors = false;
                            showCompilerOutput = false): AtlasTestOptions =
   AtlasTestOptions(
     projectDir: projectDir,
@@ -128,7 +128,7 @@ proc initAtlasTestOptions*(projectDir = Path"";
     shuffle: shuffle,
     showProgress: showProgress,
     showOutput: showOutput,
-    failureOutputOnly: failureOutputOnly,
+    onlyErrors: onlyErrors,
     showCompilerOutput: showCompilerOutput
   )
 
@@ -360,7 +360,7 @@ proc stageName(stage: TestStage): string =
   of tsRunning:
     "running"
   of tsDone:
-    "done"
+    "success"
   of tsFailed:
     "failed"
 
@@ -468,12 +468,12 @@ proc writeInteractiveBlock(lines: seq[string]; lastLines: var int) =
       stdout.write line
     else:
       let
-        isDone = " done" in line
+        isSuccess = " success" in line
         isFailed = " failed" in line
         color =
           if isFailed:
             fgRed
-          elif isDone:
+          elif isSuccess:
             fgGreen
           else:
             fgCyan
@@ -700,7 +700,8 @@ proc effectiveJobs(requested, testCount: int): int =
   if requested > 0:
     max(1, min(requested, testCount))
   else:
-    max(1, min(countProcessors(), testCount))
+    let defaultJobs = max(1, countProcessors() div 2)
+    max(1, min(defaultJobs, testCount))
 
 proc writeOutputText(output: string) =
   if output.len > 0:
@@ -711,7 +712,7 @@ proc writeOutputText(output: string) =
 proc writeResultChunk(result: AtlasTestResult; showCompilerOutput: bool) =
   let status =
     if result.exitCode == 0:
-      "passed"
+      "success"
     else:
       "failed"
   stdout.writeLine "[atlas:test] " & result.label & " " & status
@@ -724,7 +725,7 @@ proc writeResultChunk(result: AtlasTestResult; showCompilerOutput: bool) =
 proc runTestJobs(jobs: seq[TestJob];
                  workerCount: int;
                  showProgress, showOutput: bool;
-                 failureOutputOnly, showCompilerOutput: bool): tuple[
+                 onlyErrors, showCompilerOutput: bool): tuple[
                    results: seq[AtlasTestResult],
                    cancelled: bool
                  ] =
@@ -807,7 +808,7 @@ proc runTestJobs(jobs: seq[TestJob];
         result.results[ev.jobIndex].output = ev.compileOutput & ev.runOutput
         inc finished
         let shouldWriteOutput = showOutput and not result.cancelled and
-          (not failureOutputOnly or ev.exitCode != 0)
+          (not onlyErrors or ev.exitCode != 0)
         if shouldWriteOutput:
           if renderInteractive:
             clearInteractiveBlock(lastLines)
@@ -868,7 +869,7 @@ proc runAtlasTests*(options: AtlasTestOptions): int =
     workerCount,
     options.showProgress,
     options.showOutput,
-    options.failureOutputOnly,
+    options.onlyErrors,
     options.showCompilerOutput
   )
   if runResult.cancelled:

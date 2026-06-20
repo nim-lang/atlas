@@ -16,11 +16,11 @@ const Usage = "atlas-run - Atlas project runner Version " & AtlasVersion & """
 
 Usage:
   atlas-run [options] task [--list | task-name [arguments]]
-  atlas-run [options] test [--list] [--jobs:N] [test-selector...]
+  atlas-run [options] tests [--list] [--jobs:N] [selector...]
 
 Commands:
   task                  list or run tasks declared in the project's Nimble file
-  test                  run tests matching tests/t*.nim in parallel
+  tests                 run tests matching tests/t*.nim in parallel
 
 Options:
   --help, -h            show this help
@@ -31,18 +31,17 @@ Options:
   --jobs=N, -j:N        number of parallel test jobs, or auto
   --nimcache=path       test cache root; each test gets a subdirectory
   --no-shuffle          run tests in sorted discovery order
-  --shuffle             shuffle test order (default)
-  --failure-output      only print output chunks for failed tests
+  --only-errors         only print output chunks for failed tests
   --compiler-output     include compiler output from successful test builds
 
 With no command, atlas-run prints this help and the project's Nimble tasks.
 For compatibility, atlas-run <name> still runs a Nimble task unless <name> is
-a built-in command such as test.
+a built-in command such as tests.
 """
 
 type
   CliCommand = enum
-    cmdTask, cmdTest
+    cmdTask, cmdTests
 
   CliOptions = object
     command: CliCommand
@@ -54,7 +53,7 @@ type
     jobs: int
     testOptionsSeen: bool
     shuffle: bool
-    failureOutputOnly: bool
+    onlyErrors: bool
     showCompilerOutput: bool
     task: string
     taskArgs: seq[string]
@@ -125,7 +124,7 @@ proc parseCliOptions(params: seq[string]): CliOptions =
         break
       else:
         result.taskArgs.add arg
-    elif result.command == cmdTest and arg == "--":
+    elif result.command == cmdTests and arg == "--":
       inc i
       while i < params.len:
         result.testSelectors.add params[i]
@@ -166,15 +165,12 @@ proc parseCliOptions(params: seq[string]): CliOptions =
       of "nimcache", "nimcache-dir", "nimcache-root":
         result.testOptionsSeen = true
         result.nimcacheDir = Path readOptionValue(params, i, arg, value)
-      of "shuffle":
-        result.testOptionsSeen = true
-        result.shuffle = true
       of "no-shuffle":
         result.testOptionsSeen = true
         result.shuffle = false
-      of "failure-output":
+      of "only-errors":
         result.testOptionsSeen = true
-        result.failureOutputOnly = true
+        result.onlyErrors = true
       of "compiler-output", "compile-output":
         result.testOptionsSeen = true
         result.showCompilerOutput = true
@@ -188,8 +184,8 @@ proc parseCliOptions(params: seq[string]): CliOptions =
         of "task":
           result.command = cmdTask
           result.commandSet = true
-        of "test":
-          result.command = cmdTest
+        of "tests":
+          result.command = cmdTests
           result.commandSet = true
         else:
           result.command = cmdTask
@@ -202,12 +198,12 @@ proc parseCliOptions(params: seq[string]): CliOptions =
             result.task = arg
           else:
             result.taskArgs.add arg
-        of cmdTest:
+        of cmdTests:
           result.testSelectors.add arg
     inc i
 
-  if result.testOptionsSeen and result.command != cmdTest:
-    quit("atlas-run: test options require the test command", 2)
+  if result.testOptionsSeen and result.command != cmdTests:
+    quit("atlas-run: test options require the tests command", 2)
 
 proc printTasks(nimbleFile: Path) =
   let tasks = listNimbleTasks(nimbleFile)
@@ -248,7 +244,7 @@ proc atlasRunMain(params: seq[string]): int =
       printTasks(nimbleFile)
       return 0
     result = runNimbleTask(nimbleFile, opts.task, opts.taskArgs, opts.nimExe)
-  of cmdTest:
+  of cmdTests:
     let projectDir = resolveProjectDir(opts.projectArg)
     if opts.listOnly:
       printTests(projectDir, opts.testSelectors)
@@ -260,7 +256,7 @@ proc atlasRunMain(params: seq[string]): int =
       jobs = opts.jobs,
       selectors = opts.testSelectors,
       shuffle = opts.shuffle,
-      failureOutputOnly = opts.failureOutputOnly,
+      onlyErrors = opts.onlyErrors,
       showCompilerOutput = opts.showCompilerOutput
     ))
 

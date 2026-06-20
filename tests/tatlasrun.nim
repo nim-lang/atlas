@@ -124,7 +124,7 @@ task build, "Builds main":
 
     let defaultOptions = initAtlasTestOptions()
     check defaultOptions.shuffle
-    check not defaultOptions.failureOutputOnly
+    check not defaultOptions.onlyErrors
     check not defaultOptions.showCompilerOutput
 
   test "runs discovered tests in parallel":

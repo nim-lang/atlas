@@ -224,19 +224,23 @@ atlas-run task docs
 atlas-run --project path/to/project.nimble task test -- --flag
 ```
 
-Use `atlas-run test` to run project tests matching `tests/t*.nim` in parallel.
+Use `atlas-run tests` to run project tests matching `tests/t*.nim` in parallel.
 Successful compiler output is hidden by default; use `--compiler-output` to
-include it, and `--failure-output` to print only failed test chunks:
+include it, and `--only-errors` to print only failed test chunks:
+
+Selectors are positional arguments. A selector can be a test module name,
+filename, relative path, or absolute path; multiple selectors run each matched
+test once.
 
 ```
-atlas-run test
-atlas-run test --jobs:4
-atlas-run test --nimcache:.nimcache/atlas-run
-atlas-run test --no-shuffle
-atlas-run test --failure-output
-atlas-run test --compiler-output
-atlas-run test --list
-atlas-run test tatlasrun
+atlas-run tests
+atlas-run tests --jobs:4
+atlas-run tests --nimcache:.nimcache/atlas-run
+atlas-run tests --no-shuffle
+atlas-run tests --only-errors
+atlas-run tests --compiler-output
+atlas-run tests --list
+atlas-run tests tatlasrun
 ```
 
 ### Update [filter]
