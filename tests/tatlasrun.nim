@@ -10,6 +10,9 @@ proc freshDir(name: string): Path =
     removeDir($result)
   createDir($result)
 
+proc normalizedPath(path: string): string =
+  path.replace("\\", "/")
+
 suite "atlas-run":
   test "lists tasks from nimble file":
     let dir = freshDir("atlas_run_lists_tasks")
@@ -63,7 +66,8 @@ task where, "Writes package dir":
 """)
 
     check runNimbleTask(nimbleFile, "where") == 0
-    check readFile($(dir / Path"dir.txt")) == $dir.absolutePath()
+    check normalizedPath(readFile($(dir / Path"dir.txt"))) ==
+      normalizedPath($dir.absolutePath())
 
   test "unknown task fails before script execution":
     let dir = freshDir("atlas_run_unknown_task")
@@ -158,12 +162,12 @@ namedBin = {"tool": "demo-tool"}.toTable
 
     let tests = discoverTestFiles(dir)
     check tests.len == 2
-    check ($tests[0]).endsWith("tests/talpha.nim")
-    check ($tests[1]).endsWith("tests/tbeta.nim")
+    check normalizedPath($tests[0]).endsWith("tests/talpha.nim")
+    check normalizedPath($tests[1]).endsWith("tests/tbeta.nim")
 
     let selected = discoverTestFiles(dir, ["tbeta"])
     check selected.len == 1
-    check ($selected[0]).endsWith("tests/tbeta.nim")
+    check normalizedPath($selected[0]).endsWith("tests/tbeta.nim")
 
     expect ValueError:
       discard discoverTestFiles(dir, ["missing"])
