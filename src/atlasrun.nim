@@ -18,12 +18,12 @@ const Usage = "atlas-run - Atlas project runner Version " & AtlasVersion & """
 Usage:
   atlas-run [options] task [--list | task-name [arguments]]
   atlas-run [options] build [--list]
-  atlas-run [options] tests [--list] [--jobs:N] [selector...]
+  atlas-run [options] tests [--list] [--jobs:N] [--compile-only] [selector...]
 
 Commands:
   task                  list or run tasks declared in the project's Nimble file
   build                 build binaries declared in the project's Nimble file
-  tests                 run tests matching tests/t*.nim in parallel
+  tests                 run tests matching tests/t*.nim, or selected Nim files
 
 Options:
   --help, -h            show this help
@@ -36,6 +36,7 @@ Options:
   --no-shuffle          run tests in sorted discovery order
   --only-errors         only print output chunks for failed tests
   --compiler-output     include compiler output from successful test builds
+  --compile-only        compile tests without running them
 
 With no command, atlas-run prints this help and the project's Nimble tasks.
 For compatibility, atlas-run <name> still runs a Nimble task unless <name> is
@@ -58,6 +59,7 @@ type
     shuffle: bool
     onlyErrors: bool
     showCompilerOutput: bool
+    compileOnly: bool
     task: string
     taskArgs: seq[string]
     testSelectors: seq[string]
@@ -177,6 +179,9 @@ proc parseCliOptions(params: seq[string]): CliOptions =
       of "compiler-output", "compile-output":
         result.testOptionsSeen = true
         result.showCompilerOutput = true
+      of "compile-only":
+        result.testOptionsSeen = true
+        result.compileOnly = true
       else:
         quit("atlas-run: unknown option: " & arg, 2)
     elif arg.startsWith("-"):
@@ -282,6 +287,7 @@ proc atlasRunMain(params: seq[string]): int =
       nimcacheDir = opts.nimcacheDir,
       jobs = opts.jobs,
       selectors = opts.testSelectors,
+      compileOnly = opts.compileOnly,
       shuffle = opts.shuffle,
       onlyErrors = opts.onlyErrors,
       showCompilerOutput = opts.showCompilerOutput

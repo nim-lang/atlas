@@ -23,6 +23,7 @@ type
     nimcacheDir*: Path
     jobs*: int
     selectors*: seq[string]
+    compileOnly*: bool
     shuffle*: bool
     showProgress*: bool
     showOutput*: bool
@@ -77,6 +78,7 @@ type
 
   TestWorkerArgs = object
     jobs: seq[IndexedTestJob]
+    compileOnly: bool
     events: ptr TestProgressEventQueue
     registry: ptr TestProcessRegistry
     startLock: ptr Lock
@@ -114,6 +116,7 @@ proc initAtlasTestOptions*(projectDir = Path"";
                            nimcacheDir = Path"";
                            jobs = DefaultAtlasTestJobs;
                            selectors: seq[string] = @[];
+                           compileOnly = false;
                            shuffle = true;
                            showProgress = true;
                            showOutput = true;
@@ -125,6 +128,7 @@ proc initAtlasTestOptions*(projectDir = Path"";
     nimcacheDir: nimcacheDir,
     jobs: jobs,
     selectors: selectors,
+    compileOnly: compileOnly,
     shuffle: shuffle,
     showProgress: showProgress,
     showOutput: showOutput,
@@ -238,27 +242,68 @@ proc effectiveProjectDir(projectDir: Path): Path =
 proc testLabel(projectDir, path: Path): string =
   normalizePathText($path.relativePath(projectDir, '/'))
 
-proc matchesSelector(projectDir, path: Path; selector: string): bool =
-  let
-    normalized = selector.normalizePathText()
-    rel = testLabel(projectDir, path)
-    filename = normalizePathText($path.extractFilename())
-    name = normalizePathText($path.splitFile().name)
-    selectedPath = Path(selector).expandTilde().absolutePath()
-
-  result =
-    normalized == rel or
-    normalized == filename or
-    normalized == name or
-    selectedPath == path
-
-proc addUnique(paths: var seq[Path]; path: Path) =
+proc addUniquePath(paths: var seq[Path]; path: Path) =
   var found = false
   for existing in paths:
     if existing == path:
       found = true
   if not found:
     paths.add path
+
+proc hasPathSeparator(selector: string): bool =
+  selector.find('/') >= 0 or selector.find('\\') >= 0
+
+proc hasGlobWildcard(selector: string): bool =
+  selector.find('*') >= 0 or selector.find('?') >= 0 or selector.find('[') >= 0
+
+proc isNimSource(path: Path): bool =
+  normalizePathText($path).endsWith(".nim")
+
+proc selectorProjectPath(projectDir: Path; selector: string): Path =
+  let selectedPath = Path(selector).expandTilde()
+  if selectedPath.isAbsolute:
+    result = selectedPath.absolutePath()
+  else:
+    result = (projectDir / selectedPath).absolutePath()
+
+proc selectorProjectPattern(projectDir: Path; selector: string): string =
+  let selectedPath = Path(selector).expandTilde()
+  if selectedPath.isAbsolute:
+    result = $selectedPath
+  else:
+    result = $(projectDir / selectedPath)
+
+proc matchesTestSelector(path: Path; selector: string): bool =
+  let
+    name = normalizePathText($path.splitFile().name)
+    selectorName = normalizePathText($Path(selector).splitFile().name)
+    testName =
+      if selectorName.startsWith("t"):
+        selectorName
+      else:
+        "t" & selectorName
+
+  if selector.endsWith(".nim"):
+    result = name == testName
+  else:
+    result = name.startsWith(testName)
+
+proc discoverDirectSelectorFiles(projectDir: Path; selector: string): seq[Path] =
+  if selector.hasGlobWildcard():
+    for match in walkPattern(selectorProjectPattern(projectDir, selector)):
+      let path = Path(match).absolutePath()
+      if fileExists($path) and path.isNimSource():
+        result.addUniquePath path
+  else:
+    let path = selectorProjectPath(projectDir, selector)
+    if fileExists($path) and path.isNimSource():
+      result.addUniquePath path
+
+  result.sort(proc(a, b: Path): int = cmp($a, $b))
+
+proc matchesSelector(path: Path; selector: string): bool =
+  if not selector.hasPathSeparator():
+    result = matchesTestSelector(path, selector)
 
 proc discoverAllTestFiles(projectDir: Path): seq[Path] =
   let testsDir = projectDir / Path"tests"
@@ -277,10 +322,15 @@ proc discoverTestFiles*(projectDir: Path;
   else:
     for selector in selectors:
       var matched = false
-      for path in allFiles:
-        if matchesSelector(projectDir, path, selector):
-          result.addUnique path
+      if selector.hasPathSeparator():
+        for path in discoverDirectSelectorFiles(projectDir, selector):
+          result.addUniquePath path
           matched = true
+      else:
+        for path in allFiles:
+          if matchesSelector(path, selector):
+            result.addUniquePath path
+            matched = true
       if not matched:
         raise newException(ValueError, "test selector did not match: " & selector)
 
@@ -305,12 +355,21 @@ proc effectiveNimcacheRoot(projectDir, nimcacheDir: Path): Path =
 
 proc testNimcacheDir(projectDir, nimcacheRoot, path: Path): Path =
   let relativeTest = path.relativePath(projectDir, '/').changeFileExt("")
-  nimcacheRoot / relativeTest
+  let relativeText = normalizePathText($relativeTest)
+  if relativeText == ".." or relativeText.startsWith("../") or
+      relativeText.startsWith("/"):
+    var safeName = normalizePathText($path.absolutePath().changeFileExt(""))
+    safeName = safeName.replace(":", "_").replace("/", "_")
+    result = nimcacheRoot / Path"external" / Path safeName
+  else:
+    result = nimcacheRoot / relativeTest
 
 proc testExecutablePath(nimcache, path: Path): Path =
   nimcache / Path(($path.splitFile().name).addFileExt(ExeExt))
 
-proc makeTestJob(projectDir, nimcacheRoot, path: Path; nimExe: string): TestJob =
+proc makeTestJob(projectDir, nimcacheRoot, path: Path;
+                 nimExe: string;
+                 compileOnly: bool): TestJob =
   let
     label = testLabel(projectDir, path)
     nimcache = testNimcacheDir(projectDir, nimcacheRoot, path)
@@ -323,6 +382,12 @@ proc makeTestJob(projectDir, nimcacheRoot, path: Path; nimExe: string): TestJob 
       "--out:" & $executable,
       label
     ]
+    compileCommandLine = quoteCommand(nimExe, compileArgs)
+    commandLine =
+      if compileOnly:
+        compileCommandLine
+      else:
+        compileCommandLine & " && " & quoteShell($executable)
   createDir($nimcache)
   TestJob(
     label: label,
@@ -334,7 +399,7 @@ proc makeTestJob(projectDir, nimcacheRoot, path: Path; nimExe: string): TestJob 
     runCommand: $executable,
     runArgs: @[],
     workingDir: $projectDir,
-    commandLine: quoteCommand(nimExe, compileArgs) & " && " & quoteShell($executable)
+    commandLine: commandLine
   )
 
 proc shuffleJobs(jobs: var seq[TestJob]) =
@@ -656,7 +721,7 @@ proc testWorker(args: TestWorkerArgs) {.thread.} =
         compileExitCode = compileResult.exitCode
         exitCode = compileExitCode
 
-      if exitCode == 0 and not cancellationRequested():
+      if exitCode == 0 and not args.compileOnly and not cancellationRequested():
         currentStage = tsRunning
         let runResult = runTestProcess(
           job,
@@ -731,7 +796,8 @@ proc writeResultChunk(result: AtlasTestResult; showCompilerOutput: bool) =
 proc runTestJobs(jobs: seq[TestJob];
                  workerCount: int;
                  showProgress, showOutput: bool;
-                 onlyErrors, showCompilerOutput: bool): tuple[
+                 onlyErrors, showCompilerOutput: bool;
+                 compileOnly: bool): tuple[
                    results: seq[AtlasTestResult],
                    cancelled: bool
                  ] =
@@ -765,6 +831,7 @@ proc runTestJobs(jobs: seq[TestJob];
       testWorker,
       TestWorkerArgs(
         jobs: workerSlices[idx],
+        compileOnly: compileOnly,
         events: addr eventQueue,
         registry: addr registry,
         startLock: addr startLock
@@ -866,7 +933,13 @@ proc runAtlasTests*(options: AtlasTestOptions): int =
     workerCount = effectiveJobs(options.jobs, testFiles.len)
   var jobs: seq[TestJob]
   for path in testFiles:
-    jobs.add makeTestJob(projectDir, nimcacheRoot, path, options.nimExe)
+    jobs.add makeTestJob(
+      projectDir,
+      nimcacheRoot,
+      path,
+      options.nimExe,
+      options.compileOnly
+    )
   if options.shuffle:
     shuffleJobs(jobs)
 
@@ -876,7 +949,8 @@ proc runAtlasTests*(options: AtlasTestOptions): int =
     options.showProgress,
     options.showOutput,
     options.onlyErrors,
-    options.showCompilerOutput
+    options.showCompilerOutput,
+    options.compileOnly
   )
   if runResult.cancelled:
     writeAtlasRunStatusLine("test run ", "interrupted", arsFailed)
@@ -891,11 +965,21 @@ proc runAtlasTests*(options: AtlasTestOptions): int =
     passed = total - failures
 
   if failures == 0:
-    writeAtlasRunStatusLine($passed & "/" & $total & " ", "passed", arsSuccess)
+    let statusText =
+      if options.compileOnly:
+        "compiled"
+      else:
+        "passed"
+    writeAtlasRunStatusLine($passed & "/" & $total & " ", statusText, arsSuccess)
     result = 0
   else:
+    let successText =
+      if options.compileOnly:
+        " compiled, "
+      else:
+        " passed, "
     writeAtlasRunStatusLine(
-      $passed & "/" & $total & " passed, " & $failures & "/" & $total & " ",
+      $passed & "/" & $total & successText & $failures & "/" & $total & " ",
       "failed",
       arsFailed
     )

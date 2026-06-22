@@ -167,7 +167,13 @@ atlas-run build --list
 `tests/t*.nim` in parallel and prints each test's captured output as a complete
 chunk when that test finishes. Successful compiler output is hidden by default;
 use `--compiler-output` to include it, and `--only-errors` to print only
-failed test chunks:
+failed test chunks. Use `--compile-only` to compile matching tests without
+running them.
+
+Selectors without a path separator select discovered tests: `foo` matches
+`tests/tfoo*.nim`, and `foo.nim` matches `tests/tfoo.nim`. Selectors with a
+path separator are direct project-relative or absolute Nim files or glob
+patterns, so `examples/*.nim` selects those example files directly:
 
 ```sh
 atlas-run tests
@@ -176,8 +182,10 @@ atlas-run tests --nimcache:.nimcache/atlas-run
 atlas-run tests --no-shuffle
 atlas-run tests --only-errors
 atlas-run tests --compiler-output
+atlas-run tests --compile-only
 atlas-run tests --list
 atlas-run tests tatlasrun
+atlas-run tests --compile-only examples/*.nim
 ```
 
 ## Installing Nim with Atlas

@@ -158,24 +158,125 @@ namedBin = {"tool": "demo-tool"}.toTable
     createDir($testsDir)
     writeFile($(testsDir / Path"talpha.nim"), "discard\n")
     writeFile($(testsDir / Path"tbeta.nim"), "discard\n")
+    writeFile($(testsDir / Path"tbeta_extra.nim"), "discard\n")
+    writeFile($(testsDir / Path"ttype.nim"), "discard\n")
     writeFile($(testsDir / Path"other.nim"), "discard\n")
 
+    let srcDir = dir / Path"src"
+    createDir($srcDir)
+    writeFile($(srcDir / Path"beta.nim"), "discard\n")
+    writeFile($(srcDir / Path"tbeta.nim"), "discard\n")
+    writeFile($(srcDir / Path"type.nim"), "discard\n")
+
+    let examplesDir = dir / Path"examples"
+    createDir($examplesDir)
+    writeFile($(examplesDir / Path"one.nim"), "discard\n")
+    writeFile($(examplesDir / Path"two.nim"), "discard\n")
+    writeFile($(examplesDir / Path"notes.txt"), "discard\n")
+
     let tests = discoverTestFiles(dir)
-    check tests.len == 2
+    check tests.len == 4
     check normalizedPath($tests[0]).endsWith("tests/talpha.nim")
     check normalizedPath($tests[1]).endsWith("tests/tbeta.nim")
+    check normalizedPath($tests[2]).endsWith("tests/tbeta_extra.nim")
+    check normalizedPath($tests[3]).endsWith("tests/ttype.nim")
 
-    let selected = discoverTestFiles(dir, ["tbeta"])
-    check selected.len == 1
+    let selected = discoverTestFiles(dir, ["beta"])
+    check selected.len == 2
     check normalizedPath($selected[0]).endsWith("tests/tbeta.nim")
+    check normalizedPath($selected[1]).endsWith("tests/tbeta_extra.nim")
+
+    let selectedByFilename = discoverTestFiles(dir, ["beta.nim"])
+    check selectedByFilename.len == 1
+    check normalizedPath($selectedByFilename[0]).endsWith("tests/tbeta.nim")
+
+    let selectedByTestName = discoverTestFiles(dir, ["tbeta"])
+    check selectedByTestName.len == 2
+    check normalizedPath($selectedByTestName[0]).endsWith("tests/tbeta.nim")
+    check normalizedPath($selectedByTestName[1]).endsWith("tests/tbeta_extra.nim")
+
+    let selectedByDirectPath = discoverTestFiles(dir, ["src/beta.nim"])
+    check selectedByDirectPath.len == 1
+    check normalizedPath($selectedByDirectPath[0]).endsWith("src/beta.nim")
+
+    let selectedByDirectTestPath = discoverTestFiles(dir, ["src/tbeta.nim"])
+    check selectedByDirectTestPath.len == 1
+    check normalizedPath($selectedByDirectTestPath[0]).endsWith("src/tbeta.nim")
+
+    let selectedByTSourcePath = discoverTestFiles(dir, ["src/type.nim"])
+    check selectedByTSourcePath.len == 1
+    check normalizedPath($selectedByTSourcePath[0]).endsWith("src/type.nim")
+
+    let selectedByGlob = discoverTestFiles(dir, ["examples/*.nim"])
+    check selectedByGlob.len == 2
+    check normalizedPath($selectedByGlob[0]).endsWith("examples/one.nim")
+    check normalizedPath($selectedByGlob[1]).endsWith("examples/two.nim")
+
+    let selectedByDirectTestsPath = discoverTestFiles(dir, ["tests/tbeta.nim"])
+    check selectedByDirectTestsPath.len == 1
+    check normalizedPath($selectedByDirectTestsPath[0]).endsWith("tests/tbeta.nim")
 
     expect ValueError:
       discard discoverTestFiles(dir, ["missing"])
 
     let defaultOptions = initAtlasTestOptions()
     check defaultOptions.shuffle
+    check not defaultOptions.compileOnly
     check not defaultOptions.onlyErrors
     check not defaultOptions.showCompilerOutput
+
+  test "compile-only compiles tests without running them":
+    let dir = freshDir("atlas_run_compile_only")
+    defer:
+      removeDir($dir)
+
+    let testsDir = dir / Path"tests"
+    createDir($testsDir)
+    writeFile($(testsDir / Path"tcompileonly.nim"), """
+writeFile("ran.out", "ran")
+""")
+
+    let code = runAtlasTests(initAtlasTestOptions(
+      projectDir = dir,
+      compileOnly = true,
+      shuffle = false,
+      showProgress = false,
+      showOutput = false
+    ))
+    check code == 0
+    check fileExists($(dir / Path".nimcache" / Path"atlas-run" /
+      Path"tests" / Path"tcompileonly" / Path("tcompileonly".addFileExt(ExeExt))))
+    check not fileExists($(dir / Path"ran.out"))
+
+  test "compile-only compiles direct path selectors without running them":
+    let dir = freshDir("atlas_run_compile_only_examples")
+    defer:
+      removeDir($dir)
+
+    let examplesDir = dir / Path"examples"
+    createDir($examplesDir)
+    writeFile($(examplesDir / Path"one.nim"), """
+writeFile("ran-one.out", "ran")
+""")
+    writeFile($(examplesDir / Path"two.nim"), """
+writeFile("ran-two.out", "ran")
+""")
+
+    let code = runAtlasTests(initAtlasTestOptions(
+      projectDir = dir,
+      selectors = @["examples/*.nim"],
+      compileOnly = true,
+      shuffle = false,
+      showProgress = false,
+      showOutput = false
+    ))
+    check code == 0
+    check fileExists($(dir / Path".nimcache" / Path"atlas-run" /
+      Path"examples" / Path"one" / Path("one".addFileExt(ExeExt))))
+    check fileExists($(dir / Path".nimcache" / Path"atlas-run" /
+      Path"examples" / Path"two" / Path("two".addFileExt(ExeExt))))
+    check not fileExists($(dir / Path"ran-one.out"))
+    check not fileExists($(dir / Path"ran-two.out"))
 
   test "runs discovered tests in parallel":
     let dir = freshDir("atlas_run_parallel_tests")
