@@ -148,4 +148,6 @@ jobs:
           export ATLAS_REF=""
           "${GITHUB_WORKSPACE}/atlas/install.sh"
           test -x "$INSTALL_DIR/atlas"
+          test -x "$INSTALL_DIR/atlas-run"
           "$INSTALL_DIR/atlas" --version
+          "$INSTALL_DIR/atlas-run" --version

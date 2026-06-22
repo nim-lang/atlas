@@ -74,6 +74,8 @@ const GitProgressIdleRenderIntervalMs = 250
 const GitProgressPollSleepMs = 25
 const GitProgressQuietMs = 1500
 const GitProgressSpinnerFrames = "|/-\\"
+const GitProgressLeftPadding = 2
+const GitProgressPercentWidth = 4
 
 proc pushEvent(events: ptr GitProgressEventQueue; event: sink GitProgressEvent) =
   acquire(events.lock)
@@ -188,66 +190,119 @@ proc formatIdleDuration(elapsedMs: int64): string =
   let tenths = (elapsedMs mod 1000) div 100
   $seconds & "." & $tenths & "s"
 
+proc terminalColumns(): int =
+  try:
+    result = terminalWidth()
+  except CatchableError:
+    result = 80
+  if result <= 0:
+    result = 80
+
+proc clipText(text: string; width: int): string =
+  if width <= 0:
+    result = ""
+  elif text.len <= width:
+    result = text
+  elif width <= 2:
+    result = text[0 ..< width]
+  else:
+    result = text[0 ..< width - 2] & ".."
+
+proc shouldRenderState(state: GitProgressJobState; includeFinished: bool): bool =
+  result = state.running or state.finished
+  if result and state.finished and not state.failed and not includeFinished:
+    result = false
+
+proc progressBar(percent: int): string =
+  let filled =
+    if percent >= 0:
+      min(GitProgressBarWidth, (percent * GitProgressBarWidth) div 100)
+    else:
+      0
+  result = "["
+  if filled > 0:
+    if filled > 1:
+      result.add repeat('=', filled - 1)
+    if filled < GitProgressBarWidth:
+      result.add ">"
+    else:
+      result.add "="
+  if filled < GitProgressBarWidth:
+    result.add repeat(' ', GitProgressBarWidth - filled)
+  result.add "]"
+
+proc progressStatus(state: GitProgressJobState; now: MonoTime): tuple[pct, phase: string] =
+  let status =
+    if state.finished:
+      if state.failed: "failed"
+      else: "success"
+    elif state.running:
+      "running"
+    else:
+      "queued"
+  result.pct =
+    if state.progress.percent >= 0:
+      $state.progress.percent & "%"
+    else:
+      "--"
+  result.phase =
+    if state.finished:
+      status
+    elif state.progress.phase.len > 0:
+      if state.progress.speed.len > 0:
+        state.progress.phase & " " & state.progress.speed
+      else:
+        state.progress.phase
+    else:
+      status
+  if state.running:
+    let
+      idleMs = inMilliseconds(now - state.lastActivityAt)
+      spin = $spinnerFrame()
+    if idleMs >= GitProgressQuietMs:
+      result.phase = "idle " & formatIdleDuration(idleMs) & " " & spin
+    else:
+      result.phase.add " " & spin
+
 proc renderProgressBlock(
     title: string;
     states: seq[GitProgressJobState];
     now: MonoTime;
     includeFinished = false
 ): seq[string] =
+  var rows: seq[tuple[label, bar, pct, phase: string]]
+  var phaseWidth = 0
   for state in states:
-    if not state.running and not state.finished:
-      continue
-    if state.finished and not state.failed and not includeFinished:
-      continue
-    let status =
-      if state.finished:
-        if state.failed: "failed"
-        else: "done"
-      elif state.running:
-        "running"
-      else:
-        "queued"
-    let pct =
-      if state.progress.percent >= 0:
-        $state.progress.percent & "%"
-      else:
-        "--"
-    let idleMs =
-      if state.running:
-        inMilliseconds(now - state.lastActivityAt)
-      else:
-        0
-    var phase =
-      if state.progress.phase.len > 0:
-        if state.progress.speed.len > 0:
-          state.progress.phase & " " & state.progress.speed
-        else:
-          state.progress.phase
-      else:
-        status
-    if state.running:
-      let spin = $spinnerFrame()
-      if idleMs >= GitProgressQuietMs:
-        phase = "idle " & formatIdleDuration(idleMs) & " " & spin
-      else:
-        phase.add " " & spin
-    let filled =
-      if state.progress.percent >= 0:
-        min(GitProgressBarWidth, (state.progress.percent * GitProgressBarWidth) div 100)
-      else:
-        0
-    var bar = "["
-    if filled > 0:
-      if filled > 1:
-        bar.add repeat('=', filled - 1)
-      if filled < GitProgressBarWidth:
-        bar.add ">"
-      else:
-        bar.add "="
-    if filled < GitProgressBarWidth:
-      bar.add repeat(' ', GitProgressBarWidth - filled)
-    bar.add "]"
-    result.add "  " & state.label.alignLeft(14) & " " & bar & " " & pct.align(4) & " " & phase
+    if shouldRenderState(state, includeFinished):
+      let status = progressStatus(state, now)
+      phaseWidth = max(phaseWidth, status.phase.len)
+      rows.add (
+        state.label,
+        progressBar(state.progress.percent),
+        status.pct,
+        status.phase
+      )
+
+  let
+    columns = terminalColumns()
+    fixedStatusWidth = GitProgressBarWidth + 2 + 1 + GitProgressPercentWidth
+    maxPhaseWidth = max(0, columns - GitProgressLeftPadding -
+      fixedStatusWidth - 1)
+    displayPhaseWidth = min(phaseWidth, maxPhaseWidth)
+    statusWidth = fixedStatusWidth +
+      (if displayPhaseWidth > 0: 1 + displayPhaseWidth else: 0)
+    labelWidth = max(0, columns - GitProgressLeftPadding - 1 - statusWidth)
+    padding = repeat(' ', GitProgressLeftPadding)
+
+  for row in rows:
+    var status = row.bar & " " & row.pct.align(GitProgressPercentWidth)
+    if displayPhaseWidth > 0:
+      status.add " " & row.phase.clipText(displayPhaseWidth).alignLeft(displayPhaseWidth)
+    if labelWidth > 0:
+      result.add padding & row.label.clipText(labelWidth).alignLeft(labelWidth) &
+        " " & status
+    else:
+      result.add padding & status
 
 proc clearInteractiveBlock(lastLines: var int) =
   if lastLines <= 0:
@@ -267,18 +322,22 @@ proc writeInteractiveBlock(lines: seq[string]; lastLines: var int) =
     if atlasReporter.noColors:
       stdout.write line
     else:
-      let isDone = " done" in line
+      let isSuccess = " success" in line
       let isFailed = " failed" in line
       let color =
         if isFailed:
           fgRed
-        elif isDone:
+        elif isSuccess:
           fgGreen
         else:
           fgCyan
 
-      let barStart = line.find('[')
-      let barEnd = line.find(']')
+      let barStart = line.rfind('[')
+      let barEnd =
+        if barStart >= 0:
+          line.find(']', barStart)
+        else:
+          -1
       let percentPos =
         if barEnd >= 0:
           line.find('%', barEnd)
@@ -314,7 +373,7 @@ proc writeInteractiveBlock(lines: seq[string]; lastLines: var int) =
           let msgColor =
             if isFailed:
               fgRed
-            elif isDone:
+            elif isSuccess:
               fgWhite
             else:
               fgMagenta
@@ -486,7 +545,7 @@ proc runGitProgressJobs*(
           states[ev.jobIndex].progress = ev.progress
           states[ev.jobIndex].progress.percent = 100
           if states[ev.jobIndex].progress.phase.len == 0:
-            states[ev.jobIndex].progress.phase = "done"
+            states[ev.jobIndex].progress.phase = "success"
           result[ev.jobIndex].progress = states[ev.jobIndex].progress
         else:
           states[ev.jobIndex].progress = ev.progress

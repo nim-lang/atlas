@@ -12,7 +12,7 @@ Building from source:
 git clone https://github.com/nim-lang/atlas.git
 cd atlas/
 nim build
-# copy bin/atlas[.exe] somewhere in your PATH
+# copy bin/atlas[.exe] and bin/atlas-run[.exe] somewhere in your PATH
 ```
 
 Install with the bootstrap script:
@@ -21,7 +21,7 @@ Install with the bootstrap script:
 curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | bash -
 ```
 
-This clones and builds Atlas in `/tmp` and installs `atlas` into
+This clones and builds Atlas in `/tmp` and installs `atlas` and `atlas-run` into
 `~/.nimble/bin` by default. To install somewhere else:
 
 ```sh
@@ -145,6 +145,48 @@ Now `ws/` contains all the dependencies for `choosenim` such as `zippy`, `checks
 ## Debugging
 
 Sometimes it's helpful to understand what Atlas is doing. You can run commands with `atlas --verbosity=info` (or `--verbosity=debug`) to get more information.
+
+## Running Nimble Tasks
+
+`atlas-run` runs tasks from the current project's `.nimble` file without using Nimble:
+
+```sh
+atlas-run task --list
+atlas-run task docs
+atlas-run --project path/to/project.nimble task test -- --flag
+```
+
+`atlas-run build` builds every binary declared by the project's `.nimble` file:
+
+```sh
+atlas-run build
+atlas-run build --list
+```
+
+`atlas-run tests` is a built-in test runner. It runs project tests matching
+`tests/t*.nim` in parallel and prints each test's captured output as a complete
+chunk when that test finishes. Successful compiler output is hidden by default;
+use `--compiler-output` to include it, and `--only-errors` to print only
+failed test chunks. Use `--compile-only` to compile matching tests without
+running them.
+
+Selectors without a path separator select discovered tests: `foo` matches
+`tests/tfoo*.nim`, and `foo.nim` matches `tests/tfoo.nim`. Selectors with a
+path separator are direct project-relative or absolute Nim files or glob
+patterns, so `examples/*.nim` selects those example files directly:
+
+```sh
+atlas-run tests
+atlas-run tests --jobs:4
+atlas-run tests --nimcache:.nimcache/atlas-run
+atlas-run tests --no-shuffle
+atlas-run tests --only-errors
+atlas-run tests --compiler-output
+atlas-run tests --compile-only
+atlas-run tests --list
+atlas-run tests tatlasrun
+atlas-run tests --compile-only examples/*.nim
+```
 
 ## Installing Nim with Atlas
 
