@@ -30,6 +30,9 @@ type
 
   AtlasFatalError* = object of CatchableError
 
+  AtlasRunStatus* = enum
+    arsNeutral, arsRunning, arsSuccess, arsFailed
+
 var atlasReporter* = Reporter(verbosity: Notice)
 
 proc setAtlasVerbosity*(verbosity: MsgKind) =
@@ -52,6 +55,73 @@ proc resetAtlasReporter*() =
 proc setAtlasErrorsColor*(color: ForegroundColor) =
   atlasReporter.errorsColor = color
 
+proc atlasMessageStyle*(c: Reporter; k: MsgKind): tuple[
+    color: ForegroundColor,
+    style: Style
+] =
+  case k
+  of Ignore:
+    (fgWhite, styleDim)
+  of Trace:
+    (fgWhite, styleDim)
+  of Debug:
+    (fgBlue, styleBright)
+  of Info:
+    (fgGreen, styleBright)
+  of Notice:
+    (fgMagenta, styleBright)
+  of Warning:
+    (fgYellow, styleBright)
+  of Error:
+    (c.errorsColor, styleBright)
+
+proc atlasRunStatusColor(status: AtlasRunStatus): ForegroundColor =
+  case status
+  of arsNeutral:
+    atlasReporter.atlasMessageStyle(Trace).color
+  of arsRunning:
+    fgCyan
+  of arsSuccess:
+    atlasReporter.atlasMessageStyle(Info).color
+  of arsFailed:
+    atlasReporter.atlasMessageStyle(Error).color
+
+proc atlasRunStatusStyle(status: AtlasRunStatus): Style =
+  case status
+  of arsRunning:
+    styleBright
+  of arsNeutral:
+    atlasReporter.atlasMessageStyle(Trace).style
+  of arsSuccess:
+    atlasReporter.atlasMessageStyle(Info).style
+  of arsFailed:
+    atlasReporter.atlasMessageStyle(Error).style
+
+proc writeAtlasRunPrefix*() =
+  if atlasReporter.noColors:
+    stdout.write "atlas-run: "
+  else:
+    let (color, style) = atlasReporter.atlasMessageStyle(Notice)
+    stdout.styledWrite(color, style, "atlas-run:", resetStyle, " ")
+
+proc writeAtlasRunLine*(message: string) =
+  writeAtlasRunPrefix()
+  stdout.writeLine message
+
+proc writeAtlasRunStatusLine*(beforeStatus, statusText: string;
+                              status: AtlasRunStatus) =
+  writeAtlasRunPrefix()
+  stdout.write beforeStatus
+  if atlasReporter.noColors:
+    stdout.writeLine statusText
+  else:
+    stdout.styledWriteLine(
+      status.atlasRunStatusColor(),
+      status.atlasRunStatusStyle(),
+      statusText,
+      resetStyle
+    )
+
 proc writeMessageRaw(c: var Reporter; category: string; p: string, args: seq[string]) =
   var msg = category
   if p.len > 0: msg.add "(" & p & ") "
@@ -69,15 +139,7 @@ proc writeMessage(c: var Reporter; k: MsgKind; p: string, args: seq[string]) =
   if c.noColors:
     writeMessageRaw(c, $k, p, args)
   else:
-    let (color, style) =
-      case k
-      of Ignore: (fgWhite, styleDim)
-      of Trace: (fgWhite, styleDim)
-      of Debug: (fgBlue, styleBright)
-      of Info: (fgGreen, styleBright)
-      of Notice: (fgMagenta, styleBright)
-      of Warning: (fgYellow, styleBright)
-      of Error: (c.errorsColor, styleBright)
+    let (color, style) = c.atlasMessageStyle(k)
     
     stdout.styledWrite(color, style, $k, resetStyle, fgCyan, "(", p, ")", resetStyle)
     let colors = [fgWhite, fgMagenta]

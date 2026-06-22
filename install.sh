@@ -95,7 +95,9 @@ install_release_archive() {
   local archive_path
   local extract_dir
   local atlas_bin
+  local atlas_run_bin
   local installed_atlas
+  local installed_atlas_run
 
   if [ -n "$ATLAS_REF" ]; then
     return 1
@@ -137,18 +139,31 @@ install_release_archive() {
     echo "install.sh: release asset did not contain atlas; falling back to building from source" >&2
     return 1
   fi
+  atlas_run_bin="$(find "$extract_dir" -type f \( -name atlas-run -o -name atlas-run.exe \) | head -n 1)"
+  if [ -z "$atlas_run_bin" ]; then
+    echo "install.sh: release asset did not contain atlas-run; falling back to building from source" >&2
+    return 1
+  fi
 
   mkdir -p "$ATLAS_INSTALL_DIR"
   case "$atlas_bin" in
     *.exe) installed_atlas="$ATLAS_INSTALL_DIR/atlas.exe" ;;
     *) installed_atlas="$ATLAS_INSTALL_DIR/atlas" ;;
   esac
-  rm -f "$ATLAS_INSTALL_DIR/atlas" "$ATLAS_INSTALL_DIR/atlas.exe"
+  case "$atlas_run_bin" in
+    *.exe) installed_atlas_run="$ATLAS_INSTALL_DIR/atlas-run.exe" ;;
+    *) installed_atlas_run="$ATLAS_INSTALL_DIR/atlas-run" ;;
+  esac
+  rm -f "$ATLAS_INSTALL_DIR/atlas" "$ATLAS_INSTALL_DIR/atlas.exe" \
+    "$ATLAS_INSTALL_DIR/atlas-run" "$ATLAS_INSTALL_DIR/atlas-run.exe"
   cp "$atlas_bin" "$installed_atlas"
-  chmod +x "$installed_atlas"
+  cp "$atlas_run_bin" "$installed_atlas_run"
+  chmod +x "$installed_atlas" "$installed_atlas_run"
 
   echo "install.sh: installed atlas to $installed_atlas" >&2
+  echo "install.sh: installed atlas-run to $installed_atlas_run" >&2
   "$installed_atlas" --version
+  "$installed_atlas_run" --version
   case ":$PATH:" in
     *":$ATLAS_INSTALL_DIR:"*) ;;
     *)
@@ -179,17 +194,19 @@ install_from_source() {
   nim buildRelease
 
   mkdir -p "$ATLAS_INSTALL_DIR"
-  if [ -e "$ATLAS_INSTALL_DIR/atlas" ] || [ -L "$ATLAS_INSTALL_DIR/atlas" ]; then
-    rm -f "$ATLAS_INSTALL_DIR/atlas"
-  fi
+  rm -f "$ATLAS_INSTALL_DIR/atlas" "$ATLAS_INSTALL_DIR/atlas-run"
   cp "bin/atlas" "$ATLAS_INSTALL_DIR/atlas"
-  chmod +x "$ATLAS_INSTALL_DIR/atlas"
+  cp "bin/atlas-run" "$ATLAS_INSTALL_DIR/atlas-run"
+  chmod +x "$ATLAS_INSTALL_DIR/atlas" "$ATLAS_INSTALL_DIR/atlas-run"
 
   echo "install.sh: installed atlas to $ATLAS_INSTALL_DIR/atlas" >&2
+  echo "install.sh: installed atlas-run to $ATLAS_INSTALL_DIR/atlas-run" >&2
   if command -v "$ATLAS_INSTALL_DIR/atlas" >/dev/null 2>&1; then
     "$ATLAS_INSTALL_DIR/atlas" --version
+    "$ATLAS_INSTALL_DIR/atlas-run" --version
   else
     "$ATLAS_INSTALL_DIR/atlas" --version
+    "$ATLAS_INSTALL_DIR/atlas-run" --version
     case ":$PATH:" in
       *":$ATLAS_INSTALL_DIR:"*) ;;
       *)

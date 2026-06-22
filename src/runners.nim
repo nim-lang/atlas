@@ -7,8 +7,9 @@
 #
 
 import basic/context
+import nimble/nimscriptexec
 
-import std / [strutils, os, paths, osproc]
+import std/[os, paths, strutils]
 
 const
   BuilderScriptTemplate* = """
@@ -68,22 +69,17 @@ include $1
 """
 
 proc runNimScript*(scriptContent: string; name: string) =
-  var buildNims = "atlas_build_0.nims"
-  var i = 1
-  while fileExists(buildNims):
-    if i >= 20:
-      error name, "could not create new: atlas_build_0.nims"
-      return
-    buildNims = "atlas_build_" & $i & ".nims"
-    inc i
-
-  writeFile buildNims, scriptContent
-
-  let cmdLine = "nim e --hints:off -d:atlas " & quoteShell(buildNims)
-  if os.execShellCmd(cmdLine) != 0:
-    error name, "Nimscript failed: " & cmdLine
-  else:
-    removeFile buildNims
+  let options = initNimScriptRunOptions(
+    "atlas_build_" & $getCurrentProcessId(),
+    cleanup = CleanupOnSuccess,
+    candidateLimit = 20
+  )
+  try:
+    let res = runTempNimScript(scriptContent, options)
+    if res.exitCode != 0:
+      error name, "Nimscript failed: " & res.commandLine
+  except IOError, OSError:
+    error name, getCurrentExceptionMsg()
 
 proc runNimScriptInstallHook*(nimbleFile: Path, name: string) =
   notice name, "running install hooks"
