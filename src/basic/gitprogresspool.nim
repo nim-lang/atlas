@@ -284,7 +284,7 @@ proc renderProgressBlock(
       )
 
   let
-    columns = terminalColumns()
+    columns = max(1, terminalColumns() - 1)
     fixedStatusWidth = GitProgressBarWidth + 2 + 1 + GitProgressPercentWidth
     maxPhaseWidth = max(0, columns - GitProgressLeftPadding -
       fixedStatusWidth - 1)

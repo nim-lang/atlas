@@ -9,6 +9,15 @@ proc p(s: string): VersionInterval =
   check not err
 
 suite "version requirement operators":
+  test "tag parser ignores digits outside tag name":
+    let tags = parseTaggedVersions("""
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa refs/remotes/user2.example.github.com/tags/v1.2.3
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb refs/remotes/user2.example.github.com/tags/release
+""")
+
+    check tags.len == 1
+    check tags[0].c.h == "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    check tags[0].v == v"1.2.3"
 
   test "nimble comparison operators":
     check (p"== 1.2.3").matches(v"1.2.3")

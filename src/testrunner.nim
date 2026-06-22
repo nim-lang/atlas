@@ -500,10 +500,11 @@ proc renderTestProgressBlock(states: seq[TestJobState];
       rows.add (state.label, progressBar(state.stage), phase)
 
   let
+    columns = max(1, terminalColumns() - 1)
     statusWidth = TestProgressBarWidth + 2 + 1 + phaseWidth
     labelWidth = max(
       0,
-      terminalColumns() - TestProgressLeftPadding - 1 - statusWidth
+      columns - TestProgressLeftPadding - 1 - statusWidth
     )
     padding = repeat(' ', TestProgressLeftPadding)
 
