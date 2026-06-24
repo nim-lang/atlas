@@ -17,13 +17,16 @@ const Usage = "atlas-run - Atlas project runner Version " & AtlasVersion & """
 
 Usage:
   atlas-run [options] task [--list | task-name [arguments]]
-  atlas-run [options] build [--list]
-  atlas-run [options] tests [--list] [--jobs:N] [--compile-only] [selector...]
+  atlas-run [options] build [--list] [-- nim-arg...]
+  atlas-run [options] tests [--list] [--jobs:N] [--compile-only] [selector...] [--skip selector...] [-- [nim-arg...]]
 
 Commands:
   task                  list or run tasks declared in the project's Nimble file
   build                 build binaries declared in the project's Nimble file
-  tests                 run tests matching tests/t*.nim, or selected Nim files
+    [-- [nim-arg...]]   nim-args are passed to the Nim compiler
+  tests                 run tests matching tests/t*.nim in parallel
+    [selectors..]       only tests matching *selectors* are run
+    [-- [nim-arg...]]   nim-args passed to the Nim compiler
 
 Options:
   --help, -h            show this help
@@ -37,10 +40,15 @@ Options:
   --only-errors         only print output chunks for failed tests
   --compiler-output     include compiler output from successful test builds
   --compile-only        compile tests without running them
+  --skip selector...    skip tests matching these selectors
 
-With no command, atlas-run prints this help and the project's Nimble tasks.
-For compatibility, atlas-run <name> still runs a Nimble task unless <name> is
-a built-in command such as build or tests.
+For build and tests, arguments after `--` are passed to the Nim compiler. Test compiler arguments are passed after NIMFLAGS.
+
+For tests, selectors are positional arguments before --skip. Skip selectors remove tests from that selected set.
+
+Test selectors can be module names, filenames, paths, or glob patterns. Without a path separator, `foo` matches `tests/tfoo*.nim` and `foo.nim` matches `tests/tfoo.nim`. With a path separator, selectors are direct project-relative or absolute Nim files or globs, such as `"examples/*.nim"`.
+
+With no command, atlas-run prints this help and lists the project's Nimble tasks. For compatibility, atlas-run <name> still runs a Nimble task unless <name> is a built-in command such as build or tests.
 """
 
 type
@@ -60,9 +68,12 @@ type
     onlyErrors: bool
     showCompilerOutput: bool
     compileOnly: bool
+    buildCompilerArgs: seq[string]
     task: string
     taskArgs: seq[string]
     testSelectors: seq[string]
+    testSkipSelectors: seq[string]
+    testCompilerArgs: seq[string]
 
 proc writeUsage() =
   stdout.write(Usage)
@@ -117,6 +128,7 @@ proc parseCliOptions(params: seq[string]): CliOptions =
   result.shuffle = true
 
   var i = 0
+  var readingSkipSelectors = false
   while i < params.len:
     let arg = params[i]
 
@@ -129,10 +141,16 @@ proc parseCliOptions(params: seq[string]): CliOptions =
         break
       else:
         result.taskArgs.add arg
+    elif result.command == cmdBuild and arg == "--":
+      inc i
+      while i < params.len:
+        result.buildCompilerArgs.add params[i]
+        inc i
+      break
     elif result.command == cmdTests and arg == "--":
       inc i
       while i < params.len:
-        result.testSelectors.add params[i]
+        result.testCompilerArgs.add params[i]
         inc i
       break
     elif arg == "--":
@@ -146,19 +164,26 @@ proc parseCliOptions(params: seq[string]): CliOptions =
     elif arg == "-v" or arg == "--version":
       writeVersion()
     elif arg == "--list":
+      readingSkipSelectors = false
       result.listOnly = true
     elif arg == "-p":
+      readingSkipSelectors = false
       result.projectArg = Path readOptionValue(params, i, arg, "")
     elif arg.startsWith("-p:") or arg.startsWith("-p="):
+      readingSkipSelectors = false
       result.projectArg = Path arg[3 .. ^1]
     elif arg == "-j":
+      readingSkipSelectors = false
       result.testOptionsSeen = true
       result.jobs = readJobsValue(params, i, arg, "")
     elif arg.startsWith("-j:") or arg.startsWith("-j="):
+      readingSkipSelectors = false
       result.testOptionsSeen = true
       result.jobs = readJobsValue(params, i, arg, arg[3 .. ^1])
     elif arg.startsWith("--"):
       let (key, value) = splitLongOption(arg)
+      if key.normalize != "skip":
+        readingSkipSelectors = false
       case key.normalize
       of "project":
         result.projectArg = Path readOptionValue(params, i, arg, value)
@@ -182,6 +207,11 @@ proc parseCliOptions(params: seq[string]): CliOptions =
       of "compile-only":
         result.testOptionsSeen = true
         result.compileOnly = true
+      of "skip":
+        result.testOptionsSeen = true
+        readingSkipSelectors = true
+        if value.len > 0:
+          result.testSkipSelectors.add value
       else:
         quit("atlas-run: unknown option: " & arg, 2)
     elif arg.startsWith("-"):
@@ -212,7 +242,10 @@ proc parseCliOptions(params: seq[string]): CliOptions =
         of cmdBuild:
           quit("atlas-run: build does not accept positional arguments: " & arg, 2)
         of cmdTests:
-          result.testSelectors.add arg
+          if readingSkipSelectors:
+            result.testSkipSelectors.add arg
+          else:
+            result.testSelectors.add arg
     inc i
 
   if result.testOptionsSeen and result.command != cmdTests:
@@ -237,8 +270,8 @@ proc printTasks(nimbleFile: Path) =
 proc resolveProjectDir(projectArg: Path): Path =
   resolveNimbleFile(projectArg).parentDir()
 
-proc printTests(projectDir: Path; selectors: openArray[string]) =
-  let tests = discoverTestFiles(projectDir, selectors)
+proc printTests(projectDir: Path; selectors, skipSelectors: openArray[string]) =
+  let tests = discoverTestFiles(projectDir, selectors, skipSelectors)
   for path in tests:
     echo ($path.relativePath(projectDir, '/')).replace("\\", "/")
 
@@ -255,7 +288,7 @@ proc printBinaries(nimbleFile: Path; nimExe: string) =
   for binary in binaries:
     echo alignLeft(binary.name, width + 2), $binary.output
 
-proc atlasRunMain(params: seq[string]): int =
+proc atlasRunMain*(params: seq[string]): int =
   let opts = parseCliOptions(params)
   case opts.command
   of cmdTask:
@@ -275,11 +308,11 @@ proc atlasRunMain(params: seq[string]): int =
     if opts.listOnly:
       printBinaries(nimbleFile, opts.nimExe)
       return 0
-    result = runNimbleBuild(nimbleFile, opts.nimExe)
+    result = runNimbleBuild(nimbleFile, opts.nimExe, opts.buildCompilerArgs)
   of cmdTests:
     let projectDir = resolveProjectDir(opts.projectArg)
     if opts.listOnly:
-      printTests(projectDir, opts.testSelectors)
+      printTests(projectDir, opts.testSelectors, opts.testSkipSelectors)
       return 0
     result = runAtlasTests(initAtlasTestOptions(
       projectDir = projectDir,
@@ -287,6 +320,8 @@ proc atlasRunMain(params: seq[string]): int =
       nimcacheDir = opts.nimcacheDir,
       jobs = opts.jobs,
       selectors = opts.testSelectors,
+      skipSelectors = opts.testSkipSelectors,
+      compilerArgs = opts.testCompilerArgs,
       compileOnly = opts.compileOnly,
       shuffle = opts.shuffle,
       onlyErrors = opts.onlyErrors,
