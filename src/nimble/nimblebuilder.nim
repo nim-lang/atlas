@@ -69,9 +69,13 @@ proc backendCommand(backend: string): string =
   else:
     result = "c"
 
-proc buildArgs(target: NimbleBinary): seq[string] =
-  @[
+proc buildArgs(target: NimbleBinary;
+               compilerArgs: openArray[string] = []): seq[string] =
+  result = @[
     target.backend,
+  ]
+  result.add compilerArgs
+  result.add @[
     "--out:" & $target.output,
     $target.source
   ]
@@ -84,7 +88,8 @@ proc binaryNames(info: NimbleFileInfo): seq[string] =
       result.add name
     result.sort()
 
-proc listNimbleBinaries*(nimbleFile: Path; nimExe = "nim"): seq[NimbleBinary] =
+proc listNimbleBinaries*(nimbleFile: Path; nimExe = "nim";
+                         compilerArgs: openArray[string] = []): seq[NimbleBinary] =
   let
     nimbleFile = nimbleFile.absolutePath()
     projectDir = nimbleFile.parentDir()
@@ -101,7 +106,7 @@ proc listNimbleBinaries*(nimbleFile: Path; nimExe = "nim"): seq[NimbleBinary] =
       output: outputPath(projectDir, info.binDir, outputName(info, binName), backend),
       backend: backend
     )
-    let args = buildArgs(target)
+    let args = buildArgs(target, compilerArgs)
     result.add NimbleBinary(
       name: target.name,
       source: target.source,
@@ -110,8 +115,9 @@ proc listNimbleBinaries*(nimbleFile: Path; nimExe = "nim"): seq[NimbleBinary] =
       commandLine: quoteCommand(nimExe, args)
     )
 
-proc runBuildProcess(nimExe: string; projectDir: Path; target: NimbleBinary): int =
-  let args = buildArgs(target)
+proc runBuildProcess(nimExe: string; projectDir: Path; target: NimbleBinary;
+                     compilerArgs: openArray[string]): int =
+  let args = buildArgs(target, compilerArgs)
   writeAtlasRunStatusLine(target.name & " -> " & $target.output & " ", "running", arsRunning)
   writeAtlasRunLine("command: " & quoteCommand(nimExe, args))
   createDir($target.output.parentDir())
@@ -132,11 +138,12 @@ proc runBuildProcess(nimExe: string; projectDir: Path; target: NimbleBinary): in
     if process != nil:
       close(process)
 
-proc runNimbleBuild*(nimbleFile: Path; nimExe = "nim"): int =
+proc runNimbleBuild*(nimbleFile: Path; nimExe = "nim";
+                     compilerArgs: openArray[string] = []): int =
   let
     nimbleFile = nimbleFile.absolutePath()
     projectDir = nimbleFile.parentDir()
-    targets = listNimbleBinaries(nimbleFile, nimExe)
+    targets = listNimbleBinaries(nimbleFile, nimExe, compilerArgs)
 
   if targets.len == 0:
     raise newException(ValueError, "no binaries declared in: " & $nimbleFile)
@@ -144,7 +151,7 @@ proc runNimbleBuild*(nimbleFile: Path; nimExe = "nim"): int =
   for target in targets:
     if not fileExists($target.source):
       raise newException(ValueError, "binary source does not exist: " & $target.source)
-    let code = runBuildProcess(nimExe, projectDir, target)
+    let code = runBuildProcess(nimExe, projectDir, target, compilerArgs)
     if code != 0:
       return code
   result = 0

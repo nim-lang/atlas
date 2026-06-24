@@ -225,11 +225,13 @@ atlas-run --project path/to/project.nimble task test -- --flag
 ```
 
 Use `atlas-run build` to compile every binary declared by the project's
-`.nimble` file:
+`.nimble` file. Arguments after `--` are passed to the Nim compiler for each
+binary:
 
 ```
 atlas-run build
 atlas-run build --list
+atlas-run build -- -d:release --mm:orc
 ```
 
 Use `atlas-run tests` to run project tests matching `tests/t*.nim` in parallel.
@@ -245,6 +247,11 @@ tests: `foo` matches `tests/tfoo*.nim`, and `foo.nim` matches
 or absolute Nim files or glob patterns, so `examples/*.nim` selects those
 example files directly.
 
+Compiler flags can be provided with `NIMFLAGS` or after `--`. When both are
+used, arguments after `--` are passed after `NIMFLAGS`, so they take precedence
+for repeated Nim compiler options. Use one or more `--skip` options after
+normal selectors to remove matching tests from the selected set.
+
 ```
 atlas-run tests
 atlas-run tests --jobs:4
@@ -256,6 +263,9 @@ atlas-run tests --compile-only
 atlas-run tests --list
 atlas-run tests tatlasrun
 atlas-run tests --compile-only examples/*.nim
+atlas-run tests t --skip integration --skip slow
+NIMFLAGS="-d:release" atlas-run tests
+atlas-run tests tatlasrun -- -d:release --mm:orc
 ```
 
 ### Update [filter]
