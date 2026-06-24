@@ -934,16 +934,15 @@ proc runTestJobs(jobs: seq[TestJob];
         states[ev.jobIndex].running = true
         states[ev.jobIndex].stage = ev.stage
         states[ev.jobIndex].lastActivityAt = now
-        if showOutput and onlyErrors and not renderInteractive and
-            not result.cancelled:
+        if showOutput and not renderInteractive and not result.cancelled:
           writeStartedSummary(ev.label, ev.stage)
       of tpUpdated:
         let previousStage = states[ev.jobIndex].stage
         states[ev.jobIndex].running = true
         states[ev.jobIndex].stage = ev.stage
         states[ev.jobIndex].lastActivityAt = now
-        if showOutput and onlyErrors and not renderInteractive and
-            not result.cancelled and previousStage != ev.stage:
+        if showOutput and not renderInteractive and not result.cancelled and
+            previousStage != ev.stage:
           writeStartedSummary(ev.label, ev.stage)
       of tpFinished:
         states[ev.jobIndex].running = false

@@ -425,7 +425,7 @@ writeFile("two.out", "ok")
     check dirExists($(dir / Path".nimcache" / Path"atlas-run" / Path"tests" / Path"tone"))
     check dirExists($(dir / Path".nimcache" / Path"atlas-run" / Path"tests" / Path"ttwo"))
 
-  test "only-errors prints success summaries without interactive progress":
+  test "non-interactive runs print progress summaries":
     let dir = freshDir("atlas_run_only_errors_summaries")
     defer:
       removeDir($dir)
@@ -443,6 +443,18 @@ writeFile("two.out", "ok")
     if buildExitCode != 0:
       checkpoint buildOutput
     else:
+      let (regularOutput, regularExitCode) = execCmdEx(
+        quoteShell($atlasRunExe) & " --project:" & quoteShell($dir) &
+          " tests --no-shuffle"
+      )
+      check regularExitCode == 0
+      check "atlas-run:" in regularOutput
+      check "tests/tone.nim" in regularOutput
+      check "compiling" in regularOutput
+      check "running" in regularOutput
+      check "success" in regularOutput
+      check "command: nim c" in regularOutput
+
       let (output, exitCode) = execCmdEx(
         quoteShell($atlasRunExe) & " --project:" & quoteShell($dir) &
           " tests --only-errors --no-shuffle"
