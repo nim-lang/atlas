@@ -1,4 +1,4 @@
-import std/[os, paths, strutils, unittest]
+import std/[os, osproc, paths, strutils, unittest]
 from std/envvars import delEnv, existsEnv, getEnv, putEnv
 
 import atlasrun
@@ -424,6 +424,35 @@ writeFile("two.out", "ok")
     check readFile($(dir / Path"two.out")) == "ok"
     check dirExists($(dir / Path".nimcache" / Path"atlas-run" / Path"tests" / Path"tone"))
     check dirExists($(dir / Path".nimcache" / Path"atlas-run" / Path"tests" / Path"ttwo"))
+
+  test "only-errors prints success summaries without interactive progress":
+    let dir = freshDir("atlas_run_only_errors_summaries")
+    defer:
+      removeDir($dir)
+
+    writeFile($(dir / Path"demo.nimble"), "version = \"0.1.0\"\n")
+    let testsDir = dir / Path"tests"
+    createDir($testsDir)
+    writeFile($(testsDir / Path"tone.nim"), "discard\n")
+
+    let atlasRunExe = dir / Path"atlas-run-test"
+    let (buildOutput, buildExitCode) = execCmdEx(
+      "nim c --out:" & quoteShell($atlasRunExe) & " src/atlasrun.nim"
+    )
+    check buildExitCode == 0
+    if buildExitCode != 0:
+      checkpoint buildOutput
+    else:
+      let (output, exitCode) = execCmdEx(
+        quoteShell($atlasRunExe) & " --project:" & quoteShell($dir) &
+          " tests --only-errors --no-shuffle"
+      )
+      check exitCode == 0
+      check "atlas-run:" in output
+      check "tests/tone.nim" in output
+      check "compiling" in output
+      check "running" in output
+      check "success" in output
 
   test "CLI skip selectors remove matching tests":
     let dir = freshDir("atlas_run_skip_selectors")

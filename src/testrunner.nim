@@ -839,6 +839,30 @@ proc writeResultChunk(result: AtlasTestResult; showCompilerOutput: bool) =
   writeOutputText(result.runOutput)
   stdout.flushFile()
 
+proc writeResultSummary(result: AtlasTestResult) =
+  let
+    status =
+      if result.exitCode == 0:
+        arsSuccess
+      else:
+        arsFailed
+    statusText =
+      if result.exitCode == 0:
+        "success"
+      else:
+        "failed"
+  writeAtlasRunStatusLine(result.label & " ", statusText, status)
+  stdout.flushFile()
+
+proc writeStartedSummary(label: string; stage: TestStage) =
+  let action =
+    if stage == tsCompiling:
+      "compiling"
+    else:
+      "running"
+  writeAtlasRunStatusLine(label & " ", action, arsRunning)
+  stdout.flushFile()
+
 proc runTestJobs(jobs: seq[TestJob];
                  workerCount: int;
                  showProgress, showOutput: bool;
@@ -910,10 +934,17 @@ proc runTestJobs(jobs: seq[TestJob];
         states[ev.jobIndex].running = true
         states[ev.jobIndex].stage = ev.stage
         states[ev.jobIndex].lastActivityAt = now
+        if showOutput and onlyErrors and not renderInteractive and
+            not result.cancelled:
+          writeStartedSummary(ev.label, ev.stage)
       of tpUpdated:
+        let previousStage = states[ev.jobIndex].stage
         states[ev.jobIndex].running = true
         states[ev.jobIndex].stage = ev.stage
         states[ev.jobIndex].lastActivityAt = now
+        if showOutput and onlyErrors and not renderInteractive and
+            not result.cancelled and previousStage != ev.stage:
+          writeStartedSummary(ev.label, ev.stage)
       of tpFinished:
         states[ev.jobIndex].running = false
         states[ev.jobIndex].finished = true
@@ -936,6 +967,9 @@ proc runTestJobs(jobs: seq[TestJob];
           if renderInteractive:
             if renderInteractiveNow(states, now, lastLines, lastRenderedBlock):
               lastRender = now
+        elif showOutput and onlyErrors and not renderInteractive and
+            not result.cancelled and ev.exitCode == 0:
+          writeResultSummary(result.results[ev.jobIndex])
       changed = true
 
     if renderInteractive and changed and
