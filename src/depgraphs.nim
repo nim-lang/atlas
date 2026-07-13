@@ -94,10 +94,11 @@ proc requirementMatches*(query: VersionInterval; depVer: PackageVersion; depRel:
     result = query.matches(depRel.version)
 
 proc hasSatisfiedFeatureDeps(graph: DepGraph; rel: NimbleRelease; featName: string): bool =
-  if featName notin rel.features:
+  let declaredFeature = rel.features.findFeature(featName)
+  if declaredFeature.len == 0:
     return false
 
-  let reqs = rel.features[featName]
+  let reqs = rel.features[declaredFeature]
   if reqs.len == 0:
     return true
 
@@ -156,9 +157,11 @@ proc collectUnsatisfiedContextFeatures(graph: DepGraph): seq[string] =
         let rel = pkg.activeNimbleRelease()
         if rel.isNil:
           continue
-        if featName in rel.features:
+        let declaredFeature = rel.features.findFeature(featName)
+        if declaredFeature.len > 0:
           declaredInNimble = true
-          if featName in pkg.activeFeatures or hasSatisfiedFeatureDeps(graph, rel, featName):
+          if pkg.activeFeatures.containsFeature(declaredFeature) or
+              hasSatisfiedFeatureDeps(graph, rel, declaredFeature):
             featureSatisfied = true
             break
 
@@ -241,8 +244,9 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
         if depMatches:
           compatibleVersions.add(depVer.vid)
         for feature in flags:
-          if feature in nimbleRelease.features:
-            let featureVarId = nimbleRelease.featureVars[feature]
+          let declaredFeature = nimbleRelease.features.findFeature(feature)
+          if declaredFeature.len > 0:
+            let featureVarId = nimbleRelease.featureVars[declaredFeature]
             featureVersions.mgetOrPut(depVer.vid, @[]).add(featureVarId)
 
       # Add implication: if this version is selected, one of its compatible deps must be selected
@@ -290,8 +294,9 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
           var featureVersions: Table[VarId, seq[VarId]]
           for depVer, nimbleRelease in depNode.validVersions():
             trace pkg.url.projectName, "checking global feature dependency:", depNode.url.projectName, "version:", $depVer
-            if feature in nimbleRelease.features:
-              let featureVarId = nimbleRelease.featureVars[feature]
+            let declaredFeature = nimbleRelease.features.findFeature(feature)
+            if declaredFeature.len > 0:
+              let featureVarId = nimbleRelease.featureVars[declaredFeature]
               featureVersions.mgetOrPut(depVer.vid, @[]).add(featureVarId)
 
           # Add implication: if this version is selected, one of its compatible deps must be selected
@@ -491,8 +496,9 @@ proc chooseDuplicatePackage(graph: DepGraph; name: string; dupePkgs: seq[Package
         return true
 
     for feature in graph.root.activeFeatures:
-      if feature in rel.features:
-        for (depUrl, _) in rel.features[feature]:
+      let declaredFeature = rel.features.findFeature(feature)
+      if declaredFeature.len > 0:
+        for (depUrl, _) in rel.features[declaredFeature]:
           if depUrl == url:
             return true
 
@@ -657,7 +663,7 @@ proc solve*(graph: var DepGraph; form: Form, rerun: var bool) =
         assert not mapInfo.release.isNil, "too bad: " & $pkg.url
         pkg.activeVersion = mapInfo.version
         if mapInfo.feature.len > 0:
-          pkg.activeFeatures.add(mapInfo.feature)
+          pkg.activeFeatures.addUniqueFeature(mapInfo.feature)
           debug pkg.url.projectName, "package satisfiable", "feature: ", mapInfo.feature
         else:
           debug pkg.url.projectName, "package satisfiable"
@@ -815,10 +821,10 @@ proc activateGraph*(graph: DepGraph): tuple[paths: seq[CfgPath], features: seq[s
   for feature in context().features:
     if feature.startsWith("feature."):
       # Already in full format: feature.$PKG.$FEATURE
-      result.features.addUnique feature
+      result.features.addUniqueFeature feature
     else:
       # Short format: FOO -> feature.$ROOT.FOO
-      result.features.addUnique "feature." & graph.root.url.projectName & "." & feature
+      result.features.addUniqueFeature "feature." & graph.root.url.projectName & "." & feature
 
   # Apply global feature flags to activeFeatures for introspection/tests.
   for pkg in graph.pkgs.values():
@@ -829,18 +835,18 @@ proc activateGraph*(graph: DepGraph): tuple[paths: seq[CfgPath], features: seq[s
       continue
     for featName in rel.features.keys():
       if hasContextFeature(pkg, featName) and hasSatisfiedFeatureDeps(graph, rel, featName):
-        pkg.activeFeatures.addUnique(featName)
+        pkg.activeFeatures.addUniqueFeature(featName)
 
   if not graph.root.isNil and graph.root.active:
     for feature in graph.root.activeFeatures:
-      result.features.addUnique "feature." & graph.root.url.projectName & "." & feature
+      result.features.addUniqueFeature "feature." & graph.root.url.projectName & "." & feature
 
   for pkg in allActiveNodes(graph):
     if pkg.isRoot: continue
     trace pkg.url.projectName, "adding CfgPath:", $relativeToWorkspace(toDestDir(graph, pkg) / getCfgPath(graph, pkg).Path)
     result.paths.add CfgPath(toDestDir(graph, pkg) / getCfgPath(graph, pkg).Path)
     for feature in pkg.activeFeatures:
-      result.features.addUnique "feature." & pkg.url.shortName & "." & feature
+      result.features.addUniqueFeature "feature." & pkg.url.shortName & "." & feature
 
   result.paths.sort(proc (a, b: CfgPath): int =
     cmp(a.string, b.string)

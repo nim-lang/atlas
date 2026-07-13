@@ -61,6 +61,30 @@ version "0.1.0"
       if dirExists($dir):
         removeDir($dir)
 
+  test "install accepts -u when nimble file has no requirements":
+    let dir = getTempDir().Path / Path"atlas_install_short_update_no_requirements"
+    if dirExists($dir):
+      removeDir($dir)
+    createDir($dir)
+
+    try:
+      withDir dir:
+        writeFile("emptydeps.nimble", """
+version "0.1.0"
+""")
+
+        setAtlasVerbosity(Error)
+        setContext AtlasContext()
+        atlasRun(@["-u", "install"])
+
+        check atlasErrors() == 0
+        check fileExists("nim.cfg")
+        let cfg = readFile("nim.cfg")
+        check "--noNimblePath" in cfg
+    finally:
+      if dirExists($dir):
+        removeDir($dir)
+
   test "removes stale nimble.paths when writing nim.cfg":
     let oldCtx = context()
     let dir = getTempDir().Path / Path"atlas_install_stale_nimble_paths"

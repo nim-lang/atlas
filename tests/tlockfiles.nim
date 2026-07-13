@@ -1,18 +1,19 @@
-## Unit tests for the lockfile machinery (`lockfiles.nim`).
-##
-## These exercise `listChanged` against real (local, offline) git repos so
-## that two regressions stay fixed:
-##   1. `convertNimbleLock` must map a nimble package to `deps/<package-name>`
-##      (the lockfile key), not `deps/<url-repo-name>`.
-##   2. `listChanged` must inspect each dep's git state via the dir path alone,
-##      without an extra `withDir` wrapper that double-applies the path and
-##      makes every repo read back as an empty url / "-" commit.
+## Tests for Atlas lock-file creation, replay, and change detection.
 
-import std/[os, osproc, paths, json]
-import unittest
+import std/[json, os, osproc, paths, strutils, tables, unittest]
 
-import basic/[reporters, context, lockfiletypes, gitops, versions]
+import atlas
+import basic/[context, gitops, lockfiletypes, pkgurls, reporters, versions]
 import lockfiles
+
+type
+  LockFixture = object
+    baseDir: Path
+    projectDir: Path
+    dependencyDir: Path
+    dependencyUrl: string
+    dependencyCommit: string
+    nimbleContent: string
 
 proc git(dir, args: string) =
   let (outp, code) = execCmdEx("git -C " & quoteShell(dir) & " " & args)
@@ -20,13 +21,12 @@ proc git(dir, args: string) =
 
 proc freshDir(name: string): string =
   result = os.getCurrentDir() / "tests" / name
-  if dirExists(result): removeDir(result)
+  if dirExists(result):
+    removeDir(result)
   createDir(result)
 
 proc setupDep(name, url: string): tuple[url, commit: string] =
   ## Creates `deps/<name>` as a one-commit git repo with `origin` set to `url`.
-  ## Returns the canonical url and full commit hash as the lockfile-comparison
-  ## helpers see them (read from cwd, i.e. the project root).
   let depDir = "deps" / name
   createDir(depDir)
   git(depDir, "init -q")
@@ -50,6 +50,46 @@ template withCwd(dir: string; body: untyped) =
   finally:
     setCurrentDir(saved)
 
+proc createLockFixture(name: string): LockFixture =
+  # Keep the fixture on the checkout's volume. GitHub's Windows checkout is on
+  # D:, while getTempDir() is on C:. Cross-volume path behavior is unrelated to
+  # the lock-file behavior covered here.
+  result.baseDir = freshDir("ws_lockfiles_integration_" & name).Path
+  result.projectDir = result.baseDir / Path"workspace"
+  result.dependencyDir = result.baseDir / Path"source" / Path"lockeddep"
+
+  createDir($result.projectDir)
+  createDir($result.dependencyDir)
+
+  writeFile($(result.dependencyDir / Path"lockeddep.nimble"),
+    "version \"1.0.0\"\n")
+  writeFile($(result.dependencyDir / Path"marker.txt"), "locked revision\n")
+  git($result.dependencyDir, "init -q")
+  git($result.dependencyDir, "config user.email atlas-tests@example.com")
+  git($result.dependencyDir, "config user.name Atlas-Tests")
+  git($result.dependencyDir, "add lockeddep.nimble marker.txt")
+  git($result.dependencyDir, "commit -q -m add-locked-dependency")
+  git($result.dependencyDir, "tag v1.0.0")
+
+  result.dependencyCommit = currentGitCommit(result.dependencyDir).h
+  result.dependencyUrl = toWindowsFileUrl(
+    "file://" & $result.dependencyDir.absolutePath)
+  result.nimbleContent =
+    "version \"0.1.0\"\n" &
+    "requires \"" & result.dependencyUrl & " >= 1.0.0\"\n"
+  writeFile($(result.projectDir / Path"lockfixture.nimble"), result.nimbleContent)
+
+proc removeLockFixture(fixture: LockFixture) =
+  if dirExists($fixture.baseDir):
+    removeDir($fixture.baseDir)
+
+proc installFixture(fixture: LockFixture) =
+  resetAtlasReporter()
+  setAtlasVerbosity(Error)
+  setContext AtlasContext()
+  withCwd $fixture.projectDir:
+    atlasRun(@["--deps=deps", "--project=.", "--noexec", "install"])
+
 suite "Lockfile listChanged":
   setup:
     # project()=="." while cwd is the fixture root, deps live under "deps".
@@ -57,7 +97,8 @@ suite "Lockfile listChanged":
 
   test "atlas.lock: matching deps produce no warnings":
     let root = freshDir("ws_lockfiles_clean")
-    defer: removeDir(root)
+    defer:
+      removeDir(root)
 
     withCwd root:
       let exp = setupDep("foo", "https://example.com/foo")
@@ -74,7 +115,8 @@ suite "Lockfile listChanged":
 
   test "atlas.lock: a drifted commit is detected":
     let root = freshDir("ws_lockfiles_drift")
-    defer: removeDir(root)
+    defer:
+      removeDir(root)
 
     withCwd root:
       let exp = setupDep("foo", "https://example.com/foo")
@@ -84,7 +126,6 @@ suite "Lockfile listChanged":
         dir: Path("deps" / "foo"), url: exp.url, commit: exp.commit)
       write(lf, "atlas.lock")
 
-      # move HEAD forward so the on-disk commit no longer matches the lock
       git("deps" / "foo", "commit -q --allow-empty -m second")
 
       resetAtlasReporter()
@@ -93,11 +134,11 @@ suite "Lockfile listChanged":
 
   test "nimble.lock: conversion locates deps by package name":
     let root = freshDir("ws_lockfiles_nimble")
-    defer: removeDir(root)
+    defer:
+      removeDir(root)
 
     withCwd root:
-      # nimble package name "unittest2" but the repo is "nim-unittest2";
-      # the dep dir must be found as deps/unittest2 (the lockfile key).
+      # The package is `unittest2`, but the repository is `nim-unittest2`.
       let url = "https://github.com/status-im/nim-unittest2"
       let exp = setupDep("unittest2", url)
 
@@ -120,3 +161,70 @@ suite "Lockfile listChanged":
       resetAtlasReporter()
       listChanged(NimbleLockFileName)
       check atlasReporter.warnings == 0
+
+suite "Lockfile integration":
+  test "pin creates an Atlas lock file from installed dependencies":
+    let oldContext = context()
+    let fixture = createLockFixture("pin")
+    defer:
+      resetAtlasReporter()
+      setContext(oldContext)
+      removeLockFixture(fixture)
+
+    fixture.installFixture()
+    require atlasErrors() == 0
+
+    withCwd $fixture.projectDir:
+      let nimCfg = readFile("nim.cfg")
+      atlasRun(@["pin"])
+
+      require atlasErrors() == 0
+      require fileExists("atlas.lock")
+
+      let lock = readLockFile(Path"atlas.lock")
+      check lock.items.len == 1
+      check lock.items.hasKey("lockeddep")
+      if lock.items.hasKey("lockeddep"):
+        let entry = lock.items["lockeddep"]
+        check entry.dir == Path"$deps" / Path"lockeddep"
+        check entry.url == fixture.dependencyUrl
+        check entry.commit == fixture.dependencyCommit
+      check lock.nimcfg.join("\n") == nimCfg
+      check lock.nimbleFile.filename == Path"lockfixture.nimble"
+      check lock.nimbleFile.content.join("\n") == fixture.nimbleContent
+
+  test "replay restores the locked revision and project files":
+    let oldContext = context()
+    let fixture = createLockFixture("replay")
+    defer:
+      resetAtlasReporter()
+      setContext(oldContext)
+      removeLockFixture(fixture)
+
+    fixture.installFixture()
+    require atlasErrors() == 0
+
+    withCwd $fixture.projectDir:
+      let nimCfg = readFile("nim.cfg")
+      atlasRun(@["pin", "saved.lock"])
+      require atlasErrors() == 0
+
+      writeFile($(fixture.dependencyDir / Path"marker.txt"), "new revision\n")
+      git($fixture.dependencyDir, "add marker.txt")
+      git($fixture.dependencyDir, "commit -q -m advance-dependency")
+      check currentGitCommit(fixture.dependencyDir).h != fixture.dependencyCommit
+
+      removeDir("deps")
+      writeFile("nim.cfg", "corrupted config\n")
+      writeFile("lockfixture.nimble", "version \"9.9.9\"\n")
+
+      atlasRun(@["replay", "saved.lock"])
+
+      let installedDependency = Path"deps" / Path"lockeddep"
+      require atlasErrors() == 0
+      require dirExists($installedDependency)
+      check currentGitCommit(installedDependency).h == fixture.dependencyCommit
+      check readFile($(installedDependency / Path"marker.txt")) ==
+        "locked revision\n"
+      check readFile("nim.cfg") == nimCfg
+      check readFile("lockfixture.nimble") == fixture.nimbleContent

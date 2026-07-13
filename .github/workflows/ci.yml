@@ -122,6 +122,8 @@ jobs:
       - name: Install SAT
         run: |
           git clone https://github.com/nim-lang/sat.git
+          cd atlas
+          nimble -y develop --add:../sat
 
       - name: Run tests
         run: |
@@ -136,7 +138,7 @@ jobs:
       - name: Test install with Nimble
         run: |
           cd atlas
-          nimble install -y
+          nimble install -n --offline
 
       - name: Test install.sh
         if: runner.os == 'Linux' || runner.os == 'macOS'
