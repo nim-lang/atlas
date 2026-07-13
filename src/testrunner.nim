@@ -7,8 +7,8 @@
 #
 
 import std/[
-  algorithm, atomics, deques, locks, monotimes, os, osproc, paths, random,
-  streams, strutils, terminal, times
+  algorithm, atomics, cmdline, deques, locks, monotimes, os, osproc, paths,
+  random, streams, strutils, terminal, times
 ]
 
 when defined(posix):
@@ -21,8 +21,10 @@ type
     projectDir*: Path
     nimExe*: string
     nimcacheDir*: Path
+    compilerArgs*: seq[string]
     jobs*: int
     selectors*: seq[string]
+    skipSelectors*: seq[string]
     compileOnly*: bool
     shuffle*: bool
     showProgress*: bool
@@ -114,8 +116,10 @@ var testRunCancelled: Atomic[bool]
 proc initAtlasTestOptions*(projectDir = Path"";
                            nimExe = "nim";
                            nimcacheDir = Path"";
+                           compilerArgs: seq[string] = @[];
                            jobs = DefaultAtlasTestJobs;
                            selectors: seq[string] = @[];
+                           skipSelectors: seq[string] = @[];
                            compileOnly = false;
                            shuffle = true;
                            showProgress = true;
@@ -126,8 +130,10 @@ proc initAtlasTestOptions*(projectDir = Path"";
     projectDir: projectDir,
     nimExe: nimExe,
     nimcacheDir: nimcacheDir,
+    compilerArgs: compilerArgs,
     jobs: jobs,
     selectors: selectors,
+    skipSelectors: skipSelectors,
     compileOnly: compileOnly,
     shuffle: shuffle,
     showProgress: showProgress,
@@ -305,6 +311,21 @@ proc matchesSelector(path: Path; selector: string): bool =
   if not selector.hasPathSeparator():
     result = matchesTestSelector(path, selector)
 
+proc matchesDirectSelector(projectDir, path: Path; selector: string): bool =
+  if selector.hasGlobWildcard():
+    for match in walkPattern(selectorProjectPattern(projectDir, selector)):
+      let matchPath = Path(match).absolutePath()
+      if matchPath == path:
+        return true
+  else:
+    result = selectorProjectPath(projectDir, selector) == path
+
+proc matchesSkipSelector(projectDir, path: Path; selector: string): bool =
+  if selector.hasPathSeparator():
+    result = matchesDirectSelector(projectDir, path, selector)
+  else:
+    result = matchesSelector(path, selector)
+
 proc discoverAllTestFiles(projectDir: Path): seq[Path] =
   let testsDir = projectDir / Path"tests"
   for path in walkFiles($(testsDir / Path"t*.nim")):
@@ -312,7 +333,8 @@ proc discoverAllTestFiles(projectDir: Path): seq[Path] =
   result.sort(proc(a, b: Path): int = cmp($a, $b))
 
 proc discoverTestFiles*(projectDir: Path;
-                        selectors: openArray[string] = []): seq[Path] =
+                        selectors: openArray[string] = [];
+                        skipSelectors: openArray[string] = []): seq[Path] =
   let
     projectDir = effectiveProjectDir(projectDir)
     allFiles = discoverAllTestFiles(projectDir)
@@ -336,6 +358,20 @@ proc discoverTestFiles*(projectDir: Path;
 
   if result.len == 0:
     raise newException(ValueError, "no tests found matching tests/t*.nim")
+
+  if skipSelectors.len > 0:
+    var filtered: seq[Path]
+    for path in result:
+      var skip = false
+      for selector in skipSelectors:
+        if matchesSkipSelector(projectDir, path, selector):
+          skip = true
+      if not skip:
+        filtered.add path
+    result = filtered
+
+  if result.len == 0:
+    raise newException(ValueError, "all selected tests were skipped")
 
 proc quoteCommand(command: string; args: openArray[string]): string =
   result = quoteShell(command)
@@ -367,21 +403,30 @@ proc testNimcacheDir(projectDir, nimcacheRoot, path: Path): Path =
 proc testExecutablePath(nimcache, path: Path): Path =
   nimcache / Path(($path.splitFile().name).addFileExt(ExeExt))
 
+proc nimFlagsArgs(): seq[string] =
+  let flags = getEnv("NIMFLAGS").strip()
+  if flags.len > 0:
+    result = parseCmdLine(flags)
+
 proc makeTestJob(projectDir, nimcacheRoot, path: Path;
                  nimExe: string;
+                 userCompilerArgs: openArray[string];
                  compileOnly: bool): TestJob =
   let
     label = testLabel(projectDir, path)
     nimcache = testNimcacheDir(projectDir, nimcacheRoot, path)
     executable = testExecutablePath(nimcache, path)
-    compileArgs = @[
-      "c",
-      "--colors:on",
-      "-d:nimUnittestColor:on",
-      "--nimcache:" & $nimcache,
-      "--out:" & $executable,
-      label
-    ]
+  var compileArgs = @["c"]
+  compileArgs.add nimFlagsArgs()
+  compileArgs.add userCompilerArgs
+  compileArgs.add @[
+    "--colors:on",
+    "-d:nimUnittestColor:on",
+    "--nimcache:" & $nimcache,
+    "--out:" & $executable,
+    label
+  ]
+  let
     compileCommandLine = quoteCommand(nimExe, compileArgs)
     commandLine =
       if compileOnly:
@@ -794,6 +839,30 @@ proc writeResultChunk(result: AtlasTestResult; showCompilerOutput: bool) =
   writeOutputText(result.runOutput)
   stdout.flushFile()
 
+proc writeResultSummary(result: AtlasTestResult) =
+  let
+    status =
+      if result.exitCode == 0:
+        arsSuccess
+      else:
+        arsFailed
+    statusText =
+      if result.exitCode == 0:
+        "success"
+      else:
+        "failed"
+  writeAtlasRunStatusLine(result.label & " ", statusText, status)
+  stdout.flushFile()
+
+proc writeStartedSummary(label: string; stage: TestStage) =
+  let action =
+    if stage == tsCompiling:
+      "compiling"
+    else:
+      "running"
+  writeAtlasRunStatusLine(label & " ", action, arsRunning)
+  stdout.flushFile()
+
 proc runTestJobs(jobs: seq[TestJob];
                  workerCount: int;
                  showProgress, showOutput: bool;
@@ -865,10 +934,16 @@ proc runTestJobs(jobs: seq[TestJob];
         states[ev.jobIndex].running = true
         states[ev.jobIndex].stage = ev.stage
         states[ev.jobIndex].lastActivityAt = now
+        if showOutput and not renderInteractive and not result.cancelled:
+          writeStartedSummary(ev.label, ev.stage)
       of tpUpdated:
+        let previousStage = states[ev.jobIndex].stage
         states[ev.jobIndex].running = true
         states[ev.jobIndex].stage = ev.stage
         states[ev.jobIndex].lastActivityAt = now
+        if showOutput and not renderInteractive and not result.cancelled and
+            previousStage != ev.stage:
+          writeStartedSummary(ev.label, ev.stage)
       of tpFinished:
         states[ev.jobIndex].running = false
         states[ev.jobIndex].finished = true
@@ -891,6 +966,9 @@ proc runTestJobs(jobs: seq[TestJob];
           if renderInteractive:
             if renderInteractiveNow(states, now, lastLines, lastRenderedBlock):
               lastRender = now
+        elif showOutput and onlyErrors and not renderInteractive and
+            not result.cancelled and ev.exitCode == 0:
+          writeResultSummary(result.results[ev.jobIndex])
       changed = true
 
     if renderInteractive and changed and
@@ -930,7 +1008,8 @@ proc runAtlasTests*(options: AtlasTestOptions): int =
   let
     projectDir = effectiveProjectDir(options.projectDir)
     nimcacheRoot = effectiveNimcacheRoot(projectDir, options.nimcacheDir)
-    testFiles = discoverTestFiles(projectDir, options.selectors)
+    testFiles = discoverTestFiles(projectDir, options.selectors,
+      options.skipSelectors)
     workerCount = effectiveJobs(options.jobs, testFiles.len)
   var jobs: seq[TestJob]
   for path in testFiles:
@@ -939,6 +1018,7 @@ proc runAtlasTests*(options: AtlasTestOptions): int =
       nimcacheRoot,
       path,
       options.nimExe,
+      options.compilerArgs,
       options.compileOnly
     )
   if options.shuffle:
