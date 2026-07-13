@@ -172,18 +172,17 @@ proc convertNimbleLock*(nimble: Path): LockFile =
     error nimble, "invalid nimble lockfile"
     return
 
-  var nc = createNimbleContext()
-
   result = newLockFile()
   for (name, info) in jsonTree["packages"].pairs:
     if name == "nim":
       result.nimVersion = info["version"].getStr
     else:
-      # lookup package using url
       let pkgurl = info["url"].getStr
       info name, " imported "
-      let u = nc.createUrl(pkgurl)
-      let dir = depsDir(relative=true) / u.projectName.Path 
+      # the dependency directory is named after the nimble package name
+      # (the lockfile key), matching how atlas lays out deps/<name>; the
+      # url's repo name can differ
+      let dir = depsDir(relative=true) / name.Path
       result.items[name] = LockFileEntry(
         dir: dir.relativePath(project()),
         url: pkgurl,
@@ -204,20 +203,19 @@ proc listChanged*(lockFile: Path) =
     if not dirExists(dir):
       warn dir, "repo missing!"
       continue
-    withDir dir:
-      let url = getCanonicalUrl(dir)
-      if v.url != url:
-        warn v.dir, "remote URL has been changed;" &
-                       " found: " & url &
-                       " lockfile has: " & v.url
+    let url = getCanonicalUrl(dir)
+    if v.url != url:
+      warn v.dir, "remote URL has been changed;" &
+                     " found: " & url &
+                     " lockfile has: " & v.url
 
-      let commit = currentGitCommit(dir)
-      if commit.h != v.commit:
-        warn dir, "commit differs;" &
-                     " found: " & $commit &
-                     " lockfile has: " & v.commit
-      else:
-        notice "atlas:pin", "Repo:", $dir.relativePath(project()), "is up to date at:", commit.short()
+    let commit = currentGitCommit(dir)
+    if commit.h != v.commit:
+      warn dir, "commit differs;" &
+                   " found: " & $commit &
+                   " lockfile has: " & v.commit
+    else:
+      notice "atlas:pin", "Repo:", $dir.relativePath(project()), "is up to date at:", commit.short()
 
   if lf.hostOS == system.hostOS and lf.hostCPU == system.hostCPU:
     compareVersion "nim", lf.nimVersion, detectNimVersion()
