@@ -4,7 +4,7 @@ import std / [strutils, os, uri, jsonutils, json, tables, sequtils, unittest]
 import std/terminal
 
 import basic/[sattypes, context, reporters, pkgurls, compiledpatterns, versions]
-import basic/[deptypes, nimblecontext, deptypesjson, nimbleparser]
+import basic/[deptypes, nimblecontext, deptypesjson, nimbleparser, parse_requires]
 import dependencies
 import depgraphs
 import integration_test_utils
@@ -163,6 +163,32 @@ suite "test link integration":
         check hasNimbleRequirement(nimbleFile, linkUri)
 
         removeFile($nimbleFile)
+
+  test "link precheck detects forge alias dependency in feature block":
+      withDir "tests/ws_link_integration":
+        let nimbleFile = Path"link_feature_precheck.nimble"
+        defer:
+          removeFile($nimbleFile)
+        writeFile($nimbleFile, dedent"""
+        feature "SiWin":
+          requires "gh:elcritch/siwin"
+        """)
+
+        let linkedNimble =
+          (paths.getCurrentDir() / Path"siwin.nimble").absolutePath
+        let linkUri = toPkgUriRaw(parseUri("link://" & $linkedNimble))
+        let forgeUri = createUrlSkipPatterns("gh:elcritch/siwin")
+
+        check $forgeUri == "https://github.com/elcritch/siwin"
+        check hasNimbleRequirement(nimbleFile, linkUri)
+
+        var nc = createNimbleContext()
+        nc.put("siwin", linkUri)
+        patchNimbleFile(nc, nimbleFile, "siwin")
+
+        let info = extractRequiresInfo(nimbleFile)
+        check info.requires.len == 0
+        check info.features["SiWin"] == @["gh:elcritch/siwin"]
 
   test "expand using link files part 2":
       setAtlasVerbosity(Warning)

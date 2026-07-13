@@ -74,7 +74,7 @@ Options:
   --dumpgraphs          dump dependency graphs for debugging
   --showGraph           show the dependency graph
   --tree                show `atlas deps` output as a dependency tree
-  --update              for `install`, update dependency repos before solving
+  --update, -u          for `install`, update dependency repos before solving
   --noexec              do not perform any action that may run arbitrary code
   --autoenv             detect the minimal Nim $version and setup a
                         corresponding Nim virtual environment
@@ -267,8 +267,9 @@ proc activeDirectDependencies(cache: ActivationCache; pkg: ActivatedPackage): se
     if idx >= 0 and not cache.packages[idx].isRoot and not seen.containsOrIncl(idx):
       result.add(cache.packages[idx])
   for feature in pkg.features:
-    if feature in rel.features:
-      for (depUrl, _) in rel.features[feature]:
+    let declaredFeature = rel.features.findFeature(feature)
+    if declaredFeature.len > 0:
+      for (depUrl, _) in rel.features[declaredFeature]:
         let idx = cache.findActivatedPackage(depUrl)
         if idx >= 0 and not cache.packages[idx].isRoot and not seen.containsOrIncl(idx):
           result.add(cache.packages[idx])
@@ -591,7 +592,7 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
       of "dumpformular": context().flags.incl DumpFormular
       of "showgraph": context().flags.incl ShowGraph
       of "tree": context().flags.incl TreeView
-      of "update": context().flags.incl UpdateBeforeInstall
+      of "update", "u": context().flags.incl UpdateBeforeInstall
       of "ignoreurls": context().flags.incl IgnoreGitRemoteUrls
       of "keepworkspace": context().flags.incl KeepWorkspace
       of "autoenv": context().flags.incl AutoEnv

@@ -99,7 +99,7 @@ proc hasNimbleRequirement*(nimbleFile: Path; url: PkgUrl): bool =
     url.requiresName().toLowerAscii()
   ]
 
-  for req in extractRequiresInfo(nimbleFile).requires:
+  proc matchesRequirement(req: string): bool =
     let (name, _, _) = extractRequirementName(req)
     if name.toLowerAscii() in names:
       return true
@@ -107,6 +107,15 @@ proc hasNimbleRequirement*(nimbleFile: Path; url: PkgUrl): bool =
       let reqUrl = createUrlSkipPatterns(name)
       if reqUrl.shortName().toLowerAscii() == url.shortName().toLowerAscii() or
           reqUrl.projectName().toLowerAscii() == url.projectName().toLowerAscii():
+        return true
+
+  let nimbleInfo = extractRequiresInfo(nimbleFile)
+  for req in nimbleInfo.requires:
+    if matchesRequirement(req):
+      return true
+  for _, reqs in nimbleInfo.features:
+    for req in reqs:
+      if matchesRequirement(req):
         return true
 
 proc patchNimbleFile*(nc: var NimbleContext;

@@ -6,7 +6,7 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [os, uri, paths, files, tables, sets]
+import std / [os, uri, paths, files, tables, sets, strutils]
 import versions, parse_requires, compiledpatterns, reporters
 
 export reporters
@@ -118,17 +118,40 @@ proc allFeaturesRequested*(): bool =
   initAtlasContext()
   AllFeatures in atlasContext.flags
 
+func sameFeature*(a, b: string): bool {.inline.} =
+  ## Feature names follow Nim's style-insensitive conditional-symbol semantics.
+  cmpIgnoreStyle(a, b) == 0
+
+proc findFeature*[T](features: Table[string, T]; name: string): string =
+  ## Returns the declared spelling of `name`, or an empty string when missing.
+  for declaredName in features.keys():
+    if sameFeature(declaredName, name):
+      return declaredName
+
+proc containsFeature*(features: HashSet[string]; name: string): bool =
+  for feature in features:
+    if sameFeature(feature, name):
+      return true
+
+proc containsFeature*(features: openArray[string]; name: string): bool =
+  for feature in features:
+    if sameFeature(feature, name):
+      return true
+
+proc addUniqueFeature*(features: var seq[string]; feature: string) =
+  if not features.containsFeature(feature):
+    features.add feature
+
 proc hasRequestedFeature*(pkgShortName, pkgProjectName, feature: string): bool =
   initAtlasContext()
   if AllFeatures in atlasContext.flags:
     return true
-  if feature in atlasContext.features:
-    return true
   let scopedByShortName = "feature." & pkgShortName & "." & feature
   let scopedByProjectName = "feature." & pkgProjectName & "." & feature
   result =
-    scopedByShortName in atlasContext.features or
-    scopedByProjectName in atlasContext.features
+    atlasContext.features.containsFeature(feature) or
+    atlasContext.features.containsFeature(scopedByShortName) or
+    atlasContext.features.containsFeature(scopedByProjectName)
 
 proc packagesDirectory*(): Path =
   depsDir() / DefaultPackagesSubDir

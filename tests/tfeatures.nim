@@ -284,7 +284,7 @@ suite "test global features":
         withDir "deps" / "proj_a":
           writeFile("proj_a.nimble", dedent"""
           requires "proj_b >= 1.1.0"
-          feature "testing":
+          feature "Test_Ing":
             requires "$1 >= 1.0.0"
           """ % [toWindowsFileUrl("file://" & $featureDepPath)])
           exec "git add proj_a.nimble"
@@ -301,7 +301,9 @@ suite "test global features":
         ])
 
         check dirExists("deps" / "proj_feature_dep")
-        check "deps/proj_feature_dep" in readFile("nim.cfg")
+        let nimCfg = readFile("nim.cfg")
+        check "deps/proj_feature_dep" in nimCfg
+        check "feature.proj_a.testing" in nimCfg
         check fileExists("deps" / ".cache" / "atlas.active.json")
         check not fileExists("deps" / "atlas.cache.json")
 
