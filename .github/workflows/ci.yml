@@ -50,7 +50,7 @@ jobs:
           git config --global user.name "atlasbot"
 
       - name: Checkout atlas
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           path: atlas
           submodules: false
