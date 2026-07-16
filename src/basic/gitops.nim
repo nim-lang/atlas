@@ -563,6 +563,21 @@ proc findOriginTip*(path: Path; origin = "origin"; errorReportLevel: MsgKind = W
   let repo = loadRepoMetadata(path, origin, errorReportLevel = errorReportLevel, isLocalOnly = isLocalOnly)
   findOriginTip(repo, errorReportLevel)
 
+proc tagRefsSnapshot*(repo: RepoMetadata; errorReportLevel: MsgKind = Debug): string =
+  ## Returns the tag refs used for release discovery, including their targets.
+  ##
+  ## Unlike the branch tip, this changes when a tag is added to an existing
+  ## commit, so release caches can use it to detect newly published versions.
+  if not isGitDir(repo.path):
+    return
+
+  var refs = @["--format=%(refname) %(objectname)", "refs/tags"]
+  if repo.remoteName.len > 0:
+    refs.add "refs/remotes/" & repo.remoteName & "/tags"
+  let (outp, status) = exec(GitForEachRef, repo.path, refs, errorReportLevel)
+  if status == RES_OK:
+    result = outp.strip()
+
 proc collectTaggedVersions*(repo: RepoMetadata; errorReportLevel: MsgKind = Debug): seq[VersionTag] =
   let tip = findOriginTip(repo, errorReportLevel)
 

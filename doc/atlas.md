@@ -67,9 +67,10 @@ If dependency URLs use `git://`, pass `--forceGitToHttps` to rewrite them to
 
 Atlas caches parsed dependency release metadata in `deps/.cache`. Each cache
 file is scoped to one package URL and is reused only while the package's remote
-HEAD, local checked-out commit, and relevant release-collection flags still
-match. If those inputs change, Atlas reparses the package's Nimble files and
-rewrites the cache.
+HEAD, local checked-out commit, fetched tag refs, and relevant
+release-collection flags still match. If those inputs change, Atlas reparses
+the package's Nimble files and rewrites the cache. This includes a new tag
+published at an existing commit after `atlas install --update` fetches it.
 
 In addition to full URLs and package names, Atlas supports a shorthand
 **forge alias** syntax of the form `<alias>:<user>/<repo>`. The supported
