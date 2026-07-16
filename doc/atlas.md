@@ -155,7 +155,7 @@ For example:
   atlas link ../other-project
 ```
 
-This will link the other project and make its dependencies available to your current project. The other project must be another Atlas project and have a Nimble file.
+This will link the other project and make its dependencies available to your current project. The other project must be another Atlas project and have a Nimble file. Run `atlas install` in the linked project first so Atlas can create its current dependency activation cache. This is required when linking projects last installed by an older Atlas version.
 
 The linked project will be added to this project's Nimble file if it's not already present.
 

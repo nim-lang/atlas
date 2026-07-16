@@ -390,6 +390,11 @@ proc linkPackage(linkDir, linkedNimble: Path) =
   ## nimble file and create links to the dependent nimble files in the current
   ## project's deps directory
 
+  # Do this before altering the current project's Nimble file. Older Atlas
+  # versions did not create this cache, so explain how to upgrade the linked
+  # project instead of failing while trying to parse a missing file.
+  let lcache = loadActivationCache(linkedNimble)
+
   let linkUri = toPkgUriRaw(parseUri("link://" & $linkedNimble))
   discard context().nameOverrides.addPattern(linkUri.projectName, $linkUri.url)
   info "atlas:link", "link uri:", $linkUri
@@ -408,7 +413,6 @@ proc linkPackage(linkDir, linkedNimble: Path) =
 
   # Load linked project's config to get its deps dir
   info "atlas:link", "linked project dir:", $linkDir
-  let lcache = loadActivationCache(linkedNimble)
 
   # Create links for all nimble files and links in the linked project
   for pkg in lcache.packages:
