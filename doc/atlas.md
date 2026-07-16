@@ -161,6 +161,25 @@ The linked project will be added to this project's Nimble file if it's not alrea
 
 Note, that the other project's `nameOverrides` and `urlOverrides` *aren't* imported. You may need to import the name-overrides to properly use the deps. This is due to the triplet-naming above.
 
+### Unlink <package>
+
+Remove a linked package from the current project, including its `nimble-link`
+files, activation-cache entries, and generated `nim.cfg` paths. By default,
+Atlas also removes the linked package's cached child dependencies:
+
+```
+  atlas unlink other-project
+```
+
+Children still needed by another active dependency are kept linked.
+
+Use `--only` to remove just the named package while keeping its child
+dependencies linked:
+
+```
+  atlas unlink --only other-project
+```
+
 ### Use / Update <url>/<package name>
 
 `atlas use <url|pkgname>` clones a package and its dependencies (recursively) into the project.

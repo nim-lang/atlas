@@ -118,6 +118,48 @@ proc hasNimbleRequirement*(nimbleFile: Path; url: PkgUrl): bool =
       if matchesRequirement(req):
         return true
 
+proc removeNimbleRequirement*(nimbleFile: Path; url: PkgUrl): bool =
+  ## Removes a top-level, single-requirement line previously added by Atlas.
+  ## Feature requirements and grouped requirements are left untouched.
+  doAssert nimbleFile.string.fileExists()
+
+  let names = [
+    url.shortName().toLowerAscii(),
+    url.projectName().toLowerAscii(),
+    url.fullName().toLowerAscii(),
+    url.requiresName().toLowerAscii()
+  ]
+
+  proc matchesRequirement(req: string): bool =
+    let (name, _, _) = extractRequirementName(req)
+    if name.toLowerAscii() in names:
+      return true
+    if name.isUrl():
+      let reqUrl = createUrlSkipPatterns(name)
+      return reqUrl.shortName().toLowerAscii() == url.shortName().toLowerAscii() or
+        reqUrl.projectName().toLowerAscii() == url.projectName().toLowerAscii()
+
+  let content = readFile($nimbleFile)
+  var lines: seq[string]
+  for line in content.splitLines():
+    let stripped = line.strip()
+    var remove = false
+    if line == stripped and stripped.startsWith("requires "):
+      let req = stripped["requires ".len .. ^1].strip()
+      if req.len >= 2 and req[0] == '"' and req[^1] == '"':
+        remove = matchesRequirement(req[1 .. ^2])
+    if remove:
+      result = true
+    else:
+      lines.add(line)
+
+  if result:
+    var updated = lines.join("\n")
+    if content.len > 0 and content[^1] == '\n' and
+        (updated.len == 0 or updated[^1] != '\n'):
+      updated.add "\n"
+    writeFile($nimbleFile, updated)
+
 proc patchNimbleFile*(nc: var NimbleContext;
                       nimbleFile: Path, name: string) =
   var url = nc.createUrl(name)  # This will handle both name and URL overrides internally

@@ -205,12 +205,15 @@ proc toActivationCache*(g: DepGraph): ActivationCache =
     cmp($a.url, $b.url)
   )
 
-proc writeActivationCache*(g: DepGraph) =
+proc writeActivationCache*(cache: ActivationCache) =
   let configFile = activationCacheFile()
   createDir($configFile.parentDir())
   debug "atlas", "writing activation cache to: ", $configFile
-  let jn = toJson(toActivationCache(g), ToJsonOptions(enumMode: joptEnumString))
+  let jn = toJson(cache, ToJsonOptions(enumMode: joptEnumString))
   writeFile($configFile, pretty(jn))
+
+proc writeActivationCache*(g: DepGraph) =
+  writeActivationCache(toActivationCache(g))
 
 proc activationCacheFileFor*(nimbleFile: Path): Path =
   ## Returns the activation-cache path configured for a project Nimble file.
@@ -226,9 +229,8 @@ proc loadActivationCache*(nimbleFile: Path): ActivationCache =
   let projectDir = nimbleFile.parentDir()
   let configFile = activationCacheFileFor(nimbleFile)
   if not fileExists($configFile):
-    fatal "The linked project has no current activation cache at " & $configFile &
-      ". Run `atlas install` in " & $projectDir &
-      " with this version of Atlas, then retry `atlas link`."
+    fatal "No current activation cache at " & $configFile & ". Run `atlas install` in " &
+      $projectDir & " with this version of Atlas, then retry."
   debug "atlas", "reading activation cache from: ", $configFile
   result.fromJson(parseFile($configFile), Joptions(allowMissingKeys: true, allowExtraKeys: true))
 

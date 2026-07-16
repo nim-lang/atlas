@@ -59,6 +59,7 @@ type
     KeepFeatures
     AllFeatures
     TreeView
+    UnlinkOnly
     IncludeTagsAndNimbleCommits # include nimble commits and tags in the solver
     NimbleCommitsMax # takes the newest commit for each version
 
