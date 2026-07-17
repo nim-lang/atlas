@@ -1,5 +1,5 @@
-import std/[unittest, json, jsonutils, sets, tables, os, times, paths, strutils]
-import basic/[context, sattypes, pkgurls, deptypes, nimblecontext, dependencycache]
+import std/[unittest, json, jsonutils, sets, tables, os, osproc, times, paths, strutils]
+import basic/[context, sattypes, pkgurls, deptypes, nimblecontext, dependencycache, gitops]
 import basic/[deptypesjson, versions]
 import confighandler
 
@@ -137,7 +137,7 @@ suite "json serde":
       @[(VersionTag(v: Version"1.0.0", c: current).toPkgVer, release)]
     )
     let cache = parseFile($packageReleaseCachePath(pkg))
-    check cache["cacheVersion"].getInt() == 4
+    check cache["cacheVersion"].getInt() == 5
     check cache["shortName"].getStr() == "foobar"
     check cache["fullName"].getStr() == "foobar.nimble-test.github.com"
     check "packageName" notin cache
@@ -222,7 +222,45 @@ suite "json serde":
 
     savePackageReleaseCache(pkg, current, @[(version, release)])
     let regeneratedCache = parseFile($cachePath)
-    check regeneratedCache["cacheVersion"].getInt() == 4
+    check regeneratedCache["cacheVersion"].getInt() == 5
+
+  test "package release cache rejects a tag added at the current commit":
+    let oldCtx = context()
+    let ws = Path(getTempDir()) / Path("atlas_release_cache_tags_" & $int(epochTime()))
+    let repo = ws / Path"repo"
+    defer:
+      setContext(oldCtx)
+      if dirExists($ws):
+        removeDir($ws)
+
+    createDir($repo)
+    discard execCmdEx("git -C " & quoteShell($repo) & " init")
+    discard execCmdEx("git -C " & quoteShell($repo) & " config user.name test-user")
+    discard execCmdEx("git -C " & quoteShell($repo) & " config user.email test@example.com")
+    writeFile($(repo / Path"foobar.nimble"), "version = \"0.7.0\"\n")
+    discard execCmdEx("git -C " & quoteShell($repo) & " add foobar.nimble")
+    discard execCmdEx("git -C " & quoteShell($repo) & " commit -m initial")
+    discard execCmdEx("git -C " & quoteShell($repo) & " tag v0.7.0")
+
+    setContext(AtlasContext(projectDir: ws, depsDir: Path"deps"))
+    let url = nc.createUrl("foobar")
+    let current = currentGitCommit(repo)
+    let pkg = Package(url: url, ondisk: repo, originHead: current)
+    let release = NimbleRelease(version: Version"0.7.0", requirements: @[], status: Normal)
+    let version = VersionTag(v: Version"0.7.0", c: current).toPkgVer
+    let tagRefs = tagRefsSnapshot(loadRepoMetadata(repo, isLocalOnly = true))
+    savePackageReleaseCache(pkg, current, @[(version, release)], tagRefs)
+    check parseFile($packageReleaseCachePath(pkg))["tagRefs"].getStr() == tagRefs
+
+    var entries: seq[PackageReleaseCacheEntry]
+    check loadPackageReleaseCache(pkg, current, entries, tagRefs)
+
+    discard execCmdEx("git -C " & quoteShell($repo) & " tag v0.7.2")
+    let updatedTagRefs = tagRefsSnapshot(loadRepoMetadata(repo, isLocalOnly = true))
+    check updatedTagRefs != tagRefs
+    entries.setLen(0)
+    check not loadPackageReleaseCache(pkg, current, entries, updatedTagRefs)
+    check entries.len == 0
 
   test "package release cache lifts stable metadata":
     let oldCtx = context()

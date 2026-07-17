@@ -38,6 +38,7 @@ Commands:
                         search for package that contains the given keywords
   link <path>           link an existing project into the current project
                         to share its dependencies
+  unlink <package>      remove a linked package and its linked dependencies
   tag [major|minor|patch|<semver>|a..z]
                         add and push a new tag, input must be one of:
                         ['major'|'minor'|'patch'] or a SemVer tag like ['1.0.3']
@@ -75,6 +76,7 @@ Options:
   --showGraph           show the dependency graph
   --tree                show `atlas deps` output as a dependency tree
   --update, -u          for `install`, update dependency repos before solving
+  --only                for `unlink`, leave child dependencies linked
   --noexec              do not perform any action that may run arbitrary code
   --autoenv             detect the minimal Nim $version and setup a
                         corresponding Nim virtual environment
@@ -390,6 +392,16 @@ proc linkPackage(linkDir, linkedNimble: Path) =
   ## nimble file and create links to the dependent nimble files in the current
   ## project's deps directory
 
+  # Do this before altering the current project's Nimble file. Older Atlas
+  # versions did not create this cache, so explain how to upgrade the linked
+  # project instead of failing while trying to parse a missing file.
+  let linkedActivationCache = activationCacheFileFor(linkedNimble)
+  if not fileExists($linkedActivationCache):
+    fatal "The linked project has no current activation cache at " &
+      $linkedActivationCache & ". Run `atlas install` in " & $linkDir &
+      " with this version of Atlas, then retry `atlas link`."
+  let lcache = loadActivationCache(linkedNimble)
+
   let linkUri = toPkgUriRaw(parseUri("link://" & $linkedNimble))
   discard context().nameOverrides.addPattern(linkUri.projectName, $linkUri.url)
   info "atlas:link", "link uri:", $linkUri
@@ -408,7 +420,6 @@ proc linkPackage(linkDir, linkedNimble: Path) =
 
   # Load linked project's config to get its deps dir
   info "atlas:link", "linked project dir:", $linkDir
-  let lcache = loadActivationCache(linkedNimble)
 
   # Create links for all nimble files and links in the linked project
   for pkg in lcache.packages:
@@ -425,6 +436,102 @@ proc linkPackage(linkDir, linkedNimble: Path) =
     createNimbleLink(linkPkgUrl, nimble, CfgPath(pkg.srcDir))
 
   installDependencies(nc, nimbleFile)
+
+proc activatedPackageMatches(pkg: ActivatedPackage; name: string): bool =
+  let needle = name.toLowerAscii()
+  result = needle == ($pkg.url).toLowerAscii() or
+    needle == pkg.url.shortName().toLowerAscii() or
+    needle == pkg.url.projectName().toLowerAscii() or
+    needle == pkg.url.fullName().toLowerAscii()
+
+proc findActivatedPackage(cache: ActivationCache; name: string): int =
+  for i, pkg in cache.packages:
+    if not pkg.isRoot and pkg.activatedPackageMatches(name):
+      return i
+  return -1
+
+proc linkedPackageClosure(cache: ActivationCache; packageIndex: int;
+                          only: bool): HashSet[int] =
+  var closure: HashSet[int]
+
+  proc collect(pkg: ActivatedPackage) =
+    let idx = cache.findActivatedPackage($pkg.url)
+    if idx < 0 or closure.containsOrIncl(idx):
+      return
+    if not only:
+      for child in cache.activeDirectDependencies(cache.packages[idx]):
+        collect(child)
+
+  collect(cache.packages[packageIndex])
+  if not only:
+    var retained: HashSet[int]
+
+    proc retain(pkg: ActivatedPackage) =
+      let idx = cache.findActivatedPackage($pkg.url)
+      if idx < 0 or idx == packageIndex or retained.containsOrIncl(idx):
+        return
+      for child in cache.activeDirectDependencies(cache.packages[idx]):
+        retain(child)
+
+    for pkg in cache.packages:
+      if pkg.isRoot:
+        for child in cache.activeDirectDependencies(pkg):
+          retain(child)
+        break
+    for idx in retained:
+      closure.excl(idx)
+  result = closure
+
+proc activationCachePaths(cache: ActivationCache): tuple[
+    paths: seq[CfgPath], features: seq[string]] =
+  for pkg in cache.packages:
+    if pkg.isRoot:
+      for feature in pkg.features:
+        result.features.addUniqueFeature "feature." & pkg.url.projectName & "." & feature
+    else:
+      result.paths.add CfgPath(pkg.ondisk / pkg.srcDir)
+      for feature in pkg.features:
+        result.features.addUniqueFeature "feature." & pkg.url.shortName & "." & feature
+  result.paths.sort(proc (a, b: CfgPath): int = cmp(a.string, b.string))
+
+proc linkFileFor(pkg: ActivatedPackage): Path =
+  result = pkg.url.toLinkPath()
+  if result.len == 0:
+    result = depsDir() / Path(pkg.url.projectName() & ".nimble-link")
+
+proc unlinkPackage(name: string; only: bool = false) =
+  ## Removes a linked package and optionally its cached child dependencies.
+  let nimbleFile = findProjectNimbleFile().absolutePath
+  let cache = loadActivationCache(nimbleFile)
+  let packageIndex = cache.findActivatedPackage(name)
+  if packageIndex < 0:
+    fatal "No active linked package named: " & name
+
+  let removal = cache.linkedPackageClosure(packageIndex, only)
+  let target = cache.packages[packageIndex]
+  if not target.url.isNimbleLink():
+    fatal "Package is not linked: " & name
+  if removeNimbleRequirement(nimbleFile, target.url):
+    info "atlas:unlink", "removed dependency from:", $nimbleFile
+  else:
+    warn "atlas:unlink", "no top-level requirement found for:", target.url.projectName
+
+  var updated: ActivationCache
+  for i, pkg in cache.packages:
+    if i in removal:
+      let linkFile = pkg.linkFileFor()
+      if fileExists($linkFile):
+        removeFile($linkFile)
+      info "atlas:unlink", "unlinked:", pkg.url.projectName
+    else:
+      updated.packages.add(pkg)
+
+  discard context().nameOverrides.removePattern(target.url.projectName)
+  writeConfig()
+  removeDepGraphCache()
+  writeActivationCache(updated)
+  let (paths, features) = updated.activationCachePaths()
+  patchNimCfg(paths, CfgPath project(), features)
 
 proc detectProject(): bool =
   ## find project by checking `currentDir` and its parents.
@@ -593,6 +700,7 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
       of "showgraph": context().flags.incl ShowGraph
       of "tree": context().flags.incl TreeView
       of "update", "u": context().flags.incl UpdateBeforeInstall
+      of "only": context().flags.incl UnlinkOnly
       of "ignoreurls": context().flags.incl IgnoreGitRemoteUrls
       of "keepworkspace": context().flags.incl KeepWorkspace
       of "autoenv": context().flags.incl AutoEnv
@@ -686,6 +794,8 @@ proc atlasRun*(params: seq[string]) =
 
   if UpdateBeforeInstall in context().flags and action != "install":
     fatal "--update option is only valid with `install`"
+  if UnlinkOnly in context().flags and action != "unlink":
+    fatal "--only option is only valid with `unlink`"
 
   if action notin ["init", "tag", "search", "list"]:
     doAssert project().string != "" and project().dirExists(), "project was not set"
@@ -760,6 +870,10 @@ proc atlasRun*(params: seq[string]) =
       quit(2)
 
     linkPackage(linkDir, linkedNimbles[0])
+
+  of "unlink":
+    singleArg()
+    unlinkPackage(args[0], UnlinkOnly in context().flags)
 
   of "pin":
     optSingleArg($LockFileName)

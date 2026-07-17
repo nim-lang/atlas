@@ -190,6 +190,45 @@ suite "test link integration":
         check info.requires.len == 0
         check info.features["SiWin"] == @["gh:elcritch/siwin"]
 
+  test "link explains how to upgrade a project without an activation cache":
+      withDir "tests/ws_link_integration":
+        let linkedNimble = (paths.getCurrentDir() /
+          Path"../ws_link_semver/ws_link_semver.nimble").absolutePath
+        let activeCache = activationCacheFileFor(linkedNimble)
+        let oldCache = Path($activeCache & ".test-backup")
+        let legacyCache = linkedNimble.parentDir() / Path"deps/atlas.cache.json"
+        let oldLegacyCache = Path($legacyCache & ".test-backup")
+        let savedNimble = readFile("ws_link_integration.nimble")
+        let hadActiveCache = fileExists($activeCache)
+        let hadLegacyCache = fileExists($legacyCache)
+        defer:
+          writeFile("ws_link_integration.nimble", savedNimble)
+          if hadActiveCache and fileExists($oldCache):
+            moveFile($oldCache, $activeCache)
+          if hadLegacyCache and fileExists($oldLegacyCache):
+            moveFile($oldLegacyCache, $legacyCache)
+          elif fileExists($legacyCache):
+            removeFile($legacyCache)
+
+        if fileExists($oldCache):
+          removeFile($oldCache)
+        if fileExists($oldLegacyCache):
+          removeFile($oldLegacyCache)
+        if hadActiveCache:
+          moveFile($activeCache, $oldCache)
+        if hadLegacyCache:
+          moveFile($legacyCache, $oldLegacyCache)
+        writeFile($legacyCache, "{}")
+
+        try:
+          atlasRun(@["link", "../ws_link_semver"])
+          check false
+        except AtlasFatalError as err:
+          check err.msg.contains("linked project has no current activation cache")
+          check err.msg.contains("Run `atlas install`")
+          check err.msg.contains("retry `atlas link`")
+        check readFile("ws_link_integration.nimble") == savedNimble
+
   test "expand using link files part 2":
       setAtlasVerbosity(Warning)
       withDir "tests/ws_link_integration":

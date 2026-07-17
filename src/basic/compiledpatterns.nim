@@ -220,6 +220,20 @@ proc addPattern*(p: var Patterns; inputPattern, outputPattern: string): string =
       p.patterns.add((inputPattern, outputPattern))
       result = ""
 
+proc removePattern*(p: var Patterns; inputPattern: string): bool =
+  ## Removes all rewrite rules with `inputPattern`.
+  var kept: seq[(string, string)]
+  for (input, output) in p.patterns:
+    if input == inputPattern:
+      result = true
+    else:
+      kept.add((input, output))
+
+  if result:
+    p = initPatterns()
+    for (input, output) in kept:
+      discard p.addPattern(input, output)
+
 proc substitute*(p: Patterns; input: string; didReplace: var bool): string =
   if input in p.t:
     didReplace = true

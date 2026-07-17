@@ -205,19 +205,32 @@ proc toActivationCache*(g: DepGraph): ActivationCache =
     cmp($a.url, $b.url)
   )
 
-proc writeActivationCache*(g: DepGraph) =
+proc writeActivationCache*(cache: ActivationCache) =
   let configFile = activationCacheFile()
   createDir($configFile.parentDir())
   debug "atlas", "writing activation cache to: ", $configFile
-  let jn = toJson(toActivationCache(g), ToJsonOptions(enumMode: joptEnumString))
+  let jn = toJson(cache, ToJsonOptions(enumMode: joptEnumString))
   writeFile($configFile, pretty(jn))
 
-proc loadActivationCache*(nimbleFile: Path): ActivationCache =
-  doAssert nimbleFile.isAbsolute() and endsWith($nimbleFile, ".nimble") and fileExists($nimbleFile)
+proc writeActivationCache*(g: DepGraph) =
+  writeActivationCache(toActivationCache(g))
+
+proc activationCacheFileFor*(nimbleFile: Path): Path =
+  ## Returns the activation-cache path configured for a project Nimble file.
+  doAssert nimbleFile.isAbsolute() and endsWith($nimbleFile, ".nimble") and
+    fileExists($nimbleFile)
   let projectDir = nimbleFile.parentDir()
   var ctx = AtlasContext(projectDir: projectDir)
   readAtlasContext(ctx, projectDir)
-  let configFile = activationCacheFile(ctx)
+  result = activationCacheFile(ctx)
+
+proc loadActivationCache*(nimbleFile: Path): ActivationCache =
+  ## Loads the dependency activation cache created by `atlas install`.
+  let projectDir = nimbleFile.parentDir()
+  let configFile = activationCacheFileFor(nimbleFile)
+  if not fileExists($configFile):
+    fatal "No current activation cache at " & $configFile & ". Run `atlas install` in " &
+      $projectDir & " with this version of Atlas, then retry."
   debug "atlas", "reading activation cache from: ", $configFile
   result.fromJson(parseFile($configFile), Joptions(allowMissingKeys: true, allowExtraKeys: true))
 

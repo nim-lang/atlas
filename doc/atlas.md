@@ -67,9 +67,10 @@ If dependency URLs use `git://`, pass `--forceGitToHttps` to rewrite them to
 
 Atlas caches parsed dependency release metadata in `deps/.cache`. Each cache
 file is scoped to one package URL and is reused only while the package's remote
-HEAD, local checked-out commit, and relevant release-collection flags still
-match. If those inputs change, Atlas reparses the package's Nimble files and
-rewrites the cache.
+HEAD, local checked-out commit, fetched tag refs, and relevant
+release-collection flags still match. If those inputs change, Atlas reparses
+the package's Nimble files and rewrites the cache. This includes a new tag
+published at an existing commit after `atlas install --update` fetches it.
 
 In addition to full URLs and package names, Atlas supports a shorthand
 **forge alias** syntax of the form `<alias>:<user>/<repo>`. The supported
@@ -154,11 +155,30 @@ For example:
   atlas link ../other-project
 ```
 
-This will link the other project and make its dependencies available to your current project. The other project must be another Atlas project and have a Nimble file.
+This will link the other project and make its dependencies available to your current project. The other project must be another Atlas project and have a Nimble file. Run `atlas install` in the linked project first so Atlas can create its current dependency activation cache. This is required when linking projects last installed by an older Atlas version.
 
 The linked project will be added to this project's Nimble file if it's not already present.
 
 Note, that the other project's `nameOverrides` and `urlOverrides` *aren't* imported. You may need to import the name-overrides to properly use the deps. This is due to the triplet-naming above.
+
+### Unlink <package>
+
+Remove a linked package from the current project, including its `nimble-link`
+files, activation-cache entries, and generated `nim.cfg` paths. By default,
+Atlas also removes the linked package's cached child dependencies:
+
+```
+  atlas unlink other-project
+```
+
+Children still needed by another active dependency are kept linked.
+
+Use `--only` to remove just the named package while keeping its child
+dependencies linked:
+
+```
+  atlas unlink --only other-project
+```
 
 ### Use / Update <url>/<package name>
 

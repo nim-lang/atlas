@@ -26,6 +26,7 @@ type
     fullName*: string
     head*: CommitHash
     current*: CommitHash
+    tagRefs*: string
     author*: string
     description*: string
     license*: string
@@ -46,7 +47,7 @@ type
     releases*: seq[PackageReleaseCacheEntry]
 
 const
-  PackageReleaseCacheVersion = 4
+  PackageReleaseCacheVersion = 5
 
 proc sanitizeCacheStem(stem: var string) =
   for c in mitems(stem):
@@ -181,6 +182,7 @@ proc toPackageReleaseCacheJson(cache: PackageReleaseCache; opt: ToJsonOptions): 
     result["fullName"] = toJson(cache.fullName, opt)
   result["head"] = toJson(cache.head, opt)
   result["current"] = toJson(cache.current, opt)
+  result["tagRefs"] = toJson(cache.tagRefs, opt)
   if cache.author.len > 0:
     result["author"] = toJson(cache.author, opt)
   if cache.description.len > 0:
@@ -316,7 +318,8 @@ proc loadPackageReleaseCacheJson(cache: var PackageReleaseCache; jn: JsonNode) =
 proc loadPackageReleaseCache*(
     pkg: Package;
     currentCommit: CommitHash;
-    entries: var seq[PackageReleaseCacheEntry]
+    entries: var seq[PackageReleaseCacheEntry];
+    tagRefs = ""
 ): bool =
   if pkg.originHead.isEmpty():
     return false
@@ -342,6 +345,7 @@ proc loadPackageReleaseCache*(
     cache.subdir == (if pkg.subdir.len > 0: pkg.subdir else: pkg.url.subdir()) and
     cache.head == pkg.originHead and
     cache.current == currentCommit and
+    cache.tagRefs == tagRefs and
     cache.includeTagsAndNimbleCommits == includeTagsAndNimbleCommitsFlag() and
     cache.nimbleCommitsMax == nimbleCommitsMaxFlag()
 
@@ -352,7 +356,8 @@ proc loadPackageReleaseCache*(
 proc savePackageReleaseCache*(
     pkg: Package;
     currentCommit: CommitHash;
-    versions: seq[(PackageVersion, NimbleRelease)]
+    versions: seq[(PackageVersion, NimbleRelease)];
+    tagRefs = ""
 ) =
   if pkg.originHead.isEmpty():
     return
@@ -365,6 +370,7 @@ proc savePackageReleaseCache*(
     fullName: pkg.url.fullName(),
     head: pkg.originHead,
     current: currentCommit,
+    tagRefs: tagRefs,
     author: firstNonEmptyMetadata(versions, proc (release: NimbleRelease): string = release.author),
     description: firstNonEmptyMetadata(versions, proc (release: NimbleRelease): string = release.description),
     license: firstNonEmptyMetadata(versions, proc (release: NimbleRelease): string = release.license),

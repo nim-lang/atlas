@@ -137,10 +137,11 @@ proc loadPackageReleaseInfo*(
   )
   result.currentCommit = repo.currentCommit
   pkg.originHead = repo.originTip.commit()
+  let tagRefs = tagRefsSnapshot(repo)
 
   if canUsePackageReleaseCache(pkg, mode, result.expandedExplicitVersions):
     var cachedReleases: seq[PackageReleaseCacheEntry]
-    if loadPackageReleaseCache(pkg, result.currentCommit, cachedReleases):
+    if loadPackageReleaseCache(pkg, result.currentCommit, cachedReleases, tagRefs):
       for entry in cachedReleases:
         result.releases.add((entry.vtag.toPkgVer(), entry.release))
       result.loadedFromCache = true
@@ -238,4 +239,4 @@ proc loadPackageReleaseInfo*(
   result.releases = deduplicateReleases(pkg, result.releases)
 
   if canUsePackageReleaseCache(pkg, mode, result.expandedExplicitVersions):
-    savePackageReleaseCache(pkg, result.currentCommit, result.releases)
+    savePackageReleaseCache(pkg, result.currentCommit, result.releases, tagRefsSnapshot(repo))
