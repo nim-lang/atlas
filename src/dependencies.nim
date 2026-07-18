@@ -156,35 +156,6 @@ proc enrichPackageDependencies(
   for _, release in pkg.versions:
     nc.registerReleaseDependencies(pkg, release, deferChildDeps)
 
-proc addFeatureDependencies(pkg: Package) =
-  ## Marks root package feature requirements as active when requested by context flags.
-  ## This can reopen root processing so newly enabled feature dependencies are traversed.
-
-  var featuresAdded = false
-  let requested =
-    if allFeaturesRequested(): "all"
-    else: context().features.toSeq().join(", ")
-  warn pkg.url.projectName, "adding feature dependencies for root package; features:", requested, "versions:", $(pkg.versions.keys().toSeq().mapIt($it).join(", "))
-  for ver, rel in pkg.versions:
-    for flag in rel.features.keys():
-      if not hasRequestedFeature(pkg.url.shortName, pkg.url.projectName, flag):
-        continue
-      info pkg.url.projectName, "checking feature:", $flag, "in version:", $rel.version
-      let fdep = rel.features[flag]
-      for pkgUrl, interval in items(fdep):
-        info pkg.url.projectName, "adding feature reqsByFeatures:", $flag, "for:", $pkgUrl.url
-        withValue(rel.reqsByFeatures, pkgUrl, reqsByFeatures):
-          if flag notin reqsByFeatures[]:
-            reqsByFeatures[].incl(flag)
-            featuresAdded = true
-        do:
-          rel.reqsByFeatures[pkgUrl] = initHashSet[string]()
-          rel.reqsByFeatures[pkgUrl].incl(flag)
-  
-  if featuresAdded:
-    warn pkg.url.projectName, "feature dependencies added"
-    pkg.state = Found
-
 proc traverseDependency*(
     nc: var NimbleContext;
     pkg: var Package,
@@ -217,9 +188,6 @@ proc traverseDependency*(
   pkg.state = Processed
 
   nc.enrichPackageDependencies(pkg, deferChildDeps)
-
-  if pkg.isRoot and (context().features.len > 0 or allFeaturesRequested()):
-    addFeatureDependencies(pkg)
 
 proc loadDependency*(
     nc: NimbleContext,

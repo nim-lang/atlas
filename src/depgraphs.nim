@@ -266,6 +266,14 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
         b.addNegated(featureVarId)
         continue
 
+      if hasContextFeature(pkg, feature):
+        # A requested feature must be selected whenever this package version
+        # is selected. This preserves separate feature variables when
+        # several requested features share a dependency.
+        withOpenBr(b, OrForm):
+          b.addNegated(ver.vid)
+          b.add(featureVarId)
+
       for dep, query in items(reqs):
         if dep notin graph.pkgs:
           info pkg.url.projectName, "feature depdendency not found:", $dep.projectName, "query:", $query
