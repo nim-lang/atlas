@@ -100,17 +100,33 @@ proc findGitNimbleFiles*(pkg: Package; commit: CommitHash): seq[NimbleFileSource
   let subdir =
     if pkg.subdir.len > 0: pkg.subdir
     else: pkg.url.subdir()
+  let prefix =
+    if subdir.len > 0: subdir.string.strip(leading=false, trailing=true, {'/'}) & "/"
+    else: ""
   let files = listFiles(pkg.ondisk, commit)
+  var rootSources: seq[NimbleFileSource]
   for file in files:
-    if subdir.len > 0:
-      let prefix = subdir.string.strip(leading=false, trailing=true, {'/'}) & "/"
-      if not file.startsWith(prefix):
-        continue
-    if file.endsWith(".nimble"):
+    let inPackage = prefix.len == 0 or file.startsWith(prefix)
+    if inPackage and file.endsWith(".nimble"):
       let source = NimbleFileSource(path: Path(file), fromGit: true)
+      result.add source
+      let relativeFile =
+        if prefix.len > 0: file.substr(prefix.len)
+        else: file
+      if '/' notin relativeFile:
+        rootSources.add source
+
+  # Nested Nimble files commonly belong to examples or independent packages.
+  # Prefer candidates located directly at the package root.
+  if rootSources.len > 0:
+    for source in rootSources:
       if source.path.splitPath().tail == Path(pkg.url.shortName() & ".nimble"):
         return @[source]
-      result.add source
+    return rootSources
+
+  for source in result:
+    if source.path.splitPath().tail == Path(pkg.url.shortName() & ".nimble"):
+      return @[source]
 
 proc materializeNimbleFile*(pkg: Package; commit: CommitHash; source: NimbleFileSource): Path =
   if not source.fromGit:
