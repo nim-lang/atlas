@@ -176,7 +176,7 @@ proc traverseDependency*(
     pkg.versions.clear()
 
   for (ver, rel) in releaseInfo.releases:
-    if mode == ExplicitVersions and (ver.vtag.isTip or ver.version.isCommit()):
+    if mode == ExplicitVersions and (ver.vtag.isTip or ver.vtag.isPinned):
       var versionsAtCommit: seq[PackageVersion]
       var hasRegularVersion = false
       for existing in pkg.versions.keys:
@@ -193,9 +193,14 @@ proc traverseDependency*(
             pkg.versions.del(existing)
         if hasRegularVersion:
           continue
-      elif versionsAtCommit.len > 0:
-        # A commit requirement already matches any release at that commit.
-        continue
+      else:
+        for existing in versionsAtCommit:
+          if existing.version.string.len == 0 or existing.version.string[0] != '#':
+            existing.vtag.isPinned = true
+          elif existing.version.isHead() or existing.version.isCommit():
+            pkg.versions.del(existing)
+        if hasRegularVersion:
+          continue
 
     if mode != ExplicitVersions and ver in pkg.versions:
       error pkg.url.projectName, "duplicate release found:", $ver.vtag, "new:", repr(rel)

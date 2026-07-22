@@ -184,11 +184,72 @@ suite "historical explicit transitive pins":
       check widgetUrl in graph.pkgs
 
       if widgetUrl in graph.pkgs:
-        check graph.pkgs[widgetUrl].active
-        if graph.pkgs[widgetUrl].active:
-          check $graph.pkgs[widgetUrl].activeVersion.version == "1.0.0"
-          check graph.pkgs[widgetUrl].activeVersion.commit.h == pinnedCommit
-          check graph.pkgs[widgetUrl].activeVersion.commit.h != newerCommit
+        let widget = graph.pkgs[widgetUrl]
+        check widget.active
+        if widget.active:
+          check $widget.activeVersion == "1.0.0@" & pinnedCommit[0..7]
+          check widget.activeVersion.vtag.isPinned
+          check not widget.activeVersion.vtag.isTip
+          check widget.activeVersion.commit.h == pinnedCommit
+          check widget.activeVersion.commit.h != newerCommit
+          check formatVersionSelection(widget, widget.activeVersion) ==
+            "(widget, 1.0.0@" & pinnedCommit[0..7] & ") [pinned]"
+
+          var commitAliases = 0
+          for version in widget.versions.keys:
+            if version.commit.h == pinnedCommit and version.version.isCommit():
+              inc commitAliases
+          check commitAliases == 0
+
+  test "root explicit commit reports nearest version distance":
+    let ws = "tests/ws_explicit_history_leak"
+    removeDir(ws)
+    createDir(ws)
+
+    withDir ws:
+      project(paths.getCurrentDir())
+      context().flags = {KeepWorkspace, ListVersions}
+      context().defaultAlgo = SemVer
+      discard context().nameOverrides.addPattern("$+", "file://./buildGraph/$#")
+
+      createDir("buildGraph")
+
+      var pinnedCommit = ""
+
+      withDir "buildGraph":
+        createDir("widget")
+        withDir "widget":
+          writePackage("widget", "1.2.3")
+          initGitRepo()
+          commitAll("widget-version")
+
+          for i in 1..5:
+            writeFile("widget.nim", "discard " & $i & "\n")
+            commitAll("widget-source-" & $i)
+          pinnedCommit = gitHead()
+
+          writePackage("widget", "2.0.0")
+          commitAll("widget-newer")
+
+      writeFile("ws_explicit_history_leak.nimble", [
+        "version = \"0.1.0\"",
+        "requires \"widget#" & pinnedCommit[0..7] & "\"",
+        ""
+      ].join("\n"))
+
+      var nc = createNimbleContext()
+      var graph = loadWorkspace(project(), nc, AllReleases, DoClone, doSolve = true)
+      let widgetUrl = nc.createUrl("widget")
+
+      check widgetUrl in graph.pkgs
+      if widgetUrl in graph.pkgs:
+        let widget = graph.pkgs[widgetUrl]
+        check widget.active
+        if widget.active:
+          check $widget.activeVersion == "1.2.3+5@" & pinnedCommit[0..7]
+          check widget.activeVersion.vtag.isPinned
+          check formatVersionSelection(widget, widget.activeVersion) ==
+            "(widget, 1.2.3+5@" & pinnedCommit[0..7] & ") [pinned]"
 
   test "old explicit transitive pin from historical release does not leak into selected explicit commit":
     let ws = "tests/ws_explicit_history_leak"
