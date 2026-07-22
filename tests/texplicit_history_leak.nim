@@ -43,6 +43,102 @@ suite "historical explicit transitive pins":
     context().depsDir = Path "deps"
     setAtlasErrorsColor(fgMagenta)
 
+  test "head uses the Nimble version and commit distance":
+    let ws = "tests/ws_explicit_history_leak"
+    removeDir(ws)
+    createDir(ws)
+
+    withDir ws:
+      project(paths.getCurrentDir())
+      context().flags = {KeepWorkspace, ListVersions}
+      context().defaultAlgo = SemVer
+      discard context().nameOverrides.addPattern("$+", "file://./buildGraph/$#")
+
+      createDir("buildGraph/headdep")
+      var headCommit = ""
+      withDir "buildGraph/headdep":
+        writePackage("headdep", "1.2.3")
+        initGitRepo()
+        commitAll("version bump")
+
+        for i in 1..5:
+          writeFile("headdep.nim", "discard \"" & $i & "\"\n")
+          commitAll("source change " & $i)
+        headCommit = gitHead()
+
+      writeFile("ws_explicit_history_leak.nimble", [
+        "version = \"0.1.0\"",
+        "requires \"headdep#head\"",
+        ""
+      ].join("\n"))
+
+      var nc = createNimbleContext()
+      var graph = loadWorkspace(project(), nc, AllReleases, DoClone, doSolve = true)
+      let headdepUrl = nc.createUrl("headdep")
+
+      check headdepUrl in graph.pkgs
+      if headdepUrl in graph.pkgs:
+        let headdep = graph.pkgs[headdepUrl]
+        check headdep.active
+        if headdep.active:
+          check $headdep.activeVersion ==
+            "1.2.3+5@" & headCommit[0..7] & "^"
+
+        var versionsAtHead = 0
+        for version in headdep.versions.keys:
+          check not version.version.isHead()
+          if version.commit.h == headCommit:
+            inc versionsAtHead
+        check versionsAtHead == 1
+
+  test "head reuses a regular release at the same commit":
+    let ws = "tests/ws_explicit_history_leak"
+    removeDir(ws)
+    createDir(ws)
+
+    withDir ws:
+      project(paths.getCurrentDir())
+      context().flags = {KeepWorkspace, ListVersions, NimbleCommitsMax}
+      context().defaultAlgo = SemVer
+      discard context().nameOverrides.addPattern("$+", "file://./buildGraph/$#")
+
+      createDir("buildGraph/headdep")
+      var headCommit = ""
+      withDir "buildGraph/headdep":
+        writePackage("headdep", "1.2.3")
+        initGitRepo()
+        commitAll("version bump")
+
+        for i in 1..4:
+          writeFile("headdep.nim", "discard \"" & $i & "\"\n")
+          commitAll("source change " & $i)
+        writeFile("headdep.nimble", [
+          "version = \"1.2.3\"",
+          "description = \"metadata update\"",
+          ""
+        ].join("\n"))
+        commitAll("nimble metadata")
+        headCommit = gitHead()
+
+      writeFile("ws_explicit_history_leak.nimble", [
+        "version = \"0.1.0\"",
+        "requires \"headdep#head\"",
+        ""
+      ].join("\n"))
+
+      var nc = createNimbleContext()
+      var graph = loadWorkspace(project(), nc, AllReleases, DoClone, doSolve = true)
+      let headdepUrl = nc.createUrl("headdep")
+
+      check headdepUrl in graph.pkgs
+      if headdepUrl in graph.pkgs:
+        let headdep = graph.pkgs[headdepUrl]
+        check headdep.active
+        check headdep.versions.len == 1
+        if headdep.active:
+          check $headdep.activeVersion ==
+            "1.2.3+5@" & headCommit[0..7] & "^"
+
   test "root explicit commit selects pinned release over newer semver releases":
     let ws = "tests/ws_explicit_history_leak"
     removeDir(ws)

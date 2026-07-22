@@ -317,6 +317,22 @@ suite "Git Operations Tests":
       let untaggedDescription = gitDescribeRefTag(Path ".", newCommit)
       check(untaggedDescription.startsWith("v1.0.0-1-"))
 
+  test "commitDistance counts commits from an ancestor":
+    withDir testDir:
+      discard execCmd("git init")
+      writeFile("test.txt", "initial content")
+      discard execCmd("git add test.txt")
+      discard execCmd("git commit -m \"initial commit\"")
+      let base = currentGitCommit(Path ".")
+
+      for i in 1..3:
+        writeFile("test.txt", "content " & $i)
+        discard execCmd("git commit -am \"commit " & $i & "\"")
+
+      let target = currentGitCommit(Path ".")
+      check commitDistance(Path ".", base, target) == 3
+      check commitDistance(Path ".", target, base) == -1
+
   test "collectTaggedVersions functionality":
     withDir testDir:
       discard execCmd("git init")

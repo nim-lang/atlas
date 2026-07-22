@@ -87,8 +87,11 @@ proc addRelease(
   try:
     let release = nc.processNimbleRelease(pkg, vtag)
 
-    if vtag.v.string == "":
+    if vtag.v.string == "" or
+        (vtag.v.isHead() and not pkg.isRoot and release.version.string != ""):
       pkgver.vtag.v = release.version
+      if vtag.v.isHead():
+        pkgver.vtag.isTip = true
       trace pkg.url.projectName, "updating release tag information:", $pkgver.vtag
     elif release.version.string == "":
       warn pkg.url.projectName, "nimble file missing version information:", $pkgver.vtag
@@ -102,6 +105,36 @@ proc addRelease(
   except CatchableError as e:
     info pkg.url.projectName, "error processing nimble release:", $vtag, "error:", $e.msg
     return false
+
+proc addCommitDistance(
+    pkg: Package;
+    versionBase: CommitHash;
+    version: PackageVersion
+) =
+  let distance = commitDistance(pkg.ondisk, versionBase, version.commit)
+  if distance > 0:
+    version.vtag.v = version.vtag.v.withCommitDistance(Natural(distance))
+
+proc loadInferredReleases(
+    nc: var NimbleContext;
+    pkg: Package;
+    commits: seq[VersionTag];
+    versionBases: var Table[string, CommitHash]
+): seq[(PackageVersion, NimbleRelease)] =
+  ## Loads Nimble-file commits in chronological order and records the commit
+  ## where each run of an exact version string began.
+  var previousVersion = ""
+  var versionBase: CommitHash
+  for commit in commits:
+    var release: seq[(PackageVersion, NimbleRelease)]
+    if release.addRelease(nc, pkg, commit):
+      let version = release[0][1].version.string
+      if result.len == 0 or version != previousVersion:
+        versionBase = commit.c
+        versionBases[version] = versionBase
+      addCommitDistance(pkg, versionBase, release[0][0])
+      result.add(release[0])
+      previousVersion = version
 
 proc deduplicateReleases(
     pkg: Package;
@@ -173,19 +206,29 @@ proc loadPackageReleaseInfo*(
       version = vtag
       debug pkg.url.projectName, "explicit version:", $version, "vtag:", repr vtag
 
+    var versionBases: Table[string, CommitHash]
+    if result.expandedExplicitVersions.anyIt(it.isTip):
+      let nimbleCommits = nc.collectNimbleVersions(pkg, repo)
+      discard nc.loadInferredReleases(pkg, nimbleCommits, versionBases)
+
     for version in result.expandedExplicitVersions:
       debug pkg.url.projectName, "check explicit version:", repr version
       if version.commit.isEmpty():
         warn pkg.url.projectName, "explicit version has empty commit:", $version
       elif version.toPkgVer() notin pkg.versions:
         debug pkg.url.projectName, "add explicit version:", $version
-        discard result.releases.addRelease(nc, pkg, version)
+        var releases: seq[(PackageVersion, NimbleRelease)]
+        if releases.addRelease(nc, pkg, version):
+          let releaseVersion = releases[0][1].version.string
+          if version.isTip and versionBases.hasKey(releaseVersion):
+            addCommitDistance(pkg, versionBases[releaseVersion], releases[0][0])
+          result.releases.add(releases[0])
 
   of AllReleases:
     try:
       var uniqueCommits: HashSet[CommitHash]
       var nimbleVersions: HashSet[Version]
-      var nimbleCommits = nc.collectNimbleVersions(pkg, repo)
+      let nimbleCommits = nc.collectNimbleVersions(pkg, repo)
 
       debug pkg.url.projectName, "nimble explicit versions:", $explicitVersions
       for version in explicitVersions:
@@ -204,19 +247,22 @@ proc loadPackageReleaseInfo*(
       if tags.len() == 0 or IncludeTagsAndNimbleCommits in context().flags:
         # Use Nimble-file commit versions only when tags are absent or explicitly requested.
         # Otherwise deleted tags could be reintroduced as inferred releases.
+        var versionBases: Table[string, CommitHash]
+        var inferredReleases = nc.loadInferredReleases(pkg, nimbleCommits, versionBases)
         if NimbleCommitsMax in context().flags:
           # Reverse the order so the newest commit is preferred for each version.
-          nimbleCommits.reverse()
+          inferredReleases.reverse()
 
-        debug pkg.url.projectName, "nimble commits:", $nimbleCommits
-        for tag in nimbleCommits:
-          if not uniqueCommits.containsOrIncl(tag.c):
-            var vers: seq[(PackageVersion, NimbleRelease)]
-            let added = vers.addRelease(nc, pkg, tag)
-            if added and not nimbleVersions.containsOrIncl(vers[0][0].vtag.v):
-              result.releases.add(vers)
+        debug pkg.url.projectName, "nimble commits:", $inferredReleases.mapIt(it[0].vtag)
+        for inferred in inferredReleases:
+          if not uniqueCommits.containsOrIncl(inferred[0].commit):
+            if not nimbleVersions.containsOrIncl(inferred[1].version):
+              result.releases.add(inferred)
           else:
-            error pkg.url.projectName, "traverseDependency skipping nimble commit:", $tag, "uniqueCommits:", $(tag.c in uniqueCommits), "nimbleVersions:", $(tag.v in nimbleVersions)
+            error pkg.url.projectName, "traverseDependency skipping nimble commit:",
+              $inferred[0].vtag, "uniqueCommits:",
+              $(inferred[0].commit in uniqueCommits), "nimbleVersions:",
+              $(inferred[1].version in nimbleVersions)
 
         if not result.currentCommit.isEmpty() and not uniqueCommits.containsOrIncl(result.currentCommit):
           # Existing checkouts can be detached or on a non-default branch.
@@ -224,8 +270,12 @@ proc loadPackageReleaseInfo*(
           var vers: seq[(PackageVersion, NimbleRelease)]
           let currentTag = VersionTag(v: Version"", c: result.currentCommit)
           let added = vers.addRelease(nc, pkg, currentTag)
-          if added and not nimbleVersions.containsOrIncl(vers[0][0].vtag.v):
-            result.releases.add(vers)
+          if added:
+            let currentVersion = vers[0][1].version
+            if versionBases.hasKey(currentVersion.string):
+              addCommitDistance(pkg, versionBases[currentVersion.string], vers[0][0])
+            if not nimbleVersions.containsOrIncl(currentVersion):
+              result.releases.add(vers)
 
       if result.releases.len() == 0:
         let vtag = VersionTag(v: Version"#head", c: initCommitHash(result.currentCommit, FromHead))
