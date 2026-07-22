@@ -45,7 +45,7 @@ type
   VersionTag* = object
     c*: CommitHash
     v*: Version
-    isTip*: bool
+    isTip*, isPinned*: bool
 
   CommitOrigin* = enum
     FromNone, FromHead, FromGitTag, FromDep, FromNimbleFile, FromLockfile

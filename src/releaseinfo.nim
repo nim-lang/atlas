@@ -17,6 +17,8 @@ import std / [os, strutils, tables, sequtils, sets, algorithm, paths]
 import basic/[context, deptypes, versions, nimbleparser, reporters, gitops, pkgurls, nimblecontext, dependencycache]
 
 type
+  VersionRun = tuple[version: Version, base: CommitHash]
+
   PackageReleaseInfo* = object
     currentCommit*: CommitHash
     expandedExplicitVersions*: seq[VersionTag]
@@ -83,12 +85,14 @@ proc addRelease(
   ## Parses one release candidate and appends it to the pending version list.
   ## The returned release version is normalized against tag or Nimble-file metadata.
   var pkgver = vtag.toPkgVer()
+  pkgver.vtag.isPinned = vtag.v.isCommit()
   trace pkg.url.projectName, "Adding Nimble version:", $vtag
   try:
     let release = nc.processNimbleRelease(pkg, vtag)
 
     if vtag.v.string == "" or
-        (vtag.v.isHead() and not pkg.isRoot and release.version.string != ""):
+        ((vtag.v.isHead() or vtag.v.isCommit()) and not pkg.isRoot and
+          release.version.string != ""):
       pkgver.vtag.v = release.version
       if vtag.v.isHead():
         pkgver.vtag.isTip = true
@@ -119,7 +123,8 @@ proc loadInferredReleases(
     nc: var NimbleContext;
     pkg: Package;
     commits: seq[VersionTag];
-    versionBases: var Table[string, CommitHash]
+    versionBases: var Table[string, CommitHash];
+    versionRuns: var seq[VersionRun]
 ): seq[(PackageVersion, NimbleRelease)] =
   ## Loads Nimble-file commits in chronological order and records the commit
   ## where each run of an exact version string began.
@@ -132,9 +137,34 @@ proc loadInferredReleases(
       if result.len == 0 or version != previousVersion:
         versionBase = commit.c
         versionBases[version] = versionBase
+        versionRuns.add((release[0][1].version, versionBase))
       addCommitDistance(pkg, versionBase, release[0][0])
       result.add(release[0])
       previousVersion = version
+
+proc loadInferredReleases(
+    nc: var NimbleContext;
+    pkg: Package;
+    commits: seq[VersionTag];
+    versionBases: var Table[string, CommitHash]
+): seq[(PackageVersion, NimbleRelease)] =
+  var versionRuns: seq[VersionRun]
+  result = nc.loadInferredReleases(pkg, commits, versionBases, versionRuns)
+
+proc findVersionBase(
+    pkg: Package;
+    versionRuns: openArray[VersionRun];
+    version: Version;
+    target: CommitHash
+): CommitHash =
+  ## Finds the nearest run of `version` that is an ancestor of `target`.
+  var nearestDistance = high(int)
+  for run in versionRuns:
+    if run.version == version:
+      let distance = commitDistance(pkg.ondisk, run.base, target)
+      if distance >= 0 and distance < nearestDistance:
+        nearestDistance = distance
+        result = run.base
 
 proc deduplicateReleases(
     pkg: Package;
@@ -207,9 +237,10 @@ proc loadPackageReleaseInfo*(
       debug pkg.url.projectName, "explicit version:", $version, "vtag:", repr vtag
 
     var versionBases: Table[string, CommitHash]
-    if result.expandedExplicitVersions.anyIt(it.isTip):
+    var versionRuns: seq[VersionRun]
+    if result.expandedExplicitVersions.anyIt(it.isTip or it.version.isCommit()):
       let nimbleCommits = nc.collectNimbleVersions(pkg, repo)
-      discard nc.loadInferredReleases(pkg, nimbleCommits, versionBases)
+      discard nc.loadInferredReleases(pkg, nimbleCommits, versionBases, versionRuns)
 
     for version in result.expandedExplicitVersions:
       debug pkg.url.projectName, "check explicit version:", repr version
@@ -222,6 +253,11 @@ proc loadPackageReleaseInfo*(
           let releaseVersion = releases[0][1].version.string
           if version.isTip and versionBases.hasKey(releaseVersion):
             addCommitDistance(pkg, versionBases[releaseVersion], releases[0][0])
+          elif version.version.isCommit():
+            let versionBase = findVersionBase(
+              pkg, versionRuns, releases[0][1].version, version.commit)
+            if not versionBase.isEmpty():
+              addCommitDistance(pkg, versionBase, releases[0][0])
           result.releases.add(releases[0])
 
   of AllReleases:

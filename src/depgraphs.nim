@@ -459,8 +459,13 @@ proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
   result.formula = toForm(b)
 
 
+proc formatVersionSelection*(pkg: Package; version: PackageVersion): string =
+  result = "(" & pkg.url.projectName & ", " & $version & ")"
+  if version.vtag.isPinned:
+    result.add " [pinned]"
+
 proc toString(info: SatVarInfo): string =
-  "(" & info.pkg.url.projectName & ", " & $info.version & ")"
+  formatVersionSelection(info.pkg, info.version)
 
 proc debugFormular*(graph: var DepGraph; form: Form; solution: Solution) =
   echo "FORM:\n\t", form.formula

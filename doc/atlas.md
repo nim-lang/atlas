@@ -62,8 +62,10 @@ metadata does not change SemVer precedence, so it still satisfies requirements
 for `1.2.3` while making the checkout's distance from the version bump visible.
 This display is also used when a `#head` requirement selects that commit; the
 resolved version is shown once with a trailing `^`, rather than as a separate
-`#head` release. Commit requirements retain their full hashes internally but
-are shortened to eight characters in version-selection output.
+`#head` release. An explicit commit requirement uses the same nearest-version
+display and adds `[pinned]`, for example `1.2.3+5@abcdef12 [pinned]`. Commit
+requirements retain their full hashes internally but are shortened to eight
+characters in version-selection output.
 
 Atlas uses URLs internally; Nimble package names are translated to URLs
 via Nimble's  `packages.json` file. Atlas uses "shortnames" for known URLs from
