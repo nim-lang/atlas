@@ -137,7 +137,7 @@ suite "json serde":
       @[(VersionTag(v: Version"1.0.0", c: current).toPkgVer, release)]
     )
     let cache = parseFile($packageReleaseCachePath(pkg))
-    check cache["cacheVersion"].getInt() == 5
+    check cache["cacheVersion"].getInt() == 6
     check cache["shortName"].getStr() == "foobar"
     check cache["fullName"].getStr() == "foobar.nimble-test.github.com"
     check "packageName" notin cache
@@ -222,7 +222,7 @@ suite "json serde":
 
     savePackageReleaseCache(pkg, current, @[(version, release)])
     let regeneratedCache = parseFile($cachePath)
-    check regeneratedCache["cacheVersion"].getInt() == 5
+    check regeneratedCache["cacheVersion"].getInt() == 6
 
   test "package release cache rejects a tag added at the current commit":
     let oldCtx = context()

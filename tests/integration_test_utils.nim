@@ -130,16 +130,17 @@ template expectedVersionWithNoGitTagsMaxVer*() =
 
     # note: this variant uses the last commit where a given nimble version was found
     #       when the nimble file was changed, the version was the same
+    #       +1 records that this edit is one commit after the version bump
 
     let projAnimbles {.inject.} = dedent"""
     2a630f98c20f54b828f95e824e2a1b2da50fe687 1.1.0
-    62fca4fd4062087d937146fd5d8f9ab7e1e5c22b 1.0.0
+    62fca4fd4062087d937146fd5d8f9ab7e1e5c22b 1.0.0+1
     """.parseTaggedVersions(false)
     let projAtags {.inject.} = projAnimbles.filterIt(it.v.string != "")
 
     let projBnimbles {.inject.} = dedent"""
     05b2f46caf8ae7322c855a482ad297c399b5d185 1.1.0
-    4cee9aed9623f4142a7b15bb96a1d582c8b87250 1.0.0
+    4cee9aed9623f4142a7b15bb96a1d582c8b87250 1.0.0+1
     """.parseTaggedVersions(false)
     let projBtags {.inject.} = projBnimbles.filterIt(it.v.string != "")
 

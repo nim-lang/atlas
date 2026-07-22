@@ -288,6 +288,16 @@ proc compareVersions(a, b: string): int =
     return 0
   compareNumericCore(a, b)
 
+proc withCommitDistance*(v: Version; distance: Natural): Version =
+  ## Adds a Git-style commit distance as SemVer build metadata.
+  ##
+  ## Build metadata does not affect SemVer precedence, so inferred commits
+  ## remain compatible with requirements for the version declared by Nimble.
+  if distance == 0 or not parseSemVerLike(v.string).valid:
+    return v
+  let separator = if '+' in v.string: "." else: "+"
+  result = Version(v.string & separator & $distance)
+
 proc `<`*(a, b: Version): bool =
   # Handling for special versions such as "#head" or "#branch".
   if a.isSpecial or b.isSpecial:

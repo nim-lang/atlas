@@ -55,6 +55,11 @@ edit these manually too, Atlas doesn't touch what should be left untouched.
 
 Atlas uses git commits internally; version requirements are translated
 to git commits via git tags and a fallback of searching Nimble file commits.
+When Atlas identifies an untagged commit after a Nimble version bump, it shows
+the number of intervening commits as SemVer build metadata. For example, the
+fifth commit after version `1.2.3` is displayed as `1.2.3+5@abcdef12`. Build
+metadata does not change SemVer precedence, so it still satisfies requirements
+for `1.2.3` while making the checkout's distance from the version bump visible.
 
 Atlas uses URLs internally; Nimble package names are translated to URLs
 via Nimble's  `packages.json` file. Atlas uses "shortnames" for known URLs from

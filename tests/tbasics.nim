@@ -498,6 +498,13 @@ suite "versions":
     let v4 = VersionTag(v: Version"#head", c: initCommitHash("", FromGitTag))
     check v4 == v3
 
+  test "commit distance uses SemVer build metadata":
+    check $Version"1.2.3".withCommitDistance(5) == "1.2.3+5"
+    check $Version"1.2.3-beta.1".withCommitDistance(5) == "1.2.3-beta.1+5"
+    check $Version"1.2.3+linux".withCommitDistance(5) == "1.2.3+linux.5"
+    check $Version"1.2.3".withCommitDistance(0) == "1.2.3"
+    check Version"1.2.3+5" == Version"1.2.3"
+
 
 import basic/[versions]
 import depgraphs

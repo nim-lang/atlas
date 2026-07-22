@@ -32,6 +32,7 @@ type
     GitPull = "git -C $DIR pull",
     GitCurrentCommit = "git -C $DIR log -n1 --format=%H"
     GitMergeBase = "git -C $DIR merge-base"
+    GitRevList = "git -C $DIR rev-list"
     GitLsFiles = "git -C $DIR ls-files"
     GitLog = "git -C $DIR log --format=%H"
     GitLogLocal = "git -C $DIR log --format=%H HEAD"
@@ -500,6 +501,27 @@ proc clone*(url: Uri, dest: Path; retries = 5): (CloneStatus, string) =
 proc gitDescribeRefTag*(path: Path, commit: string): string =
   let (lt, status) = exec(GitDescribe, path, ["--tags", commit])
   result = if status == RES_OK: strutils.strip(lt) else: ""
+
+proc commitDistance*(path: Path; base, target: CommitHash): int =
+  ## Returns the number of commits after `base` leading to `target`.
+  ## Returns -1 when the commits are missing or `base` is not an ancestor.
+  if base.isEmpty() or target.isEmpty():
+    return -1
+
+  let (_, ancestorStatus) = exec(
+    GitMergeBase, path, ["--is-ancestor", base.h, target.h], Debug)
+  if ancestorStatus != RES_OK:
+    return -1
+
+  let (count, countStatus) = exec(
+    GitRevList, path, ["--count", base.h & ".." & target.h], Debug)
+  if countStatus == RES_OK:
+    try:
+      result = parseInt(count.strip())
+    except ValueError:
+      result = -1
+  else:
+    result = -1
 
 proc tipFromRef(path: Path; remoteName, remoteRef: string; errorReportLevel: MsgKind; isLocalOnly: bool): VersionTag =
   let commit =
