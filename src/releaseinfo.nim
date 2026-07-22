@@ -87,8 +87,11 @@ proc addRelease(
   try:
     let release = nc.processNimbleRelease(pkg, vtag)
 
-    if vtag.v.string == "":
+    if vtag.v.string == "" or
+        (vtag.v.isHead() and not pkg.isRoot and release.version.string != ""):
       pkgver.vtag.v = release.version
+      if vtag.v.isHead():
+        pkgver.vtag.isTip = true
       trace pkg.url.projectName, "updating release tag information:", $pkgver.vtag
     elif release.version.string == "":
       warn pkg.url.projectName, "nimble file missing version information:", $pkgver.vtag
@@ -203,13 +206,23 @@ proc loadPackageReleaseInfo*(
       version = vtag
       debug pkg.url.projectName, "explicit version:", $version, "vtag:", repr vtag
 
+    var versionBases: Table[string, CommitHash]
+    if result.expandedExplicitVersions.anyIt(it.isTip):
+      let nimbleCommits = nc.collectNimbleVersions(pkg, repo)
+      discard nc.loadInferredReleases(pkg, nimbleCommits, versionBases)
+
     for version in result.expandedExplicitVersions:
       debug pkg.url.projectName, "check explicit version:", repr version
       if version.commit.isEmpty():
         warn pkg.url.projectName, "explicit version has empty commit:", $version
       elif version.toPkgVer() notin pkg.versions:
         debug pkg.url.projectName, "add explicit version:", $version
-        discard result.releases.addRelease(nc, pkg, version)
+        var releases: seq[(PackageVersion, NimbleRelease)]
+        if releases.addRelease(nc, pkg, version):
+          let releaseVersion = releases[0][1].version.string
+          if version.isTip and versionBases.hasKey(releaseVersion):
+            addCommitDistance(pkg, versionBases[releaseVersion], releases[0][0])
+          result.releases.add(releases[0])
 
   of AllReleases:
     try:

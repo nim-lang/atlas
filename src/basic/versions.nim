@@ -62,7 +62,9 @@ proc `$`*(c: CommitHash): string =
   if result == "":
     result = "-"
 
-const ValidChars = {'a'..'f', '0'..'9'}
+const
+  ValidChars = {'a'..'f', '0'..'9'}
+  MinCommitLen = len("#baca3")
 
 proc isLowerAlphaNum*(s: string): bool =
   for c in s:
@@ -92,8 +94,15 @@ proc short*(c: CommitHash): string =
   elif c.h.len() == 0: "-"
   else: "!"&c.h[0..<c.h.len()]
 
+proc isCommit*(v: Version): bool =
+  ## Returns whether a special version names a Git commit.
+  result = v.string.len >= MinCommitLen and v.string[0] == '#' and
+    v.string.substr(1).isLowerAlphaNum()
+
 proc `$`*(vt: VersionTag): string =
-  if vt.v.string != "":
+  if vt.v.isCommit() and vt.v.string.len > 9:
+    result = vt.v.string[0..8]
+  elif vt.v.string != "":
     result = $vt.v
   else: result = "~"
   result &= "@" & vt.c.short()
@@ -655,9 +664,6 @@ proc extractRequirementName*(req: string): (string, seq[string], int) =
     result = (name, features, i+1)
   else:
     result = (name, @[], i)
-
-const
-  MinCommitLen = len("#baca3")
 
 proc extractSpecificCommit*(pattern: VersionInterval): CommitHash =
   if not pattern.isInterval and pattern.a.r == verEq and pattern.a.v.isSpecial: # and pattern.a.v.string.len >= MinCommitLen:

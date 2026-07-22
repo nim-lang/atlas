@@ -498,6 +498,12 @@ suite "versions":
     let v4 = VersionTag(v: Version"#head", c: initCommitHash("", FromGitTag))
     check v4 == v3
 
+    let v5 = VersionTag(v: Version("#" & c1.h), c: c1)
+    check $v5 == "#24870f48@24870f48"
+    check repr(v5) ==
+      "#24870f48c40da2146ce12ff1e675e6e7b9748355@" &
+      "24870f48c40da2146ce12ff1e675e6e7b9748355"
+
   test "commit distance uses SemVer build metadata":
     check $Version"1.2.3".withCommitDistance(5) == "1.2.3+5"
     check $Version"1.2.3-beta.1".withCommitDistance(5) == "1.2.3-beta.1+5"
