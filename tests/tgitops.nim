@@ -41,6 +41,9 @@ suite "Git Operations Tests":
     check(extractVersion("release-2.3.4") == "2.3.4")
     check(extractVersion("prefix_5.0.1_suffix") == "5.0.1_suffix")
 
+  test "remoteNameFromGitUrl strips tilde from sourcehut users":
+    check remoteNameFromGitUrl("https://git.sr.ht/~bptato/chame") == "chame.bptato.git.sr.ht"
+
   test "Git command execution":
     # Initialize test repo
     withDir testDir:
