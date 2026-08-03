@@ -292,6 +292,18 @@ suite "urls and naming":
     echo "LINKPATH: ", upkg.toLinkPath()
     check upkg.toLinkPath().fileExists()
 
+  test "package name resolves URL-named link file":
+    let upkg = nc.createUrl("https://github.com/status-im/nim-chronicles")
+    let nimbleFile = ws / Path"remote-deps" / Path"foobar" / Path"foobar.nimble"
+    let linkFile = upkg.toLinkPath()
+    defer: removeFile(linkFile)
+
+    createNimbleLink(upkg, nimbleFile, CfgPath(nimbleFile.parentDir()))
+
+    check linkFile == ws / Path"deps" / Path"nim-chronicles.nimble-link"
+    check not fileExists(ws / Path"deps" / Path"chronicles.nimble-link")
+    check upkg.toDirectoryPath("chronicles") == nimbleFile.parentDir()
+
   test "print names":
     let upkg = nc.createUrl("https://github.com/disruptek/balls.git")
     echo "\nNimbleContext:urlToNames: "
