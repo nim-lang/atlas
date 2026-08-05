@@ -308,7 +308,8 @@ proc remoteNameFromGitUrl*(rawUrl: string): string =
   if user.len == 0:
     repo
   else:
-    let sanitizedUser = user.replace("~", "")
+    const invalidChars = (invalidFilenameChars + {'~'}).toSeq().mapIt(($it, ""))
+    let sanitizedUser = user.multiReplace(invalidChars)
     repo & "." & sanitizedUser & "." & u.hostname
 
 proc getRemoteUrlFor(path: Path; remote: string): string =
