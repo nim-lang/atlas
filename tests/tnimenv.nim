@@ -1,6 +1,6 @@
 import std/[unittest, envvars, options, os, paths, strutils, tempfiles]
 
-import basic/context
+import basic/[context, sha256]
 import nimenv
 
 const ReleaseIndex = """
@@ -62,13 +62,25 @@ suite "Nim environments":
     defer:
       if fileExists(path):
         removeFile(path)
-    writeFile(path, "abc")
 
-    const Expected = "ba7816bf8f01cfea414140de5dae2223" &
+    const AbcDigest = "ba7816bf8f01cfea414140de5dae2223" &
       "b00361a396177a9cb410ff61f20015ad"
-    check sha256File(path) == Expected
-    check digestMatches(path, "sha256:" & Expected)
+    writeFile(path, "abc")
+    check sha256File(path) == AbcDigest
+    check digestMatches(path, "sha256:" & AbcDigest)
     check not digestMatches(path, "sha256:" & repeat('0', 64))
+
+    writeFile(path, "")
+    check sha256File(path) == "e3b0c44298fc1c149afbf4c8996fb924" &
+      "27ae41e4649b934ca495991b7852b855"
+
+    writeFile(path, "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq")
+    check sha256File(path) == "248d6a61d20638b8e5c026930c3e6039" &
+      "a33ce45964ff2167f6ecedd419db06c1"
+
+    writeFile(path, repeat('a', 1_000_000))
+    check sha256File(path) == "cdc76e5c9914fb9281a1c7e284d73e67" &
+      "f1809a48a497200e046d39ccc7112cd0"
 
   test "uses Nim's standard build script":
     when defined(windows):

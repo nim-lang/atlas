@@ -8,8 +8,8 @@
 
 ## Implementation of the "Nim virtual environment" (`atlas env`) feature.
 import std/[files, dirs, strscans, os, strutils, uri, json, options,
-            httpclient, tempfiles, osproc, streams, openssl]
-import basic/[context, osutils, versions, gitops, httpclientutils]
+            httpclient, tempfiles, osproc, streams]
+import basic/[context, osutils, versions, gitops, httpclientutils, sha256]
 
 const NimReleasesUrl* = "https://nim-lang.org/releases.json"
 
@@ -148,38 +148,6 @@ proc findBinaryRelease*(manifest, nimVersion, platform: string): Option[NimBinar
   if url.len == 0:
     raise newException(ValueError, "Nim binary release has no download URL")
   result = some(NimBinaryRelease(url: url, digest: artifact.jsonString("digest")))
-
-proc sha256File*(path: string): string =
-  let digestContext = EVP_MD_CTX_create()
-  if digestContext == nil:
-    raise newException(IOError, "cannot create SHA-256 digest context")
-  defer:
-    EVP_MD_CTX_destroy(digestContext)
-
-  if EVP_DigestInit_ex(digestContext, EVP_sha256()) != 1:
-    raise newException(IOError, "cannot initialize SHA-256 digest")
-
-  var file = open(path, fmRead)
-  defer:
-    file.close()
-  var buffer: array[64 * 1024, byte]
-  while true:
-    let count = file.readBuffer(addr buffer[0], buffer.len)
-    if count == 0:
-      break
-    if EVP_DigestUpdate(digestContext, addr buffer[0], cuint(count)) != 1:
-      raise newException(IOError, "cannot update SHA-256 digest")
-
-  var digest: array[32, byte]
-  var digestLen: cuint
-  if EVP_DigestFinal_ex(digestContext, addr digest[0], addr digestLen) != 1 or
-      digestLen != cuint(digest.len):
-    raise newException(IOError, "cannot finish SHA-256 digest")
-
-  const HexDigits = "0123456789abcdef"
-  for value in digest:
-    result.add HexDigits[int(value shr 4)]
-    result.add HexDigits[int(value and 0x0f)]
 
 proc digestMatches*(path, expected: string): bool =
   let parts = expected.split(':', maxsplit = 1)
