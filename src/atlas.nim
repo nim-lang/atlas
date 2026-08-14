@@ -70,6 +70,9 @@ Options:
   --list[=on|off]       list all available and installed versions
   --keepCommits         do not perform any `git checkouts`
   --keepworkspace       keep generated workspace artifacts
+  --binary              for `env`, require a prebuilt Nim release
+  --source              for `env`, build Nim from source
+  --github-path         for `env`, add Nim's bin directory to $GITHUB_PATH
   --ignoreerrors        continue even when errors were recorded
   --dumpformular        dump SAT formula for debugging
   --dumpgraphs          dump dependency graphs for debugging
@@ -678,6 +681,9 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
       of "keepcommits": context().flags.incl KeepCommits
       of "keepfeatures", "k": context().flags.incl KeepFeatures
       of "allfeatures": context().flags.incl AllFeatures
+      of "binary": context().flags.incl BinaryNimEnv
+      of "source": context().flags.incl SourceNimEnv
+      of "githubpath", "github-path": context().flags.incl GitHubPath
       of "project", "p":
         context().flags.incl(ManualProjectArg)
         if val == ".":
@@ -796,6 +802,12 @@ proc atlasRun*(params: seq[string]) =
     fatal "--update option is only valid with `install`"
   if UnlinkOnly in context().flags and action != "unlink":
     fatal "--only option is only valid with `unlink`"
+  if {BinaryNimEnv, SourceNimEnv, GitHubPath} * context().flags != {} and action != "env":
+    fatal "--binary, --source, and --github-path options are only valid with `env`"
+  if {BinaryNimEnv, SourceNimEnv} <= context().flags:
+    fatal "--binary and --source cannot be used together"
+  if GitHubPath in context().flags and getEnv("GITHUB_PATH").len == 0:
+    fatal "--github-path requires the GITHUB_PATH environment variable"
 
   if action notin ["init", "tag", "search", "list"]:
     doAssert project().string != "" and project().dirExists(), "project was not set"
@@ -891,7 +903,13 @@ proc atlasRun*(params: seq[string]) =
     showSelectedDeps()
   of "env":
     singleArg()
-    setupNimEnv args[0], KeepNimEnv in context().flags
+    let mode =
+      if BinaryNimEnv in context().flags: NimEnvMode.Binary
+      elif SourceNimEnv in context().flags: NimEnvMode.Source
+      else: NimEnvMode.Auto
+    let installed = setupNimEnv(args[0], KeepNimEnv in context().flags, mode)
+    if installed and GitHubPath in context().flags:
+      discard addNimEnvToGitHubPath(args[0])
   of "outdated":
     listOutdated()
   else:

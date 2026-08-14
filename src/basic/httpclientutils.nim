@@ -13,8 +13,8 @@ import atlasversion
 
 const AtlasUserAgent* = "atlas/" & AtlasPackageVersion
 
-proc newAtlasHttpClient*(): HttpClient =
-  newHttpClient(headers = newHttpHeaders({
-    "User-Agent": AtlasUserAgent,
-    "Accept-Encoding": "gzip"
-  }))
+proc newAtlasHttpClient*(acceptGzip = true): HttpClient =
+  let headers = newHttpHeaders({"User-Agent": AtlasUserAgent})
+  if acceptGzip:
+    headers["Accept-Encoding"] = "gzip"
+  newHttpClient(headers = headers)

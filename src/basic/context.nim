@@ -36,6 +36,9 @@ type
     KeepCommits
     CfgHere
     KeepNimEnv
+    BinaryNimEnv
+    SourceNimEnv
+    GitHubPath
     KeepWorkspace
     ShowGraph
     AutoEnv
