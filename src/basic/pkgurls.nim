@@ -185,19 +185,25 @@ proc toDirectoryPath(pkgUrl: PkgUrl, packageName: string, isLinkFile: bool): Pat
   else:
     result = depsDir() / Path(dirName)
   
-  if not isLinkFile and not dirExists(result) and fileExists(result.linkPath()):
-    # prefer the directory path if it exists (?)
-    let linkPath = result.linkPath()
-    let link = readFile($linkPath)
-    let lines = link.split("\n")
-    if lines.len != 2:
-      warn pkgUrl.projectName(), "invalid link file:", $linkPath
-    else:
-      let nimble = Path(lines[0])
-      result = nimble.splitFile().dir
-      if not result.isAbsolute():
-        result = linkPath.parentDir() / result
-      debug pkgUrl.projectName(), "link file to:", $result
+  if not isLinkFile and not dirExists(result):
+    var linkPath = result.linkPath()
+    if not fileExists(linkPath) and packageName.len > 0:
+      # Link files use the URL slug, which can differ from the registry package name.
+      let urlLinkPath = (depsDir() / Path(pkgUrl.projectName())).linkPath()
+      if urlLinkPath != linkPath and fileExists(urlLinkPath):
+        linkPath = urlLinkPath
+
+    if fileExists(linkPath):
+      let link = readFile($linkPath)
+      let lines = link.split("\n")
+      if lines.len != 2:
+        warn pkgUrl.projectName(), "invalid link file:", $linkPath
+      else:
+        let nimble = Path(lines[0])
+        result = nimble.splitFile().dir
+        if not result.isAbsolute():
+          result = linkPath.parentDir() / result
+        debug pkgUrl.projectName(), "link file to:", $result
 
   result = result.absolutePath
   trace pkgUrl, "found directory path:", $result

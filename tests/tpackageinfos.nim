@@ -112,6 +112,11 @@ doAssert not AtlasIsDirty
     check client.headers["User-Agent"] == "atlas/" & AtlasPackageVersion
     check client.headers["Accept-Encoding"] == "gzip"
 
+    let uncompressedClient = newAtlasHttpClient(acceptGzip = false)
+    defer: uncompressedClient.close()
+    check uncompressedClient.headers["User-Agent"] == "atlas/" & AtlasPackageVersion
+    check not uncompressedClient.headers.hasKey("Accept-Encoding")
+
   test "gzip encoded package list is decompressed with gzip":
     if findExe("gzip").len == 0:
       skip()
