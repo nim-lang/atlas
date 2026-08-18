@@ -308,7 +308,9 @@ proc remoteNameFromGitUrl*(rawUrl: string): string =
   if user.len == 0:
     repo
   else:
-    repo & "." & user & "." & u.hostname
+    const invalidChars = (invalidFilenameChars + {'~'}).toSeq().mapIt(($it, ""))
+    let sanitizedUser = user.multiReplace(invalidChars)
+    repo & "." & sanitizedUser & "." & u.hostname
 
 proc getRemoteUrlFor(path: Path; remote: string): string =
   result = configRemoteUrl(path, remote)
