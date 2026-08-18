@@ -398,6 +398,30 @@ atlas env 1.6.12
 atlas env devel
 ```
 
+For a tagged release, Atlas downloads the prebuilt binary for the current platform
+from the Nim release index. If that version or platform has no binary, Atlas builds
+Nim from source instead. Use `--binary` to require a binary or `--source` to always
+build from source:
+
+```
+atlas env 2.2.10 --binary
+atlas env 2.2.10 --source
+```
+
+Binary downloads are verified when the release index provides a checksum. Download,
+checksum, and extraction failures are reported rather than falling back to a source
+build. The source path uses Nim's standard `build_all.sh` script on UNIX and
+`build_all.bat` on Windows. The `devel` version is always built from source, and
+`atlas env devel --binary` is an error.
+
+In GitHub Actions, use `--github-path` to append the installed Nim `bin` directory
+to the runner's `GITHUB_PATH` environment file. Nim will then be available on
+`PATH` in subsequent steps of the current job:
+
+```
+atlas env 2.2.10 --binary --github-path
+```
+
 When completed, run `source deps/nim-1.6.12/activate.sh` on UNIX and `deps\nim-1.6.12\activate.bat` on Windows.
 
 
