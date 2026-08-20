@@ -161,3 +161,12 @@ proc findRelease*(pkg: Package, v: VersionInterval): NimbleRelease =
 
 proc matches*(v: VersionInterval, pkgVer: PackageVersion): bool =
   v.matches(pkgVer.vtag)
+
+proc matchesRequirement*(query: VersionInterval; depVer: PackageVersion;
+                         depRel: NimbleRelease): bool =
+  ## Match semver constraints against nimble-declared release versions, while
+  ## preserving special ref semantics (#head/#branch/#commit) on package tags.
+  if query.isSpecial:
+    result = query.matches(depVer)
+  else:
+    result = query.matches(depRel.version)
