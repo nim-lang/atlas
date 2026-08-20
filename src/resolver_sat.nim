@@ -1,4 +1,4 @@
-## SAT-based dependency resolution.
+## SAT dependency resolution.
 
 import std/[algorithm, json, jsonutils, sequtils, sets, strutils, tables]
 

@@ -2,9 +2,9 @@ import std/[algorithm, files, os, paths, sequtils, sets, strutils, tables]
 
 import basic/[context, depgraphtypes, deptypes, deptypesjson, gitops,
   nimblecontext, osutils, pkgurls, reporters, sattypes, versions]
-import dependencies, resolver_eager, resolverutils, resolvers_sat, runners
+import dependencies, resolver_eager, resolver_sat, resolverutils, runners
 
-export depgraphtypes, deptypesjson, resolverutils, resolvers_sat
+export depgraphtypes, deptypesjson, resolver_sat, resolverutils
 
 
 when not compiles(newSeq[int]().addUnique(1)):
