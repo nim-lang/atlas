@@ -4,7 +4,7 @@ import std/[algorithm, json, jsonutils, sequtils, sets, strutils, tables]
 
 import basic/[context, depgraphtypes, deptypes, deptypesjson, pkgurls, reporters,
   sattypes, versions]
-import resolverutils
+import resolver_utils
 
 export sat
 

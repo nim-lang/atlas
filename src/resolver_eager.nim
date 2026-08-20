@@ -1,8 +1,10 @@
 ## Breadth-first eager dependency resolution.
 
-import std / [algorithm, deques, sequtils, sets, tables]
+import std/[algorithm, deques, sequtils, sets, strutils, tables]
 
-import basic/[context, deptypes, pkgurls, reporters, versions]
+import basic/[context, depgraphtypes, deptypes, deptypesjson, pkgurls, reporters,
+  versions]
+import resolver_utils
 
 
 type
@@ -187,3 +189,40 @@ proc resolveBreadthFirst*(graph: var DepGraph; deferred: var seq[Package]): bool
 proc resolveBreadthFirst*(graph: var DepGraph): bool =
   var deferred: seq[Package]
   result = graph.resolveBreadthFirst(deferred) and deferred.len == 0
+
+proc solveBreadthFirst*(graph: var DepGraph; rerun: var bool): bool =
+  if DumpGraphs in context().flags:
+    dumpJson(graph, "graph-solve-input.json")
+
+  var deferred: seq[Package]
+  result = graph.resolveBreadthFirst(deferred)
+  if not result:
+    return
+
+  if deferred.len > 0:
+    notice "atlas:resolved", "rerunning BFS; loading selected lazy dependencies:",
+      deferred.mapIt(it.url.projectName).join(", ")
+    for pkg in deferred:
+      pkg.state = DoLoad
+      pkg.versions.clear()
+    rerun = true
+    result = false
+    return
+
+  checkDuplicateModules(graph)
+
+  if ListVersions in context().flags and ListVersionsOff notin context().flags:
+    notice "atlas:resolved", "selected:"
+    for pkg in graph.allActiveNodes():
+      if not pkg.isRoot:
+        notice "atlas:resolved",
+          "[x] " & formatVersionSelection(pkg, pkg.activeVersion)
+    notice "atlas:resolved", "end of selection"
+
+  if DumpGraphs in context().flags:
+    info "atlas:graph", "dumping graph after solving"
+    dumpJson(graph, "graph-solved.json")
+
+proc solveBreadthFirst*(graph: var DepGraph): bool =
+  var rerun = false
+  result = graph.solveBreadthFirst(rerun)

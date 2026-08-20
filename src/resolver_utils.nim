@@ -1,3 +1,5 @@
+## Shared resolver post-processing helpers.
+
 import std/[algorithm, sequtils, sets, strutils, tables]
 
 import basic/[context, deptypes, gitops, pkgurls, reporters]
@@ -12,6 +14,9 @@ proc formatVersionSelection*(pkg: Package; version: PackageVersion): string =
 
 proc chooseDuplicatePackage(graph: DepGraph; name: string;
                             dupePkgs: seq[Package]): Package =
+  ## Select the unambiguous preferred package for a duplicate module name.
+  ## Root requirements and forks take precedence; equivalent Git remotes use
+  ## a deterministic project-name tie breaker. Returns `nil` if no choice is safe.
   proc sortedFirst(pkgs: seq[Package]): Package =
     if pkgs.len == 0:
       return nil
@@ -79,6 +84,8 @@ proc chooseDuplicatePackage(graph: DepGraph; name: string;
     result = sortedFirst(dupePkgs)
 
 proc checkDuplicateModules*(graph: var DepGraph) =
+  ## Resolve duplicate active module names or fail when no selection is safe.
+  ## Deactivates losing packages in `graph` and honors configured overrides.
   var moduleNames: Table[string, HashSet[Package]]
   for pkg in graph.pkgs.values():
     if pkg.active:

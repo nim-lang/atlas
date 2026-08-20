@@ -2,9 +2,11 @@ import std/[algorithm, files, os, paths, sequtils, sets, strutils, tables]
 
 import basic/[context, depgraphtypes, deptypes, deptypesjson, gitops,
   nimblecontext, osutils, pkgurls, reporters, sattypes, versions]
-import dependencies, resolver_eager, resolver_sat, resolverutils, runners
+import dependencies, resolver_sat, resolver_utils, runners
+from resolver_eager import solveBreadthFirst
 
-export depgraphtypes, deptypesjson, resolver_sat, resolverutils
+export depgraphtypes, deptypesjson, resolver_sat, resolver_utils
+export solveBreadthFirst
 
 
 when not compiles(newSeq[int]().addUnique(1)):
@@ -90,43 +92,6 @@ proc collectUnsatisfiedContextFeatures(graph: DepGraph): seq[string] =
       result.add(qualified & " (no active package matched '" & pkgName & "')")
     elif declaredInNimble and not featureSatisfied:
       result.add qualified
-
-proc solveBreadthFirst*(graph: var DepGraph; rerun: var bool): bool =
-  if DumpGraphs in context().flags:
-    dumpJson(graph, "graph-solve-input.json")
-
-  var deferred: seq[Package]
-  result = graph.resolveBreadthFirst(deferred)
-  if not result:
-    return
-
-  if deferred.len > 0:
-    notice "atlas:resolved", "rerunning BFS; loading selected lazy dependencies:",
-      deferred.mapIt(it.url.projectName).join(", ")
-    for pkg in deferred:
-      pkg.state = DoLoad
-      pkg.versions.clear()
-    rerun = true
-    result = false
-    return
-
-  checkDuplicateModules(graph)
-
-  if ListVersions in context().flags and ListVersionsOff notin context().flags:
-    notice "atlas:resolved", "selected:"
-    for pkg in graph.allActiveNodes():
-      if not pkg.isRoot:
-        notice "atlas:resolved",
-          "[x] " & formatVersionSelection(pkg, pkg.activeVersion)
-    notice "atlas:resolved", "end of selection"
-
-  if DumpGraphs in context().flags:
-    info "atlas:graph", "dumping graph after solving"
-    dumpJson(graph, "graph-solved.json")
-
-proc solveBreadthFirst*(graph: var DepGraph): bool =
-  var rerun = false
-  result = graph.solveBreadthFirst(rerun)
 
 proc loadWorkspace*(path: Path; nc: var NimbleContext; mode: TraversalMode;
                     onClone: PackageAction; doSolve: bool): DepGraph =
