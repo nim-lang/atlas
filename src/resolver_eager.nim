@@ -1,3 +1,5 @@
+## Breadth-first eager dependency resolution.
+
 import std / [algorithm, deques, sequtils, sets, tables]
 
 import basic/[context, deptypes, pkgurls, reporters, versions]

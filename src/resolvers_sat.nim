@@ -1,3 +1,5 @@
+## SAT-based dependency resolution.
+
 import std/[algorithm, json, jsonutils, sequtils, sets, strutils, tables]
 
 import basic/[context, depgraphtypes, deptypes, deptypesjson, pkgurls, reporters,

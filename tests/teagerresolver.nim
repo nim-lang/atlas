@@ -1,7 +1,7 @@
 import std/[sets, strutils, tables, unittest, uri]
 
 import basic/[context, deptypes, pkgurls, reporters, versions]
-import depgraphs, eagerresolver
+import depgraphs, resolver_eager
 
 
 proc pkgUrl(name: string): PkgUrl =
