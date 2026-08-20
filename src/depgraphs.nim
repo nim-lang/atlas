@@ -144,7 +144,7 @@ proc loadWorkspace*(path: Path; nc: var NimbleContext; mode: TraversalMode;
     else:
       let form = result.toFormular(context().defaultAlgo)
       var rerun = false
-      solve(result, form, rerun)
+      solveSat(result, form, rerun)
 
       if rerun:
         for pkg in result.pkgs.values():

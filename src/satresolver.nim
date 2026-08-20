@@ -440,7 +440,7 @@ proc printVersionSelections(graph: DepGraph, solution: Solution, form: Form) =
     notice "atlas:resolved", str
   notice "atlas:resolved", "end of selection"
 
-proc solve*(graph: var DepGraph; form: Form, rerun: var bool) =
+proc solveSat*(graph: var DepGraph; form: Form, rerun: var bool) =
   for pkg in graph.pkgs.mvalues():
     pkg.activeVersion = nil
     pkg.activeFeatures = @[]
@@ -556,6 +556,6 @@ proc solve*(graph: var DepGraph; form: Form, rerun: var bool) =
     info "atlas:graph", "dumping graph after solving"
     dumpJson(graph, "graph-solved.json")
 
-proc solve*(graph: var DepGraph; form: Form) =
+proc solveSat*(graph: var DepGraph; form: Form) =
   var rerun = false
-  solve(graph, form, rerun)
+  solveSat(graph, form, rerun)

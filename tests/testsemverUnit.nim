@@ -68,7 +68,7 @@ suite "graph solve":
         let form = graph.toFormular(SemVer)
         context().flags.incl DumpGraphs
         var sol: Solution
-        solve(graph, form)
+        solveSat(graph, form)
 
         check graph.root.active
         check graph.pkgs[nc.createUrl("proj_a")].active
@@ -85,7 +85,7 @@ suite "graph solve":
         let formMinVer = graph.toFormular(MinVer)
         context().flags.incl DumpGraphs
         var solMinVer: Solution
-        solve(graph, formMinVer)
+        solveSat(graph, formMinVer)
 
         check $graph.root.activeVersion == "#head@-"
         check $graph.pkgs[nc.createUrl("proj_a")].activeVersion == $findCommit("proj_a", "1.0.0")
@@ -130,7 +130,7 @@ suite "graph solve":
         let form = graph.toFormular(SemVer)
         context().flags.incl DumpGraphs
         var sol: Solution
-        solve(graph, form)
+        solveSat(graph, form)
 
         check graph.root.active
         check graph.pkgs[nc.createUrl("proj_a")].active
@@ -147,7 +147,7 @@ suite "graph solve":
         let formMinVer = graph.toFormular(MinVer)
         context().flags.incl DumpGraphs
         var solMinVer: Solution
-        solve(graph, formMinVer)
+        solveSat(graph, formMinVer)
 
 
         check $graph.root.activeVersion == "#head@-"
@@ -202,7 +202,7 @@ suite "test expand with no git tags":
         let form = graph.toFormular(SemVer)
         context().flags.incl DumpGraphs
         var sol: Solution
-        solve(graph, form)
+        solveSat(graph, form)
 
         check graph.root.active
         check graph.pkgs[nc.createUrl("proj_a")].active
@@ -219,7 +219,7 @@ suite "test expand with no git tags":
         let formMinVer = graph.toFormular(MinVer)
         context().flags.incl DumpGraphs
         var solMinVer: Solution
-        solve(graph, formMinVer)
+        solveSat(graph, formMinVer)
 
         check $graph.root.activeVersion == "#head@-"
         check $graph.pkgs[nc.createUrl("proj_a")].activeVersion.version == "1.0.0"
@@ -274,7 +274,7 @@ suite "test expand with no git tags":
         let form = graph.toFormular(SemVer)
         context().flags.incl DumpGraphs
         var sol: Solution
-        solve(graph, form)
+        solveSat(graph, form)
 
         check graph.root.active
         check graph.pkgs[nc.createUrl("proj_a")].active
