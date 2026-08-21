@@ -19,6 +19,11 @@ iterator directDependencies*(graph: DepGraph; pkg: Package): lent Package =
     for (depUrl, _) in pkg.activeNimbleRelease.requirements:
       yield graph.pkgs[depUrl]
 
+proc requirementMatches*(query: VersionInterval; depVer: PackageVersion;
+                         depRel: NimbleRelease): bool =
+  ## Compatibility wrapper for dependency requirement matching.
+  query.matchesRequirement(depVer, depRel)
+
 proc hasSatisfiedFeatureDeps(graph: DepGraph; rel: NimbleRelease;
                              featName: string): bool =
   let declaredFeature = rel.features.findFeature(featName)
