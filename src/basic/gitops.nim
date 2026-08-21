@@ -657,7 +657,7 @@ proc versionToCommit*(path: Path; origin = "origin"; algo: ResolutionAlgorithm; 
     result = selectBestCommitMinVer(allVersions, query)
   of SemVer:
     result = selectBestCommitSemVer(allVersions, query)
-  of MaxVer:
+  of MaxVer, Bfs:
     result = selectBestCommitMaxVer(allVersions, query)
 
 proc shortToCommit*(path: Path, short: CommitHash): CommitHash =

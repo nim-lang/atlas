@@ -65,7 +65,7 @@ Options:
   --features=<list>     enables one or more features separated by commas or spaces
   --allFeatures         enables every declared feature
   --keepFeatures, -k    reuse feature defines from the current nim.cfg
-  --resolver=minver|semver|maxver
+  --resolver=minver|semver|maxver|bfs
                         which resolution algorithm to use, default is semver
   --list[=on|off]       list all available and installed versions
   --keepCommits         do not perform any `git checkouts`
@@ -745,6 +745,7 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
         of "minver": context().defaultAlgo = MinVer
         of "maxver": context().defaultAlgo = MaxVer
         of "semver": context().defaultAlgo = SemVer
+        of "bfs": context().defaultAlgo = Bfs
         else: writeHelp()
       of "nolazydeps", "no-lazy-deps":
         context().flags.incl NoLazyDeps

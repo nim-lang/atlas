@@ -36,7 +36,7 @@ type
     isInterval: bool
 
   ResolutionAlgorithm* = enum
-    MinVer, SemVer, MaxVer
+    MinVer, SemVer, MaxVer, Bfs
 
   CommitHash* = object
     h*: string

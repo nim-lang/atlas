@@ -226,7 +226,8 @@ feature "testing":
   require "mytestlib"
 ```
 
-Features are lazily cloned by Atlas until they are specified by either a requires feature or passed from the command line.
+Features are lazily cloned until they are selected by a requires feature or passed from the command
+line. The BFS resolver loads a lazy feature dependency when its selected path reaches it.
 
 In Nimble files you can enable features for a a given package like so:
 ```nim
@@ -427,13 +428,12 @@ When completed, run `source deps/nim-1.6.12/activate.sh` on UNIX and `deps\nim-1
 
 ## Dependency resolution
 
-To change the used dependency resolution mechanism, edit the `resolver` value of
-your `atlas.config` file. The possible values are:
+To change the dependency resolution mechanism, pass `--resolver=<name>` or edit
+the `resolver` value of your `atlas.config` file. The default is `SemVer`.
 
 ### MaxVer
 
-The default resolution mechanism is called "MaxVer" where the highest available version is selected
-that still fits the requirements.
+`MaxVer` selects the highest available version that still fits the requirements.
 
 Suppose you have a dependency called "mylibrary" with the following available versions:
 1.0.0, 1.1.0, and 2.0.0. `MaxVer` selects the version 2.0.0.
@@ -463,6 +463,20 @@ For the "mylibrary" dependency with versions 1.0.0, 1.1.0, and 2.0.0, if you set
 to `MinVer` and specify multiple minimum versions, the highest version among the minimum
 required versions will be selected. For example, if you specify a minimum requirement of
 both `>=1.0.0` and `>=2.0.0`, the selected version would be 2.0.0.
+
+
+### Bfs
+
+`Bfs` is an eager, breadth-first resolver with traditional nearest-wins behavior. It uses the same
+package and release discovery as the SAT-based resolvers, but selects a release when it first reaches
+a package instead of building a global SAT formula.
+
+Requirements closer to the root package take precedence over requirements found deeper in the
+dependency graph. Declaration order breaks ties at the same depth. Atlas selects the highest release
+compatible with that winning requirement. A later incompatible requirement produces a warning and
+does not replace the selected release.
+
+Use it from the command line with `--resolver=bfs`, or set `"resolver": "Bfs"` in `atlas.config`.
 
 
 ## Reproducible builds / lockfiles

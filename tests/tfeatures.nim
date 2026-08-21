@@ -113,7 +113,7 @@ suite "test features":
         # let form = graph.toFormular(SemVer)
         # context().flags.incl DumpGraphs
         # var sol: Solution
-        # solve(graph, form)
+        # solveSat(graph, form)
 
         check graph.root.active
         check graph.pkgs[nc.createUrl("proj_a")].active
@@ -218,7 +218,7 @@ suite "test global features":
         # let form = graph.toFormular(SemVer)
         # context().flags.incl DumpGraphs
         # var sol: Solution
-        # solve(graph, form)
+        # solveSat(graph, form)
 
         check graph.root.active
         check graph.pkgs[nc.createUrl("proj_a")].active

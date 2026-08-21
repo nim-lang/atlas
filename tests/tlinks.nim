@@ -69,7 +69,7 @@ suite "test link integration":
         let form = graph.toFormular(SemVer)
         context().flags.incl DumpGraphs
         var sol: Solution
-        solve(graph, form)
+        solveSat(graph, form)
         writeActivationCache(graph)
 
         check graph.root.active
@@ -253,7 +253,7 @@ suite "test link integration":
         # let form = graph.toFormular(SemVer)
         # context().flags.incl DumpGraphs
         # var sol: Solution
-        # solve(graph, form)
+        # solveSat(graph, form)
 
         proc checkHead(pkg: Package) =
           check pkg.isLocalOnly
