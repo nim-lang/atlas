@@ -25,6 +25,7 @@ type
     plugins*: string
     resolver*: string
     graph*: JsonNode
+    nimEnvs*: Table[string, NimEnvConfig]
 
   ActivatedPackage* = object
     url*: PkgUrl
@@ -52,11 +53,14 @@ proc writeDefaultConfigFile*() =
     nameOverrides: initTable[string, string](),
     urlOverrides: initTable[string, string](),
     pkgOverrides: initTable[string, string](),
+    nimEnvs: initTable[string, NimEnvConfig](),
     resolver: $SemVer,
     graph: newJNull()
   )
   let configFile = getProjectConfig()
-  writeFile($configFile, pretty %*config)
+  let json = %*config
+  json.delete("nimEnvs")
+  writeFile($configFile, pretty json)
 
 proc readConfigFile*(configFile: Path): JsonConfig =
   var f = newFileStream($configFile, fmRead)
@@ -77,6 +81,8 @@ proc readAtlasContext*(ctx: var AtlasContext, projectDir: Path) =
   let m = readConfigFile(configFile)
 
   ctx.projectDir = projectDir
+  ctx.nimEnvs =
+    if m.nimEnvs.len > 0: m.nimEnvs else: initTable[string, NimEnvConfig]()
 
   if m.deps.len > 0:
     ctx.depsDir = m.deps.Path.expandTilde()
@@ -120,11 +126,14 @@ proc writeConfig*() =
     pkgOverrides: context().pkgOverrides.pairs().toSeq().mapIt((it[0], $it[1])).toTable(),
     plugins: $context().pluginsFile,
     resolver: $context().defaultAlgo,
-    graph: newJNull()
+    graph: newJNull(),
+    nimEnvs: context().nimEnvs
   )
 
   let jcfg = toJson(config)
   doAssert not jcfg.isNil()
+  if context().nimEnvs.len == 0:
+    jcfg.delete("nimEnvs")
   let configFile = getProjectConfig()
   debug "atlas", "writing config file: ", $configFile
   writeFile($configFile, pretty(jcfg))

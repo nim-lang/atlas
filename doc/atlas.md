@@ -286,7 +286,7 @@ normal selectors to remove matching tests from the selected set.
 ```
 atlas-run tests
 atlas-run tests --jobs:4
-atlas-run tests --nimcache:.nimcache/atlas-run
+atlas-run tests --nimcache:deps/.nimcache/atlas-run
 atlas-run tests --no-shuffle
 atlas-run tests --only-errors
 atlas-run tests --compiler-output
@@ -413,6 +413,22 @@ checksum, and extraction failures are reported rather than falling back to a sou
 build. The source path uses Nim's standard `build_all.sh` script on UNIX and
 `build_all.bat` on Windows. The `devel` version is always built from source, and
 `atlas env devel --binary` is an error.
+
+To build a custom Nim checkout, pass `--git-ref` with a branch, tag, commit SHA,
+or explicit Git ref. This implies a source build. The environment name is local
+to the workspace, so use a name without path separators. By default Atlas uses
+the upstream Nim repository; pass `--git-url` to build a fork or other remote:
+
+```
+atlas env nim-develop --git-ref=devel
+atlas env nim-fix --git-ref=4fcb2ea7b9be2a40b5679c1ba4d41f2bd1b2247f
+atlas env my-nim --git-url=https://github.com/me/Nim.git --git-ref=fix/windows
+```
+
+`--git-url` requires `--git-ref`, and Git source selection cannot be combined
+with `--binary`. Atlas resolves the requested ref to a full commit SHA, checks it
+out detached, and records the URL, requested ref, and SHA under `nimEnvs` in
+`atlas.config`.
 
 In GitHub Actions, use `--github-path` to append the installed Nim `bin` directory
 to the runner's `GITHUB_PATH` environment file. Nim will then be available on

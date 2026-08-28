@@ -387,7 +387,7 @@ proc effectiveNimcacheRoot(projectDir, nimcacheDir: Path): Path =
     else:
       result = projectDir / expanded
   else:
-    result = projectDir / Path".nimcache" / Path"atlas-run"
+    result = projectDir / Path"deps/.nimcache" / Path"atlas-run"
 
 proc testNimcacheDir(projectDir, nimcacheRoot, path: Path): Path =
   let relativeTest = path.relativePath(projectDir, '/').changeFileExt("")
