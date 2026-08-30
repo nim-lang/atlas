@@ -244,6 +244,10 @@ Atlas also accepts the older `somelib[testing] >= 1.0` placement, but warns when
 a version constraint follows the feature list. Move the feature list to the end
 of the requirement to match Nimble's syntax.
 
+As with Nimble, requesting a dependency feature always emits its compiler define.
+The dependency does not need to declare the feature; a declaration is only needed
+when activating the feature should add more package requirements.
+
 
 ### Search <term term2 term3 ...>
 

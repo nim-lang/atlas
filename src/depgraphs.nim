@@ -97,6 +97,26 @@ proc matchesFeaturePackageName(pkg: Package; rel: NimbleRelease;
     if candidate.len > 0 and sameFeature(candidate, name):
       return true
 
+proc activateRequiredDependencyFeatures(graph: DepGraph) =
+  ## Records every feature requested on an active dependency requirement.
+  ## Nimble emits the define even when the selected dependency does not declare
+  ## the feature; only declared features contribute additional requirements.
+  for pkg in allActiveNodes(graph):
+    let rel = pkg.activeNimbleRelease()
+    if not rel.isNil:
+      for depUrl, requestedFeatures in rel.reqsByFeatures:
+        if depUrl in graph.pkgs:
+          let depPkg = graph.pkgs[depUrl]
+          if depPkg.active and not depPkg.activeVersion.isNil:
+            let depRel = depPkg.activeNimbleRelease()
+            if not depRel.isNil:
+              for requestedFeature in requestedFeatures:
+                let declaredFeature = depRel.features.findFeature(requestedFeature)
+                let feature =
+                  if declaredFeature.len > 0: declaredFeature
+                  else: requestedFeature
+                depPkg.activeFeatures.addUniqueFeature(feature)
+
 proc canonicalFeatureDefine(graph: DepGraph; feature: string): string =
   if not feature.startsWith(FeatureDefinePrefix):
     if graph.root.isNil or graph.root.activeNimbleRelease().isNil:
@@ -766,6 +786,8 @@ proc solve*(graph: var DepGraph; form: Form, rerun: var bool) =
 
       rerun = true
       return
+
+    graph.activateRequiredDependencyFeatures()
 
     if ListVersions in context().flags and ListVersionsOff notin context().flags:
       printVersionSelections(graph, solution, form)
