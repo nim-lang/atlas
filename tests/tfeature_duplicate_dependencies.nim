@@ -30,7 +30,7 @@ suite "duplicate feature dependencies":
     graph.pkgs[rootUrl] = root
     graph.pkgs[sharedDependency] = dependency
 
-    graph.solve(graph.toFormular(SemVer))
+    graph.solveSat(graph.toFormular(SemVer))
 
     doAssert root.active
     doAssert dependency.active, "the shared feature dependency must be selected"
@@ -60,7 +60,7 @@ suite "duplicate feature dependencies":
     graph.pkgs[rootUrl] = root
     graph.pkgs[sharedDependency] = dependency
 
-    graph.solve(graph.toFormular(SemVer))
+    graph.solveSat(graph.toFormular(SemVer))
 
     doAssert root.active
     doAssert dependency.active, "automatic feature dependencies must be selected"
@@ -93,7 +93,7 @@ suite "duplicate feature dependencies":
     graph.pkgs[rootUrl] = root
     graph.pkgs[sharedDependency] = dependency
 
-    graph.solve(graph.toFormular(SemVer))
+    graph.solveSat(graph.toFormular(SemVer))
 
     doAssert root.active
     doAssert dependency.active

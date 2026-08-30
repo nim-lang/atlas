@@ -88,7 +88,7 @@ suite "monorepo registry packages":
     check authUrl in graph.pkgs
 
     let form = graph.toFormular(SemVer)
-    solve(graph, form)
+    solveSat(graph, form)
 
     check graph.root.active
     check provenUrl in graph.pkgs
