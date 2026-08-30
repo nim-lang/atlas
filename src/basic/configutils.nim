@@ -29,6 +29,11 @@ proc patchNimCfg*(deps: seq[CfgPath]; cfgPath: CfgPath; features: seq[string] = 
       paths.add "--path:\"" & x & "\"\n"
   for feature in features:
     paths.add "--define:\"" & feature & "\"\n"
+    # Remove this singular alias when support for legacy `foo[bar] > 3.0`
+    # requirements is removed.
+    if feature.startsWith(FeatureDefinePrefix):
+      let legacyFeature = LegacyFeatureDefinePrefix & feature[FeatureDefinePrefix.len..^1]
+      paths.add "--define:\"" & legacyFeature & "\"\n"
   var cfgContent = configPatternBegin & paths & configPatternEnd
 
   let cfg = Path(cfgPath.string / "nim.cfg")
@@ -75,5 +80,7 @@ proc parseNimCfgFeatures*(cfgPath: CfgPath): seq[string] =
 
     if x.len >= 2 and x[0] == '"' and x[^1] == '"':
       x = x[1 .. ^2]
-    if x.startsWith("feature.") and x notin result:
+    if x.startsWith(LegacyFeatureDefinePrefix):
+      x = FeatureDefinePrefix & x[LegacyFeatureDefinePrefix.len..^1]
+    if x.startsWith(FeatureDefinePrefix) and x notin result:
       result.add x.toLowerAscii()

@@ -632,6 +632,48 @@ proc matches*(pattern: VersionInterval; v: Version): bool =
   else:
     result = matches(pattern.a, v)
 
+proc requirementFeatures(req: string): tuple[features: seq[string], first, last: int] =
+  result = (@[], req.find('['), -1)
+  if result.first < 0:
+    return
+  result.last = req.find(']', result.first + 1)
+  if result.last < 0:
+    return
+  for rawFeature in req[result.first + 1 ..< result.last].split(','):
+    let feature = rawFeature.strip()
+    if feature.len > 0:
+      result.features.add(feature)
+
+proc removeRequirementFeatures*(req: string): string =
+  ## Removes the feature list from a Nimble requirement.
+  let (_, first, last) = requirementFeatures(req)
+  if last < 0:
+    return req
+  if first > 0:
+    result.add(req[0..<first])
+  if last + 1 < req.len:
+    result.add(req[last + 1..^1])
+
+proc usesLegacyRequirementFeatureSyntax*(req: string): bool =
+  ## Returns whether features appear before a version constraint.
+  let (_, first, last) = requirementFeatures(req)
+  if last < 0 or last + 1 >= req.len:
+    return false
+
+  const verChars = {'#', '<', '=', '>', '^', '~', '['}
+  var nameEnd = 0
+  while nameEnd < req.len and req[nameEnd] notin verChars + Whitespace:
+    inc nameEnd
+  result = first == nameEnd and req[last + 1..^1].strip().len > 0
+
+proc requirementWithFeaturesAtEnd*(req: string): string =
+  ## Rewrites the legacy feature placement to Nimble's feature suffix syntax.
+  let (_, first, last) = requirementFeatures(req)
+  if last < 0:
+    return req
+  result = removeRequirementFeatures(req).strip()
+  result.add(req[first..last])
+
 proc extractRequirementName*(req: string): (string, seq[string], int) =
   const verChars = {'#', '<', '=', '>', '^', '~', '['}
   proc isScpStyleGitUrl(name: string): bool =
@@ -651,19 +693,11 @@ proc extractRequirementName*(req: string): (string, seq[string], int) =
     #       so it occurs rarely but breaks things for atlas
     raise newException(ValueError, "Invalid requirements name: " & req)
 
-  if i < req.len and req[i] == '[':
-    inc i
-    var features: seq[string]
-    while i < req.len and req[i] notin verChars + {']'}:
-      while i < req.len and req[i] in verChars + {','} + Whitespace:
-        inc i
-      let start = i
-      while i < req.len and req[i] notin verChars + {',', ']'} + Whitespace:
-        inc i
-      features.add req.substr(start, i-1)
-    result = (name, features, i+1)
+  let (features, first, last) = requirementFeatures(req)
+  if i < req.len and req[i] == '[' and first == i and last >= 0:
+    result = (name, features, last + 1)
   else:
-    result = (name, @[], i)
+    result = (name, features, i)
 
 proc extractSpecificCommit*(pattern: VersionInterval): CommitHash =
   if not pattern.isInterval and pattern.a.r == verEq and pattern.a.v.isSpecial: # and pattern.a.v.string.len >= MinCommitLen:

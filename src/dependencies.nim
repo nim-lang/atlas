@@ -137,12 +137,16 @@ proc registerReleaseDependencies(
         nc.explicitVersions.mgetOrPut(pkgUrl, initHashSet[VersionTag]()).incl(VersionTag(v: Version($(interval)), c: commit))
       if pkgUrl notin nc.packageToDependency:
         let state =
-          if not hasRequestedFeature(pkg.url.shortName, pkg.url.projectName, feature): LazyDeferred
+          if not hasRequestedFeature(pkg.url.shortName, pkg.url.projectName,
+                                     release.name, feature, pkg.isRoot): LazyDeferred
           else: childDependencyState(pkg, deferChildDeps)
         debug pkg.url.projectName, "Found new feature pkg:", pkgUrl.projectName, "url:", $pkgUrl.url, "projectName:", $pkgUrl.projectName, "state:", $state
         let pkgDep = nc.initPackage(pkgUrl, state)
         nc.packageToDependency[pkgUrl] = pkgDep
-      elif hasRequestedFeature(pkg.url.shortName, pkg.url.projectName, feature) and nc.packageToDependency[pkgUrl].state == LazyDeferred and childDependencyState(pkg, deferChildDeps) != LazyDeferred:
+      elif hasRequestedFeature(pkg.url.shortName, pkg.url.projectName,
+                               release.name, feature, pkg.isRoot) and
+          nc.packageToDependency[pkgUrl].state == LazyDeferred and
+          childDependencyState(pkg, deferChildDeps) != LazyDeferred:
         warn pkg.url.projectName, "Changing LazyDeferred feature pkg to DoLoad:", $pkgUrl.url
         nc.packageToDependency[pkgUrl].state = DoLoad
 

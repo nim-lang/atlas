@@ -19,7 +19,12 @@ proc processRequirement(nc: var NimbleContext;
                         req: string;
                         feature: string;
                         result: var NimbleRelease) =
-    let (name, reqsByFeatures, verIdx) = extractRequirementName(req)
+    let (name, reqsByFeatures, _) = extractRequirementName(req)
+    let requirement = removeRequirementFeatures(req)
+    let (_, _, verIdx) = extractRequirementName(requirement)
+    if usesLegacyRequirementFeatureSyntax(req):
+      warn nimbleFile, "deprecated dependency feature syntax:", req,
+        "; use", requirementWithFeaturesAtEnd(req)
 
     var url: PkgUrl
     try:
@@ -32,7 +37,7 @@ proc processRequirement(nc: var NimbleContext;
       url = toPkgUriRaw(parseUri("error://" & name))
 
     var err = false
-    let query = parseVersionInterval(req, verIdx, err) # update err
+    let query = parseVersionInterval(requirement, verIdx, err) # update err
     if err:
       if result.status != HasBrokenDep:
         warn nimbleFile, "broken nimble file: " & name
