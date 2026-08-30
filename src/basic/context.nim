@@ -26,6 +26,10 @@ const
 type
   CfgPath* = distinct string # put into a config `--path:"../x"`
 
+  NimEnvConfig* = object
+    ## The source revision used to build a Nim environment.
+    url*, gitRef*, sha*: string
+
   SemVerField* = enum
     major, minor, patch
 
@@ -79,6 +83,7 @@ type
     overridesFile*: Path
     pluginsFile*: Path
     proxy*: Uri
+    nimEnvs*: Table[string, NimEnvConfig]
     parallelCloneWorkers*: int = DefaultParallelCloneWorkers
     features*: HashSet[string]
 

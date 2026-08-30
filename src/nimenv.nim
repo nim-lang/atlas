@@ -8,10 +8,13 @@
 
 ## Implementation of the "Nim virtual environment" (`atlas env`) feature.
 import std/[files, dirs, strscans, os, strutils, uri, json, options,
-            httpclient, tempfiles, osproc, streams]
+            httpclient, tempfiles, osproc, streams, tables]
 import basic/[context, osutils, versions, gitops, httpclientutils, sha256]
+import confighandler
 
-const NimReleasesUrl* = "https://nim-lang.org/releases.json"
+const
+  NimReleasesUrl* = "https://nim-lang.org/releases.json"
+  NimRepositoryUrl* = "https://github.com/nim-lang/nim"
 
 type
   NimEnvMode* {.pure.} = enum
@@ -19,6 +22,10 @@ type
 
   NimBinaryRelease* = object
     url*, digest*: string
+
+  NimSourceSpec* = object
+    ## A Git source used to build a custom Nim environment.
+    remoteUrl*, gitRef*: string
 
 when defined(windows):
   const
@@ -188,17 +195,46 @@ proc removeBootstrapSources(nimDir: Path) =
       if dirExists($cCode):
         removeDir($cCode)
 
-proc setupNimFromSource(nimVersion: string; nimDest: Path; keepCsources: bool): bool =
-  let url = "https://github.com/nim-lang/nim"
+proc hasGitRef(source: NimSourceSpec): bool =
+  source.gitRef.len > 0
+
+proc sourceUrl(source: NimSourceSpec): string =
+  if source.remoteUrl.len > 0: source.remoteUrl else: NimRepositoryUrl
+
+proc checkoutGitRef(nimDest: Path; gitRef: string): CommitHash =
+  let (fetchOutput, fetchStatus) = gitops.exec(
+    GitFetch, nimDest, ["--no-tags", "origin", gitRef], Warning)
+  if fetchStatus != RES_OK:
+    error nimDest, "cannot fetch git ref " & gitRef & ": " & fetchOutput.strip()
+    return
+
+  let (output, status) = gitops.exec(GitRevParse, nimDest, ["FETCH_HEAD^{commit}"], Warning)
+  if status != RES_OK:
+    error nimDest, "cannot resolve git ref " & gitRef
+    return
+  result = initCommitHash(output.strip(), FromHead)
+  if not result.isFull():
+    error nimDest, "git ref " & gitRef & " did not resolve to a full commit SHA"
+    return
+  if not checkoutGitCommit(nimDest, result):
+    result = initCommitHash("", FromNone)
+
+proc setupNimFromSource(nimVersion: string; nimDest: Path; keepCsources: bool;
+                        source = NimSourceSpec()): bool =
+  let url = source.sourceUrl()
   withDir $depsDir():
     let (status, msg) = gitops.clone(url.parseUri(), nimDest)
     if status != Ok:
       error nimDest, "failed to clone: " & url & " (" & $status & "): " & msg
       return false
-    discard gitops.fetchRemoteTags(nimDest)
 
   let nimDir = depsDir() / nimDest
-  if nimVersion != "devel":
+  if source.hasGitRef():
+    if checkoutGitRef(nimDir, source.gitRef).isEmpty():
+      return false
+  else:
+    discard gitops.fetchRemoteTags(nimDest)
+  if not source.hasGitRef() and nimVersion != "devel":
     let query = createQueryEq(Version(nimVersion))
     let commit = versionToCommit(nimDir, algo = SemVer, query = query)
     if commit.isEmpty():
@@ -227,6 +263,32 @@ proc setupNimFromSource(nimVersion: string; nimDest: Path; keepCsources: bool): 
   if not keepCsources:
     removeBootstrapSources(nimDir)
   result = true
+
+proc validNimEnvName*(name: string): bool =
+  ## Returns whether `name` is safe to use as a single environment directory name.
+  if name.len == 0:
+    return false
+  for ch in name:
+    if not (ch.isAlphaNumeric() or ch in {'-', '_', '.'}):
+      return false
+  true
+
+proc recordNimEnv(nimName: string; source: NimSourceSpec) =
+  let commit = currentGitCommit(depsDir() / Path("nim-" & nimName))
+  if not commit.isFull():
+    error nimName, "cannot record a Nim environment without a full Git commit SHA"
+    return
+  if context().nimEnvs.len == 0:
+    context().nimEnvs = initTable[string, NimEnvConfig]()
+  context().nimEnvs[nimName] = NimEnvConfig(
+    url: source.sourceUrl(), gitRef: source.gitRef, sha: $commit)
+  writeConfig()
+
+proc matchesRecordedNimEnv(nimName: string; source: NimSourceSpec): bool =
+  if context().nimEnvs.len == 0 or nimName notin context().nimEnvs:
+    return true
+  let recorded = context().nimEnvs[nimName]
+  result = recorded.url == source.sourceUrl() and recorded.gitRef == source.gitRef
 
 proc extractBinaryArchive(archive, destination: string): tuple[output: string, exitCode: int] =
   when defined(windows):
@@ -339,24 +401,41 @@ proc addNimEnvToGitHubPath*(nimVersion: string): bool =
   result = true
 
 proc setupNimEnv*(nimVersion: string; keepCsources: bool;
-                  mode = NimEnvMode.Auto): bool {.discardable.} =
+                  mode = NimEnvMode.Auto;
+                  source = NimSourceSpec()): bool {.discardable.} =
+  if source.remoteUrl.len > 0 and not source.hasGitRef():
+    error "nim", "--git-url requires --git-ref"
+    return
+  if source.hasGitRef() and mode == NimEnvMode.Binary:
+    error "nim", "--binary cannot be used with --git-ref"
+    return
+  if source.hasGitRef() and not validNimEnvName(nimVersion):
+    error "nim", "custom Nim environment names may only contain letters, digits, '.', '-', and '_'"
+    return
+
   let nimDest = Path("nim-" & nimVersion)
   if dirExists(depsDir() / nimDest):
     if not fileExists(depsDir() / nimDest / ActivationFile):
       info nimDest, "already exists; remove or rename and try again"
     else:
+      if source.hasGitRef():
+        if not matchesRecordedNimEnv(nimVersion, source):
+          error nimDest,
+            "already exists for a different Git source; use a different environment name"
+          return
+        recordNimEnv(nimVersion, source)
       infoAboutActivation nimDest, nimVersion
       result = true
     return
 
-  if nimVersion != "devel":
+  if not source.hasGitRef() and nimVersion != "devel":
     var major, minor, patch: int
     if not scanf(nimVersion, "$i.$i.$i", major, minor, patch):
       error "nim", "cannot parse version requirement"
       return
 
   var installed = false
-  if mode != NimEnvMode.Source and nimVersion != "devel":
+  if mode != NimEnvMode.Source and not source.hasGitRef() and nimVersion != "devel":
     let release =
       try:
         fetchBinaryRelease(nimVersion)
@@ -378,9 +457,11 @@ proc setupNimEnv*(nimVersion: string; keepCsources: bool;
     return
 
   if not installed:
-    installed = setupNimFromSource(nimVersion, nimDest, keepCsources)
+    installed = setupNimFromSource(nimVersion, nimDest, keepCsources, source)
 
   if installed:
     writeActivation(nimDest, nimVersion)
+    if source.hasGitRef():
+      recordNimEnv(nimVersion, source)
     infoAboutActivation nimDest, nimVersion
   result = installed

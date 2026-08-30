@@ -51,7 +51,7 @@ Commands:
   changed [atlas.lock]  list any packages that differ from the lock file
   outdated              list the packages that are outdated
   deps                  list the currently selected dependencies
-  env <nimversion>      setup a Nim virtual environment
+  env <env-name>        setup a Nim virtual environment
 
 Options:
   --help, -h            show this help
@@ -72,6 +72,8 @@ Options:
   --keepworkspace       keep generated workspace artifacts
   --binary              for `env`, require a prebuilt Nim release
   --source              for `env`, build Nim from source
+  --git-ref=ref         for `env`, build this Git branch, tag, or commit from source
+  --git-url=url         for `env --git-ref`, use this Nim Git repository
   --github-path         for `env`, add Nim's bin directory to $GITHUB_PATH
   --ignoreerrors        continue even when errors were recorded
   --dumpformular        dump SAT formula for debugging
@@ -118,6 +120,10 @@ proc parseParallelCloneWorkers(value: string): int =
     writeHelp()
   if result < 1:
     writeHelp()
+
+type
+  EnvOptions = object
+    gitRef, gitUrl: string
 
 proc addRequestedFeature(rawFeature: string) =
   # Package-scoped features use `<pkg>.<feature>` and are normalized to
@@ -663,7 +669,8 @@ proc update(filter: string) =
   if updatedAny:
     notice project(), "dependency refs updated, run `atlas install` to update"
 
-proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[string]) =
+proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[string];
+                       envOptions: var EnvOptions) =
   var autoinit = true
   if existsEnv("NO_COLOR") or not isatty(stdout) or (getEnv("TERM") == "dumb"):
     setAtlasNoColors(true)
@@ -683,6 +690,14 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
       of "allfeatures": context().flags.incl AllFeatures
       of "binary": context().flags.incl BinaryNimEnv
       of "source": context().flags.incl SourceNimEnv
+      of "gitref", "git-ref":
+        if val.len == 0:
+          writeHelp()
+        envOptions.gitRef = val
+      of "giturl", "git-url":
+        if val.len == 0:
+          writeHelp()
+        envOptions.gitUrl = val
       of "githubpath", "github-path": context().flags.incl GitHubPath
       of "project", "p":
         context().flags.incl(ManualProjectArg)
@@ -787,6 +802,7 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
 proc atlasRun*(params: seq[string]) =
   var action = ""
   var args: seq[string] = @[]
+  var envOptions: EnvOptions
   template singleArg() =
     if args.len != 1:
       fatal action & " command takes a single package name"
@@ -797,16 +813,22 @@ proc atlasRun*(params: seq[string]) =
     elif args.len != 1:
       fatal action & " command takes a single package name"
 
-  parseAtlasOptions(params, action, args)
+  parseAtlasOptions(params, action, args, envOptions)
 
   if UpdateBeforeInstall in context().flags and action != "install":
     fatal "--update option is only valid with `install`"
   if UnlinkOnly in context().flags and action != "unlink":
     fatal "--only option is only valid with `unlink`"
-  if {BinaryNimEnv, SourceNimEnv, GitHubPath} * context().flags != {} and action != "env":
-    fatal "--binary, --source, and --github-path options are only valid with `env`"
+  if ({BinaryNimEnv, SourceNimEnv, GitHubPath} * context().flags != {} or
+      envOptions.gitRef.len > 0 or envOptions.gitUrl.len > 0) and action != "env":
+    fatal "--binary, --source, --git-ref, --git-url, and --github-path " &
+      "options are only valid with `env`"
   if {BinaryNimEnv, SourceNimEnv} <= context().flags:
     fatal "--binary and --source cannot be used together"
+  if envOptions.gitUrl.len > 0 and envOptions.gitRef.len == 0:
+    fatal "--git-url requires --git-ref"
+  if envOptions.gitRef.len > 0 and BinaryNimEnv in context().flags:
+    fatal "--binary cannot be used with --git-ref"
   if GitHubPath in context().flags and getEnv("GITHUB_PATH").len == 0:
     fatal "--github-path requires the GITHUB_PATH environment variable"
 
@@ -908,7 +930,8 @@ proc atlasRun*(params: seq[string]) =
       if BinaryNimEnv in context().flags: NimEnvMode.Binary
       elif SourceNimEnv in context().flags: NimEnvMode.Source
       else: NimEnvMode.Auto
-    let installed = setupNimEnv(args[0], KeepNimEnv in context().flags, mode)
+    let source = NimSourceSpec(remoteUrl: envOptions.gitUrl, gitRef: envOptions.gitRef)
+    let installed = setupNimEnv(args[0], KeepNimEnv in context().flags, mode, source)
     if installed and GitHubPath in context().flags:
       discard addNimEnvToGitHubPath(args[0])
   of "outdated":

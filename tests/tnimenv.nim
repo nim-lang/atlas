@@ -1,6 +1,8 @@
-import std/[unittest, envvars, options, os, paths, strutils, tempfiles]
+import std/[unittest, envvars, options, os, osproc, paths, strutils, tables, tempfiles]
 
 import basic/[context, sha256]
+import atlas
+import confighandler
 import nimenv
 
 const ReleaseIndex = """
@@ -17,6 +19,11 @@ const ReleaseIndex = """
   }
 }
 """
+
+proc runGit(dir: Path; args: string): string =
+  let (output, code) = execCmdEx("git -C " & quoteShell($dir) & " " & args)
+  doAssert code == 0, output
+  result = output.strip()
 
 suite "Nim environments":
   test "maps every binary release platform":
@@ -111,3 +118,53 @@ suite "Nim environments":
 
     check addNimEnvToGitHubPath("2.2.10")
     check readFile($githubPath) == "already-present\n" & $binDir.absolutePath() & "\n"
+
+  test "builds custom Git refs and records their SHAs":
+    let oldContext = context()
+    let projectDir = Path(genTempPath("atlas nim env project ", ""))
+    let repoDir = Path(genTempPath("atlas nim env repo ", ""))
+    defer:
+      setContext(oldContext)
+      if dirExists($projectDir):
+        removeDir($projectDir)
+      if dirExists($repoDir):
+        removeDir($repoDir)
+
+    createDir($projectDir)
+    createDir($repoDir)
+    writeFile($(projectDir / Path"atlas.config"), "{}\n")
+    discard runGit(repoDir, "init")
+    discard runGit(repoDir, "config user.email atlas@example.invalid")
+    discard runGit(repoDir, "config user.name Atlas")
+    when defined(windows):
+      writeFile($(repoDir / Path"build_all.bat"), "@echo off\nmkdir bin\ntype nul > bin\\nim.exe\n")
+    else:
+      writeFile($(repoDir / Path"build_all.sh"), "mkdir -p bin\ntouch bin/nim\n")
+    writeFile($(repoDir / Path"compiler.nim"), "discard\n")
+    discard runGit(repoDir, "add .")
+    discard runGit(repoDir, "commit -m initial")
+    discard runGit(repoDir, "checkout -b custom")
+    writeFile($(repoDir / Path"compiler.nim"), "echo \"custom\"\n")
+    discard runGit(repoDir, "commit -am custom")
+    let sha = runGit(repoDir, "rev-parse HEAD")
+
+    let branchSource = NimSourceSpec(remoteUrl: $repoDir, gitRef: "custom")
+    setContext(AtlasContext())
+    atlasRun(@[
+      "--project=" & $projectDir,
+      "env",
+      "custom-branch",
+      "--git-url=" & branchSource.remoteUrl,
+      "--git-ref=" & branchSource.gitRef
+    ])
+    setContext(AtlasContext(projectDir: projectDir, depsDir: Path"deps"))
+    readConfig()
+    let shaSource = NimSourceSpec(remoteUrl: $repoDir, gitRef: sha)
+    check setupNimEnv("custom-sha", false, source = shaSource)
+
+    let config = readConfigFile(projectDir / Path"atlas.config")
+    check config.nimEnvs["custom-branch"].url == $repoDir
+    check config.nimEnvs["custom-branch"].gitRef == "custom"
+    check config.nimEnvs["custom-branch"].sha == sha
+    check config.nimEnvs["custom-sha"].sha == sha
+    check "\"sha\": \"" & sha & "\"" in readFile($(projectDir / Path"atlas.config"))
