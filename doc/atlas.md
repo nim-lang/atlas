@@ -230,9 +230,13 @@ Features are lazily cloned by Atlas until they are specified by either a require
 
 In Nimble files you can enable features for a a given package like so:
 ```nim
-require "somelib[testing]"
-require "anotherlib[testing, async]"
+requires "somelib >= 1.0[testing]"
+requires "anotherlib >= 2.0 [testing, async]"
 ```
+
+Atlas also accepts the older `somelib[testing] >= 1.0` placement, but warns when
+a version constraint follows the feature list. Move the feature list to the end
+of the requirement to match Nimble's syntax.
 
 
 ### Search <term term2 term3 ...>

@@ -1,5 +1,6 @@
-import std/[unittest, os, algorithm, strutils, importutils, terminal, tables]
-import basic/[context, pkgurls, deptypes, nimblecontext, compiledpatterns, osutils, versions]
+import std/[unittest, os, algorithm, strutils, importutils, terminal, tables, sets, tempfiles]
+import basic/[context, pkgurls, deptypes, nimblecontext, compiledpatterns, osutils,
+              reporters, versions]
 import basic/nimbleparser
 import basic/parse_requires
 import runners
@@ -55,6 +56,43 @@ suite "nimbleparser":
     check res.features.hasKey("useOldAsyncTools")
     check res.features["useOldAsyncTools"].len == 1
     check res.features["useOldAsyncTools"][0] == "asynctools >= 0.1.0"
+
+  test "parses Nimble feature suffixes and warns for the legacy placement":
+    let nimbleFile = Path(genTempPath("atlas_feature_requirements_", ".nimble"))
+    defer:
+      removeFile($nimbleFile)
+    writeFile($nimbleFile, dedent"""
+    version = "0.1.0"
+    requires "chroniclers >= 0.3.0 [chronicles]"
+    requires "chronicles >= 0.3.0 [logging] "
+    requires "spaced >= 1.0 [bar, bazz]"
+    requires "compact >= 1.0 [bar,baz]"
+    requires "legacy[old] >= 1.0"
+    """)
+
+    var nc = createUnfilledNimbleContext()
+    let chroniclers = toPkgUriRaw(parseUri "https://example.com/chroniclers")
+    let chronicles = toPkgUriRaw(parseUri "https://example.com/chronicles")
+    let spaced = toPkgUriRaw(parseUri "https://example.com/spaced")
+    let compact = toPkgUriRaw(parseUri "https://example.com/compact")
+    let legacy = toPkgUriRaw(parseUri "https://example.com/legacy")
+    discard nc.put("chroniclers", chroniclers)
+    discard nc.put("chronicles", chronicles)
+    discard nc.put("spaced", spaced)
+    discard nc.put("compact", compact)
+    discard nc.put("legacy", legacy)
+
+    let warningsBefore = atlasReporter.warnings
+    let release = nc.parseNimbleFile(nimbleFile)
+    check release.requirements.len == 5
+    check release.requirements[0][1].matches(Version"0.3.0")
+    check not release.requirements[0][1].matches(Version"0.2.9")
+    check release.reqsByFeatures[chroniclers].contains("chronicles")
+    check release.reqsByFeatures[chronicles].contains("logging")
+    check release.reqsByFeatures[spaced] == ["bar", "bazz"].toHashSet()
+    check release.reqsByFeatures[compact] == ["bar", "baz"].toHashSet()
+    check release.reqsByFeatures[legacy].contains("old")
+    check atlasReporter.warnings == warningsBefore + 1
 
   test "parse nimble file preserves empty features":
     let nimbleFile = Path("tests" / "test_data" / "empty_feature.nimble")
