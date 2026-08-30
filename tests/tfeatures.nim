@@ -283,6 +283,7 @@ suite "test global features":
 
         withDir "deps" / "proj_a":
           writeFile("proj_a.nimble", dedent"""
+          name = "declared_proj_a"
           requires "proj_b >= 1.1.0"
           feature "Test_Ing":
             requires "$1 >= 1.0.0"
@@ -303,8 +304,8 @@ suite "test global features":
         check dirExists("deps" / "proj_feature_dep")
         let nimCfg = readFile("nim.cfg")
         check "deps/proj_feature_dep" in nimCfg
-        check "features.proj_a.testing" in nimCfg
-        check "feature.proj_a.testing" in nimCfg
+        check "features.declared_proj_a.Test_Ing" in nimCfg
+        check "feature.declared_proj_a.Test_Ing" in nimCfg
         check fileExists("deps" / ".cache" / "atlas.active.json")
         check not fileExists("deps" / "atlas.cache.json")
 
@@ -720,6 +721,32 @@ suite "test global features":
         requires "proj_a >= 9.9.9"
       """)
       check runInstallWithFeature("siwin") > 0
+
+      # 4) Root dev and patch features activate without CLI flags and use the
+      # declared package name in compiler defines.
+      if dirExists("deps"):
+        removeDir("deps")
+      writeFile(rootNimble, dedent"""
+      name = "declared_root"
+      dev:
+        requires "proj_a >= 1.1.0"
+      feature "patch":
+        requires "proj_a >= 1.1.0"
+      """)
+      resetFeatureTestContext()
+      let errorsBefore = atlasErrors()
+      atlasRun(@[
+        "--deps=deps",
+        "--proxy=http://localhost:4242/",
+        "--dumbproxy",
+        "install"
+      ])
+      check atlasErrors() == errorsBefore
+      check dirExists("deps" / "proj_a")
+      let nimCfg = readFile("nim.cfg")
+      for feature in ["dev", "patch"]:
+        check "features.declared_root." & feature in nimCfg
+        check "feature.declared_root." & feature in nimCfg
 
   test "unsat root dependency should not trigger lazy historical retry":
     ## Expected behavior:

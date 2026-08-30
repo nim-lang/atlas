@@ -496,13 +496,15 @@ proc linkedPackageClosure(cache: ActivationCache; packageIndex: int;
 proc activationCachePaths(cache: ActivationCache): tuple[
     paths: seq[CfgPath], features: seq[string]] =
   for pkg in cache.packages:
+    let packageName = featurePackageName(pkg.name,
+      if pkg.isRoot: pkg.url.projectName else: pkg.url.shortName)
     if pkg.isRoot:
       for feature in pkg.features:
-        result.features.addUniqueFeature FeatureDefinePrefix & pkg.url.projectName & "." & feature
+        result.features.addUniqueFeature FeatureDefinePrefix & packageName & "." & feature
     else:
       result.paths.add CfgPath(pkg.ondisk / pkg.srcDir)
       for feature in pkg.features:
-        result.features.addUniqueFeature FeatureDefinePrefix & pkg.url.shortName & "." & feature
+        result.features.addUniqueFeature FeatureDefinePrefix & packageName & "." & feature
   result.paths.sort(proc (a, b: CfgPath): int = cmp(a.string, b.string))
 
 proc linkFileFor(pkg: ActivatedPackage): Path =

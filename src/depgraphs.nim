@@ -82,8 +82,48 @@ proc addCompatibleVersionChoice(b: var Builder; compatibleVersions: seq[VarId]) 
   var featureVersions: Table[VarId, seq[VarId]]
   b.addCompatibleVersionChoice(compatibleVersions, featureVersions)
 
-proc hasContextFeature(pkg: Package; feature: string): bool =
-  result = hasRequestedFeature(pkg.url.shortName, pkg.url.projectName, feature)
+proc packageFeatureName(pkg: Package; rel: NimbleRelease): string =
+  let fallbackName =
+    if pkg.isRoot: pkg.url.projectName
+    else: pkg.url.shortName
+  let declaredName =
+    if rel.isNil: ""
+    else: rel.name
+  result = featurePackageName(declaredName, fallbackName)
+
+proc matchesFeaturePackageName(pkg: Package; rel: NimbleRelease;
+                               name: string): bool =
+  for candidate in [pkg.url.shortName, pkg.url.projectName, rel.name]:
+    if candidate.len > 0 and sameFeature(candidate, name):
+      return true
+
+proc canonicalFeatureDefine(graph: DepGraph; feature: string): string =
+  if not feature.startsWith(FeatureDefinePrefix):
+    if graph.root.isNil or graph.root.activeNimbleRelease().isNil:
+      return feature
+    return FeatureDefinePrefix &
+      graph.root.packageFeatureName(graph.root.activeNimbleRelease()) & "." & feature
+
+  let parts = feature.split(".")
+  if parts.len < 3:
+    return feature
+  let requestedPackage = parts[1]
+  let requestedFeature = parts[2..^1].join(".")
+  for pkg in allActiveNodes(graph):
+    let rel = pkg.activeNimbleRelease()
+    if rel.isNil:
+      continue
+    if pkg.matchesFeaturePackageName(rel, requestedPackage):
+      let declaredFeature = rel.features.findFeature(requestedFeature)
+      let featureName =
+        if declaredFeature.len > 0: declaredFeature
+        else: requestedFeature
+      return FeatureDefinePrefix & pkg.packageFeatureName(rel) & "." & featureName
+  result = feature
+
+proc hasContextFeature(pkg: Package; rel: NimbleRelease; feature: string): bool =
+  result = hasRequestedFeature(pkg.url.shortName, pkg.url.projectName,
+                               rel.name, feature, pkg.isRoot)
 
 proc requirementMatches*(query: VersionInterval; depVer: PackageVersion; depRel: NimbleRelease): bool =
   ## Match semver constraints against nimble-declared release versions, while
@@ -126,16 +166,24 @@ proc collectUnsatisfiedContextFeatures(graph: DepGraph): seq[string] =
       if rel.isNil:
         continue
       for featName in rel.features.keys():
-        requested.addUnique(FeatureDefinePrefix & pkg.url.projectName & "." & featName)
+        requested.addUnique(FeatureDefinePrefix & pkg.packageFeatureName(rel) & "." & featName)
   else:
     requested = context().features.toSeq()
+    if not graph.root.isNil:
+      let rel = graph.root.activeNimbleRelease()
+      if not rel.isNil:
+        for feature in ["dev", "patch"]:
+          if feature in rel.features:
+            requested.addUnique(FeatureDefinePrefix &
+              graph.root.packageFeatureName(rel) & "." & feature)
   requested.sort()
   for raw in requested:
     let qualified =
       if raw.startsWith(FeatureDefinePrefix):
         raw
-      elif not graph.root.isNil:
-        FeatureDefinePrefix & graph.root.url.projectName & "." & raw
+      elif not graph.root.isNil and not graph.root.activeNimbleRelease().isNil:
+        FeatureDefinePrefix &
+          graph.root.packageFeatureName(graph.root.activeNimbleRelease()) & "." & raw
       else:
         FeatureDefinePrefix & raw
 
@@ -152,11 +200,11 @@ proc collectUnsatisfiedContextFeatures(graph: DepGraph): seq[string] =
     var declaredInNimble = false
     var featureSatisfied = false
     for pkg in allActiveNodes(graph):
-      if pkg.url.shortName == pkgName or pkg.url.projectName == pkgName:
+      let rel = pkg.activeNimbleRelease()
+      if rel.isNil:
+        continue
+      if pkg.matchesFeaturePackageName(rel, pkgName):
         matchedPkg = true
-        let rel = pkg.activeNimbleRelease()
-        if rel.isNil:
-          continue
         let declaredFeature = rel.features.findFeature(featName)
         if declaredFeature.len > 0:
           declaredInNimble = true
@@ -266,7 +314,7 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
         b.addNegated(featureVarId)
         continue
 
-      if hasContextFeature(pkg, feature):
+      if hasContextFeature(pkg, rel, feature):
         # A requested feature must be selected whenever this package version
         # is selected. This preserves separate feature variables when
         # several requested features share a dependency.
@@ -297,7 +345,7 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
           debug pkg.url.projectName, "added compatVer feature dep variables:", $compatibleVersions.mapIt($it).join(", ")
         
         # Add implictations for globally set features
-        if hasContextFeature(pkg, feature):
+        if hasContextFeature(pkg, rel, feature):
           debug pkg.url.projectName, "checking global feature:", $feature, "in version:", $ver, "context().features:", $context().features.toSeq().mapIt($it).join(", ")
           var featureVersions: Table[VarId, seq[VarId]]
           for depVer, nimbleRelease in depNode.validVersions():
@@ -388,7 +436,7 @@ proc collectLazyDeferredPackagesForUnsatRetry(graph: DepGraph): seq[Package] =
 
       includeLazyDeps(rel.requirements, $pkg.url.projectName & ":" & $ver)
       for feature, reqs in rel.features:
-        if hasContextFeature(pkg, feature):
+        if hasContextFeature(pkg, rel, feature):
           includeLazyDeps(reqs, $pkg.url.projectName & ":" & feature)
 
 proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
@@ -702,7 +750,7 @@ proc solve*(graph: var DepGraph; form: Form, rerun: var bool) =
 
       for feature, reqs in rel.features:
         var isFeatureEnabled = false
-        if hasContextFeature(pkg, feature):
+        if hasContextFeature(pkg, rel, feature):
           isFeatureEnabled = true
         elif feature in rel.featureVars and solution.isTrue(rel.featureVars[feature]):
           isFeatureEnabled = true
@@ -832,12 +880,7 @@ proc activateGraph*(graph: DepGraph): tuple[paths: seq[CfgPath], features: seq[s
 
   # Add feature defines for --feature:FOO flags (root project features without prefix)
   for feature in context().features:
-    if feature.startsWith(FeatureDefinePrefix):
-      # Already in full format: features.$PKG.$FEATURE
-      result.features.addUniqueFeature feature
-    else:
-      # Short format: FOO -> features.$ROOT.FOO
-      result.features.addUniqueFeature FeatureDefinePrefix & graph.root.url.projectName & "." & feature
+    result.features.addUniqueFeature graph.canonicalFeatureDefine(feature)
 
   # Apply global feature flags to activeFeatures for introspection/tests.
   for pkg in graph.pkgs.values():
@@ -847,19 +890,24 @@ proc activateGraph*(graph: DepGraph): tuple[paths: seq[CfgPath], features: seq[s
     if rel.isNil:
       continue
     for featName in rel.features.keys():
-      if hasContextFeature(pkg, featName) and hasSatisfiedFeatureDeps(graph, rel, featName):
+      if hasContextFeature(pkg, rel, featName) and
+          hasSatisfiedFeatureDeps(graph, rel, featName):
         pkg.activeFeatures.addUniqueFeature(featName)
 
   if not graph.root.isNil and graph.root.active:
+    let rel = graph.root.activeNimbleRelease()
     for feature in graph.root.activeFeatures:
-      result.features.addUniqueFeature FeatureDefinePrefix & graph.root.url.projectName & "." & feature
+      result.features.addUniqueFeature FeatureDefinePrefix &
+        graph.root.packageFeatureName(rel) & "." & feature
 
   for pkg in allActiveNodes(graph):
     if pkg.isRoot: continue
     trace pkg.url.projectName, "adding CfgPath:", $relativeToWorkspace(toDestDir(graph, pkg) / getCfgPath(graph, pkg).Path)
     result.paths.add CfgPath(toDestDir(graph, pkg) / getCfgPath(graph, pkg).Path)
+    let rel = pkg.activeNimbleRelease()
     for feature in pkg.activeFeatures:
-      result.features.addUniqueFeature FeatureDefinePrefix & pkg.url.shortName & "." & feature
+      result.features.addUniqueFeature FeatureDefinePrefix &
+        pkg.packageFeatureName(rel) & "." & feature
 
   result.paths.sort(proc (a, b: CfgPath): int =
     cmp(a.string, b.string)

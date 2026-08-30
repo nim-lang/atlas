@@ -153,16 +153,27 @@ proc addUniqueFeature*(features: var seq[string]; feature: string) =
   if not features.containsFeature(feature):
     features.add feature
 
-proc hasRequestedFeature*(pkgShortName, pkgProjectName, feature: string): bool =
+func featurePackageName*(declaredName, fallbackName: string): string =
+  ## Returns the Nimble package name used in compiler feature symbols.
+  if declaredName.len > 0: declaredName
+  else: fallbackName
+
+proc hasRequestedFeature*(pkgShortName, pkgProjectName, pkgDeclaredName,
+                          feature: string; isRoot: bool): bool =
   initAtlasContext()
-  if AllFeatures in atlasContext.flags:
+  if AllFeatures in atlasContext.flags or
+      (isRoot and feature in ["dev", "patch"]):
     return true
-  let scopedByShortName = FeatureDefinePrefix & pkgShortName & "." & feature
-  let scopedByProjectName = FeatureDefinePrefix & pkgProjectName & "." & feature
-  result =
-    atlasContext.features.containsFeature(feature) or
-    atlasContext.features.containsFeature(scopedByShortName) or
-    atlasContext.features.containsFeature(scopedByProjectName)
+  if atlasContext.features.containsFeature(feature):
+    return true
+  for pkgName in [pkgShortName, pkgProjectName, pkgDeclaredName]:
+    if pkgName.len > 0 and atlasContext.features.containsFeature(
+        FeatureDefinePrefix & pkgName & "." & feature):
+      return true
+
+proc hasRequestedFeature*(pkgShortName, pkgProjectName, feature: string): bool =
+  ## Compatibility overload for callers without release metadata.
+  hasRequestedFeature(pkgShortName, pkgProjectName, "", feature, false)
 
 proc packagesDirectory*(): Path =
   depsDir() / DefaultPackagesSubDir

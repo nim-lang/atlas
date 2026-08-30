@@ -228,6 +228,12 @@ feature "testing":
 
 Features are lazily cloned by Atlas until they are specified by either a requires feature or passed from the command line.
 
+Atlas automatically enables the root package's `dev` and `patch` features, matching
+Nimble. Declare development-only dependencies with `dev:`; `patch` uses a regular
+`feature "patch":` block. Compiler defines use the package name declared in its
+Nimble file, for example `--define:features.my_package.testing`, even when the
+repository or dependency alias has a different name.
+
 In Nimble files you can enable features for a a given package like so:
 ```nim
 requires "somelib >= 1.0[testing]"
