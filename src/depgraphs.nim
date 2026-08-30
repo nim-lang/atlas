@@ -24,6 +24,28 @@ proc requirementMatches*(query: VersionInterval; depVer: PackageVersion;
   ## Compatibility wrapper for dependency requirement matching.
   query.matchesRequirement(depVer, depRel)
 
+proc canonicalFeatureDefine(graph: DepGraph; feature: string): string =
+  if not feature.startsWith(FeatureDefinePrefix):
+    if graph.root.isNil or graph.root.activeNimbleRelease().isNil:
+      return feature
+    let rel = graph.root.activeNimbleRelease()
+    return FeatureDefinePrefix & graph.root.packageFeatureName(rel) & "." & feature
+
+  let parts = feature.split(".")
+  if parts.len < 3:
+    return feature
+  let requestedPackage = parts[1]
+  let requestedFeature = parts[2..^1].join(".")
+  for pkg in allActiveNodes(graph):
+    let rel = pkg.activeNimbleRelease()
+    if not rel.isNil and pkg.matchesFeaturePackageName(rel, requestedPackage):
+      let declaredFeature = rel.features.findFeature(requestedFeature)
+      let featureName =
+        if declaredFeature.len > 0: declaredFeature
+        else: requestedFeature
+      return FeatureDefinePrefix & pkg.packageFeatureName(rel) & "." & featureName
+  result = feature
+
 proc hasSatisfiedFeatureDeps(graph: DepGraph; rel: NimbleRelease;
                              featName: string): bool =
   let declaredFeature = rel.features.findFeature(featName)
@@ -56,19 +78,32 @@ proc collectUnsatisfiedContextFeatures(graph: DepGraph): seq[string] =
       if rel.isNil:
         continue
       for featName in rel.features.keys():
-        requested.addUnique("feature." & pkg.url.projectName & "." & featName)
+        requested.addUnique(
+          FeatureDefinePrefix & pkg.packageFeatureName(rel) & "." & featName)
   else:
     requested = context().features.toSeq()
+    if not graph.root.isNil:
+      let rel = graph.root.activeNimbleRelease()
+      if not rel.isNil:
+        for feature in ["dev", "patch"]:
+          if feature in rel.features:
+            requested.addUnique(
+              FeatureDefinePrefix & graph.root.packageFeatureName(rel) &
+              "." & feature)
   requested.sort()
 
   for raw in requested:
     let qualified =
-      if raw.startsWith("feature."):
+      if raw.startsWith(FeatureDefinePrefix):
         raw
-      elif not graph.root.isNil:
-        "feature." & graph.root.url.projectName & "." & raw
+      elif not graph.root.isNil and not graph.root.activeNimbleRelease().isNil:
+        FeatureDefinePrefix & graph.root.packageFeatureName(
+          graph.root.activeNimbleRelease()) & "." & raw
       else:
-        "feature." & raw
+        FeatureDefinePrefix & raw
+
+    if not qualified.startsWith(FeatureDefinePrefix):
+      continue
 
     let parts = qualified.split(".")
     if parts.len < 3:
@@ -80,11 +115,9 @@ proc collectUnsatisfiedContextFeatures(graph: DepGraph): seq[string] =
     var declaredInNimble = false
     var featureSatisfied = false
     for pkg in allActiveNodes(graph):
-      if pkg.url.shortName == pkgName or pkg.url.projectName == pkgName:
+      let rel = pkg.activeNimbleRelease()
+      if not rel.isNil and pkg.matchesFeaturePackageName(rel, pkgName):
         matchedPkg = true
-        let rel = pkg.activeNimbleRelease()
-        if rel.isNil:
-          continue
         let declaredFeature = rel.features.findFeature(featName)
         if declaredFeature.len > 0:
           declaredInNimble = true
@@ -173,11 +206,7 @@ proc activateGraph*(graph: DepGraph):
   notice "atlas:graph", "Wrote nim.cfg!"
 
   for feature in context().features:
-    if feature.startsWith("feature."):
-      result.features.addUniqueFeature feature
-    else:
-      result.features.addUniqueFeature(
-        "feature." & graph.root.url.projectName & "." & feature)
+    result.features.addUniqueFeature graph.canonicalFeatureDefine(feature)
 
   for pkg in graph.pkgs.values():
     if not pkg.active:
@@ -186,14 +215,15 @@ proc activateGraph*(graph: DepGraph):
     if rel.isNil:
       continue
     for featName in rel.features.keys():
-      if hasContextFeature(pkg, featName) and
+      if hasContextFeature(pkg, rel, featName) and
           hasSatisfiedFeatureDeps(graph, rel, featName):
         pkg.activeFeatures.addUniqueFeature(featName)
 
   if not graph.root.isNil and graph.root.active:
+    let rel = graph.root.activeNimbleRelease()
     for feature in graph.root.activeFeatures:
-      result.features.addUniqueFeature(
-        "feature." & graph.root.url.projectName & "." & feature)
+      result.features.addUniqueFeature FeatureDefinePrefix &
+        graph.root.packageFeatureName(rel) & "." & feature
 
   for pkg in allActiveNodes(graph):
     if pkg.isRoot:
@@ -202,8 +232,9 @@ proc activateGraph*(graph: DepGraph):
     trace pkg.url.projectName, "adding CfgPath:",
       $relativeToWorkspace(cfgPath)
     result.paths.add CfgPath(cfgPath)
+    let rel = pkg.activeNimbleRelease()
     for feature in pkg.activeFeatures:
-      result.features.addUniqueFeature(
-        "feature." & pkg.url.shortName & "." & feature)
+      result.features.addUniqueFeature FeatureDefinePrefix &
+        pkg.packageFeatureName(rel) & "." & feature
 
   result.paths.sort(proc (a, b: CfgPath): int = cmp(a.string, b.string))

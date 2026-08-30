@@ -168,7 +168,8 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
     for feature, reqs in rel.features:
       let featureVarId = rel.featureVars[feature]
       let featDepCheck = checkDeps(graph, ver, reqs)
-      let qualifiedFeature = "feature." & pkg.url.projectName & "." & feature
+      let qualifiedFeature =
+        FeatureDefinePrefix & pkg.packageFeatureName(rel) & "." & feature
 
       debug pkg.url.projectName, "checking feature dep:", $feature, "query:", $reqs, "compat versions:", $featDepCheck.allDepsCompatible
       if not featDepCheck.allDepsCompatible:
@@ -176,7 +177,7 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
         b.addNegated(featureVarId)
         continue
 
-      if hasContextFeature(pkg, feature):
+      if hasContextFeature(pkg, rel, feature):
         # A requested feature must be selected whenever this package version
         # is selected. This preserves separate feature variables when
         # several requested features share a dependency.
@@ -207,7 +208,7 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
           debug pkg.url.projectName, "added compatVer feature dep variables:", $compatibleVersions.mapIt($it).join(", ")
         
         # Add implictations for globally set features
-        if hasContextFeature(pkg, feature):
+        if hasContextFeature(pkg, rel, feature):
           debug pkg.url.projectName, "checking global feature:", $feature, "in version:", $ver, "context().features:", $context().features.toSeq().mapIt($it).join(", ")
           var featureVersions: Table[VarId, seq[VarId]]
           for depVer, nimbleRelease in depNode.validVersions():
@@ -298,7 +299,7 @@ proc collectLazyDeferredPackagesForUnsatRetry(graph: DepGraph): seq[Package] =
 
       includeLazyDeps(rel.requirements, $pkg.url.projectName & ":" & $ver)
       for feature, reqs in rel.features:
-        if hasContextFeature(pkg, feature):
+        if hasContextFeature(pkg, rel, feature):
           includeLazyDeps(reqs, $pkg.url.projectName & ":" & feature)
 
 proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
@@ -500,7 +501,7 @@ proc solveSat*(graph: var DepGraph; form: Form, rerun: var bool) =
 
       for feature, reqs in rel.features:
         var isFeatureEnabled = false
-        if hasContextFeature(pkg, feature):
+        if hasContextFeature(pkg, rel, feature):
           isFeatureEnabled = true
         elif feature in rel.featureVars and solution.isTrue(rel.featureVars[feature]):
           isFeatureEnabled = true
@@ -516,6 +517,8 @@ proc solveSat*(graph: var DepGraph; form: Form, rerun: var bool) =
 
       rerun = true
       return
+
+    graph.activateRequiredDependencyFeatures()
 
     if ListVersions in context().flags and ListVersionsOff notin context().flags:
       printVersionSelections(graph, solution, form)

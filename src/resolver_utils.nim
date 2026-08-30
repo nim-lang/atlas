@@ -2,10 +2,50 @@
 
 import std/[algorithm, sequtils, sets, strutils, tables]
 
-import basic/[context, deptypes, gitops, pkgurls, reporters]
+import basic/[context, depgraphtypes, deptypes, gitops, pkgurls, reporters]
+
+proc packageFeatureName*(pkg: Package; rel: NimbleRelease): string =
+  let fallbackName =
+    if pkg.isRoot: pkg.url.projectName
+    else: pkg.url.shortName
+  let declaredName =
+    if rel.isNil: ""
+    else: rel.name
+  result = featurePackageName(declaredName, fallbackName)
+
+proc matchesFeaturePackageName*(pkg: Package; rel: NimbleRelease;
+                                name: string): bool =
+  for candidate in [pkg.url.shortName, pkg.url.projectName, rel.name]:
+    if candidate.len > 0 and sameFeature(candidate, name):
+      return true
+
+proc hasContextFeature*(pkg: Package; rel: NimbleRelease;
+                        feature: string): bool =
+  hasRequestedFeature(pkg.url.shortName, pkg.url.projectName,
+    rel.name, feature, pkg.isRoot)
 
 proc hasContextFeature*(pkg: Package; feature: string): bool =
+  ## Compatibility overload for callers without selected release metadata.
   hasRequestedFeature(pkg.url.shortName, pkg.url.projectName, feature)
+
+proc activateRequiredDependencyFeatures*(graph: DepGraph) =
+  ## Record features requested on active dependency requirements.
+  ## Undeclared features still emit defines but add no requirements.
+  for pkg in allActiveNodes(graph):
+    let rel = pkg.activeNimbleRelease()
+    if not rel.isNil:
+      for depUrl, requestedFeatures in rel.reqsByFeatures:
+        if depUrl in graph.pkgs:
+          let depPkg = graph.pkgs[depUrl]
+          if depPkg.active and not depPkg.activeVersion.isNil:
+            let depRel = depPkg.activeNimbleRelease()
+            if not depRel.isNil:
+              for requestedFeature in requestedFeatures:
+                let declaredFeature = depRel.features.findFeature(requestedFeature)
+                let feature =
+                  if declaredFeature.len > 0: declaredFeature
+                  else: requestedFeature
+                depPkg.activeFeatures.addUniqueFeature(feature)
 
 proc formatVersionSelection*(pkg: Package; version: PackageVersion): string =
   result = "(" & pkg.url.projectName & ", " & $version & ")"

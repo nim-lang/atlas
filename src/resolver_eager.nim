@@ -35,7 +35,8 @@ proc requestedDependencyFeatures(rel: NimbleRelease; url: PkgUrl): seq[string] =
 proc requestedContextFeatures(pkg: Package; rel: NimbleRelease): seq[string] =
   for feature in rel.features.keys():
     if allFeaturesRequested() or
-        hasRequestedFeature(pkg.url.shortName, pkg.url.projectName, feature):
+        hasRequestedFeature(pkg.url.shortName, pkg.url.projectName,
+          rel.name, feature, pkg.isRoot):
       result.add feature
   result.sort()
 
@@ -72,19 +73,21 @@ proc enableFeatures(state: var BfsResolverState; pkg: Package;
     return
 
   for requestedFeature in features:
-    let feature = rel.features.findFeature(requestedFeature)
-    if feature.len == 0:
-      warn pkg.url.projectName, "BFS ignored unknown requested feature:", requestedFeature
-    elif not pkg.activeFeatures.containsFeature(feature):
+    let declaredFeature = rel.features.findFeature(requestedFeature)
+    let feature =
+      if declaredFeature.len > 0: declaredFeature
+      else: requestedFeature
+    if not pkg.activeFeatures.containsFeature(feature):
       pkg.activeFeatures.addUniqueFeature(feature)
-      for (depUrl, query) in rel.features[feature]:
-        state.pending.addLast BfsRequirement(
-          url: depUrl,
-          query: query,
-          depth: depth + 1,
-          parent: pkg.url.projectName & "." & feature,
-          features: rel.requestedDependencyFeatures(depUrl)
-        )
+      if declaredFeature.len > 0:
+        for (depUrl, query) in rel.features[feature]:
+          state.pending.addLast BfsRequirement(
+            url: depUrl,
+            query: query,
+            depth: depth + 1,
+            parent: pkg.url.projectName & "." & feature,
+            features: rel.requestedDependencyFeatures(depUrl)
+          )
 
 proc selectRoot(state: var BfsResolverState; graph: var DepGraph) =
   var versions = graph.root.versions.pairs().toSeq()
@@ -151,11 +154,11 @@ proc selectRequirement(state: var BfsResolverState; graph: var DepGraph;
   let rel = pkg.activeNimbleRelease()
   pkg.activeFeatures = pkg.requestedContextFeatures(rel)
   for requestedFeature in req.features:
-    let feature = rel.features.findFeature(requestedFeature)
-    if feature.len == 0:
-      warn pkg.url.projectName, "BFS ignored unknown requested feature:", requestedFeature
-    else:
-      pkg.activeFeatures.addUniqueFeature(feature)
+    let declaredFeature = rel.features.findFeature(requestedFeature)
+    let feature =
+      if declaredFeature.len > 0: declaredFeature
+      else: requestedFeature
+    pkg.activeFeatures.addUniqueFeature(feature)
   state.selections[pkg.url] = BfsSelection(
     depth: req.depth,
     parent: req.parent
@@ -209,6 +212,7 @@ proc solveBreadthFirst*(graph: var DepGraph; rerun: var bool): bool =
     result = false
     return
 
+  graph.activateRequiredDependencyFeatures()
   checkDuplicateModules(graph)
 
   if ListVersions in context().flags and ListVersionsOff notin context().flags:

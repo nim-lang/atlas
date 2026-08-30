@@ -141,6 +141,39 @@ suite "breadth-first dependency resolver":
     check toolkit.activeFeatures == @["extras"]
     check leaf.active
 
+  test "undeclared dependency features remain active":
+    let root = newPackage("root", isRoot = true)
+    let toolkit = newPackage("toolkit")
+    let rootRelease = root.addRelease(
+      "#head", @[(toolkit.url, requirement("*"))])
+    rootRelease.reqsByFeatures[toolkit.url] = ["future"].toHashSet()
+    let toolkitRelease = toolkit.addRelease("1.0.0")
+    toolkitRelease.name = "declared_toolkit"
+
+    var graph = DepGraph(root: root)
+    for pkg in [root, toolkit]:
+      graph.addPackage(pkg)
+
+    check graph.resolveBreadthFirst()
+    check toolkit.activeFeatures == @["future"]
+
+  test "root dev and patch features activate automatically":
+    let root = newPackage("root", isRoot = true)
+    let shared = newPackage("shared")
+    let rootRelease = root.addRelease("#head")
+    rootRelease.name = "declared_root"
+    rootRelease.features["dev"] = @[(shared.url, requirement("*"))]
+    rootRelease.features["patch"] = @[(shared.url, requirement("*"))]
+    shared.addRelease("1.0.0")
+
+    var graph = DepGraph(root: root)
+    for pkg in [root, shared]:
+      graph.addPackage(pkg)
+
+    check graph.resolveBreadthFirst()
+    check root.activeFeatures.toHashSet() == ["dev", "patch"].toHashSet()
+    check shared.active
+
   test "only reached lazy feature dependencies are requested for loading":
     let root = newPackage("root", isRoot = true)
     let toolkit = newPackage("toolkit")

@@ -229,11 +229,25 @@ feature "testing":
 Features are lazily cloned until they are selected by a requires feature or passed from the command
 line. The BFS resolver loads a lazy feature dependency when its selected path reaches it.
 
+Atlas automatically enables the root package's `dev` and `patch` features, matching
+Nimble. Declare development-only dependencies with `dev:`; `patch` uses a regular
+`feature "patch":` block. Compiler defines use the package name declared in its
+Nimble file, for example `--define:features.my_package.testing`, even when the
+repository or dependency alias has a different name.
+
 In Nimble files you can enable features for a a given package like so:
 ```nim
-require "somelib[testing]"
-require "anotherlib[testing, async]"
+requires "somelib >= 1.0[testing]"
+requires "anotherlib >= 2.0 [testing, async]"
 ```
+
+Atlas also accepts the older `somelib[testing] >= 1.0` placement, but warns when
+a version constraint follows the feature list. Move the feature list to the end
+of the requirement to match Nimble's syntax.
+
+As with Nimble, requesting a dependency feature always emits its compiler define.
+The dependency does not need to declare the feature; a declaration is only needed
+when activating the feature should add more package requirements.
 
 
 ### Search <term term2 term3 ...>

@@ -332,6 +332,10 @@ proc extract(n: PNode; conf: ConfigRef; currFeature: string; result: var NimbleF
           for f in features:
             result.features[f] = newSeq[string]()
             extract(n[^1], conf, f, result)
+      of "dev":
+        if n.len >= 2:
+          result.features["dev"] = newSeq[string]()
+          extract(n[^1], conf, "dev", result)
       else:
         discard
   of nkAsgn, nkFastAsgn:
