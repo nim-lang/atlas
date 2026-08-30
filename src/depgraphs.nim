@@ -126,20 +126,20 @@ proc collectUnsatisfiedContextFeatures(graph: DepGraph): seq[string] =
       if rel.isNil:
         continue
       for featName in rel.features.keys():
-        requested.addUnique("feature." & pkg.url.projectName & "." & featName)
+        requested.addUnique(FeatureDefinePrefix & pkg.url.projectName & "." & featName)
   else:
     requested = context().features.toSeq()
   requested.sort()
   for raw in requested:
     let qualified =
-      if raw.startsWith("feature."):
+      if raw.startsWith(FeatureDefinePrefix):
         raw
       elif not graph.root.isNil:
-        "feature." & graph.root.url.projectName & "." & raw
+        FeatureDefinePrefix & graph.root.url.projectName & "." & raw
       else:
-        "feature." & raw
+        FeatureDefinePrefix & raw
 
-    if not qualified.startsWith("feature."):
+    if not qualified.startsWith(FeatureDefinePrefix):
       continue
 
     let parts = qualified.split(".")
@@ -258,7 +258,7 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
     for feature, reqs in rel.features:
       let featureVarId = rel.featureVars[feature]
       let featDepCheck = checkDeps(graph, ver, reqs)
-      let qualifiedFeature = "feature." & pkg.url.projectName & "." & feature
+      let qualifiedFeature = FeatureDefinePrefix & pkg.url.projectName & "." & feature
 
       debug pkg.url.projectName, "checking feature dep:", $feature, "query:", $reqs, "compat versions:", $featDepCheck.allDepsCompatible
       if not featDepCheck.allDepsCompatible:
@@ -832,12 +832,12 @@ proc activateGraph*(graph: DepGraph): tuple[paths: seq[CfgPath], features: seq[s
 
   # Add feature defines for --feature:FOO flags (root project features without prefix)
   for feature in context().features:
-    if feature.startsWith("feature."):
-      # Already in full format: feature.$PKG.$FEATURE
+    if feature.startsWith(FeatureDefinePrefix):
+      # Already in full format: features.$PKG.$FEATURE
       result.features.addUniqueFeature feature
     else:
-      # Short format: FOO -> feature.$ROOT.FOO
-      result.features.addUniqueFeature "feature." & graph.root.url.projectName & "." & feature
+      # Short format: FOO -> features.$ROOT.FOO
+      result.features.addUniqueFeature FeatureDefinePrefix & graph.root.url.projectName & "." & feature
 
   # Apply global feature flags to activeFeatures for introspection/tests.
   for pkg in graph.pkgs.values():
@@ -852,14 +852,14 @@ proc activateGraph*(graph: DepGraph): tuple[paths: seq[CfgPath], features: seq[s
 
   if not graph.root.isNil and graph.root.active:
     for feature in graph.root.activeFeatures:
-      result.features.addUniqueFeature "feature." & graph.root.url.projectName & "." & feature
+      result.features.addUniqueFeature FeatureDefinePrefix & graph.root.url.projectName & "." & feature
 
   for pkg in allActiveNodes(graph):
     if pkg.isRoot: continue
     trace pkg.url.projectName, "adding CfgPath:", $relativeToWorkspace(toDestDir(graph, pkg) / getCfgPath(graph, pkg).Path)
     result.paths.add CfgPath(toDestDir(graph, pkg) / getCfgPath(graph, pkg).Path)
     for feature in pkg.activeFeatures:
-      result.features.addUniqueFeature "feature." & pkg.url.shortName & "." & feature
+      result.features.addUniqueFeature FeatureDefinePrefix & pkg.url.shortName & "." & feature
 
   result.paths.sort(proc (a, b: CfgPath): int =
     cmp(a.string, b.string)

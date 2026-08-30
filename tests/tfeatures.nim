@@ -193,7 +193,7 @@ suite "test global features":
         context().flags = {ListVersions}
         context().defaultAlgo = SemVer
         context().flags.incl DumpFormular
-        context().features.incl "feature.proj_a.testing"
+        context().features.incl "features.proj_a.testing"
 
         expectedVersionWithGitTags()
         var nc = createNimbleContext()
@@ -303,6 +303,7 @@ suite "test global features":
         check dirExists("deps" / "proj_feature_dep")
         let nimCfg = readFile("nim.cfg")
         check "deps/proj_feature_dep" in nimCfg
+        check "features.proj_a.testing" in nimCfg
         check "feature.proj_a.testing" in nimCfg
         check fileExists("deps" / ".cache" / "atlas.active.json")
         check not fileExists("deps" / "atlas.cache.json")
@@ -381,8 +382,8 @@ suite "test global features":
         check dirExists("deps" / "proj_feature_dep")
         let nimCfg = readFile("nim.cfg")
         check "deps/proj_feature_dep" in nimCfg
-        check "feature.proj_a.testing" in nimCfg
-        check "feature.proj_a.marker" in nimCfg
+        check "features.proj_a.testing" in nimCfg
+        check "features.proj_a.marker" in nimCfg
 
   test "atlasRun install activates package feature deps from --allFeatures":
       setAtlasVerbosity(Error)
@@ -449,8 +450,8 @@ suite "test global features":
         check dirExists("deps" / "proj_feature_dep")
         let nimCfg = readFile("nim.cfg")
         check "deps/proj_feature_dep" in nimCfg
-        check "feature.proj_a.testing" in nimCfg
-        check "feature.proj_a.marker" in nimCfg
+        check "features.proj_a.testing" in nimCfg
+        check "features.proj_a.marker" in nimCfg
 
   test "requires dependency feature activates empty feature declaration":
       setAtlasVerbosity(Error)
@@ -512,18 +513,20 @@ suite "test global features":
         check graph.pkgs[nc2.createUrl("proj_a")].activeFeatures == @["marker"]
 
         let (_, features) = graph.activateGraph()
-        check "feature.proj_a.marker" in features
+        check "features.proj_a.marker" in features
 
   test "parse features from nim.cfg":
       withDir "tests/ws_features_global":
         writeFile("nim.cfg", dedent"""
-        --define:"feature.proj_a.testing"
-        -d:feature.proj_b.extra
+        --define:"features.proj_a.testing"
+        -d:features.proj_b.extra
+        --define:"feature.proj_c.legacy"
         --define:"not_a_feature"
         """)
 
         check parseNimCfgFeatures(CfgPath paths.getCurrentDir()).toHashSet ==
-          ["feature.proj_a.testing", "feature.proj_b.extra"].toHashSet
+          ["features.proj_a.testing", "features.proj_b.extra",
+           "features.proj_c.legacy"].toHashSet
 
   test "atlasRun install keeps features from nim.cfg with -k":
       setAtlasVerbosity(Error)
@@ -572,7 +575,7 @@ suite "test global features":
           exec "git tag v1.2.0"
 
         writeFile("nim.cfg", dedent"""
-        --define:"feature.proj_a.testing"
+        --define:"features.proj_a.testing"
         """)
 
         setContext(AtlasContext())
@@ -642,8 +645,8 @@ suite "test global features":
         context().flags = {DumbProxy, ListVersions}
         context().depsDir = Path "deps"
         context().defaultAlgo = SemVer
-        context().features.incl "feature.proj_a.testing"
-        context().features.incl "feature.proj_a.broken"
+        context().features.incl "features.proj_a.testing"
+        context().features.incl "features.proj_a.broken"
         project(paths.getCurrentDir())
 
         var nc2 = createNimbleContext()

@@ -127,14 +127,16 @@ type
 
 proc addRequestedFeature(rawFeature: string) =
   # Package-scoped features use `<pkg>.<feature>` and are normalized to
-  # `feature.<pkg>.<feature>` internally for nim.cfg defines.
+  # `features.<pkg>.<feature>` internally for nim.cfg defines.
   let raw = rawFeature.strip().toLowerAscii()
   if raw.len == 0:
     writeHelp()
-  elif raw.startsWith("feature."):
+  elif raw.startsWith(FeatureDefinePrefix):
     context().features.incl raw
+  elif raw.startsWith(LegacyFeatureDefinePrefix):
+    context().features.incl FeatureDefinePrefix & raw[LegacyFeatureDefinePrefix.len..^1]
   elif '.' in raw:
-    context().features.incl "feature." & raw
+    context().features.incl FeatureDefinePrefix & raw
   else:
     # Root-package feature shorthand.
     context().features.incl raw
@@ -496,11 +498,11 @@ proc activationCachePaths(cache: ActivationCache): tuple[
   for pkg in cache.packages:
     if pkg.isRoot:
       for feature in pkg.features:
-        result.features.addUniqueFeature "feature." & pkg.url.projectName & "." & feature
+        result.features.addUniqueFeature FeatureDefinePrefix & pkg.url.projectName & "." & feature
     else:
       result.paths.add CfgPath(pkg.ondisk / pkg.srcDir)
       for feature in pkg.features:
-        result.features.addUniqueFeature "feature." & pkg.url.shortName & "." & feature
+        result.features.addUniqueFeature FeatureDefinePrefix & pkg.url.shortName & "." & feature
   result.paths.sort(proc (a, b: CfgPath): int = cmp(a.string, b.string))
 
 proc linkFileFor(pkg: ActivatedPackage): Path =

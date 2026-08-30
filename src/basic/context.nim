@@ -21,6 +21,8 @@ const
   DefaultCachesSubDir* = Path".cache"
   DefaultNimbleCachesSubDir* = Path"_nimbles"
   DefaultParallelCloneWorkers* = 3
+  FeatureDefinePrefix* = "features."
+  LegacyFeatureDefinePrefix* = "feature."
 
 
 type
@@ -155,8 +157,8 @@ proc hasRequestedFeature*(pkgShortName, pkgProjectName, feature: string): bool =
   initAtlasContext()
   if AllFeatures in atlasContext.flags:
     return true
-  let scopedByShortName = "feature." & pkgShortName & "." & feature
-  let scopedByProjectName = "feature." & pkgProjectName & "." & feature
+  let scopedByShortName = FeatureDefinePrefix & pkgShortName & "." & feature
+  let scopedByProjectName = FeatureDefinePrefix & pkgProjectName & "." & feature
   result =
     atlasContext.features.containsFeature(feature) or
     atlasContext.features.containsFeature(scopedByShortName) or
