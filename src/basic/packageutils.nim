@@ -40,6 +40,16 @@ proc tmpCheckoutDir(pkg: Package): Path =
 proc matchesPackageUrl(path: Path; pkg: Package): bool =
   dirExists(path) and gitops.getCanonicalUrl(path) == $pkg.url.cloneUri()
 
+proc findPackageDirByUrl(pkg: Package): Path =
+  if not dirExists(depsDir()):
+    return
+  for kind, path in walkDir($depsDir()):
+    if kind == pcDir:
+      let candidate = Path(path)
+      if $candidate.splitPath().tail != ".tmp" and
+          matchesPackageUrl(candidate, pkg):
+        return candidate.absolutePath()
+
 proc disambiguatedDirectoryPath(pkg: Package): Path =
   let baseName =
     if pkg.url.fullName().len > 0: pkg.url.fullName()
@@ -82,7 +92,8 @@ proc finalizeClonedPackagePath*(pkg: var Package; checkoutDir: Path) =
              "preferred:", $pkg.url.toDirectoryPath(pkg.projectName()),
              "using:", $finalDir
         if dirExists(finalDir):
-          removeDir($checkoutDir)
+          if checkoutDir != finalDir:
+            removeDir($checkoutDir)
         else:
           moveDir($checkoutDir, $finalDir)
     else:
@@ -101,16 +112,23 @@ proc resolveExistingPackageDir*(pkg: var Package): bool =
   ## filename after cloning. If another unofficial package with the same nimble
   ## filename already owns that directory, look for this package's deterministic
   ## disambiguated directory instead of reusing the wrong checkout.
-  if not dirExists(pkg.ondisk):
-    return false
-  if not pkg.shouldCloneToTemp():
-    return true
-  if matchesPackageUrl(pkg.ondisk, pkg):
-    return true
+  if dirExists(pkg.ondisk):
+    if not pkg.shouldCloneToTemp():
+      return true
+    if matchesPackageUrl(pkg.ondisk, pkg):
+      pkg.finalizeClonedPackagePath(pkg.ondisk)
+      return true
 
   let alternateDir = disambiguatedDirectoryPath(pkg)
   if dirExists(alternateDir) and matchesPackageUrl(alternateDir, pkg):
     pkg.ondisk = alternateDir
+    pkg.finalizeClonedPackagePath(pkg.ondisk)
+    return true
+
+  let existingDir = findPackageDirByUrl(pkg)
+  if existingDir.len > 0:
+    pkg.ondisk = existingDir
+    pkg.finalizeClonedPackagePath(pkg.ondisk)
     return true
 
   false

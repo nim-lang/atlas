@@ -179,7 +179,8 @@ proc initPackage*(nc: NimbleContext; url: PkgUrl; state = NotInitialized): Packa
     isFork: nc.isForkUrl(url)
   )
 
-proc putImpl(nc: var NimbleContext, name: string, url: PkgUrl, isFromPath = false): bool =
+proc putImpl(nc: var NimbleContext, name: string, url: PkgUrl,
+             isFromPath = false, authoritativeName = true): bool =
   ## Adds a package-name mapping to the context extras table.
   ##
   ## Returns false when the name is already reserved by the registry or by a
@@ -190,21 +191,29 @@ proc putImpl(nc: var NimbleContext, name: string, url: PkgUrl, isFromPath = fals
   elif name notin nc.packageExtras:
     nc.packageExtras[name] = url
     nc.urlToUrl[$url.cloneUri()] = url
-    nc.rememberPackageName(name, url)
+    if authoritativeName:
+      nc.rememberPackageName(name, url)
     result = true
   else:
     let existingPkg = nc.packageExtras[name]
     let existingUrl = existingPkg.cloneUri()
-    let url = url.cloneUri()
-    if existingUrl != url:
-      if existingUrl.scheme != url.scheme and existingUrl.port == url.port and
-          existingUrl.path == url.path and existingUrl.hostname == url.hostname:
-        info "atlas:nimblecontext", "different url schemes for the same package:", $name, "existing:", $existingUrl, "new:", $url
+    let newUrl = url.cloneUri()
+    if existingUrl != newUrl:
+      if existingUrl.scheme != newUrl.scheme and
+          existingUrl.port == newUrl.port and
+          existingUrl.path == newUrl.path and existingUrl.hostname == newUrl.hostname:
+        info "atlas:nimblecontext", "different url schemes for the same package:",
+             $name, "existing:", $existingUrl, "new:", $newUrl
       else:
         # this is handled in the solver which checks for conflicts
         # but users should be aware that this is happening as they can override stuff
-        warn "atlas:nimblecontext", "name already exists in packageExtras:", $name, "isFromPath:", $isFromPath, "with different url:", $nc.packageExtras[name], "and url:", $url
+        warn "atlas:nimblecontext", "name already exists in packageExtras:", $name,
+             "isFromPath:", $isFromPath, "with different url:",
+             $nc.packageExtras[name], "and url:", $newUrl
         result = false
+    elif authoritativeName:
+      nc.rememberPackageName(name, url)
+      result = true
 
 proc put*(nc: var NimbleContext, name: string, url: PkgUrl): bool {.discardable.} =
   ## Adds an explicit package-name to URL mapping.
@@ -275,7 +284,10 @@ proc createUrl*(nc: var NimbleContext, nameOrig: string): PkgUrl =
       raise newException(ValueError, "project name not found in packages database: " & $lname & " original: " & $nameOrig)
   
   if not result.isEmpty():
-    if nc.put(result.projectName, result):
+    let packageName =
+      if origWasUrl: result.projectName
+      else: nameOrig
+    if nc.putImpl(packageName, result, authoritativeName = not origWasUrl):
       debug "atlas:createUrl", "created url with name:", name, "orig:",
             nameOrig, "projectName:", $result.projectName,
             "url:", $result.url
