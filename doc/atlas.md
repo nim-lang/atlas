@@ -68,9 +68,17 @@ requirements retain their full hashes internally but are shortened to eight
 characters in version-selection output.
 
 Atlas uses URLs internally; Nimble package names are translated to URLs
-via Nimble's  `packages.json` file. Atlas uses "shortnames" for known URLs from
-packages. Unofficial URLs, including forks, using a name triplet of the form
-`projectName.author.host`. For example Atlas would be `atlas.nim-lang.github.com`. Packages can be added using `nameOverrides` in `atlas.config` which adds a new name to URL mapping.
+via Nimble's `packages.json` file. Repository URLs identify what Atlas clones,
+but package names determine dependency directory and feature names. Explicit
+URLs and forge aliases derive that name from the `.nimble` filename after
+checkout. For example, a `nim-markdown` repository containing `markdown.nimble`
+uses `deps/markdown` and `features.markdown.*`.
+
+Unofficial URLs, including forks, use a name triplet of the form
+`projectName.author.host` when Atlas must disambiguate packages with the same
+name. For example, Atlas would be `atlas.nim-lang.github.com`. Packages can be
+added using `nameOverrides` in `atlas.config`, which adds a new name-to-URL
+mapping.
 Atlas downloads `packages.json` into `deps/_packages` by default; pass
 `--packagesRepo` to keep the git-clone behavior for the full packages repo.
 If dependency URLs use `git://`, pass `--forceGitToHttps` to rewrite them to

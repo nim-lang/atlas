@@ -574,3 +574,65 @@ suite "historical explicit transitive pins":
           check graph2.pkgs[upstreamUrl2].ondisk == upstream.ondisk
           check graph2.pkgs[forkUrl2].ondisk == fork.ondisk
           check gitops.getCanonicalUrl(graph2.pkgs[forkUrl2].ondisk) == forkUrlString
+
+  test "forge URL uses Nimble name for checkout and feature define":
+    let ws = "tests/ws_explicit_history_leak"
+    removeDir(ws)
+    createDir(ws)
+
+    withDir ws:
+      project(paths.getCurrentDir())
+      context().flags = {KeepWorkspace, ListVersions, NoExec}
+      context().defaultAlgo = SemVer
+
+      createDir("remotes/elcritch/nim-markdown")
+      withDir "remotes/elcritch/nim-markdown":
+        writeFile("markdown.nimble", [
+          "version = \"1.0.0\"",
+          "feature \"regex\":",
+          "  discard",
+          ""
+        ].join("\n"))
+        writeFile("markdown.nim", "discard\n")
+        initGitRepo()
+        commitAll("markdown")
+        exec("git branch devel")
+
+      let remotesUrl = "file://" & $(Path("remotes").absolutePath()) & "/"
+      putEnv("GIT_CONFIG_COUNT", "1")
+      putEnv("GIT_CONFIG_KEY_0", "url." & remotesUrl & ".insteadOf")
+      putEnv("GIT_CONFIG_VALUE_0", "https://github.com/")
+
+      writeFile("ws_explicit_history_leak.nimble", [
+        "version = \"0.1.0\"",
+        "requires \"gh:elcritch/nim-markdown#devel[regex]\"",
+        ""
+      ].join("\n"))
+
+      var nc = createUnfilledNimbleContext()
+      var graph = loadWorkspace(project(), nc, AllReleases, DoClone, doSolve = true)
+      let markdownUrl = nc.createUrl("gh:elcritch/nim-markdown")
+      let (_, features) = graph.activateGraph()
+
+      check markdownUrl in graph.pkgs
+      check dirExists("deps/markdown")
+      check not dirExists("deps/nim-markdown")
+      check "features.markdown.regex" in features
+      check "features.nim-markdown.regex" notin features
+      if markdownUrl in graph.pkgs:
+        check graph.pkgs[markdownUrl].name == "markdown"
+        check graph.pkgs[markdownUrl].ondisk == Path("deps/markdown").absolutePath()
+
+      if dirExists("deps/markdown"):
+        moveDir("deps/markdown", "deps/nim-markdown")
+
+      var nc2 = createUnfilledNimbleContext()
+      var graph2 = loadWorkspace(project(), nc2, AllReleases, DoClone, doSolve = true)
+      let markdownUrl2 = nc2.createUrl("gh:elcritch/nim-markdown")
+      let (_, features2) = graph2.activateGraph()
+
+      check markdownUrl2 in graph2.pkgs
+      check dirExists("deps/markdown")
+      check not dirExists("deps/nim-markdown")
+      check "features.markdown.regex" in features2
+      check "features.nim-markdown.regex" notin features2
