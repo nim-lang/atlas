@@ -1,7 +1,7 @@
 import std / [paths, sets, unittest, uri]
 
 import basic/[context, deptypes, nimblecontext, nimbleparser, pkgurls, versions]
-import depgraphs
+import confighandler, depgraphs
 
 suite "duplicate feature dependencies":
   test "two enabled features can share one dependency":
@@ -100,3 +100,29 @@ suite "duplicate feature dependencies":
     doAssert dependency.activeFeatures == @["future"]
     let (_, features) = graph.activateGraph()
     doAssert "features.declared_dependency.future" in features
+
+  test "feature defines use the package name instead of the URL slug":
+    setContext(AtlasContext())
+    context().flags.incl NoExec
+
+    var nc = createUnfilledNimbleContext()
+    let markdownUrl = toPkgUriRaw(parseUri("https://example.com/nim-markdown"))
+    discard nc.put("markdown", markdownUrl)
+    let markdownRelease = nc.parseNimbleFile(Path"tests/test_data/markdown.nimble")
+    let markdownVersion = toVersionTag("1.0.0@-").toPkgVer
+
+    let markdown = nc.initPackage(markdownUrl, Processed)
+    markdown.versions[markdownVersion] = markdownRelease
+    markdown.activeVersion = markdownVersion
+    markdown.activeFeatures = @["regex"]
+    markdown.active = true
+    markdown.ondisk = Path"tests/test_data"
+
+    var graph = DepGraph()
+    graph.pkgs[markdownUrl] = markdown
+
+    let (_, features) = graph.activateGraph()
+    let cache = graph.toActivationCache()
+    doAssert cache.packages[0].name == "markdown"
+    doAssert "features.markdown.regex" in features
+    doAssert "features.nim-markdown.regex" notin features

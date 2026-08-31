@@ -84,7 +84,8 @@ proc addCompatibleVersionChoice(b: var Builder; compatibleVersions: seq[VarId]) 
 
 proc packageFeatureName(pkg: Package; rel: NimbleRelease): string =
   let fallbackName =
-    if pkg.isRoot: pkg.url.projectName
+    if pkg.name.len > 0: pkg.name
+    elif pkg.isRoot: pkg.url.projectName
     else: pkg.url.shortName
   let declaredName =
     if rel.isNil: ""
@@ -93,7 +94,7 @@ proc packageFeatureName(pkg: Package; rel: NimbleRelease): string =
 
 proc matchesFeaturePackageName(pkg: Package; rel: NimbleRelease;
                                name: string): bool =
-  for candidate in [pkg.url.shortName, pkg.url.projectName, rel.name]:
+  for candidate in [pkg.url.shortName, pkg.url.projectName, rel.name, pkg.name]:
     if candidate.len > 0 and sameFeature(candidate, name):
       return true
 
@@ -143,7 +144,7 @@ proc canonicalFeatureDefine(graph: DepGraph; feature: string): string =
 
 proc hasContextFeature(pkg: Package; rel: NimbleRelease; feature: string): bool =
   result = hasRequestedFeature(pkg.url.shortName, pkg.url.projectName,
-                               rel.name, feature, pkg.isRoot)
+                               rel.name, pkg.name, feature, pkg.isRoot)
 
 proc requirementMatches*(query: VersionInterval; depVer: PackageVersion; depRel: NimbleRelease): bool =
   ## Match semver constraints against nimble-declared release versions, while

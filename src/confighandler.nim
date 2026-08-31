@@ -189,12 +189,16 @@ proc toActivationCache*(g: DepGraph): ActivationCache =
       continue
 
     let rel = pkg.activeNimbleRelease()
+    let fallbackName =
+      if pkg.name.len > 0: pkg.name
+      elif pkg.isRoot: pkg.url.projectName
+      else: pkg.url.shortName
     var features = pkg.activeFeatures
     features.sort()
 
     result.packages.add ActivatedPackage(
       url: pkg.url,
-      name: if rel.isNil: "" else: rel.name,
+      name: featurePackageName(if rel.isNil: "" else: rel.name, fallbackName),
       version: repr(pkg.activeVersion.vtag),
       author: if rel.isNil: "" else: rel.author,
       description: if rel.isNil: "" else: rel.description,
