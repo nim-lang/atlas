@@ -230,9 +230,10 @@ Features are lazily cloned by Atlas until they are specified by either a require
 
 Atlas automatically enables the root package's `dev` and `patch` features, matching
 Nimble. Declare development-only dependencies with `dev:`; `patch` uses a regular
-`feature "patch":` block. Compiler defines use the package name declared in its
-Nimble file, for example `--define:features.my_package.testing`, even when the
-repository or dependency alias has a different name.
+`feature "patch":` block. Compiler defines use the Nimble package name, defaulting
+to the `.nimble` filename when no name is declared. For example,
+`--define:features.my_package.testing` is independent of the repository or
+dependency alias name.
 
 In Nimble files you can enable features for a a given package like so:
 ```nim

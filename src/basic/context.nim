@@ -159,17 +159,22 @@ func featurePackageName*(declaredName, fallbackName: string): string =
   else: fallbackName
 
 proc hasRequestedFeature*(pkgShortName, pkgProjectName, pkgDeclaredName,
-                          feature: string; isRoot: bool): bool =
+                          pkgName, feature: string; isRoot: bool): bool =
   initAtlasContext()
   if AllFeatures in atlasContext.flags or
       (isRoot and feature in ["dev", "patch"]):
     return true
   if atlasContext.features.containsFeature(feature):
     return true
-  for pkgName in [pkgShortName, pkgProjectName, pkgDeclaredName]:
-    if pkgName.len > 0 and atlasContext.features.containsFeature(
-        FeatureDefinePrefix & pkgName & "." & feature):
+  for candidate in [pkgShortName, pkgProjectName, pkgDeclaredName, pkgName]:
+    if candidate.len > 0 and atlasContext.features.containsFeature(
+        FeatureDefinePrefix & candidate & "." & feature):
       return true
+
+proc hasRequestedFeature*(pkgShortName, pkgProjectName, pkgDeclaredName,
+                          feature: string; isRoot: bool): bool =
+  hasRequestedFeature(pkgShortName, pkgProjectName, pkgDeclaredName, "",
+                      feature, isRoot)
 
 proc hasRequestedFeature*(pkgShortName, pkgProjectName, feature: string): bool =
   ## Compatibility overload for callers without release metadata.
