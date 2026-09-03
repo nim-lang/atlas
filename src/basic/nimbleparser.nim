@@ -20,7 +20,7 @@ proc processRequirement(nc: var NimbleContext;
                         feature: string;
                         result: var NimbleRelease) =
     let (name, reqsByFeatures, _) = extractRequirementName(req)
-    let requirement = removeRequirementFeatures(req)
+    let requirement = removeRequirementFeatures(req).strip()
     let (_, _, verIdx) = extractRequirementName(requirement)
     if usesLegacyRequirementFeatureSyntax(req):
       warn nimbleFile, "deprecated dependency feature syntax:", req,

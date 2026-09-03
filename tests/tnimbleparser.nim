@@ -94,6 +94,26 @@ suite "nimbleparser":
     check release.reqsByFeatures[legacy].contains("old")
     check atlasReporter.warnings == warningsBefore + 1
 
+  test "parses URL branch requirements with features":
+    let nimbleFile = Path(genTempPath("atlas_url_branch_features_", ".nimble"))
+    defer:
+      removeFile($nimbleFile)
+
+    var nc = createUnfilledNimbleContext()
+    let markdown = toPkgUriRaw(parseUri "https://github.com/elcritch/nim-markdown")
+    for requirement in [
+        "https://github.com/elcritch/nim-markdown#devel [regex]",
+        "https://github.com/elcritch/nim-markdown#devel[regex]",
+        "https://github.com/elcritch/nim-markdown#devel [regex] ",
+        "https://github.com/elcritch/nim-markdown#devel[regex] "]:
+      writeFile($nimbleFile, "requires \"" & requirement & "\"\n")
+      let release = nc.parseNimbleFile(nimbleFile)
+      check release.status == Normal
+      require release.requirements.len == 1
+      check $release.requirements[0][0] == $markdown
+      check $release.requirements[0][1] == "#devel"
+      check release.reqsByFeatures[markdown].contains("regex")
+
   test "parse nimble file preserves empty features":
     let nimbleFile = Path("tests" / "test_data" / "empty_feature.nimble")
     writeFile($nimbleFile, dedent"""
