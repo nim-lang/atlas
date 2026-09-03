@@ -119,6 +119,55 @@ suite "Nim environments":
     check addNimEnvToGitHubPath("2.2.10")
     check readFile($githubPath) == "already-present\n" & $binDir.absolutePath() & "\n"
 
+  test "source builds resolve version tags in the dependency directory":
+    let oldContext = context()
+    let projectDir = Path(genTempPath("atlas nim source project ", ""))
+    let repoDir = Path(genTempPath("atlas nim source repo ", ""))
+    let hadGitConfigCount = existsEnv("GIT_CONFIG_COUNT")
+    let oldGitConfigCount = getEnv("GIT_CONFIG_COUNT")
+    let hadGitConfigKey = existsEnv("GIT_CONFIG_KEY_0")
+    let oldGitConfigKey = getEnv("GIT_CONFIG_KEY_0")
+    let hadGitConfigValue = existsEnv("GIT_CONFIG_VALUE_0")
+    let oldGitConfigValue = getEnv("GIT_CONFIG_VALUE_0")
+    defer:
+      setContext(oldContext)
+      if hadGitConfigCount: putEnv("GIT_CONFIG_COUNT", oldGitConfigCount)
+      else: delEnv("GIT_CONFIG_COUNT")
+      if hadGitConfigKey: putEnv("GIT_CONFIG_KEY_0", oldGitConfigKey)
+      else: delEnv("GIT_CONFIG_KEY_0")
+      if hadGitConfigValue: putEnv("GIT_CONFIG_VALUE_0", oldGitConfigValue)
+      else: delEnv("GIT_CONFIG_VALUE_0")
+      if dirExists($projectDir): removeDir($projectDir)
+      if dirExists($repoDir): removeDir($repoDir)
+
+    createDir($projectDir)
+    createDir($(projectDir / Path"deps"))
+    createDir($repoDir)
+    when defined(windows):
+      writeFile($(repoDir / Path"build_all.bat"),
+        "@echo off\nmkdir bin\ntype nul > bin\\nim.exe\n")
+    else:
+      writeFile($(repoDir / Path"build_all.sh"), "mkdir -p bin\ntouch bin/nim\n")
+    writeFile($(repoDir / Path"compiler.nim"), "discard\n")
+    discard runGit(repoDir, "init")
+    discard runGit(repoDir, "config user.email atlas@example.invalid")
+    discard runGit(repoDir, "config user.name Atlas")
+    discard runGit(repoDir, "add .")
+    discard runGit(repoDir, "commit -m initial")
+    discard runGit(repoDir, "tag v2.2.10")
+    let sourceCommit = runGit(repoDir, "rev-parse HEAD")
+
+    let repoUrl = "file://" & $repoDir.absolutePath()
+    putEnv("GIT_CONFIG_COUNT", "1")
+    putEnv("GIT_CONFIG_KEY_0", "url." & repoUrl & ".insteadOf")
+    putEnv("GIT_CONFIG_VALUE_0", NimRepositoryUrl)
+    setContext(AtlasContext(projectDir: projectDir, depsDir: Path"deps"))
+
+    check setupNimEnv("2.2.10", false, mode = NimEnvMode.Source)
+    let nimDir = projectDir / Path"deps" / Path"nim-2.2.10"
+    check runGit(nimDir, "rev-parse HEAD") == sourceCommit
+    check fileExists($(nimDir / ActivationFile))
+
   test "builds custom Git refs and records their SHAs":
     let oldContext = context()
     let projectDir = Path(genTempPath("atlas nim env project ", ""))

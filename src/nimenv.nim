@@ -233,7 +233,7 @@ proc setupNimFromSource(nimVersion: string; nimDest: Path; keepCsources: bool;
     if checkoutGitRef(nimDir, source.gitRef).isEmpty():
       return false
   else:
-    discard gitops.fetchRemoteTags(nimDest)
+    discard gitops.fetchRemoteTags(nimDir)
   if not source.hasGitRef() and nimVersion != "devel":
     let query = createQueryEq(Version(nimVersion))
     let commit = versionToCommit(nimDir, algo = SemVer, query = query)
