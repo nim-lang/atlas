@@ -51,11 +51,13 @@ task buildRelease, "Build release":
     mkDir("bin")
   when defined(macosx):
     let x86Args = "\"-target x86_64-apple-macos11 -arch x86_64 -DARCH=x86_64\""
-    exec "nim c -d:release --passC:" & x86args & " --passL:" & x86args & " -o:./atlas_x86_64 src/atlas.nim"
-    exec "nim c -d:release --passC:" & x86args & " --passL:" & x86args & " -o:./atlas-run_x86_64 src/atlasrun.nim"
+    let x86CompileArgs = "--cpu:amd64 --passC:" & x86Args & " --passL:" & x86Args
+    exec "nim c -d:release " & x86CompileArgs & " -o:./atlas_x86_64 src/atlas.nim"
+    exec "nim c -d:release " & x86CompileArgs & " -o:./atlas-run_x86_64 src/atlasrun.nim"
     let armArgs = "\"-target arm64-apple-macos11 -arch arm64 -DARCH=arm64\""
-    exec "nim c -d:release --passC:" & armArgs & " --passL:" & armArgs & " -o:./atlas_arm64 src/atlas.nim"
-    exec "nim c -d:release --passC:" & armArgs & " --passL:" & armArgs & " -o:./atlas-run_arm64 src/atlasrun.nim"
+    let armCompileArgs = "--cpu:arm64 --passC:" & armArgs & " --passL:" & armArgs
+    exec "nim c -d:release " & armCompileArgs & " -o:./atlas_arm64 src/atlas.nim"
+    exec "nim c -d:release " & armCompileArgs & " -o:./atlas-run_arm64 src/atlasrun.nim"
     exec "lipo -create -output bin/atlas atlas_x86_64 atlas_arm64"
     exec "lipo -create -output bin/atlas-run atlas-run_x86_64 atlas-run_arm64"
     rmFile("atlas_x86_64")
