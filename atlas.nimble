@@ -1,5 +1,5 @@
 # Package
-version = "0.15.3"
+version = "0.15.4"
 author = "Araq"
 description = "Atlas is a simple package cloner tool. It manages an isolated project."
 license = "MIT"
