@@ -102,9 +102,10 @@ doAssert not AtlasIsDirty
     check code == 0
     check outp.len >= 0
 
-  test "package list urls prefer CDN and retain fallback":
-    check PackagesJsonUrls[0] == "https://packages.nim-lang.org/packages.json"
-    check PackagesJsonUrls[^1].startsWith("https://raw.githubusercontent.com/nim-lang/packages/")
+  test "package list uses the GitHub raw source":
+    check PackagesJsonUrls.len == 1
+    check PackagesJsonUrls[0] ==
+      "https://raw.githubusercontent.com/nim-lang/packages/refs/heads/master/packages.json"
 
   test "http client user agent matches atlas version":
     let client = newAtlasHttpClient()

@@ -13,7 +13,6 @@ import context, reporters, gitops, pkgurls, httpclientutils
 const
   UnitTests = defined(atlasUnitTests)
   PackagesJsonUrls* = [
-    "https://packages.nim-lang.org/packages.json",
     "https://raw.githubusercontent.com/nim-lang/packages/refs/heads/master/packages.json"
   ]
 

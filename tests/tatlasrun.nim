@@ -1,4 +1,4 @@
-import std/[os, osproc, paths, strutils, unittest]
+import std/[os, osproc, paths, streams, strutils, unittest]
 from std/envvars import delEnv, existsEnv, getEnv, putEnv
 
 import atlasrun
@@ -26,6 +26,23 @@ template withNimFlags(value: string; body: untyped) =
       putEnv("NIMFLAGS", oldNimFlags)
     else:
       delEnv("NIMFLAGS")
+
+proc readUntilMarkers(process: Process; markers: openArray[string]): string =
+  var found = newSeq[bool](markers.len)
+  var foundCount = 0
+  while foundCount < markers.len:
+    var line: string
+    try:
+      line = process.outputStream.readLine()
+    except IOError:
+      break
+    result.add line & "\n"
+    for idx, marker in markers:
+      if not found[idx] and marker in line:
+        found[idx] = true
+        inc foundCount
+    if line.len == 0 and process.peekExitCode() != -1:
+      break
 
 suite "atlas-run":
   test "lists tasks from nimble file":
@@ -290,6 +307,8 @@ namedBin = {"tool": "demo-tool"}.toTable
     let defaultOptions = initAtlasTestOptions()
     check defaultOptions.shuffle
     check not defaultOptions.compileOnly
+    check not defaultOptions.stream
+    check not defaultOptions.stats
     check not defaultOptions.onlyErrors
     check not defaultOptions.showCompilerOutput
     check defaultOptions.compilerArgs.len == 0
@@ -425,6 +444,94 @@ writeFile("two.out", "ok")
     check dirExists($(dir / Path"deps/.nimcache" / Path"atlas-run" / Path"tests" / Path"tone"))
     check dirExists($(dir / Path"deps/.nimcache" / Path"atlas-run" / Path"tests" / Path"ttwo"))
 
+  test "streams one job directly and parallel jobs in labeled chunks":
+    let dir = freshDir("atlas_run_stream_tests")
+    defer:
+      removeDir($dir)
+
+    writeFile($(dir / Path"demo.nimble"), "version = \"0.1.0\"\n")
+    let testsDir = dir / Path"tests"
+    createDir($testsDir)
+    writeFile($(testsDir / Path"tone.nim"), """
+import std/os
+
+echo "ONE-BEGIN"
+stdout.flushFile()
+var waited = 0
+while not fileExists("stream.release") and waited < 5000:
+  sleep 25
+  inc waited, 25
+writeFile("one.done", "done")
+""")
+
+    let atlasRunExe = dir / Path"atlas-run-stream-test"
+    let (buildOutput, buildExitCode) = execCmdEx(
+      "nim c -d:TestStreamIntervalMs=250 --out:" & quoteShell($atlasRunExe) &
+        " src/atlasrun.nim"
+    )
+    check buildExitCode == 0
+    if buildExitCode != 0:
+      checkpoint buildOutput
+    else:
+      var singleProcess = startProcess(
+        $atlasRunExe,
+        args = @[
+          "--project:" & $dir,
+          "tests",
+          "--stream",
+          "--jobs:1",
+          "--no-shuffle"
+        ],
+        options = {poStdErrToStdOut}
+      )
+      var singleOutput = singleProcess.readUntilMarkers(["ONE-BEGIN"])
+      check not fileExists($(dir / Path"one.done"))
+      writeFile($(dir / Path"stream.release"), "release")
+      let singleExitCode = singleProcess.waitForExit()
+      singleOutput.add singleProcess.outputStream.readAll()
+      singleProcess.close()
+      check singleExitCode == 0
+      check "ONE-BEGIN" in singleOutput
+      check "tests/tone.nim output:" notin singleOutput
+
+      removeFile($(dir / Path"one.done"))
+      removeFile($(dir / Path"stream.release"))
+      writeFile($(testsDir / Path"ttwo.nim"), """
+import std/os
+
+echo "TWO-BEGIN"
+stdout.flushFile()
+var waited = 0
+while not fileExists("stream.release") and waited < 5000:
+  sleep 25
+  inc waited, 25
+writeFile("two.done", "done")
+""")
+
+      var parallelProcess = startProcess(
+        $atlasRunExe,
+        args = @[
+          "--project:" & $dir,
+          "tests",
+          "--stream",
+          "--jobs:2",
+          "--no-shuffle"
+        ],
+        options = {poStdErrToStdOut}
+      )
+      var parallelOutput = parallelProcess.readUntilMarkers(
+        ["ONE-BEGIN", "TWO-BEGIN"]
+      )
+      check not fileExists($(dir / Path"one.done"))
+      check not fileExists($(dir / Path"two.done"))
+      writeFile($(dir / Path"stream.release"), "release")
+      let parallelExitCode = parallelProcess.waitForExit()
+      parallelOutput.add parallelProcess.outputStream.readAll()
+      parallelProcess.close()
+      check parallelExitCode == 0
+      check "tests/tone.nim output:" in parallelOutput
+      check "tests/ttwo.nim output:" in parallelOutput
+
   test "non-interactive runs print progress summaries":
     let dir = freshDir("atlas_run_only_errors_summaries")
     defer:
@@ -445,7 +552,7 @@ writeFile("two.out", "ok")
     else:
       let (regularOutput, regularExitCode) = execCmdEx(
         quoteShell($atlasRunExe) & " --project:" & quoteShell($dir) &
-          " tests --no-shuffle"
+          " tests --stats --no-shuffle"
       )
       check regularExitCode == 0
       check "atlas-run:" in regularOutput
@@ -454,6 +561,16 @@ writeFile("two.out", "ok")
       check "running" in regularOutput
       check "success" in regularOutput
       check "command: nim c" in regularOutput
+      check "tests/tone.nim stats: compile " in regularOutput
+      check ", run " in regularOutput
+
+      let (compileStatsOutput, compileStatsExitCode) = execCmdEx(
+        quoteShell($atlasRunExe) & " --project:" & quoteShell($dir) &
+          " tests --compile-only --stats --no-shuffle"
+      )
+      check compileStatsExitCode == 0
+      check "tests/tone.nim stats: compile " in compileStatsOutput
+      check ", run " notin compileStatsOutput
 
       let (output, exitCode) = execCmdEx(
         quoteShell($atlasRunExe) & " --project:" & quoteShell($dir) &

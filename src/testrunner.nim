@@ -12,7 +12,7 @@ import std/[
 ]
 
 when defined(posix):
-  from std/posix import Pid, SIGKILL, SIGTERM, killpg, setpgid
+  from std/posix import Pid, SIGKILL, SIGTERM, killpg, read, setpgid
 
 import basic/reporters
 
@@ -29,6 +29,8 @@ type
     shuffle*: bool
     showProgress*: bool
     showOutput*: bool
+    stream*: bool
+    stats*: bool
     onlyErrors*: bool
     showCompilerOutput*: bool
 
@@ -41,6 +43,8 @@ type
     compileOutput*: string
     runOutput*: string
     output*: string
+    compileDurationMs*: int64
+    runDurationMs*: int64
 
   TestStage = enum
     tsQueued, tsCompiling, tsRunning, tsDone, tsFailed
@@ -62,7 +66,7 @@ type
     job: TestJob
 
   TestProgressEventKind = enum
-    tpStarted, tpUpdated, tpFinished
+    tpStarted, tpUpdated, tpOutput, tpFinished
 
   TestProgressEvent = object
     kind: TestProgressEventKind
@@ -73,6 +77,9 @@ type
     compileExitCode: int
     compileOutput: string
     runOutput: string
+    output: string
+    compileDurationMs: int64
+    runDurationMs: int64
 
   TestProgressEventQueue = object
     lock: Lock
@@ -84,6 +91,7 @@ type
     events: ptr TestProgressEventQueue
     registry: ptr TestProcessRegistry
     startLock: ptr Lock
+    stream: bool
 
   ActiveTestProcess = object
     process: Process
@@ -107,6 +115,7 @@ const
   TestProgressRenderIntervalMs = 250
   TestProgressIdleRenderIntervalMs = 250
   TestProgressPollSleepMs = 25
+  TestStreamIntervalMs {.intdefine.} = 5000
   TestProgressQuietMs = 1500
   TestProgressSpinnerFrames = "|/-\\"
   TestProgressLeftPadding = 2
@@ -124,6 +133,8 @@ proc initAtlasTestOptions*(projectDir = Path"";
                            shuffle = true;
                            showProgress = true;
                            showOutput = true;
+                           stream = false;
+                           stats = false;
                            onlyErrors = false;
                            showCompilerOutput = false): AtlasTestOptions =
   AtlasTestOptions(
@@ -138,6 +149,8 @@ proc initAtlasTestOptions*(projectDir = Path"";
     shuffle: shuffle,
     showProgress: showProgress,
     showOutput: showOutput,
+    stream: stream,
+    stats: stats,
     onlyErrors: onlyErrors,
     showCompilerOutput: showCompilerOutput
   )
@@ -651,21 +664,40 @@ proc lineStage(line: string; current: TestStage): TestStage =
   else:
     current
 
+proc readProcessData(p: Process; buffer: pointer; size: int): int =
+  when defined(posix):
+    result = read(cint(p.outputHandle), buffer, size)
+    if result < 0:
+      raiseOSError(osLastError())
+  else:
+    while p.running() and not p.hasData():
+      sleep TestProgressPollSleepMs
+    if p.hasData():
+      result = p.outputStream.readData(buffer, size)
+
 proc readTestOutput(p: Process;
                     jobIndex: int;
                     label: string;
                     events: ptr TestProgressEventQueue;
-                    initialStage: TestStage): tuple[output: string,
-                                                    stage: TestStage] =
+                    initialStage: TestStage;
+                    stream: bool): tuple[output: string, stage: TestStage] =
   result.stage = initialStage
   var buffer = ""
   var chunk = newString(4096)
   while true:
-    let readLen = p.outputStream.readData(addr chunk[0], chunk.len)
+    let readLen = readProcessData(p, addr chunk[0], chunk.len)
     if readLen <= 0:
       break
     let piece = chunk[0..<readLen]
     result.output.add piece
+    if stream:
+      events.pushEvent TestProgressEvent(
+        kind: tpOutput,
+        jobIndex: jobIndex,
+        label: label,
+        stage: initialStage,
+        output: piece
+      )
     for line in outputChunks(buffer, piece):
       let nextStage = lineStage(line, result.stage)
       if nextStage != result.stage:
@@ -723,7 +755,8 @@ proc runTestProcess(job: TestJob;
       indexedJob.index,
       job.label,
       workerArgs.events,
-      stage
+      stage,
+      workerArgs.stream
     )
     result.output = readResult.output
     result.exitCode = waitForExit(process)
@@ -751,34 +784,44 @@ proc testWorker(args: TestWorkerArgs) {.thread.} =
     var runOutput = ""
     var compileExitCode = 130
     var exitCode = 130
+    var compileDurationMs = -1'i64
+    var runDurationMs = -1'i64
     var currentStage = tsCompiling
     try:
       if not cancellationRequested():
         currentStage = tsCompiling
-        let compileResult = runTestProcess(
-          job,
-          indexedJob,
-          job.compileCommand,
-          job.compileArgs,
-          tsCompiling,
-          args
-        )
-        compileOutput = compileResult.output
-        compileExitCode = compileResult.exitCode
-        exitCode = compileExitCode
+        let compileStartedAt = getMonoTime()
+        try:
+          let compileResult = runTestProcess(
+            job,
+            indexedJob,
+            job.compileCommand,
+            job.compileArgs,
+            tsCompiling,
+            args
+          )
+          compileOutput = compileResult.output
+          compileExitCode = compileResult.exitCode
+          exitCode = compileExitCode
+        finally:
+          compileDurationMs = inMilliseconds(getMonoTime() - compileStartedAt)
 
       if exitCode == 0 and not args.compileOnly and not cancellationRequested():
         currentStage = tsRunning
-        let runResult = runTestProcess(
-          job,
-          indexedJob,
-          job.runCommand,
-          job.runArgs,
-          tsRunning,
-          args
-        )
-        runOutput = runResult.output
-        exitCode = runResult.exitCode
+        let runStartedAt = getMonoTime()
+        try:
+          let runResult = runTestProcess(
+            job,
+            indexedJob,
+            job.runCommand,
+            job.runArgs,
+            tsRunning,
+            args
+          )
+          runOutput = runResult.output
+          exitCode = runResult.exitCode
+        finally:
+          runDurationMs = inMilliseconds(getMonoTime() - runStartedAt)
 
       args.events.pushEvent TestProgressEvent(
         kind: tpFinished,
@@ -788,7 +831,9 @@ proc testWorker(args: TestWorkerArgs) {.thread.} =
         exitCode: exitCode,
         compileExitCode: compileExitCode,
         compileOutput: compileOutput,
-        runOutput: runOutput
+        runOutput: runOutput,
+        compileDurationMs: compileDurationMs,
+        runDurationMs: runDurationMs
       )
     except CatchableError as exc:
       if currentStage == tsCompiling:
@@ -804,7 +849,9 @@ proc testWorker(args: TestWorkerArgs) {.thread.} =
         exitCode: 1,
         compileExitCode: compileExitCode,
         compileOutput: compileOutput,
-        runOutput: runOutput
+        runOutput: runOutput,
+        compileDurationMs: compileDurationMs,
+        runDurationMs: runDurationMs
       )
 
 proc effectiveJobs(requested, testCount: int): int =
@@ -854,6 +901,27 @@ proc writeResultSummary(result: AtlasTestResult) =
   writeAtlasRunStatusLine(result.label & " ", statusText, status)
   stdout.flushFile()
 
+proc writeStreamChunk(label, output: string) =
+  if output.len > 0:
+    writeAtlasRunLine(label & " output:")
+    writeOutputText(output)
+    stdout.flushFile()
+
+proc formatTestDuration(milliseconds: int64): string =
+  let
+    milliseconds = max(0'i64, milliseconds)
+    seconds = milliseconds div 1000
+    fraction = milliseconds mod 1000
+  $seconds & "." & align($fraction, 3, '0') & "s"
+
+proc writeResultStats(result: AtlasTestResult) =
+  var message = result.label & " stats: compile " &
+    formatTestDuration(result.compileDurationMs)
+  if result.runDurationMs >= 0:
+    message.add ", run " & formatTestDuration(result.runDurationMs)
+  writeAtlasRunLine(message)
+  stdout.flushFile()
+
 proc writeStartedSummary(label: string; stage: TestStage) =
   let action =
     if stage == tsCompiling:
@@ -866,7 +934,7 @@ proc writeStartedSummary(label: string; stage: TestStage) =
 proc runTestJobs(jobs: seq[TestJob];
                  workerCount: int;
                  showProgress, showOutput: bool;
-                 onlyErrors, showCompilerOutput: bool;
+                 stream, stats, onlyErrors, showCompilerOutput: bool;
                  compileOnly: bool): tuple[
                    results: seq[AtlasTestResult],
                    cancelled: bool
@@ -885,7 +953,10 @@ proc runTestJobs(jobs: seq[TestJob];
     result.results[idx].path = job.path
     result.results[idx].commandLine = job.commandLine
 
-  let renderInteractive = interactiveProgressEnabled(showProgress)
+  let
+    streamOutput = showOutput and stream and not onlyErrors
+    streamDirectly = streamOutput and workerCount == 1
+    renderInteractive = interactiveProgressEnabled(showProgress) and not streamOutput
   var eventQueue: TestProgressEventQueue
   initLock(eventQueue.lock)
   var registry: TestProcessRegistry
@@ -904,7 +975,8 @@ proc runTestJobs(jobs: seq[TestJob];
         compileOnly: compileOnly,
         events: addr eventQueue,
         registry: addr registry,
-        startLock: addr startLock
+        startLock: addr startLock,
+        stream: streamOutput
       )
     )
 
@@ -913,6 +985,17 @@ proc runTestJobs(jobs: seq[TestJob];
   var lastLines = 0
   var lastRenderedBlock = ""
   var cancellationHandled = false
+  var streamBuffers = newSeq[string](jobs.len)
+  var lastStreamFlush = newSeq[MonoTime](jobs.len)
+  for timestamp in mitems(lastStreamFlush):
+    timestamp = startedAt
+  var directStreamLineOpen = false
+
+  template finishDirectStreamLine() =
+    if directStreamLineOpen:
+      stdout.write "\n"
+      stdout.flushFile()
+      directStreamLineOpen = false
 
   installCancellationHook()
   while finished < jobs.len:
@@ -921,6 +1004,7 @@ proc runTestJobs(jobs: seq[TestJob];
     if cancellationRequested() and not cancellationHandled:
       result.cancelled = true
       cancellationHandled = true
+      finishDirectStreamLine()
       if renderInteractive:
         clearInteractiveBlock(lastLines)
         lastRenderedBlock = ""
@@ -935,7 +1019,10 @@ proc runTestJobs(jobs: seq[TestJob];
         states[ev.jobIndex].stage = ev.stage
         states[ev.jobIndex].lastActivityAt = now
         if showOutput and not renderInteractive and not result.cancelled:
+          finishDirectStreamLine()
           writeStartedSummary(ev.label, ev.stage)
+          if streamOutput:
+            writeAtlasRunLine("command: " & result.results[ev.jobIndex].commandLine)
       of tpUpdated:
         let previousStage = states[ev.jobIndex].stage
         states[ev.jobIndex].running = true
@@ -943,7 +1030,17 @@ proc runTestJobs(jobs: seq[TestJob];
         states[ev.jobIndex].lastActivityAt = now
         if showOutput and not renderInteractive and not result.cancelled and
             previousStage != ev.stage:
+          finishDirectStreamLine()
           writeStartedSummary(ev.label, ev.stage)
+      of tpOutput:
+        if streamOutput and not result.cancelled and
+            (ev.stage == tsRunning or showCompilerOutput):
+          if streamDirectly:
+            stdout.write ev.output
+            stdout.flushFile()
+            directStreamLineOpen = not ev.output.endsWith("\n")
+          else:
+            streamBuffers[ev.jobIndex].add ev.output
       of tpFinished:
         states[ev.jobIndex].running = false
         states[ev.jobIndex].finished = true
@@ -955,21 +1052,46 @@ proc runTestJobs(jobs: seq[TestJob];
         result.results[ev.jobIndex].compileOutput = ev.compileOutput
         result.results[ev.jobIndex].runOutput = ev.runOutput
         result.results[ev.jobIndex].output = ev.compileOutput & ev.runOutput
+        result.results[ev.jobIndex].compileDurationMs = ev.compileDurationMs
+        result.results[ev.jobIndex].runDurationMs = ev.runDurationMs
         inc finished
         let shouldWriteOutput = showOutput and not result.cancelled and
           (not onlyErrors or ev.exitCode != 0)
-        if shouldWriteOutput:
+        let shouldWriteSuccessSummary = showOutput and onlyErrors and
+          not renderInteractive and not result.cancelled and ev.exitCode == 0
+        let shouldWriteStats = stats and not result.cancelled
+        if shouldWriteOutput or shouldWriteSuccessSummary or shouldWriteStats:
+          finishDirectStreamLine()
           if renderInteractive:
             clearInteractiveBlock(lastLines)
             lastRenderedBlock = ""
-          writeResultChunk(result.results[ev.jobIndex], showCompilerOutput)
+          if shouldWriteOutput:
+            if streamOutput:
+              if not streamDirectly:
+                writeStreamChunk(ev.label, streamBuffers[ev.jobIndex])
+                streamBuffers[ev.jobIndex].setLen(0)
+              if ev.compileExitCode != 0 and not showCompilerOutput:
+                writeResultChunk(result.results[ev.jobIndex], showCompilerOutput)
+              else:
+                writeResultSummary(result.results[ev.jobIndex])
+            else:
+              writeResultChunk(result.results[ev.jobIndex], showCompilerOutput)
+          elif shouldWriteSuccessSummary:
+            writeResultSummary(result.results[ev.jobIndex])
+          if shouldWriteStats:
+            writeResultStats(result.results[ev.jobIndex])
           if renderInteractive:
             if renderInteractiveNow(states, now, lastLines, lastRenderedBlock):
               lastRender = now
-        elif showOutput and onlyErrors and not renderInteractive and
-            not result.cancelled and ev.exitCode == 0:
-          writeResultSummary(result.results[ev.jobIndex])
       changed = true
+
+    if streamOutput and not streamDirectly and not result.cancelled:
+      for idx in 0..<streamBuffers.len:
+        if streamBuffers[idx].len > 0 and
+            inMilliseconds(now - lastStreamFlush[idx]) >= TestStreamIntervalMs:
+          writeStreamChunk(states[idx].label, streamBuffers[idx])
+          streamBuffers[idx].setLen(0)
+          lastStreamFlush[idx] = now
 
     if renderInteractive and changed and
         inMilliseconds(now - lastRender) >= TestProgressRenderIntervalMs:
@@ -1029,6 +1151,8 @@ proc runAtlasTests*(options: AtlasTestOptions): int =
     workerCount,
     options.showProgress,
     options.showOutput,
+    options.stream,
+    options.stats,
     options.onlyErrors,
     options.showCompilerOutput,
     options.compileOnly
