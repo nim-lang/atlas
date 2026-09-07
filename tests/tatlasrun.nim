@@ -457,7 +457,10 @@ import std/os
 
 echo "ONE-BEGIN"
 stdout.flushFile()
-sleep 900
+var waited = 0
+while not fileExists("stream.release") and waited < 5000:
+  sleep 25
+  inc waited, 25
 writeFile("one.done", "done")
 """)
 
@@ -483,6 +486,7 @@ writeFile("one.done", "done")
       )
       var singleOutput = singleProcess.readUntilMarkers(["ONE-BEGIN"])
       check not fileExists($(dir / Path"one.done"))
+      writeFile($(dir / Path"stream.release"), "release")
       let singleExitCode = singleProcess.waitForExit()
       singleOutput.add singleProcess.outputStream.readAll()
       singleProcess.close()
@@ -491,12 +495,16 @@ writeFile("one.done", "done")
       check "tests/tone.nim output:" notin singleOutput
 
       removeFile($(dir / Path"one.done"))
+      removeFile($(dir / Path"stream.release"))
       writeFile($(testsDir / Path"ttwo.nim"), """
 import std/os
 
 echo "TWO-BEGIN"
 stdout.flushFile()
-sleep 900
+var waited = 0
+while not fileExists("stream.release") and waited < 5000:
+  sleep 25
+  inc waited, 25
 writeFile("two.done", "done")
 """)
 
@@ -516,6 +524,7 @@ writeFile("two.done", "done")
       )
       check not fileExists($(dir / Path"one.done"))
       check not fileExists($(dir / Path"two.done"))
+      writeFile($(dir / Path"stream.release"), "release")
       let parallelExitCode = parallelProcess.waitForExit()
       parallelOutput.add parallelProcess.outputStream.readAll()
       parallelProcess.close()
