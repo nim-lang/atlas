@@ -18,7 +18,7 @@ const Usage = "atlas-run - Atlas project runner Version " & AtlasVersion & """
 Usage:
   atlas-run [options] task [--list | task-name [arguments]]
   atlas-run [options] build [--list] [-- nim-arg...]
-  atlas-run [options] tests [--list] [--jobs:N] [--compile-only] [selector...] [--skip selector...] [-- [nim-arg...]]
+  atlas-run [options] tests [--list] [--jobs:N] [--stream] [--stats] [--compile-only] [selector...] [--skip selector...] [-- [nim-arg...]]
 
 Commands:
   task                  list or run tasks declared in the project's Nimble file
@@ -35,6 +35,8 @@ Options:
   --nim=path            use the Nim executable at path
   --list                list tasks or tests without running them
   --jobs=N, -j:N        number of parallel test jobs, or auto
+  --stream              periodically print output from running tests
+  --stats               print compile and run time for each test
   --nimcache=path       test cache root; each test gets a subdirectory
   --no-shuffle          run tests in sorted discovery order
   --only-errors         only print output chunks for failed tests
@@ -65,6 +67,8 @@ type
     jobs: int
     testOptionsSeen: bool
     shuffle: bool
+    stream: bool
+    stats: bool
     onlyErrors: bool
     showCompilerOutput: bool
     compileOnly: bool
@@ -198,6 +202,12 @@ proc parseCliOptions(params: seq[string]): CliOptions =
       of "no-shuffle":
         result.testOptionsSeen = true
         result.shuffle = false
+      of "stream":
+        result.testOptionsSeen = true
+        result.stream = true
+      of "stats":
+        result.testOptionsSeen = true
+        result.stats = true
       of "only-errors":
         result.testOptionsSeen = true
         result.onlyErrors = true
@@ -324,6 +334,8 @@ proc atlasRunMain*(params: seq[string]): int =
       compilerArgs = opts.testCompilerArgs,
       compileOnly = opts.compileOnly,
       shuffle = opts.shuffle,
+      stream = opts.stream,
+      stats = opts.stats,
       onlyErrors = opts.onlyErrors,
       showCompilerOutput = opts.showCompilerOutput
     ))

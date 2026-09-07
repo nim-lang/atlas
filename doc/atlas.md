@@ -79,8 +79,9 @@ Unofficial URLs, including forks, use a name triplet of the form
 name. For example, Atlas would be `atlas.nim-lang.github.com`. Packages can be
 added using `nameOverrides` in `atlas.config`, which adds a new name-to-URL
 mapping.
-Atlas downloads `packages.json` into `deps/_packages` by default; pass
-`--packagesRepo` to keep the git-clone behavior for the full packages repo.
+Atlas downloads `packages.json` from the `nim-lang/packages` GitHub repository
+into `deps/_packages` by default; pass `--packagesRepo` to keep the git-clone
+behavior for the full packages repo.
 If dependency URLs use `git://`, pass `--forceGitToHttps` to rewrite them to
 `https://` before cloning.
 
@@ -291,7 +292,10 @@ atlas-run build -- -d:release --mm:orc
 Use `atlas-run tests` to run project tests matching `tests/t*.nim` in parallel.
 Successful compiler output is hidden by default; use `--compiler-output` to
 include it, and `--only-errors` to print only failed test chunks. Use
-`--compile-only` to compile matching tests without running them:
+`--stream` to print output as it arrives with `--jobs:1`, or in labeled chunks
+about every five seconds when tests run in parallel. `--stats` prints the
+compile and run time for each test. Use `--compile-only` to compile matching
+tests without running them:
 
 Selectors are positional arguments. A selector can be a test module name,
 filename, relative path, absolute path, or glob pattern; multiple selectors run
@@ -309,6 +313,8 @@ normal selectors to remove matching tests from the selected set.
 ```
 atlas-run tests
 atlas-run tests --jobs:4
+atlas-run tests --stream
+atlas-run tests --stats
 atlas-run tests --nimcache:deps/.nimcache/atlas-run
 atlas-run tests --no-shuffle
 atlas-run tests --only-errors
