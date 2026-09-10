@@ -269,8 +269,8 @@ in its description (or name or list of tags).
 
 Use the project's `.nimble` file to set up dependencies.
 
-Dependency repositories are cloned and updated in parallel by default, using up
-to four workers. Use `--no-thread`/`-T` to process them sequentially. The legacy
+Dependency repositories are cloned and updated in parallel by default, using
+four workers by default. Use `--no-thread`/`-T` to process them sequentially. The legacy
 `-t` option remains accepted, and `--parallel[=count]`/`-t[=count]` can still
 select the worker count.
 
