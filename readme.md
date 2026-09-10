@@ -32,6 +32,12 @@ curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
 
 Supported installer environment variables: `ATLAS_INSTALL_DIR`, `ATLAS_REF`, `ATLAS_REPO_URL`, `ATLAS_TMP_ROOT`.
 
+If you're using Nimble you can install the latest Atlas with:
+
+```sh
+nimble install "https://github.com/nim-lang/atlas@#head"
+```
+
 ## Windows installation
 
 From PowerShell, run the native Windows installer:
@@ -53,12 +59,6 @@ curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | ba
 The Bash command detects Git Bash/MSYS and downloads the native Windows
 release. In WSL, it installs the Linux build into WSL instead.
 
-
-If you're using Nimble you can install the latest Atlas with:
-
-```sh
-nimble install "https://github.com/nim-lang/atlas@#head"
-```
 
 # Documentation
 
