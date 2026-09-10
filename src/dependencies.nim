@@ -340,6 +340,16 @@ proc processPendingPackages(
           processing = true
           continue
 
+        # Local file dependencies are copied by loadDependency and do not go
+        # through the parallel git clone queue. Keep its empty `ondisk`
+        # precondition intact by handling them before preparing the queued
+        # clone path below.
+        if pkg.url.isFileProtocol:
+          nc.loadDependency(pkg, onClone)
+          trace pkg.projectName, "expanded pkg:", pkg.repr
+          processing = true
+          continue
+
         let officialUrl = nc.lookup(pkg.projectName())
         let isFork = pkg.isFork
 
@@ -371,10 +381,6 @@ proc processPendingPackages(
           if onClone == DoNothing:
             pkg.state = Error
             pkg.errors.add "Not found"
-          elif pkg.url.isFileProtocol:
-            nc.loadDependency(pkg, onClone)
-            trace pkg.projectName, "expanded pkg:", pkg.repr
-            processing = true
           else:
             let checkoutDir = pkg.prepareCloneCheckoutDir()
             cloneJobs.add PendingCloneJob(
