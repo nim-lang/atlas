@@ -21,7 +21,8 @@ Install with the bootstrap script:
 curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | bash -
 ```
 
-This clones and builds Atlas in `/tmp` and installs `atlas` and `atlas-run` into
+This downloads the latest prebuilt release when available, falling back to
+cloning and building Atlas in `/tmp`, and installs `atlas` and `atlas-run` into
 `~/.nimble/bin` by default. To install somewhere else:
 
 ```sh
@@ -30,6 +31,27 @@ curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
 ```
 
 Supported installer environment variables: `ATLAS_INSTALL_DIR`, `ATLAS_REF`, `ATLAS_REPO_URL`, `ATLAS_TMP_ROOT`.
+
+## Windows installation
+
+From PowerShell, run the native Windows installer:
+
+```powershell
+Invoke-Expression (Invoke-RestMethod 'https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.ps1')
+```
+
+It downloads the latest native Windows release and installs `atlas.exe` and
+`atlas-run.exe` into `$env:USERPROFILE\.nimble\bin`. Add
+`%USERPROFILE%\.nimble\bin` to your Windows `PATH` if needed.
+
+The Bash installer also works from Git Bash (included with Git for Windows):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | bash -
+```
+
+The Bash command detects Git Bash/MSYS and downloads the native Windows
+release. In WSL, it installs the Linux build into WSL instead.
 
 
 If you're using Nimble you can install the latest Atlas with:
