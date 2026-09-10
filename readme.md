@@ -30,7 +30,7 @@ curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | \
   ATLAS_INSTALL_DIR="$HOME/.local/bin" bash -
 ```
 
-Supported installer environment variables: `ATLAS_INSTALL_DIR`, `ATLAS_REF`, `ATLAS_REPO_URL`, `ATLAS_TMP_ROOT`.
+Supported installer environment variables: `ATLAS_INSTALL_DIR`, `ATLAS_REF`, `ATLAS_REPO_URL`, `ATLAS_TMP_ROOT`, `ATLAS_WINDOWS_DLLS_URL`, and `ATLAS_ADD_TO_PATH` (`1`, `true`, or `yes` for PowerShell).
 
 If you're using Nimble you can install the latest Atlas with:
 
@@ -47,8 +47,16 @@ Invoke-Expression (Invoke-RestMethod 'https://raw.githubusercontent.com/nim-lang
 ```
 
 It downloads the latest native Windows release and installs `atlas.exe` and
-`atlas-run.exe` into `$env:USERPROFILE\.nimble\bin`. Add
+`atlas-run.exe` into `$env:USERPROFILE\.nimble\bin`, including the OpenSSL DLLs
+and CA certificate bundle Atlas needs for HTTPS. Add
 `%USERPROFILE%\.nimble\bin` to your Windows `PATH` if needed.
+
+To add the install directory to your user `PATH` automatically, pass
+`-AddToPath` to the PowerShell installer:
+
+```powershell
+& ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.ps1'))) -AddToPath
+```
 
 The Bash installer also works from Git Bash (included with Git for Windows):
 
@@ -58,6 +66,11 @@ curl -fsSL https://raw.githubusercontent.com/nim-lang/atlas/HEAD/install.sh | ba
 
 The Bash command detects Git Bash/MSYS and downloads the native Windows
 release. In WSL, it installs the Linux build into WSL instead.
+
+The Bash installer also installs the Windows OpenSSL DLLs and CA certificate
+bundle. For older releases that do not include them, it downloads the official
+Nim Windows support files from `ATLAS_WINDOWS_DLLS_URL` (default:
+`https://nim-lang.org/download/windeps.zip`).
 
 
 # Documentation

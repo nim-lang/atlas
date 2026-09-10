@@ -1,3 +1,7 @@
+param(
+  [switch]$AddToPath
+)
+
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
@@ -34,6 +38,15 @@ if ([string]::IsNullOrWhiteSpace($tmpRoot)) {
 
 $tmpDir = Join-Path $tmpRoot ("atlas-install-" + [Guid]::NewGuid().ToString("N"))
 
+$windowsDllsUrl = $env:ATLAS_WINDOWS_DLLS_URL
+if ([string]::IsNullOrWhiteSpace($windowsDllsUrl)) {
+  $windowsDllsUrl = "https://nim-lang.org/download/windeps.zip"
+}
+
+if (-not $AddToPath -and $env:ATLAS_ADD_TO_PATH -match "^(1|true|yes)$") {
+  $AddToPath = $true
+}
+
 function Get-ReleaseArchive {
   $architecture = $env:PROCESSOR_ARCHITEW6432
   if ([string]::IsNullOrWhiteSpace($architecture)) {
@@ -66,10 +79,127 @@ function Get-ReleaseBaseUrl([string]$url) {
   return "$repo/releases/latest/download"
 }
 
-function Install-Binaries([string]$atlasSource, [string]$atlasRunSource) {
+function Get-WindowsRuntimeFiles([string]$archive) {
+  switch ($archive) {
+    "atlas-windows-amd64.zip" {
+      return @("cacert.pem", "libcrypto-1_1-x64.dll", "libssl-1_1-x64.dll")
+    }
+    "atlas-windows-i386.zip" {
+      return @("cacert.pem", "libcrypto-1_1.dll", "libssl-1_1.dll")
+    }
+    default {
+      throw "unsupported Windows release archive $archive"
+    }
+  }
+}
+
+function Find-WindowsRuntimeFile([string]$sourceDir, [string]$name) {
+  $file = Get-ChildItem -LiteralPath $sourceDir -Recurse -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -ieq $name } |
+    Select-Object -First 1
+  if ($null -eq $file) {
+    return $null
+  }
+  return $file
+}
+
+function Install-WindowsRuntime([string]$sourceDir, [string]$archive) {
+  $runtimeFiles = @(Get-WindowsRuntimeFiles $archive)
+  $sources = @{}
+  foreach ($name in $runtimeFiles) {
+    $source = Find-WindowsRuntimeFile $sourceDir $name
+    if ($null -eq $source) {
+      throw "Windows runtime file $name was not found"
+    }
+    $sources[$name] = $source.FullName
+  }
+
+  foreach ($name in $runtimeFiles) {
+    $destination = Join-Path $installDir $name
+    if ([IO.Path]::GetFullPath($sources[$name]) -ine [IO.Path]::GetFullPath($destination)) {
+      Copy-Item -Force -LiteralPath $sources[$name] -Destination $destination
+    }
+  }
+}
+
+function Ensure-WindowsRuntime([string]$sourceDir, [string]$archive) {
+  try {
+    Install-WindowsRuntime $sourceDir $archive
+    return
+  } catch {
+    Write-Host "install.ps1: Windows release is missing SSL runtime files; downloading Nim support files"
+  }
+
+  $runtimeArchivePath = Join-Path $tmpDir "windeps.zip"
+  $runtimeDir = Join-Path $tmpDir "windows-runtime"
+  $null = New-Item -ItemType Directory -Force -Path $runtimeDir
+  Invoke-WebRequest -UseBasicParsing `
+    -Uri $windowsDllsUrl -OutFile $runtimeArchivePath
+  Expand-Archive -LiteralPath $runtimeArchivePath -DestinationPath $runtimeDir -Force
+  Install-WindowsRuntime $runtimeDir $archive
+}
+
+function Test-PathContains([string]$directory) {
+  $candidate = [IO.Path]::GetFullPath($directory).TrimEnd("\")
+  $pathValues = @(
+    $env:Path,
+    [Environment]::GetEnvironmentVariable("Path", "User"),
+    [Environment]::GetEnvironmentVariable("Path", "Machine")
+  )
+  foreach ($pathValue in $pathValues) {
+    if ([string]::IsNullOrWhiteSpace($pathValue)) {
+      continue
+    }
+    foreach ($entry in ($pathValue -split ";")) {
+      if ([string]::IsNullOrWhiteSpace($entry)) {
+        continue
+      }
+      $expanded = [Environment]::ExpandEnvironmentVariables($entry.Trim().Trim('"'))
+      try {
+        $expanded = [IO.Path]::GetFullPath($expanded).TrimEnd("\")
+      } catch {
+        # Compare the unnormalized entry below if it is not a valid filesystem path.
+      }
+      if ($expanded -ieq $candidate) {
+        return $true
+      }
+    }
+  }
+  return $false
+}
+
+function Add-UserPathEntry([string]$directory) {
+  if (Test-PathContains $directory) {
+    Write-Host "install.ps1: $directory is already in PATH"
+    return
+  }
+
+  $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+  $newPath =
+    if ([string]::IsNullOrWhiteSpace($userPath)) {
+      $directory
+    } else {
+      "$userPath;$directory"
+    }
+  [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
+  $env:Path = "$directory;$env:Path"
+  Write-Host "install.ps1: added $directory to the user PATH"
+  Write-Host "install.ps1: PATH changes take effect in new terminals"
+}
+
+function Install-Binaries(
+  [string]$atlasSource,
+  [string]$atlasRunSource,
+  [string]$archive = "",
+  [string]$runtimeSourceDir = ""
+) {
   $null = New-Item -ItemType Directory -Force -Path $installDir
   $installedAtlas = Join-Path $installDir "atlas.exe"
   $installedAtlasRun = Join-Path $installDir "atlas-run.exe"
+
+  if (-not [string]::IsNullOrWhiteSpace($archive)) {
+    Ensure-WindowsRuntime $runtimeSourceDir $archive
+  }
 
   foreach ($path in @(
       (Join-Path $installDir "atlas"),
@@ -98,17 +228,9 @@ function Install-Binaries([string]$atlasSource, [string]$atlasRunSource) {
   Write-Host $atlasVersion
   Write-Host $atlasRunVersion
 
-  $pathContainsInstallDir = $false
-  if (-not [string]::IsNullOrWhiteSpace($env:Path)) {
-    $normalizedInstallDir = [IO.Path]::GetFullPath($installDir).TrimEnd("\")
-    foreach ($entry in ($env:Path -split ";")) {
-      if ($entry.TrimEnd("\") -ieq $normalizedInstallDir) {
-        $pathContainsInstallDir = $true
-        break
-      }
-    }
-  }
-  if (-not $pathContainsInstallDir) {
+  if ($AddToPath) {
+    Add-UserPathEntry $installDir
+  } elseif (-not (Test-PathContains $installDir)) {
     Write-Warning "add $installDir to your user PATH to run atlas directly"
   }
 }
@@ -152,7 +274,8 @@ function Try-InstallRelease {
     }
 
     Install-Binaries -atlasSource ($atlasBins[0].FullName) `
-      -atlasRunSource ($atlasRunBins[0].FullName)
+      -atlasRunSource ($atlasRunBins[0].FullName) `
+      -archive $archive -runtimeSourceDir $extractDir
     return $true
   } catch {
     Write-Warning "release asset installation failed; falling back to building from source: $($_.Exception.Message)"
@@ -207,7 +330,10 @@ function Install-FromSource {
       throw "build did not produce atlas and atlas-run"
     }
 
-    Install-Binaries $atlasSource $atlasRunSource
+    $nimBinDir = Split-Path -Parent (Get-Command nim).Source
+    Install-Binaries -atlasSource $atlasSource `
+      -atlasRunSource $atlasRunSource `
+      -archive (Get-ReleaseArchive) -runtimeSourceDir $nimBinDir
   } finally {
     Pop-Location
   }

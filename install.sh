@@ -7,6 +7,7 @@ ATLAS_INSTALL_DIR="${ATLAS_INSTALL_DIR:-$HOME/.nimble/bin}"
 ATLAS_REF="${ATLAS_REF:-}"
 ATLAS_TMP_ROOT="${ATLAS_TMP_ROOT:-${TMP:-/tmp}}"
 ATLAS_GITHUB_REPO="${ATLAS_GITHUB_REPO:-nim-lang/atlas}"
+ATLAS_WINDOWS_DLLS_URL="${ATLAS_WINDOWS_DLLS_URL:-https://nim-lang.org/download/windeps.zip}"
 
 need_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -89,6 +90,90 @@ github_release_base_url() {
   esac
 }
 
+windows_runtime_files() {
+  case "$1" in
+    atlas-windows-amd64.zip)
+      printf '%s\n' cacert.pem libcrypto-1_1-x64.dll libssl-1_1-x64.dll
+      ;;
+    atlas-windows-i386.zip)
+      printf '%s\n' cacert.pem libcrypto-1_1.dll libssl-1_1.dll
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+windows_runtime_available() {
+  local source_dir="$1"
+  local archive="$2"
+  local runtime_file
+  local source_file
+
+  while IFS= read -r runtime_file; do
+    source_file="$(find "$source_dir" -type f -name "$runtime_file" -print -quit)"
+    if [ -z "$source_file" ]; then
+      return 1
+    fi
+  done < <(windows_runtime_files "$archive")
+  return 0
+}
+
+copy_windows_runtime() {
+  local source_dir="$1"
+  local target_dir="$2"
+  local archive="$3"
+  local runtime_file
+  local source_file
+
+  while IFS= read -r runtime_file; do
+    source_file="$(find "$source_dir" -type f -name "$runtime_file" -print -quit)"
+    if ! cp "$source_file" "$target_dir/$runtime_file"; then
+      return 1
+    fi
+  done < <(windows_runtime_files "$archive")
+  return 0
+}
+
+ensure_windows_runtime() {
+  local source_dir="$1"
+  local target_dir="$2"
+  local archive="$3"
+  local runtime_archive
+  local runtime_dir
+
+  case "$archive" in
+    atlas-windows-amd64.zip | atlas-windows-i386.zip) ;;
+    *) return 0 ;;
+  esac
+
+  if windows_runtime_available "$source_dir" "$archive"; then
+    copy_windows_runtime "$source_dir" "$target_dir" "$archive"
+    return 0
+  fi
+
+  if ! has_cmd curl || ! has_cmd unzip; then
+    return 1
+  fi
+
+  echo "install.sh: release is missing Windows SSL runtime files; downloading Nim support files" >&2
+  runtime_archive="$ATLAS_TMP_DIR/windeps.zip"
+  runtime_dir="$ATLAS_TMP_DIR/windows-runtime"
+  if ! curl -fL "$ATLAS_WINDOWS_DLLS_URL" -o "$runtime_archive"; then
+    return 1
+  fi
+  if ! mkdir -p "$runtime_dir"; then
+    return 1
+  fi
+  if ! unzip -q "$runtime_archive" -d "$runtime_dir"; then
+    return 1
+  fi
+  if ! windows_runtime_available "$runtime_dir" "$archive"; then
+    return 1
+  fi
+  copy_windows_runtime "$runtime_dir" "$target_dir" "$archive"
+}
+
 install_release_archive() {
   local archive
   local release_base_url
@@ -159,11 +244,21 @@ install_release_archive() {
   cp "$atlas_bin" "$installed_atlas"
   cp "$atlas_run_bin" "$installed_atlas_run"
   chmod +x "$installed_atlas" "$installed_atlas_run"
+  if ! ensure_windows_runtime "$extract_dir" "$ATLAS_INSTALL_DIR" "$archive"; then
+    echo "install.sh: required Windows runtime files are unavailable; falling back to building from source" >&2
+    return 1
+  fi
 
   echo "install.sh: installed atlas to $installed_atlas" >&2
   echo "install.sh: installed atlas-run to $installed_atlas_run" >&2
-  "$installed_atlas" --version
-  "$installed_atlas_run" --version
+  if ! "$installed_atlas" --version; then
+    echo "install.sh: atlas failed to start; required runtime files may be missing" >&2
+    return 1
+  fi
+  if ! "$installed_atlas_run" --version; then
+    echo "install.sh: atlas-run failed to start; required runtime files may be missing" >&2
+    return 1
+  fi
   case ":$PATH:" in
     *":$ATLAS_INSTALL_DIR:"*) ;;
     *)
@@ -175,6 +270,12 @@ install_release_archive() {
 
 install_from_source() {
   local source_dir
+  local source_atlas
+  local source_atlas_run
+  local installed_atlas
+  local installed_atlas_run
+  local windows_archive
+  local nim_bin_dir
 
   need_cmd git
   need_cmd nim
@@ -193,20 +294,59 @@ install_from_source() {
   echo "install.sh: building atlas" >&2
   nim buildRelease
 
-  mkdir -p "$ATLAS_INSTALL_DIR"
-  rm -f "$ATLAS_INSTALL_DIR/atlas" "$ATLAS_INSTALL_DIR/atlas-run"
-  cp "bin/atlas" "$ATLAS_INSTALL_DIR/atlas"
-  cp "bin/atlas-run" "$ATLAS_INSTALL_DIR/atlas-run"
-  chmod +x "$ATLAS_INSTALL_DIR/atlas" "$ATLAS_INSTALL_DIR/atlas-run"
+  source_atlas="bin/atlas"
+  source_atlas_run="bin/atlas-run"
+  if [ ! -f "$source_atlas" ] && [ -f "bin/atlas.exe" ]; then
+    source_atlas="bin/atlas.exe"
+  fi
+  if [ ! -f "$source_atlas_run" ] && [ -f "bin/atlas-run.exe" ]; then
+    source_atlas_run="bin/atlas-run.exe"
+  fi
+  if [ ! -f "$source_atlas" ] || [ ! -f "$source_atlas_run" ]; then
+    echo "install.sh: build did not produce atlas and atlas-run" >&2
+    return 1
+  fi
 
-  echo "install.sh: installed atlas to $ATLAS_INSTALL_DIR/atlas" >&2
-  echo "install.sh: installed atlas-run to $ATLAS_INSTALL_DIR/atlas-run" >&2
-  if command -v "$ATLAS_INSTALL_DIR/atlas" >/dev/null 2>&1; then
-    "$ATLAS_INSTALL_DIR/atlas" --version
-    "$ATLAS_INSTALL_DIR/atlas-run" --version
+  mkdir -p "$ATLAS_INSTALL_DIR"
+  case "$source_atlas" in
+    *.exe) installed_atlas="$ATLAS_INSTALL_DIR/atlas.exe" ;;
+    *) installed_atlas="$ATLAS_INSTALL_DIR/atlas" ;;
+  esac
+  case "$source_atlas_run" in
+    *.exe) installed_atlas_run="$ATLAS_INSTALL_DIR/atlas-run.exe" ;;
+    *) installed_atlas_run="$ATLAS_INSTALL_DIR/atlas-run" ;;
+  esac
+  rm -f "$ATLAS_INSTALL_DIR/atlas" "$ATLAS_INSTALL_DIR/atlas.exe" \
+    "$ATLAS_INSTALL_DIR/atlas-run" "$ATLAS_INSTALL_DIR/atlas-run.exe"
+  cp "$source_atlas" "$installed_atlas"
+  cp "$source_atlas_run" "$installed_atlas_run"
+  chmod +x "$installed_atlas" "$installed_atlas_run"
+
+  windows_archive="$(detect_release_archive || true)"
+  if [ -n "$windows_archive" ]; then
+    nim_bin_dir="$(dirname "$(command -v nim)")"
+    if ! ensure_windows_runtime "$nim_bin_dir" "$ATLAS_INSTALL_DIR" "$windows_archive"; then
+      echo "install.sh: required Windows runtime files are unavailable" >&2
+      return 1
+    fi
+  fi
+
+  echo "install.sh: installed atlas to $installed_atlas" >&2
+  echo "install.sh: installed atlas-run to $installed_atlas_run" >&2
+  if command -v "$installed_atlas" >/dev/null 2>&1; then
+    if ! "$installed_atlas" --version; then
+      return 1
+    fi
+    if ! "$installed_atlas_run" --version; then
+      return 1
+    fi
   else
-    "$ATLAS_INSTALL_DIR/atlas" --version
-    "$ATLAS_INSTALL_DIR/atlas-run" --version
+    if ! "$installed_atlas" --version; then
+      return 1
+    fi
+    if ! "$installed_atlas_run" --version; then
+      return 1
+    fi
     case ":$PATH:" in
       *":$ATLAS_INSTALL_DIR:"*) ;;
       *)

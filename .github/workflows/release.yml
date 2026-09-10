@@ -148,6 +148,15 @@ jobs:
           fi
           cp license.txt readme.md "$package_dir/"
           if [[ '${{ matrix.target.os }}' == 'windows' ]]; then
+            dll_dir="external/dlls-${{ matrix.target.setup_arch }}"
+            cp "$dll_dir/cacert.pem" "$package_dir/"
+            if [[ '${{ matrix.target.arch }}' == 'amd64' ]]; then
+              cp "$dll_dir/libcrypto-1_1-x64.dll" "$package_dir/"
+              cp "$dll_dir/libssl-1_1-x64.dll" "$package_dir/"
+            else
+              cp "$dll_dir/libcrypto-1_1.dll" "$package_dir/"
+              cp "$dll_dir/libssl-1_1.dll" "$package_dir/"
+            fi
             (cd dist && 7z a "${{ matrix.target.archive }}" "${{ matrix.target.artifact }}")
           else
             tar -czf "dist/${{ matrix.target.archive }}" -C dist "${{ matrix.target.artifact }}"
