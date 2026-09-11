@@ -34,6 +34,11 @@ type
     formula*: Formular
     mapping*: Table[VarId, SatVarInfo]
     idgen: int32
+    noVersionsFound: seq[string]
+
+  NoVersionIssues = ref object
+    messages: seq[string]
+    seen: HashSet[string]
 
 template withOpenBr(b, op, blk) =
   b.openOpr(op)
@@ -240,8 +245,18 @@ proc collectUnsatisfiedContextFeatures(graph: DepGraph): seq[string] =
     elif declaredInNimble and not featureSatisfied:
       result.add qualified
 
-proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
-  var anyReleaseSatisfied = false
+proc trackNoVersionsFound(issues: NoVersionIssues; issue: string) =
+  if issue notin issues.seen:
+    issues.seen.incl issue
+    issues.messages.add issue
+
+proc addVersionConstraints(
+    b: var Builder;
+    graph: var DepGraph;
+    pkg: Package;
+    issues: NoVersionIssues
+) =
+  var hasValidRelease = false
 
   proc checkDeps(graph: var DepGraph, ver: PackageVersion, reqs: seq[(PkgUrl, VersionInterval)]): tuple[allDepsCompatible: bool, unmatchedDeps: seq[string]] =
     result.allDepsCompatible = true
@@ -252,6 +267,10 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
         debug pkg.url.projectName, "checking dependency for ", $ver, "not found:", $dep
         result.allDepsCompatible = false
         result.unmatchedDeps.add($dep.projectName & " " & $query & " (not found)")
+        issues.trackNoVersionsFound(
+          pkg.url.projectName & ": no versions matched requirements for the dependency: " &
+          $dep.projectName & " " & $query & " (not found)"
+        )
         continue
       debug pkg.url.projectName, "checking dependency for ", $ver, ":", $dep.projectName, "query:", $query
       let depNode = graph.pkgs[dep]
@@ -272,22 +291,21 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
       if not hasCompatible:
         result.allDepsCompatible = false
         result.unmatchedDeps.add($dep.projectName & " " & $query)
-        warn pkg.url.projectName, "no versions matched requirements for the dependency:", $dep.projectName
+        issues.trackNoVersionsFound(
+          pkg.url.projectName & ": no versions matched requirements for the dependency: " &
+          $dep.projectName & " " & $query
+        )
       else:
         debug pkg.url.projectName, "a compatible version matched requirements for the dependency version:", $depNode.url.projectName
 
   for ver, rel in validVersions(pkg):
+    hasValidRelease = true
     let depCheck = checkDeps(graph, ver, rel.requirements)
 
     # If any dependency can't be satisfied, make this version unsatisfiable
     if not depCheck.allDepsCompatible:
-      warn pkg.url.projectName, "all requirements needed for nimble release:", $ver, "were not able to be satisfied:", $rel.requirements.mapIt(it[0].projectName & " " & $it[1]).join("; ")
-      if depCheck.unmatchedDeps.len > 0:
-        warn pkg.url.projectName, "deps with no matching releases:", depCheck.unmatchedDeps.join("; ")
       b.addNegated(ver.vid)
       continue
-
-    anyReleaseSatisfied = true
 
     # Add implications for each dependency
     for dep, query in items(rel.requirements):
@@ -331,7 +349,13 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
 
       debug pkg.url.projectName, "checking feature dep:", $feature, "query:", $reqs, "compat versions:", $featDepCheck.allDepsCompatible
       if not featDepCheck.allDepsCompatible:
-        warn pkg.url.projectName, "all requirements needed for feature:", qualifiedFeature, "were not able to be satisfied:", $reqs.mapIt(it[0].projectName & " " & $it[1]).join("; "), "deps with no matching releases:", featDepCheck.unmatchedDeps.join("; ")
+        issues.trackNoVersionsFound(
+          pkg.url.projectName & ": all requirements needed for feature " &
+          qualifiedFeature & " were not able to be satisfied: " &
+          $reqs.mapIt(it[0].projectName & " " & $it[1]).join("; ") &
+          "; deps with no matching releases: " &
+          featDepCheck.unmatchedDeps.join("; ")
+        )
         b.addNegated(featureVarId)
         continue
 
@@ -382,8 +406,16 @@ proc addVersionConstraints(b: var Builder; graph: var DepGraph, pkg: Package) =
               b.addNegated(ver.vid)  # not this version
               b.addCompatibleVersionChoice(compatibleVersions, featureVersions)
 
-  if not anyReleaseSatisfied:
-    warn pkg.url.projectName, "no versions satisfied for this package:", $pkg.url
+  if not hasValidRelease:
+    issues.trackNoVersionsFound(
+      pkg.url.projectName & ": no versions satisfied for this package: " & $pkg.url
+    )
+
+proc reportNoVersionsFound(form: Form) =
+  var issues = form.noVersionsFound
+  issues.sort()
+  for issue in issues:
+    warn "atlas:resolved", issue
 
 proc hasVersionSatisfiableByLoadedDeps(graph: DepGraph; pkg: Package): bool =
   ## Returns true when at least one normal release can satisfy all currently
@@ -463,6 +495,7 @@ proc collectLazyDeferredPackagesForUnsatRetry(graph: DepGraph): seq[Package] =
 proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
   result = Form()
   var b = Builder()
+  let issues = NoVersionIssues(seen: initHashSet[string]())
 
   withOpenBr(b, AndForm):
 
@@ -523,9 +556,10 @@ proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
     # This simpler deps loop was copied from Nimble after it was first ported from Atlas :)
     # It appears to acheive the same results, but it's a lot simpler
     for pkg in graph.pkgs.mvalues():
-      b.addVersionConstraints(graph, pkg)
+      b.addVersionConstraints(graph, pkg, issues)
 
   result.formula = toForm(b)
+  result.noVersionsFound = issues.messages
 
 
 proc formatVersionSelection*(pkg: Package; version: PackageVersion): string =
@@ -817,6 +851,7 @@ proc solve*(graph: var DepGraph; form: Form, rerun: var bool) =
     else:
       error "atlas:resolved", "not retrying lazy deferred packages; non-lazy dependencies are unsatisfiable for:", hardUnsatPkgs.join(", ")
 
+    reportNoVersionsFound(form)
     error project(), "version conflict; for more information use --showGraph"
     for pkg in mvalues(graph.pkgs):
       var usedVersionCount = 0
@@ -888,7 +923,7 @@ proc activateGraph*(graph: DepGraph): tuple[paths: seq[CfgPath], features: seq[s
         let pkgUri = pkg.url.cloneUri()
         if pkgUri.scheme notin ["file", "link", "atlas"]:
           discard gitops.ensureCanonicalOrigin(pkg.ondisk, pkgUri)
-        notice pkg.url.projectName, "Checked out to:", $pkg.activeVersion.commit().short(), "at:", pkg.ondisk.relativeToWorkspace()
+        info pkg.url.projectName, "Checked out to:", $pkg.activeVersion.commit().short(), "at:", pkg.ondisk.relativeToWorkspace()
         discard checkoutGitCommitFull(pkg.ondisk, pkg.activeVersion.commit())
 
   let unsatisfiedFeatures = collectUnsatisfiedContextFeatures(graph)

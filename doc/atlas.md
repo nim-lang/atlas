@@ -515,6 +515,14 @@ required versions will be selected. For example, if you specify a minimum requir
 both `>=1.0.0` and `>=2.0.0`, the selected version would be 2.0.0.
 
 
+### Resolution diagnostics
+
+Atlas records dependency requirements for which no compatible versions were
+found while building the SAT formula. These diagnostics are emitted as
+warnings only when the final SAT resolution fails, so rejected candidate
+versions do not produce warnings during a successful resolution.
+
+
 ## Reproducible builds / lockfiles
 
 Atlas supports lockfiles for reproducible builds via its `pin` and `rep` commands.

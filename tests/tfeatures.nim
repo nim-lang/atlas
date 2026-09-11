@@ -784,10 +784,12 @@ suite "test global features":
 
       let dir = paths.getCurrentDir().absolutePath
       let errorsBefore = atlasErrors()
+      let warningsBefore = atlasReporter.warnings
       let graph = dir.loadWorkspace(nc, AllReleases, onClone=DoClone, doSolve=true)
       let errorsAfter = atlasErrors()
 
       check errorsAfter > errorsBefore
+      check atlasReporter.warnings > warningsBefore
       check not graph.root.active
 
       # Desired behavior: keep lazy deps deferred on UNSAT caused by non-lazy deps.
