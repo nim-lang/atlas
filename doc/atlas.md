@@ -92,10 +92,12 @@ release-collection flags still match. If those inputs change, Atlas reparses
 the package's Nimble files and rewrites the cache. This includes a new tag
 published at an existing commit after `atlas install --update` fetches it.
 
-This cache covers ordinary release discovery. Explicit commit and branch
-requirements are resolved separately and currently bypass the release-list
-cache. For commit-distance reporting, Atlas scans Nimble-file history to find
-version bases, but calculates distances only for the requested explicit releases.
+Explicit commit and branch requirements are resolved separately. When a pin or
+`#head` resolves to a commit already represented by a regular release, Atlas
+reuses that release's metadata, including metadata loaded from cache. Ref names
+are still resolved again, so a moving branch can select a new commit. For unseen
+explicit commits, Atlas scans Nimble-file history to find version bases, but
+calculates distances only for the requested releases.
 
 In addition to full URLs and package names, Atlas supports a shorthand
 **forge alias** syntax of the form `<alias>:<user>/<repo>`. The supported
