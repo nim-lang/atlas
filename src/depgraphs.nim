@@ -159,6 +159,114 @@ proc requirementMatches*(query: VersionInterval; depVer: PackageVersion; depRel:
   else:
     result = query.matches(depRel.version)
 
+type
+  RequiredDependency = tuple[url: PkgUrl, query: VersionInterval, source: string]
+
+proc requiredDependencies(pkg: Package; ver: PackageVersion;
+                          rel: NimbleRelease): seq[RequiredDependency] =
+  let source = pkg.url.projectName & " " & $ver & (if pkg.isRoot: " (root)" else: "")
+  for (dep, query) in rel.requirements:
+    result.add (dep, query, source)
+  for feature, reqs in rel.features:
+    if hasContextFeature(pkg, rel, feature):
+      for (dep, query) in reqs:
+        result.add (dep, query, source & " feature " & feature)
+
+proc requirementDescription(req: RequiredDependency): string =
+  req.source & " requires " & req.url.projectName & " " & $req.query
+
+proc loadedVersionSummary(graph: DepGraph; url: PkgUrl): string =
+  if url notin graph.pkgs:
+    return "package is not loaded"
+  let pkg = graph.pkgs[url]
+  if pkg.state == Error:
+    return "package could not be loaded: " & $pkg.errors
+  var versions: seq[string]
+  for ver, rel in pkg.validVersions():
+    versions.add $ver
+  versions.sort()
+  if versions.len == 0:
+    return "no usable releases are loaded"
+  result = "loaded releases: " & versions[0 ..< min(versions.len, 5)].join(", ")
+  if versions.len > 5:
+    result.add " (and " & $(versions.len - 5) & " more)"
+
+proc findDependencyConflict*(graph: DepGraph): seq[string] =
+  ## Explains a proven conflict reachable from the root without running SAT.
+  ## Only mandatory requirements restrict choices. Alternative releases and
+  ## lazy dependencies remain possible until they can safely be ruled out.
+  if graph.root.isNil or graph.root.state != Processed:
+    return
+  var choices: Table[PkgUrl, seq[PackageVersion]]
+  for url, pkg in graph.pkgs:
+    choices[url] = @[]
+    if pkg.state != Error:
+      for ver, rel in pkg.validVersions():
+        choices[url].add ver
+  var required: OrderedTable[PkgUrl, seq[string]]
+  required[graph.root.url] = @[graph.root.url.projectName & " is the root package"]
+  var expanded: HashSet[PkgUrl]
+  var changed = true
+  while changed:
+    changed = false
+    for url in required.keys.toSeq():
+      if url in graph.pkgs and graph.pkgs[url].state == LazyDeferred:
+        continue
+      var remaining: seq[PackageVersion]
+      var rejected: seq[string]
+      var conflictUrl = url
+      for ver in choices.getOrDefault(url):
+        let pkg = graph.pkgs[url]
+        var reason: seq[string]
+        for req in requiredDependencies(pkg, ver, pkg.versions[ver]):
+          if req.url in graph.pkgs and graph.pkgs[req.url].state == LazyDeferred:
+            continue
+          var matches = false
+          for candidate in choices.getOrDefault(req.url):
+            if requirementMatches(req.query, candidate, graph.pkgs[req.url].versions[candidate]):
+              matches = true
+              break
+          if not matches:
+            if choices[url].len == 1:
+              conflictUrl = req.url
+            reason.add requirementDescription(req)
+            reason.add required.getOrDefault(req.url)
+            reason.add req.url.projectName & ": " & loadedVersionSummary(graph, req.url)
+            break
+        if reason.len == 0:
+          remaining.add ver
+        elif rejected.len < 12:
+          for line in reason:
+            rejected.addUnique line
+      if remaining.len == 0:
+        result = @["dependency conflict: no compatible release of " & conflictUrl.projectName]
+        result.add required[url]
+        result.add rejected
+        if rejected.len == 0:
+          result.add loadedVersionSummary(graph, url)
+        return
+      if remaining.len != choices.getOrDefault(url).len:
+        choices[url] = remaining
+        changed = true
+      if remaining.len == 1 and not expanded.containsOrIncl(url):
+        let pkg = graph.pkgs[url]
+        let ver = remaining[0]
+        for req in requiredDependencies(pkg, ver, pkg.versions[ver]):
+          required.mgetOrPut(req.url, @[]).addUnique requirementDescription(req)
+          if req.url in graph.pkgs and graph.pkgs[req.url].state == LazyDeferred:
+            continue
+          var compatible: seq[PackageVersion]
+          for candidate in choices.getOrDefault(req.url):
+            if requirementMatches(req.query, candidate, graph.pkgs[req.url].versions[candidate]):
+              compatible.add candidate
+          choices[req.url] = compatible
+          if compatible.len == 0:
+            result = @["dependency conflict: no compatible release of " & req.url.projectName]
+            result.add required[req.url]
+            result.add loadedVersionSummary(graph, req.url)
+            return
+        changed = true
+
 proc hasSatisfiedFeatureDeps(graph: DepGraph; rel: NimbleRelease; featName: string): bool =
   let declaredFeature = rel.features.findFeature(featName)
   if declaredFeature.len == 0:
@@ -414,8 +522,35 @@ proc addVersionConstraints(
 proc reportNoVersionsFound(form: Form) =
   var issues = form.noVersionsFound
   issues.sort()
-  for issue in issues:
-    warn "atlas:resolved", issue
+  for idx, issue in issues:
+    if idx < 10:
+      warn "atlas:resolved", issue
+    else:
+      debug "atlas:resolved", issue
+  if issues.len > 10:
+    notice "atlas:resolved", $(issues.len - 10),
+      "more release mismatches; use --verbosity=debug to see them"
+
+proc reportRootRequirements(graph: DepGraph) =
+  if not graph.root.isNil:
+    var requirements: seq[string]
+    for ver, rel in graph.root.validVersions():
+      for req in requiredDependencies(graph.root, ver, rel):
+        var matches: seq[string]
+        if req.url in graph.pkgs:
+          for candidate, depRel in graph.pkgs[req.url].validVersions():
+            if requirementMatches(req.query, candidate, depRel):
+              matches.add $candidate
+        matches.sort()
+        let candidates =
+          if matches.len == 0: "no matching loaded releases"
+          elif matches.len <= 3: matches.join(", ")
+          else: matches[0..2].join(", ") & " (and " & $(matches.len - 3) & " more)"
+        requirements.add requirementDescription(req) & "; matches: " & candidates
+    requirements.sort()
+    notice "atlas:resolved", "root requirements and matching loaded releases:"
+    for requirement in requirements:
+      notice "atlas:resolved", requirement
 
 proc hasVersionSatisfiableByLoadedDeps(graph: DepGraph; pkg: Package): bool =
   ## Returns true when at least one normal release can satisfy all currently
@@ -740,9 +875,7 @@ proc printVersionSelections(graph: DepGraph, solution: Solution, form: Form) =
             selections.add((item.pkg.url.projectName, "[ ] " & toString item))
         else:
           selections.add((pkg.url.projectName, "[!] " & "(" & $rel.status & "; pkg: " & pkg.url.projectName & ", " & $ver & ")"))
-  var longestPkgName = 0
-  for (pkg, str) in selections:
-    longestPkgName = max(longestPkgName, pkg.len)
+  selections.sort(proc (a, b: (string, string)): int = cmpIgnoreCase(a[0], b[0]))
   for (pkg, str) in selections:
     notice "atlas:resolved", str
   notice "atlas:resolved", "end of selection"
@@ -752,6 +885,14 @@ proc solve*(graph: var DepGraph; form: Form, rerun: var bool) =
     pkg.activeVersion = nil
     pkg.activeFeatures = @[]
     pkg.active = false
+
+  let conflict = findDependencyConflict(graph)
+  if conflict.len > 0:
+    error project(), conflict[0]
+    for line in conflict[1..^1]:
+      warn "atlas:resolved", line
+    notice "atlas:resolved", "check the requirements above in the listed packages' Nimble files; SAT was not run"
+    return
 
   let maxVar = form.idgen
   if DumpGraphs in context().flags:
@@ -851,16 +992,10 @@ proc solve*(graph: var DepGraph; form: Form, rerun: var bool) =
     else:
       error "atlas:resolved", "not retrying lazy deferred packages; non-lazy dependencies are unsatisfiable for:", hardUnsatPkgs.join(", ")
 
+    error project(), "dependency conflict: no combination satisfies all required versions and features"
+    reportRootRequirements(graph)
     reportNoVersionsFound(form)
-    error project(), "version conflict; for more information use --showGraph"
-    for pkg in mvalues(graph.pkgs):
-      var usedVersionCount = 0
-      for (ver, rel) in validVersions(pkg):
-        if solution.isTrue(ver.vid): inc usedVersionCount
-      if usedVersionCount > 1:
-        for (ver, rel) in validVersions(pkg):
-          if solution.isTrue(ver.vid):
-            error pkg.url.projectName, string(ver.version()) & " required"
+    notice "atlas:resolved", "use --showGraph to inspect transitive requirements, or --verbosity=debug for release details"
 
   if DumpGraphs in context().flags:
     info "atlas:graph", "dumping graph after solving"

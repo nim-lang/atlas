@@ -522,10 +522,24 @@ both `>=1.0.0` and `>=2.0.0`, the selected version would be 2.0.0.
 
 ### Resolution diagnostics
 
-Atlas records dependency requirements for which no compatible versions were
-found while building the SAT formula. These diagnostics are emitted as
-warnings only when the final SAT resolution fails, so rejected candidate
-versions do not produce warnings during a successful resolution.
+After loading releases, Atlas checks for conflicts that follow directly from
+mandatory requirements before running SAT. For example, a root requirement
+`siwin#abcdef` conflicts if every permitted release of another required package
+needs a different Siwin commit. The error names the dependency and shows the
+requirements, originating package versions, enabled features, and loaded
+releases involved. An existing root pin alone is valid; unused historical
+releases and disabled features do not impose requirements. Deferred dependencies
+remain unknown until loaded.
+
+For conflicts that still require SAT, Atlas prints the root requirements and
+their matching loaded releases, followed by up to ten individual release
+mismatches. These mismatches explain rejected candidates; they are not a minimal
+set of conflicting constraints. Use `--showGraph` to inspect transitive
+requirements or `--verbosity=debug` to see the remaining release mismatches.
+Rejected candidates do not produce warnings during successful resolution.
+
+The `selected:` output is sorted by dependency name, ignoring case, with each
+dependency's version rows kept together.
 
 
 ## Reproducible builds / lockfiles
