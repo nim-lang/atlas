@@ -124,7 +124,8 @@ proc loadInferredReleases(
     pkg: Package;
     commits: seq[VersionTag];
     versionBases: var Table[string, CommitHash];
-    versionRuns: var seq[VersionRun]
+    versionRuns: var seq[VersionRun];
+    includeDistances = true
 ): seq[(PackageVersion, NimbleRelease)] =
   ## Loads Nimble-file commits in chronological order and records the commit
   ## where each run of an exact version string began.
@@ -138,7 +139,8 @@ proc loadInferredReleases(
         versionBase = commit.c
         versionBases[version] = versionBase
         versionRuns.add((release[0][1].version, versionBase))
-      addCommitDistance(pkg, versionBase, release[0][0])
+      if includeDistances:
+        addCommitDistance(pkg, versionBase, release[0][0])
       result.add(release[0])
       previousVersion = version
 
@@ -240,7 +242,10 @@ proc loadPackageReleaseInfo*(
     var versionRuns: seq[VersionRun]
     if result.expandedExplicitVersions.anyIt(it.isTip or it.version.isCommit()):
       let nimbleCommits = nc.collectNimbleVersions(pkg, repo)
-      discard nc.loadInferredReleases(pkg, nimbleCommits, versionBases, versionRuns)
+      # Only the version bases are needed here, not distances for every
+      # historical candidate. Compute distances for the requested releases below.
+      discard nc.loadInferredReleases(
+        pkg, nimbleCommits, versionBases, versionRuns, includeDistances = false)
 
     for version in result.expandedExplicitVersions:
       debug pkg.url.projectName, "check explicit version:", repr version

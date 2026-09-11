@@ -92,6 +92,11 @@ release-collection flags still match. If those inputs change, Atlas reparses
 the package's Nimble files and rewrites the cache. This includes a new tag
 published at an existing commit after `atlas install --update` fetches it.
 
+This cache covers ordinary release discovery. Explicit commit and branch
+requirements are resolved separately and currently bypass the release-list
+cache. For commit-distance reporting, Atlas scans Nimble-file history to find
+version bases, but calculates distances only for the requested explicit releases.
+
 In addition to full URLs and package names, Atlas supports a shorthand
 **forge alias** syntax of the form `<alias>:<user>/<repo>`. The supported
 aliases are:
