@@ -6,13 +6,15 @@
 #    distribution, for details about the copyright.
 #
 
-import std / [os, strutils, paths, dirs]
-import context, deptypes, versions, gitops, pkgurls, reporters, deptypesjson
+import std / [os, strutils, paths, dirs, tempfiles]
+import context, deptypes, versions, gitops, pkgurls, reporters, deptypesjson, osutils
 
 type
   NimbleFileSource* = object
     path*: Path
     fromGit*: bool
+    contents: string
+    contentsLoaded: bool
 
   PackageReleaseCacheEntry* = object
     vtag*: VersionTag
@@ -128,6 +130,59 @@ proc findGitNimbleFiles*(pkg: Package; commit: CommitHash): seq[NimbleFileSource
     if source.path.splitPath().tail == Path(pkg.url.shortName() & ".nimble"):
       return @[source]
 
+proc nimbleFileCachePath*(pkg: Package; commit: CommitHash): Path =
+  ## Historical contents are immutable only when addressed by a full Git hash.
+  ## Bump the cache directory version when Nimble-file selection rules change.
+  if commit.h.len in [40, 64] and commit.h.allCharsInSet(HexDigits):
+    result = cachesDirectory() / Path"nimble-files-v1" /
+      Path(packageCacheStem(pkg)) / Path(commit.h & ".json")
+
+proc loadGitNimbleFiles*(pkg: Package; commit: CommitHash): seq[NimbleFileSource] =
+  ## Loads historical Nimble contents, reusing a cache scoped to package and
+  ## full commit hash. Contents are parsed again with the current workspace
+  ## settings; resolved requirements and failed Git reads are not cached here.
+  let cachePath = nimbleFileCachePath(pkg, commit)
+  let subdir = if pkg.subdir.len > 0: pkg.subdir else: pkg.url.subdir()
+  if cachePath.string.len > 0 and fileExists($cachePath):
+    try:
+      let cache = parseFile($cachePath)
+      if cache["url"].getStr() == $pkg.url and
+          cache["subdir"].getStr() == $subdir and
+          cache["shortName"].getStr() == pkg.url.shortName() and
+          cache["commit"].getStr() == commit.h and
+          cache["path"].getStr().endsWith(".nimble") and
+          cache["contents"].kind == JString:
+        debug pkg.url.projectName, "loaded historical Nimble cache:", $commit
+        return @[NimbleFileSource(path: Path(cache["path"].getStr()), fromGit: true,
+          contents: cache["contents"].getStr(), contentsLoaded: true)]
+    except CatchableError as e:
+      debug pkg.url.projectName, "ignoring invalid historical Nimble cache:", e.msg
+
+  result = findGitNimbleFiles(pkg, commit)
+  if result.len == 1:
+    let (contents, status) = exec(GitShowFiles, pkg.ondisk,
+      [commit.h & ":" & $result[0].path])
+    if status == RES_OK:
+      result[0].contents = contents
+      result[0].contentsLoaded = true
+      if cachePath.string.len > 0:
+        try:
+          let cache = %*{"url": $pkg.url, "subdir": $subdir,
+            "shortName": pkg.url.shortName(), "commit": commit.h,
+            "path": $result[0].path, "contents": contents}
+          let cacheDir = cachePath.parentDir
+          createDir(cacheDir)
+          let (file, tmpPath) = createTempFile("nimble-", ".tmp", $cacheDir)
+          close(file)
+          try:
+            writeFile(tmpPath, $cache)
+            moveFile(tmpPath, $cachePath)
+          finally:
+            if fileExists(tmpPath):
+              removeFile(tmpPath)
+        except CatchableError as e:
+          debug pkg.url.projectName, "could not cache historical Nimble contents:", e.msg
+
 proc materializeNimbleFile*(pkg: Package; commit: CommitHash; source: NimbleFileSource): Path =
   if not source.fromGit:
     return source.path
@@ -136,7 +191,10 @@ proc materializeNimbleFile*(pkg: Package; commit: CommitHash; source: NimbleFile
   createDir(cachesDirectory())
   createDir(tmpDir)
   result = tmpDir / Path(packageCacheStem(pkg) & "-" & commit.short() & "-" & $source.path.splitPath().tail)
-  writeFile($result, showFile(pkg.ondisk, commit, $source.path))
+  let contents =
+    if source.contentsLoaded: source.contents
+    else: showFile(pkg.ondisk, commit, $source.path)
+  writeFile($result, contents)
 
 proc firstNonEmptyMetadata(
     versions: seq[(PackageVersion, NimbleRelease)];

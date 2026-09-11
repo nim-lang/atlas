@@ -47,7 +47,7 @@ proc processNimbleRelease*(
     release: VersionTag;
 ): NimbleRelease =
   ## Loads and parses the Nimble file for a specific package release candidate.
-  ## Historical releases are read from git contents and materialized only temporarily.
+  ## Historical contents are cached by commit and materialized only temporarily.
   trace pkg.url.projectName, "Processing release:", $release
 
   var nimbleFiles: seq[NimbleFileSource]
@@ -59,7 +59,7 @@ proc processNimbleRelease*(
     result = NimbleRelease(status: HasBrokenRelease, err: "no commit")
     return
   else:
-    nimbleFiles = findGitNimbleFiles(pkg, release.commit)
+    nimbleFiles = loadGitNimbleFiles(pkg, release.commit)
 
   if nimbleFiles.len() == 0:
     info "processRelease", "skipping release: missing nimble file:", $release
@@ -202,9 +202,8 @@ proc loadPackageReleaseInfo*(
   )
   result.currentCommit = repo.currentCommit
   pkg.originHead = repo.originTip.commit()
-  let tagRefs = tagRefsSnapshot(repo)
-
   if canUsePackageReleaseCache(pkg, mode, result.expandedExplicitVersions):
+    let tagRefs = tagRefsSnapshot(repo)
     var cachedReleases: seq[PackageReleaseCacheEntry]
     if loadPackageReleaseCache(pkg, result.currentCommit, cachedReleases, tagRefs):
       for entry in cachedReleases:

@@ -99,6 +99,14 @@ are still resolved again, so a moving branch can select a new commit. For unseen
 explicit commits, Atlas scans Nimble-file history to find version bases, but
 calculates distances only for the requested releases.
 
+Historical Nimble-file contents are also cached under
+`deps/.cache/nimble-files-v1`, scoped to the package, subdirectory, and full Git
+commit hash. This avoids repeated Git tree and file reads across installs.
+Atlas still parses those contents with the current workspace's dependency
+mappings and settings. New commits use separate entries, working-tree files
+are read directly, and corrupt entries are rebuilt from Git. Failed Git reads
+and ambiguous or missing Nimble-file selections are not cached.
+
 In addition to full URLs and package names, Atlas supports a shorthand
 **forge alias** syntax of the form `<alias>:<user>/<repo>`. The supported
 aliases are:
