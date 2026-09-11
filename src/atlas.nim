@@ -89,7 +89,8 @@ Options:
   --no-lazy-deps        disable lazy dependency loading and use eager loading
                         for all transitive dependencies during SAT solving
   --parallel[=count], -t[=count]
-                        clone dependency repositories in parallel, default count is 3
+                        clone dependency repositories in parallel, default count is 4
+  --no-thread, -T       clone dependency repositories sequentially
   --proxy=url           use the given proxy URL for all git operations
   --dumbProxy           use a dumb proxy without smart git protocol
   --packagesRepo        use the nim-lang/packages git repo (legacy behavior)
@@ -676,6 +677,7 @@ proc update(filter: string) =
 proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[string];
                        envOptions: var EnvOptions) =
   var autoinit = true
+  context().flags.incl ParallelClones
   if existsEnv("NO_COLOR") or not isatty(stdout) or (getEnv("TERM") == "dumb"):
     setAtlasNoColors(true)
   for kind, key, val in getopt(params):
@@ -686,7 +688,10 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
       else:
         args.add key
     of cmdLongOption, cmdShortOption:
-      case normalize(key)
+      let optionKey =
+        if kind == cmdShortOption and key == "T": "nothread"
+        else: normalize(key)
+      case optionKey
       of "help", "h": writeHelp(0)
       of "version", "v": writeVersion()
       of "keepcommits": context().flags.incl KeepCommits
@@ -767,9 +772,13 @@ proc parseAtlasOptions(params: seq[string], action: var string, args: var seq[st
         else: writeHelp()
       of "nolazydeps", "no-lazy-deps":
         context().flags.incl NoLazyDeps
+      of "nothread", "no-thread", "nothreads", "no-threads", "noparallel",
+         "no-parallel":
+        context().flags.excl ParallelClones
       of "parallel", "t":
         context().flags.incl ParallelClones
-        context().parallelCloneWorkers = parseParallelCloneWorkers(val)
+        if optionKey == "parallel" or val.len > 0:
+          context().parallelCloneWorkers = parseParallelCloneWorkers(val)
       of "verbosity":
         case val.normalize
         of "normal": setAtlasVerbosity(Info)
