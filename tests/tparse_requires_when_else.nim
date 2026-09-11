@@ -51,4 +51,8 @@ when unsupportedCondition():
     expect AssertionDefect:
       discard extractRequiresInfo(fname.Path)
 
+    # A diagnostic exception must release the parser's file handle, including
+    # on Windows where an open file cannot be removed.
+    removeFile(fname)
+    writeFile(fname, nimbleContent)
     discard extractRequiresInfo(fname.Path)

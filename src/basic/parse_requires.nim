@@ -512,8 +512,8 @@ proc extractRequiresInfo*(nimbleFile: Path): NimbleFileInfo =
     handleError(config, info, mk, msg)
 
   if setupParser(parser, fileIdx, newIdentCache(), conf):
+    defer: closeParser(parser)
     extract(parseAll(parser), conf, "", result)
-    closeParser(parser)
   result.hasErrors = result.hasErrors or conf.errorCounter > 0
 
 type
@@ -544,8 +544,8 @@ proc extractPluginInfo*(nimscriptFile: string; info: var PluginInfo) =
   let fileIdx = fileInfoIdx(conf, AbsoluteFile nimscriptFile)
   var parser: Parser
   if setupParser(parser, fileIdx, newIdentCache(), conf):
+    defer: closeParser(parser)
     extractPlugin(nimscriptFile, parseAll(parser), conf, info)
-    closeParser(parser)
 
 const Operators* = {'<', '>', '=', '&', '@', '!', '^'}
 
