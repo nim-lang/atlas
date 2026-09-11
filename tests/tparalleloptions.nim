@@ -29,7 +29,7 @@ suite "parallel clone options":
     block:
       let ctx = runWithOptions(@[])
       doAssert ParallelClones in ctx.flags
-      doAssert ctx.parallelCloneWorkers == 4
+      doAssert ctx.parallelCloneWorkers == 6
 
   test "no-thread disables parallel cloning":
     block:

@@ -89,7 +89,7 @@ Options:
   --no-lazy-deps        disable lazy dependency loading and use eager loading
                         for all transitive dependencies during SAT solving
   --parallel[=count], -t[=count]
-                        clone dependency repositories in parallel, default count is 4
+                        clone dependency repositories in parallel, default count is 6
   --no-thread, -T       clone dependency repositories sequentially
   --proxy=url           use the given proxy URL for all git operations
   --dumbProxy           use a dumb proxy without smart git protocol

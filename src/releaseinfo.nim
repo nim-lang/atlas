@@ -47,7 +47,7 @@ proc processNimbleRelease*(
     release: VersionTag;
 ): NimbleRelease =
   ## Loads and parses the Nimble file for a specific package release candidate.
-  ## Historical releases are read from git contents and materialized only temporarily.
+  ## Historical contents are cached by commit and materialized only temporarily.
   trace pkg.url.projectName, "Processing release:", $release
 
   var nimbleFiles: seq[NimbleFileSource]
@@ -59,7 +59,7 @@ proc processNimbleRelease*(
     result = NimbleRelease(status: HasBrokenRelease, err: "no commit")
     return
   else:
-    nimbleFiles = findGitNimbleFiles(pkg, release.commit)
+    nimbleFiles = loadGitNimbleFiles(pkg, release.commit)
 
   if nimbleFiles.len() == 0:
     info "processRelease", "skipping release: missing nimble file:", $release
@@ -124,7 +124,8 @@ proc loadInferredReleases(
     pkg: Package;
     commits: seq[VersionTag];
     versionBases: var Table[string, CommitHash];
-    versionRuns: var seq[VersionRun]
+    versionRuns: var seq[VersionRun];
+    includeDistances = true
 ): seq[(PackageVersion, NimbleRelease)] =
   ## Loads Nimble-file commits in chronological order and records the commit
   ## where each run of an exact version string began.
@@ -138,7 +139,8 @@ proc loadInferredReleases(
         versionBase = commit.c
         versionBases[version] = versionBase
         versionRuns.add((release[0][1].version, versionBase))
-      addCommitDistance(pkg, versionBase, release[0][0])
+      if includeDistances:
+        addCommitDistance(pkg, versionBase, release[0][0])
       result.add(release[0])
       previousVersion = version
 
@@ -200,9 +202,8 @@ proc loadPackageReleaseInfo*(
   )
   result.currentCommit = repo.currentCommit
   pkg.originHead = repo.originTip.commit()
-  let tagRefs = tagRefsSnapshot(repo)
-
   if canUsePackageReleaseCache(pkg, mode, result.expandedExplicitVersions):
+    let tagRefs = tagRefsSnapshot(repo)
     var cachedReleases: seq[PackageReleaseCacheEntry]
     if loadPackageReleaseCache(pkg, result.currentCommit, cachedReleases, tagRefs):
       for entry in cachedReleases:
@@ -236,13 +237,39 @@ proc loadPackageReleaseInfo*(
       version = vtag
       debug pkg.url.projectName, "explicit version:", $version, "vtag:", repr vtag
 
+    var pendingVersions: seq[VersionTag]
+    for version in result.expandedExplicitVersions:
+      if version.commit.isEmpty():
+        warn pkg.url.projectName, "explicit version has empty commit:", $version
+      elif version.toPkgVer() notin pkg.versions:
+        var reused = false
+        if version.isTip or version.version.isCommit():
+          for existing, release in pkg.versions:
+            if existing.commit == version.commit and existing.version.string.len > 0 and
+                existing.version.string[0] != '#':
+              # traverseDependency retains this regular release and only updates
+              # its tip/pin flags. Reuse its metadata instead of scanning history
+              # and parsing a release that would then be discarded.
+              var vtag = existing.vtag
+              vtag.isTip = version.isTip
+              vtag.isPinned = version.version.isCommit()
+              result.releases.add((vtag.toPkgVer(), release))
+              debug pkg.url.projectName, "reusing release at explicit commit:", $version.commit
+              reused = true
+              break
+        if not reused:
+          pendingVersions.add version
+
     var versionBases: Table[string, CommitHash]
     var versionRuns: seq[VersionRun]
-    if result.expandedExplicitVersions.anyIt(it.isTip or it.version.isCommit()):
+    if pendingVersions.anyIt(it.isTip or it.version.isCommit()):
       let nimbleCommits = nc.collectNimbleVersions(pkg, repo)
-      discard nc.loadInferredReleases(pkg, nimbleCommits, versionBases, versionRuns)
+      # Only the version bases are needed here, not distances for every
+      # historical candidate. Compute distances for the requested releases below.
+      discard nc.loadInferredReleases(
+        pkg, nimbleCommits, versionBases, versionRuns, includeDistances = false)
 
-    for version in result.expandedExplicitVersions:
+    for version in pendingVersions:
       debug pkg.url.projectName, "check explicit version:", repr version
       if version.commit.isEmpty():
         warn pkg.url.projectName, "explicit version has empty commit:", $version

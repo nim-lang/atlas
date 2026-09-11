@@ -20,7 +20,7 @@ const
   DefaultPackagesSubDir* = Path"_packages"
   DefaultCachesSubDir* = Path".cache"
   DefaultNimbleCachesSubDir* = Path"_nimbles"
-  DefaultParallelCloneWorkers* = 4
+  DefaultParallelCloneWorkers* = 6
   FeatureDefinePrefix* = "features."
   LegacyFeatureDefinePrefix* = "feature."
 

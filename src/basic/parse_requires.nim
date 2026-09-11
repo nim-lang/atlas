@@ -1,7 +1,7 @@
 ## Utility API for Nim package managers.
 ## (c) 2021 Andreas Rumpf
 
-import std / [strutils, paths, tables, options]
+import std / [strutils, paths, tables, options, sets]
 
 import compiler / [ast, idents, msgs, syntaxes, options, pathutils, lineinfos]
 import reporters
@@ -99,9 +99,20 @@ proc extractStringTable(n: PNode; values: var Table[string, string]): bool =
   else:
     discard
 
+var reportedParserErrors = initHashSet[string]()
+
 proc handleError(cfg: ConfigRef, li: TLineInfo, mk: TMsgKind, msg: string) =
   {.cast(gcsafe).}:
-    info("atlas:nimbleparser", "error parsing \"$1\" at $2" % [msg, cfg.toFileLineCol(li), repr mk])
+    # Nimble files can be parsed repeatedly for different release candidates
+    # and temporary checkout paths, so the source location is not a stable key.
+    let key = msg
+    if (atlasReporter.assertOnError or atlasReporter.verbosity >= Info) and
+        key notin reportedParserErrors:
+      reportedParserErrors.incl key
+      info(
+        "atlas:nimbleparser",
+        "error parsing \"$1\" at $2" % [msg, cfg.toFileLineCol(li), repr mk]
+      )
 
 proc handleError(cfg: ConfigRef, mk: TMsgKind, li: TLineInfo, msg: string) =
   handleError(cfg, li, warnUser, msg)
@@ -501,8 +512,8 @@ proc extractRequiresInfo*(nimbleFile: Path): NimbleFileInfo =
     handleError(config, info, mk, msg)
 
   if setupParser(parser, fileIdx, newIdentCache(), conf):
+    defer: closeParser(parser)
     extract(parseAll(parser), conf, "", result)
-    closeParser(parser)
   result.hasErrors = result.hasErrors or conf.errorCounter > 0
 
 type
@@ -533,8 +544,8 @@ proc extractPluginInfo*(nimscriptFile: string; info: var PluginInfo) =
   let fileIdx = fileInfoIdx(conf, AbsoluteFile nimscriptFile)
   var parser: Parser
   if setupParser(parser, fileIdx, newIdentCache(), conf):
+    defer: closeParser(parser)
     extractPlugin(nimscriptFile, parseAll(parser), conf, info)
-    closeParser(parser)
 
 const Operators* = {'<', '>', '=', '&', '@', '!', '^'}
 

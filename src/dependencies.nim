@@ -78,7 +78,8 @@ proc processCloneEpoch(
   if cloneJobs.len == 0:
     return
 
-  notice root.projectName, "Cloning packages in parallel:", $cloneJobs.len
+  notice root.projectName, "Cloning", $cloneJobs.len,
+    "packages in parallel (up to", $context().parallelCloneWorkers, "at a time)"
   let cloneResults = runGitProgressJobs(
     cloneJobs.mapIt(it.progressJob),
     title = "atlas:clone",

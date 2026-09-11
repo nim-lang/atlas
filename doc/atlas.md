@@ -92,6 +92,21 @@ release-collection flags still match. If those inputs change, Atlas reparses
 the package's Nimble files and rewrites the cache. This includes a new tag
 published at an existing commit after `atlas install --update` fetches it.
 
+Explicit commit and branch requirements are resolved separately. When a pin or
+`#head` resolves to a commit already represented by a regular release, Atlas
+reuses that release's metadata, including metadata loaded from cache. Ref names
+are still resolved again, so a moving branch can select a new commit. For unseen
+explicit commits, Atlas scans Nimble-file history to find version bases, but
+calculates distances only for the requested releases.
+
+Historical Nimble-file contents are also cached under
+`deps/.cache/nimble-files-v1`, scoped to the package, subdirectory, and full Git
+commit hash. This avoids repeated Git tree and file reads across installs.
+Atlas still parses those contents with the current workspace's dependency
+mappings and settings. New commits use separate entries, working-tree files
+are read directly, and corrupt entries are rebuilt from Git. Failed Git reads
+and ambiguous or missing Nimble-file selections are not cached.
+
 In addition to full URLs and package names, Atlas supports a shorthand
 **forge alias** syntax of the form `<alias>:<user>/<repo>`. The supported
 aliases are:
@@ -270,7 +285,7 @@ in its description (or name or list of tags).
 Use the project's `.nimble` file to set up dependencies.
 
 Dependency repositories are cloned and updated in parallel by default, using
-four workers by default. Use `--no-thread`/`-T` to process them sequentially. The legacy
+six workers by default. Use `--no-thread`/`-T` to process them sequentially. The legacy
 `-t` option remains accepted, and `--parallel[=count]`/`-t[=count]` can still
 select the worker count.
 
@@ -513,6 +528,28 @@ For the "mylibrary" dependency with versions 1.0.0, 1.1.0, and 2.0.0, if you set
 to `MinVer` and specify multiple minimum versions, the highest version among the minimum
 required versions will be selected. For example, if you specify a minimum requirement of
 both `>=1.0.0` and `>=2.0.0`, the selected version would be 2.0.0.
+
+
+### Resolution diagnostics
+
+After loading releases, Atlas checks for conflicts that follow directly from
+mandatory requirements before running SAT. For example, a root requirement
+`siwin#abcdef` conflicts if every permitted release of another required package
+needs a different Siwin commit. The error names the dependency and shows the
+requirements, originating package versions, enabled features, and loaded
+releases involved. An existing root pin alone is valid; unused historical
+releases and disabled features do not impose requirements. Deferred dependencies
+remain unknown until loaded.
+
+For conflicts that still require SAT, Atlas prints the root requirements and
+their matching loaded releases, followed by up to ten individual release
+mismatches. These mismatches explain rejected candidates; they are not a minimal
+set of conflicting constraints. Use `--showGraph` to inspect transitive
+requirements or `--verbosity=debug` to see the remaining release mismatches.
+Rejected candidates do not produce warnings during successful resolution.
+
+The `selected:` output is sorted by dependency name, ignoring case, with each
+dependency's version rows kept together.
 
 
 ## Reproducible builds / lockfiles
