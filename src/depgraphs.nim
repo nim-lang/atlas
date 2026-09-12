@@ -597,6 +597,60 @@ proc reportRootRequirements(graph: DepGraph) =
     for requirement in requirements:
       notice "atlas:resolved", requirement
 
+proc collectLazyDependenciesForRetry(graph: DepGraph): seq[Package] =
+  ## Discover metadata through individual release requirements, not through the
+  ## union of every loaded package's history. This is conservative reachability,
+  ## not a SAT decision: a deferred manifest may introduce new explicit commits.
+  if graph.root.isNil:
+    return
+  var deferred: HashSet[PkgUrl]
+  for rootVer, rootRel in graph.root.validVersions():
+    var pending = requiredDependencies(graph, graph.root, rootVer, rootRel)
+    var rootQueries: Table[PkgUrl, seq[VersionInterval]]
+    var rootFeatures: Table[PkgUrl, seq[string]]
+    for req in pending:
+      rootQueries.mgetOrPut(req.url, @[]).add req.query
+      for feature in req.features:
+        rootFeatures.mgetOrPut(req.url, @[]).addUniqueFeature(feature)
+
+    # Keep root alternatives separate. Likewise, two incoming requests may
+    # reach different releases: do not intersect those requests globally.
+    var expanded: HashSet[VarId]
+    var requestedFeatures: Table[VarId, seq[string]]
+    var next = 0
+    while next < pending.len:
+      let req = pending[next]
+      inc next
+      if req.url notin graph.pkgs:
+        continue
+      let pkg = graph.pkgs[req.url]
+      if pkg.state == LazyDeferred:
+        if not deferred.containsOrIncl(req.url):
+          result.add pkg
+        continue
+      if pkg.state == Error:
+        continue
+      for ver, rel in pkg.validVersions():
+        if not requirementMatches(req.query, ver, rel):
+          continue
+        var compatible = true
+        for query in rootQueries.getOrDefault(req.url):
+          if not requirementMatches(query, ver, rel):
+            compatible = false
+            break
+        if not compatible:
+          continue
+        var changed = not expanded.containsOrIncl(ver.vid)
+        # These feature demands only discover metadata. They do not activate
+        # features or change the guarded requirements in the SAT formula.
+        for feature in req.features & rootFeatures.getOrDefault(req.url):
+          if not requestedFeatures.getOrDefault(ver.vid).containsFeature(feature):
+            requestedFeatures.mgetOrPut(ver.vid, @[]).addUniqueFeature(feature)
+            changed = true
+        if changed:
+          pending.add requiredDependencies(graph, pkg, ver, rel,
+            requestedFeatures.getOrDefault(ver.vid))
+
 proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
   result = Form()
   var b = Builder()
@@ -947,9 +1001,19 @@ proc solve*(graph: var DepGraph; form: Form, rerun: var bool) =
     if notFoundCount > 0:
       return
 
-    # Deferred dependency implications are omitted from this formula. Loading
-    # them can only restrict its solutions, so it cannot repair UNSAT. Only a
-    # satisfiable selection above can justify loading more release metadata.
+    # Deferred manifests can introduce explicit commits on already-loaded
+    # packages, expanding their candidate sets. Retry only metadata reachable
+    # through matching release-specific edges, never arbitrary loaded history.
+    let lazyDeps = collectLazyDependenciesForRetry(graph)
+    if lazyDeps.len > 0:
+      notice "atlas:resolved", "rerunning SAT after conflict; loading reachable deferred packages:",
+        lazyDeps.mapIt(it.url.projectName).join(", ")
+      for pkg in lazyDeps:
+        pkg.state = DoLoad
+        pkg.versions.clear()
+      rerun = true
+      return
+
     error project(), "dependency conflict: no combination satisfies all required versions and features"
     reportRootRequirements(graph)
     reportNoVersionsFound(form)

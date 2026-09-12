@@ -9,6 +9,7 @@ import integration_test_utils
 const Workspace = "tests/ws_history_feasibility"
 var oldSiwinCommit = ""
 var newSiwinCommit = ""
+var cycleEscapeCommit = ""
 
 proc initGitRepo() =
   exec("git init -b master")
@@ -98,6 +99,42 @@ proc createFixture() =
       initGitRepo()
       commitRelease("third", "1.0.0", ["first == 2.0.0"])
       commitRelease("third", "2.0.0", ["first == 1.0.0"])
+
+    createDir("cyclea")
+    withDir "cyclea":
+      initGitRepo()
+      commitRelease("cyclea", "1.0.0", ["cycleb == 2.0.0"])
+      commitRelease("cyclea", "2.0.0", ["cycleb == 1.0.0"])
+      exec("git switch -c escape")
+      writePackage("cyclea", "1.5.0", ["cycleb == 1.0.0"])
+      exec("git add .")
+      exec("git commit -m untagged-escape")
+      cycleEscapeCommit = gitHead()
+      exec("git switch master")
+
+    createDir("cycleb")
+    withDir "cycleb":
+      initGitRepo()
+      commitRelease("cycleb", "1.0.0", ["cyclec == 2.0.0"])
+      commitRelease("cycleb", "2.0.0", ["cyclec == 1.0.0"])
+
+    createDir("cyclec")
+    withDir "cyclec":
+      initGitRepo()
+      commitRelease("cyclec", "1.0.0", ["cyclea == 2.0.0"])
+      commitRelease("cyclec", "2.0.0", ["cyclea >= 1.0.0 & < 2.0.0"])
+
+    createDir("revealer")
+    withDir "revealer":
+      initGitRepo()
+      commitRelease("revealer", "1.0.0", [
+        "cyclea#" & cycleEscapeCommit[0..7]
+      ])
+
+    createDir("gateway")
+    withDir "gateway":
+      initGitRepo()
+      commitRelease("gateway", "1.0.0", ["revealer"])
 
     createDir("siwin")
     withDir "siwin":
@@ -257,6 +294,37 @@ proc checkUnsatDoesNotExpandExcludedHistory() =
       doAssert nc.createUrl(name) notin graph.pkgs,
         "UNSAT retry must not splice " & name & " from excluded unicodeplus releases"
 
+proc checkUnsatPreservesSecondHopConstraint() =
+  withDir Workspace:
+    removeDir("deps")
+    writeFile("ws_history_feasibility.nimble", [
+      "version = \"0.1.0\"",
+      "requires \"regex == 0.1.0\"",
+      "requires \"unicodedb == 0.3.0\"",
+      "requires \"poison >= 2.0.0\"",
+      "requires \"first\"",
+      "requires \"second\"",
+      "requires \"third\"",
+      ""
+    ].join("\n"))
+    configureFixture(eager = false)
+
+    var nc = createNimbleContext()
+    let errorsBefore = atlasErrors()
+    let graph = loadWorkspace(project(), nc, AllReleases, DoClone, doSolve = true)
+    doAssert atlasErrors() > errorsBefore
+    doAssert not graph.root.active
+
+    let unicodeplus = graph.pkgs[nc.createUrl("unicodeplus")]
+    doAssert unicodeplus.state == Processed,
+      "the eligible old regex release should load its deferred dependency"
+    for name in ["segmentation", "graphemes"]:
+      let url = nc.createUrl(name)
+      doAssert url in graph.pkgs,
+        name & " should be represented after unicodeplus metadata is loaded"
+      doAssert graph.pkgs[url].state == LazyDeferred,
+        name & " belongs only to unicodeplus releases excluded by <= 0.2.0"
+
 proc checkAlternativeReleaseBacktracking() =
   withDir Workspace:
     removeDir("deps")
@@ -278,6 +346,29 @@ proc checkAlternativeReleaseBacktracking() =
     doAssert regex.activeNimbleRelease.version == Version"0.26.3"
     doAssert not graph.pkgs[nc.createUrl("unicodeplus")].active,
       "requirements from mutually exclusive regex releases must not be intersected"
+
+proc checkDeferredMetadataCanRevealCandidate() =
+  withDir Workspace:
+    removeDir("deps")
+    writeFile("ws_history_feasibility.nimble", [
+      "version = \"0.1.0\"",
+      "requires \"cyclea\"",
+      "requires \"cycleb\"",
+      "requires \"cyclec\"",
+      "requires \"gateway\"",
+      ""
+    ].join("\n"))
+    configureFixture(eager = false)
+
+    var nc = createNimbleContext()
+    let errorsBefore = atlasErrors()
+    let graph = loadWorkspace(project(), nc, AllReleases, DoClone, doSolve = true)
+    doAssert atlasErrors() == errorsBefore
+    doAssert graph.root.active,
+      "a mandatory deferred child may reveal a needed off-branch candidate"
+    let cyclea = graph.pkgs[nc.createUrl("cyclea")]
+    doAssert cyclea.active
+    doAssert cyclea.activeVersion.commit.h == cycleEscapeCommit
 
 proc checkRootPinOverridesTransitiveHead() =
   withDir Workspace:
@@ -432,12 +523,26 @@ suite "dependency history feasibility":
 
     checkUnsatDoesNotExpandExcludedHistory()
 
+  test "UNSAT traversal preserves constraints across a second hop":
+    createFixture()
+    defer:
+      removeDir(Workspace)
+
+    checkUnsatPreservesSecondHopConstraint()
+
   test "mutually exclusive parent releases remain alternatives":
     createFixture()
     defer:
       removeDir(Workspace)
 
     checkAlternativeReleaseBacktracking()
+
+  test "mandatory deferred metadata may reveal a satisfiable candidate":
+    createFixture()
+    defer:
+      removeDir(Workspace)
+
+    checkDeferredMetadataCanRevealCandidate()
 
   test "root commit pin overrides transitive head feature dependency":
     createFixture()

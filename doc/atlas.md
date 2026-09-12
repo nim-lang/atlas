@@ -77,8 +77,10 @@ When requirements conflict:
 
 - Atlas reports the incompatible requirements and the packages or features that
   requested them where it can identify the cause.
-- It does not load unrelated historical dependencies to retry an already
-  unsatisfiable graph. Lazy loading proceeds from a satisfiable candidate selection.
+- Lazy loading normally follows the selected releases. If a solve fails, Atlas
+  may load more reachable metadata: a dependency can introduce a previously
+  unknown commit candidate. These retries follow each release's version bounds,
+  rather than treating all historical dependencies as one combined requirement.
 - For more complex conflicts, Atlas lists root requirements and matching loaded
   releases. Use `--verbosity:debug` for release-level details.
 
