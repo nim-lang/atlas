@@ -11,6 +11,13 @@ import basic/[context, reporters, packageinfos, httpclientutils]
 
 type PkgCandidates* = array[3, seq[PackageInfo]]
 
+proc newGithubHttpClient(): HttpClient =
+  newAtlasHttpClient(acceptGzip = false)
+
+when defined(atlasUnitTests):
+  proc newGithubHttpClientForTests*(): HttpClient =
+    newGithubHttpClient()
+
 proc determineCandidates*(pkgList: seq[PackageInfo];
                          terms: seq[string]): PkgCandidates =
   result[0] = @[]
@@ -45,7 +52,7 @@ proc singleGithubSearch(term: string, fullSearch = false): JsonNode =
   else:
     # For example:
     # https://api.github.com/search/repositories?q=weave+language:nim
-    var client = newAtlasHttpClient()
+    var client = newGithubHttpClient()
     try:
       var searchUrl = "https://api.github.com/search/repositories?q=" & encodeUrl(term)
       if not fullSearch:
