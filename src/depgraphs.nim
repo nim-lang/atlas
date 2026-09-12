@@ -159,21 +159,54 @@ proc requirementMatches*(query: VersionInterval; depVer: PackageVersion; depRel:
   else:
     result = query.matches(depRel.version)
 
-type
-  RequiredDependency = tuple[url: PkgUrl, query: VersionInterval, source: string]
+proc effectiveRequirement(graph: DepGraph; owner: Package; dep: PkgUrl;
+                          query: VersionInterval): VersionInterval =
+  ## A root commit pin takes precedence over a transitive moving #head.
+  ## Other constraints, including concrete transitive refs, remain binding.
+  result = query
+  if owner.isRoot or not query.isSpecial or not query.isHead or
+      graph.root.isNil:
+    return
+  var rootRelease: NimbleRelease
+  for _, rel in graph.root.validVersions():
+    if not rootRelease.isNil:
+      # Alternative root releases cannot impose unconditional overrides.
+      return
+    rootRelease = rel
+  if rootRelease.isNil:
+    return
 
-proc requiredDependencies(pkg: Package; ver: PackageVersion;
-                          rel: NimbleRelease): seq[RequiredDependency] =
+  for (url, requirement) in rootRelease.requirements:
+    if url == dep and requirement.isSpecial and Version($requirement).isCommit:
+      return requirement
+  for feature, reqs in rootRelease.features:
+    if hasContextFeature(graph.root, rootRelease, feature):
+      for (url, requirement) in reqs:
+        if url == dep and requirement.isSpecial and Version($requirement).isCommit:
+          return requirement
+
+type
+  RequiredDependency = tuple[url: PkgUrl, query: VersionInterval, source: string,
+                             features: seq[string], requestedQuery: VersionInterval]
+
+proc requiredDependencies(graph: DepGraph; pkg: Package; ver: PackageVersion;
+                          rel: NimbleRelease;
+                          requestedFeatures: seq[string] = @[]): seq[RequiredDependency] =
   let source = pkg.url.projectName & " " & $ver & (if pkg.isRoot: " (root)" else: "")
   for (dep, query) in rel.requirements:
-    result.add (dep, query, source)
+    result.add (dep, graph.effectiveRequirement(pkg, dep, query), source,
+                rel.reqsByFeatures.getOrDefault(dep).toSeq(), query)
   for feature, reqs in rel.features:
-    if hasContextFeature(pkg, rel, feature):
+    if hasContextFeature(pkg, rel, feature) or requestedFeatures.containsFeature(feature):
       for (dep, query) in reqs:
-        result.add (dep, query, source & " feature " & feature)
+        result.add (dep, graph.effectiveRequirement(pkg, dep, query),
+                    source & " feature " & feature,
+                    rel.reqsByFeatures.getOrDefault(dep).toSeq(), query)
 
 proc requirementDescription(req: RequiredDependency): string =
-  req.source & " requires " & req.url.projectName & " " & $req.query
+  result = req.source & " requires " & req.url.projectName & " " & $req.requestedQuery
+  if $req.query != $req.requestedQuery:
+    result.add " (using root pin " & $req.query & ")"
 
 proc loadedVersionSummary(graph: DepGraph; url: PkgUrl): string =
   if url notin graph.pkgs:
@@ -205,7 +238,8 @@ proc findDependencyConflict*(graph: DepGraph): seq[string] =
         choices[url].add ver
   var required: OrderedTable[PkgUrl, seq[string]]
   required[graph.root.url] = @[graph.root.url.projectName & " is the root package"]
-  var expanded: HashSet[PkgUrl]
+  var requestedFeatures: Table[PkgUrl, seq[string]]
+  var expanded: HashSet[string]
   var changed = true
   while changed:
     changed = false
@@ -218,7 +252,8 @@ proc findDependencyConflict*(graph: DepGraph): seq[string] =
       for ver in choices.getOrDefault(url):
         let pkg = graph.pkgs[url]
         var reason: seq[string]
-        for req in requiredDependencies(pkg, ver, pkg.versions[ver]):
+        for req in requiredDependencies(graph, pkg, ver, pkg.versions[ver],
+                                        requestedFeatures.getOrDefault(url)):
           if req.url in graph.pkgs and graph.pkgs[req.url].state == LazyDeferred:
             continue
           var matches = false
@@ -248,11 +283,17 @@ proc findDependencyConflict*(graph: DepGraph): seq[string] =
       if remaining.len != choices.getOrDefault(url).len:
         choices[url] = remaining
         changed = true
-      if remaining.len == 1 and not expanded.containsOrIncl(url):
+      if remaining.len == 1:
         let pkg = graph.pkgs[url]
         let ver = remaining[0]
-        for req in requiredDependencies(pkg, ver, pkg.versions[ver]):
+        for req in requiredDependencies(graph, pkg, ver, pkg.versions[ver],
+                                        requestedFeatures.getOrDefault(url)):
+          if expanded.containsOrIncl(requirementDescription(req)):
+            continue
+          changed = true
           required.mgetOrPut(req.url, @[]).addUnique requirementDescription(req)
+          for feature in req.features:
+            requestedFeatures.mgetOrPut(req.url, @[]).addUniqueFeature(feature)
           if req.url in graph.pkgs and graph.pkgs[req.url].state == LazyDeferred:
             continue
           var compatible: seq[PackageVersion]
@@ -265,9 +306,9 @@ proc findDependencyConflict*(graph: DepGraph): seq[string] =
             result.add required[req.url]
             result.add loadedVersionSummary(graph, req.url)
             return
-        changed = true
 
-proc hasSatisfiedFeatureDeps(graph: DepGraph; rel: NimbleRelease; featName: string): bool =
+proc hasSatisfiedFeatureDeps(graph: DepGraph; pkg: Package;
+                            rel: NimbleRelease; featName: string): bool =
   let declaredFeature = rel.features.findFeature(featName)
   if declaredFeature.len == 0:
     return false
@@ -286,7 +327,8 @@ proc hasSatisfiedFeatureDeps(graph: DepGraph; rel: NimbleRelease; featName: stri
     let depRel = depPkg.activeNimbleRelease()
     if depRel.isNil:
       return false
-    if not requirementMatches(query, depPkg.activeVersion, depRel):
+    if not requirementMatches(graph.effectiveRequirement(pkg, depUrl, query),
+                               depPkg.activeVersion, depRel):
       return false
 
   true
@@ -343,7 +385,7 @@ proc collectUnsatisfiedContextFeatures(graph: DepGraph): seq[string] =
         if declaredFeature.len > 0:
           declaredInNimble = true
           if pkg.activeFeatures.containsFeature(declaredFeature) or
-              hasSatisfiedFeatureDeps(graph, rel, declaredFeature):
+              hasSatisfiedFeatureDeps(graph, pkg, rel, declaredFeature):
             featureSatisfied = true
             break
 
@@ -370,7 +412,8 @@ proc addVersionConstraints(
     result.allDepsCompatible = true
 
     # First check if all dependencies can be satisfied
-    for dep, query in items(reqs):
+    for dep, requestedQuery in items(reqs):
+      let query = graph.effectiveRequirement(pkg, dep, requestedQuery)
       if dep notin graph.pkgs:
         debug pkg.url.projectName, "checking dependency for ", $ver, "not found:", $dep
         result.allDepsCompatible = false
@@ -416,7 +459,8 @@ proc addVersionConstraints(
       continue
 
     # Add implications for each dependency
-    for dep, query in items(rel.requirements):
+    for dep, requestedQuery in items(rel.requirements):
+      let query = graph.effectiveRequirement(pkg, dep, requestedQuery)
       if dep notin graph.pkgs:
         info pkg.url.projectName, "requirement depdendency not found:", $dep.projectName, "query:", $query
         continue
@@ -475,7 +519,8 @@ proc addVersionConstraints(
           b.addNegated(ver.vid)
           b.add(featureVarId)
 
-      for dep, query in items(reqs):
+      for dep, requestedQuery in items(reqs):
+        let query = graph.effectiveRequirement(pkg, dep, requestedQuery)
         if dep notin graph.pkgs:
           info pkg.url.projectName, "feature depdendency not found:", $dep.projectName, "query:", $query
           continue
@@ -535,7 +580,7 @@ proc reportRootRequirements(graph: DepGraph) =
   if not graph.root.isNil:
     var requirements: seq[string]
     for ver, rel in graph.root.validVersions():
-      for req in requiredDependencies(graph.root, ver, rel):
+      for req in requiredDependencies(graph, graph.root, ver, rel):
         var matches: seq[string]
         if req.url in graph.pkgs:
           for candidate, depRel in graph.pkgs[req.url].validVersions():
@@ -551,81 +596,6 @@ proc reportRootRequirements(graph: DepGraph) =
     notice "atlas:resolved", "root requirements and matching loaded releases:"
     for requirement in requirements:
       notice "atlas:resolved", requirement
-
-proc hasVersionSatisfiableByLoadedDeps(graph: DepGraph; pkg: Package): bool =
-  ## Returns true when at least one normal release can satisfy all currently
-  ## loaded non-lazy dependencies. If false, lazy retry cannot help this pkg.
-  for ver, rel in validVersions(pkg):
-    var allDepsCompatible = true
-
-    for dep, query in items(rel.requirements):
-      if dep notin graph.pkgs:
-        allDepsCompatible = false
-        break
-
-      let depNode = graph.pkgs[dep]
-      if depNode.state == LazyDeferred:
-        continue
-
-      var hasCompatible = false
-      for depVer, depRel in depNode.validVersions():
-        if requirementMatches(query, depVer, depRel):
-          hasCompatible = true
-          break
-
-      if not hasCompatible:
-        allDepsCompatible = false
-        break
-
-    if allDepsCompatible:
-      return true
-
-  false
-
-proc collectHardUnsatNonLazyPackages(graph: DepGraph): seq[string] =
-  ## Only retry lazy deferred packages when they could change SAT.
-  ## If already-loaded non-lazy packages have no satisfiable versions, lazy
-  ## retry cannot fix the conflict and should be skipped.
-  for pkg in graph.pkgs.values():
-    if pkg.state == LazyDeferred or pkg.versions.len == 0:
-      continue
-    if not hasVersionSatisfiableByLoadedDeps(graph, pkg):
-      result.add(pkg.url.projectName)
-
-proc collectLazyDeferredPackagesForUnsatRetry(graph: DepGraph): seq[Package] =
-  ## If SAT fails, collect lazy deferred packages that are reachable from the
-  ## currently loaded graph and could change satisfiability on one retry pass.
-  var lazyDeferUrls: HashSet[PkgUrl]
-
-  template includeLazyDeps(reqs: untyped, reason: string) =
-    for req in reqs:
-      let depUrl = req[0]
-      if depUrl in graph.pkgs and graph.pkgs[depUrl].state == LazyDeferred:
-        if not lazyDeferUrls.containsOrIncl(depUrl):
-          result.add graph.pkgs[depUrl]
-          debug graph.pkgs[depUrl].url.projectName, "lazy deferred package selected for load after UNSAT:", reason
-
-  for pkg in graph.pkgs.values():
-    if pkg.state == LazyDeferred:
-      continue
-
-    var hasSpecialVersions = false
-    for ver, rel in validVersions(pkg):
-      let verStr = ver.version().string
-      if verStr.len > 1 and verStr[0] == '#':
-        hasSpecialVersions = true
-        break
-
-    for ver, rel in validVersions(pkg):
-      if hasSpecialVersions:
-        let verStr = ver.version().string
-        if verStr.len <= 1 or verStr[0] != '#':
-          continue
-
-      includeLazyDeps(rel.requirements, $pkg.url.projectName & ":" & $ver)
-      for feature, reqs in rel.features:
-        if hasContextFeature(pkg, rel, feature):
-          includeLazyDeps(reqs, $pkg.url.projectName & ":" & feature)
 
 proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
   result = Form()
@@ -977,21 +947,9 @@ proc solve*(graph: var DepGraph; form: Form, rerun: var bool) =
     if notFoundCount > 0:
       return
 
-    let hardUnsatPkgs = collectHardUnsatNonLazyPackages(graph)
-
-    if hardUnsatPkgs.len == 0:
-      let lazyDefersNeeded = collectLazyDeferredPackagesForUnsatRetry(graph)
-
-      if lazyDefersNeeded.len > 0:
-        notice "atlas:resolved", "rerunning SAT after conflict; loading lazy deferred packages:", lazyDefersNeeded.mapIt(it.url.projectName).join(", ")
-        for pkg in lazyDefersNeeded:
-          pkg.state = DoLoad
-          pkg.versions.clear()
-        rerun = true
-        return
-    else:
-      error "atlas:resolved", "not retrying lazy deferred packages; non-lazy dependencies are unsatisfiable for:", hardUnsatPkgs.join(", ")
-
+    # Deferred dependency implications are omitted from this formula. Loading
+    # them can only restrict its solutions, so it cannot repair UNSAT. Only a
+    # satisfiable selection above can justify loading more release metadata.
     error project(), "dependency conflict: no combination satisfies all required versions and features"
     reportRootRequirements(graph)
     reportNoVersionsFound(form)
@@ -1084,7 +1042,7 @@ proc activateGraph*(graph: DepGraph): tuple[paths: seq[CfgPath], features: seq[s
       continue
     for featName in rel.features.keys():
       if hasContextFeature(pkg, rel, featName) and
-          hasSatisfiedFeatureDeps(graph, rel, featName):
+          hasSatisfiedFeatureDeps(graph, pkg, rel, featName):
         pkg.activeFeatures.addUniqueFeature(featName)
 
   if not graph.root.isNil and graph.root.active:

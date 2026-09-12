@@ -108,6 +108,41 @@ suite "dependency conflict diagnostics":
     let g = graph(root, ui)
     check g.findDependencyConflict().len == 0
 
+  test "dependency-requested features identify the root and feature conflict":
+    let app = root.release("0.1.0", "root", [(siwin, "#abcdef"), (ui, "*")])
+    app.reqsByFeatures[ui.url] = toHashSet(["render"])
+    let renderer = ui.release("1.0.0", "ui1")
+    renderer.features["render"] = @[(siwin.url, query("#fedcba"))]
+    let g = graph(root, siwin, ui)
+    let explanation = g.findDependencyConflict().join("\n")
+    check "(root) requires siwin #abcdef" in explanation
+    check "feature render requires siwin #fedcba" in explanation
+
+  test "new feature demands revisit an already expanded package":
+    let later = pkg("later")
+    discard root.release("0.1.0", "root",
+      [(ui, "*"), (later, "*"), (siwin, "#abcdef")])
+    let renderer = ui.release("1.0.0", "ui1")
+    renderer.features["render"] = @[(siwin.url, query("#fedcba"))]
+    let requester = later.release("1.0.0", "later1", [(ui, "*")])
+    requester.reqsByFeatures[ui.url] = toHashSet(["render"])
+    let g = graph(root, siwin, ui, later)
+    check "feature render requires siwin #fedcba" in
+      g.findDependencyConflict().join("\n")
+
+  test "feature demands from alternative parents are not intersected":
+    discard root.release("0.1.0", "root", [(ui, "*"), (siwin, "#abcdef")])
+    let first = ui.release("1.0.0", "ui1", [(siwin, "*")])
+    first.reqsByFeatures[siwin.url] = toHashSet(["broken"])
+    discard ui.release("2.0.0", "ui2", [(siwin, "*")])
+    for _, rel in siwin.versions:
+      rel.features["broken"] = @[(siwin.url, query("#badbad"))]
+    var g = graph(root, siwin, ui)
+    check g.findDependencyConflict().len == 0
+    g.solve(g.toFormular(SemVer))
+    check root.active
+    check ui.activeVersion.version == Version"2.0.0"
+
   test "root alternatives do not all become mandatory":
     discard root.release("0.1.0", "root1", [(siwin, "#abcdef")])
     discard root.release("0.2.0", "root2", [(siwin, "#fedcba")])
