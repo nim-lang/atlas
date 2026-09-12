@@ -269,7 +269,7 @@ proc solveFixture(eager, cold: bool): DepGraph =
 
     configureFixture(eager)
 
-    var nc = createNimbleContext()
+    var nc = createUnfilledNimbleContext()
     result = loadWorkspace(project(), nc, AllReleases, DoClone, doSolve = true)
 
     doAssert result.root.active, "the valid modern dependency selection must be satisfiable"
@@ -320,7 +320,7 @@ proc checkUnsatDoesNotExpandExcludedHistory() =
     ].join("\n"))
     configureFixture(eager = false)
 
-    var nc = createNimbleContext()
+    var nc = createUnfilledNimbleContext()
     let errorsBefore = atlasErrors()
     let graph = loadWorkspace(project(), nc, AllReleases, DoClone, doSolve = true)
     doAssert atlasErrors() > errorsBefore,
@@ -350,7 +350,7 @@ proc checkUnsatPreservesSecondHopConstraint() =
     ].join("\n"))
     configureFixture(eager = false)
 
-    var nc = createNimbleContext()
+    var nc = createUnfilledNimbleContext()
     let errorsBefore = atlasErrors()
     let graph = loadWorkspace(project(), nc, AllReleases, DoClone, doSolve = true)
     doAssert atlasErrors() > errorsBefore
@@ -378,7 +378,7 @@ proc checkAlternativeReleaseBacktracking() =
     ].join("\n"))
     configureFixture(eager = true, algo = MinVer)
 
-    var nc = createNimbleContext()
+    var nc = createUnfilledNimbleContext()
     let graph = loadWorkspace(project(), nc, AllReleases, DoClone, doSolve = true)
     doAssert graph.root.active,
       "minimum-version search must backtrack from the incompatible old regex"
@@ -401,7 +401,7 @@ proc checkDeferredMetadataCanRevealCandidate() =
     ].join("\n"))
     configureFixture(eager = false)
 
-    var nc = createNimbleContext()
+    var nc = createUnfilledNimbleContext()
     let errorsBefore = atlasErrors()
     let graph = loadWorkspace(project(), nc, AllReleases, DoClone, doSolve = true)
     doAssert atlasErrors() == errorsBefore
@@ -423,7 +423,7 @@ proc checkFeaturePreflightAllowsCandidateDiscovery() =
     ].join("\n"))
     configureFixture(eager = false)
 
-    var nc = createNimbleContext()
+    var nc = createUnfilledNimbleContext()
     let errorsBefore = atlasErrors()
     let graph = loadWorkspace(project(), nc, AllReleases, DoClone, doSolve = true)
     doAssert atlasErrors() == errorsBefore
@@ -444,7 +444,7 @@ proc checkRootPinOverridesTransitiveHead() =
     ].join("\n"))
     configureFixture(eager = true)
 
-    var nc = createNimbleContext()
+    var nc = createUnfilledNimbleContext()
     let errorsBefore = atlasErrors()
     let graph = loadWorkspace(project(), nc, AllReleases, DoClone, doSolve = true)
     doAssert atlasErrors() == errorsBefore
@@ -465,7 +465,7 @@ proc checkTransitiveCommitRemainsStrict() =
     ].join("\n"))
     configureFixture(eager = true)
 
-    var nc = createNimbleContext()
+    var nc = createUnfilledNimbleContext()
     let errorsBefore = atlasErrors()
     let graph = loadWorkspace(project(), nc, AllReleases, DoClone, doSolve = true)
     doAssert atlasErrors() > errorsBefore
@@ -484,7 +484,7 @@ proc checkDisabledRootFeaturePinDoesNotOverrideHead() =
     ].join("\n"))
     configureFixture(eager = true)
 
-    var nc = createNimbleContext()
+    var nc = createUnfilledNimbleContext()
     let errorsBefore = atlasErrors()
     let graph = loadWorkspace(project(), nc, AllReleases, DoClone, doSolve = true)
     doAssert atlasErrors() == errorsBefore
@@ -507,7 +507,7 @@ proc checkEnabledRootFeaturePinOverridesHead() =
     configureFixture(eager = true)
     context().features.incl "legacy"
 
-    var nc = createNimbleContext()
+    var nc = createUnfilledNimbleContext()
     let errorsBefore = atlasErrors()
     let graph = loadWorkspace(project(), nc, AllReleases, DoClone, doSolve = true)
     doAssert atlasErrors() == errorsBefore
@@ -525,7 +525,7 @@ proc checkDirectRootHeadRemainsStrict() =
     ].join("\n"))
     configureFixture(eager = true)
 
-    var nc = createNimbleContext()
+    var nc = createUnfilledNimbleContext()
     let errorsBefore = atlasErrors()
     let graph = loadWorkspace(project(), nc, AllReleases, DoClone, doSolve = true)
     doAssert atlasErrors() > errorsBefore
@@ -543,7 +543,7 @@ proc checkTransitiveSemverRemainsBinding() =
     ].join("\n"))
     configureFixture(eager = true)
 
-    var nc = createNimbleContext()
+    var nc = createUnfilledNimbleContext()
     let errorsBefore = atlasErrors()
     let graph = loadWorkspace(project(), nc, AllReleases, DoClone, doSolve = true)
     doAssert atlasErrors() > errorsBefore
@@ -561,7 +561,7 @@ proc checkTransitiveBranchRemainsStrict() =
     ].join("\n"))
     configureFixture(eager = true)
 
-    var nc = createNimbleContext()
+    var nc = createUnfilledNimbleContext()
     let errorsBefore = atlasErrors()
     let graph = loadWorkspace(project(), nc, AllReleases, DoClone, doSolve = true)
     doAssert atlasErrors() > errorsBefore

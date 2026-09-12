@@ -42,6 +42,9 @@ proc buildAtlas(outputPath: string) =
   doAssert res.exitCode == 0, res.output
 
 proc writeConfig(dir: string) =
+  createDir(dir / "deps")
+  createDir(dir / "deps/.cache")
+  writeFile(dir / "deps/.cache/packages.json", "[]\n")
   writeFile(dir / "atlas.config", """
 {
   "deps": "deps",
@@ -72,6 +75,7 @@ requires "consumer_b"
 proc createSuccessWorkspace(dir: string) =
   createDir(dir)
   writeFile(dir / "success.nimble", "version = \"0.1.0\"\n")
+  writeConfig(dir)
 
 if paramCount() > 0 and paramStr(1) == "reporter-child":
   resetAtlasReporter()
