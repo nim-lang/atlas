@@ -361,12 +361,12 @@ proc updateProgressJob(repoName: string; repoPath: Path): GitProgressJob =
     workingDir: $repoPath
   )
 
-proc afterGraphActions(g: DepGraph) =
+proc afterGraphActions(g: DepGraph; errorsBefore: int) =
   ## perform any actions after the dependency graph has been generated
   ##
   ## this will write the config file, generate the dependency graph, and
   ## setup the Nim environment if the user has requested it
-  if atlasErrors() == 0:
+  if atlasErrors() == errorsBefore:
     writeConfig()
 
   if DumpGraphs in context().flags:
@@ -374,18 +374,18 @@ proc afterGraphActions(g: DepGraph) =
   else:
     removeDepGraphCache()
 
-  if atlasErrors() == 0:
+  if atlasErrors() == errorsBefore:
     writeActivationCache(g)
 
   if ShowGraph in context().flags:
     generateDepGraph g
 
-  if atlasErrors() == 0 and AutoEnv in context().flags:
+  if atlasErrors() == errorsBefore and AutoEnv in context().flags:
     let v = g.bestNimVersion
     if v != Version"":
       setupNimEnv v.string, KeepNimEnv in context().flags
 
-  if atlasErrors() == 0 and NoExec notin context().flags:
+  if atlasErrors() == errorsBefore and NoExec notin context().flags:
     g.runBuildSteps()
 
 proc installDependencies(nc: var NimbleContext; nimbleFile: Path) =
@@ -397,21 +397,22 @@ proc installDependencies(nc: var NimbleContext; nimbleFile: Path) =
   if dir == Path "":
     dir = Path(".").absolutePath
   info pkgname, "installing dependencies"
+  let errorsBefore = atlasErrors()
   let graph = dir.loadWorkspace(nc, AllReleases, onClone=DoClone, doSolve=true)
   if not graph.root.active or
-      (atlasErrors() > 0 and IgnoreErrors notin context().flags):
+      (atlasErrors() > errorsBefore and IgnoreErrors notin context().flags):
     if DumpGraphs in context().flags:
       writeDepGraph(graph, debug = true)
     if ShowGraph in context().flags:
       generateDepGraph graph
     return
   let (paths, features) = graph.activateGraph()
-  if atlasErrors() > 0 and IgnoreErrors notin context().flags:
+  if atlasErrors() > errorsBefore and IgnoreErrors notin context().flags:
     return
   let cfgPath = CfgPath project()
   patchNimCfg(paths, cfgPath, features)
-  afterGraphActions graph
-  if atlasErrors() == 0:
+  afterGraphActions(graph, errorsBefore)
+  if atlasErrors() == errorsBefore:
     notice "atlas:graph", "Wrote nim.cfg!"
 
 proc linkPackage(linkDir, linkedNimble: Path) =
@@ -970,12 +971,14 @@ proc atlasRun*(params: seq[string]) =
 
 proc main() =
   setContext AtlasContext()
+  var completed = false
   try:
     atlasRun(commandLineParams())
+    completed = true
   finally:
     atlasWritePendingMessages()
     atlasWriteErrorSummary()
-    atlasWriteResultFooter()
+    atlasWriteResultFooter(completed and atlasErrors() == 0)
   if atlasErrors() > 0 and IgnoreErrors notin context().flags:
     quit 1
 
