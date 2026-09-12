@@ -105,11 +105,13 @@ Options:
 proc writeHelp(code = 2) =
   stdout.write(Usage)
   stdout.flushFile()
+  atlasWriteResultFooter(code == 0)
   quit(code)
 
 proc writeVersion() =
   stdout.write("version: " & AtlasVersion & "\n")
   stdout.flushFile()
+  atlasWriteResultFooter(true)
   quit(0)
 
 proc parseParallelCloneWorkers(value: string): int =
@@ -152,6 +154,8 @@ proc addRequestedFeatures(rawFeatures: string) =
 proc tag(tag: string) =
   if gitops.getCanonicalUrl(project()).len == 0:
     error "atlas:tag", "Missing canonical remote 'origin'"
+    atlasWriteErrorSummary()
+    atlasWriteResultFooter(false)
     quit(1)
   if tag.len == 1 and tag[0] in {'a'..'z'}:
     # Handle single letter tags
@@ -176,6 +180,8 @@ proc tag(tag: string) =
     pushTag(project(), tag = tag)
   else:
     error "atlas:tag", "Invalid tag format. Must be one of: ['major'|'minor'|'patch'] or a SemVer tag like ['1.0.3'] or a letter ['a'..'z']"
+    atlasWriteErrorSummary()
+    atlasWriteResultFooter(false)
     quit(1)
 
 proc findProjectNimbleFile(writeNimbleFile: bool = false): Path =
@@ -379,7 +385,7 @@ proc afterGraphActions(g: DepGraph) =
     if v != Version"":
       setupNimEnv v.string, KeepNimEnv in context().flags
 
-  if NoExec notin context().flags:
+  if atlasErrors() == 0 and NoExec notin context().flags:
     g.runBuildSteps()
 
 proc installDependencies(nc: var NimbleContext; nimbleFile: Path) =
@@ -392,10 +398,21 @@ proc installDependencies(nc: var NimbleContext; nimbleFile: Path) =
     dir = Path(".").absolutePath
   info pkgname, "installing dependencies"
   let graph = dir.loadWorkspace(nc, AllReleases, onClone=DoClone, doSolve=true)
+  if not graph.root.active or
+      (atlasErrors() > 0 and IgnoreErrors notin context().flags):
+    if DumpGraphs in context().flags:
+      writeDepGraph(graph, debug = true)
+    if ShowGraph in context().flags:
+      generateDepGraph graph
+    return
   let (paths, features) = graph.activateGraph()
+  if atlasErrors() > 0 and IgnoreErrors notin context().flags:
+    return
   let cfgPath = CfgPath project()
   patchNimCfg(paths, cfgPath, features)
   afterGraphActions graph
+  if atlasErrors() == 0:
+    notice "atlas:graph", "Wrote nim.cfg!"
 
 proc linkPackage(linkDir, linkedNimble: Path) =
   ## link a project into the current project
@@ -957,6 +974,8 @@ proc main() =
     atlasRun(commandLineParams())
   finally:
     atlasWritePendingMessages()
+    atlasWriteErrorSummary()
+    atlasWriteResultFooter()
   if atlasErrors() > 0 and IgnoreErrors notin context().flags:
     quit 1
 

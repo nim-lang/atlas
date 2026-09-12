@@ -27,6 +27,7 @@ type
     warnings*: int
     errors*: int
     messages: seq[(MsgKind, string, seq[string])] # delayed output
+    recentErrors: seq[(string, seq[string])]
 
   AtlasFatalError* = object of CatchableError
 
@@ -51,6 +52,7 @@ proc resetAtlasReporter*() =
   atlasReporter.warnings = 0
   atlasReporter.errors = 0
   atlasReporter.messages.setLen 0
+  atlasReporter.recentErrors.setLen 0
 
 proc setAtlasErrorsColor*(color: ForegroundColor) =
   atlasReporter.errorsColor = color
@@ -156,6 +158,9 @@ proc message(c: var Reporter; k: MsgKind; p: string, args: openArray[string]) =
     inc c.warnings
   elif k == Error:
     inc c.errors
+    c.recentErrors.add (p, @args)
+    if c.recentErrors.len > 5:
+      c.recentErrors.delete(0)
   writeMessage c, k, p, @args
 
 proc writePendingMessages*(c: var Reporter) =
@@ -167,6 +172,40 @@ proc writePendingMessages*(c: var Reporter) =
 proc atlasWritePendingMessages*() =
   atlasReporter.writePendingMessages()
 
+proc atlasWriteErrorSummary*() =
+  if atlasReporter.errors == 0:
+    return
+  let count = atlasReporter.errors
+  var heading = "error summary: " & $count &
+    (if count == 1: " error reported" else: " errors reported")
+  if count > atlasReporter.recentErrors.len:
+    heading.add "; showing the last " & $atlasReporter.recentErrors.len
+  # Replaying output must not record another error or alter the exit status.
+  writeMessage(atlasReporter, Error, "atlas", @[heading])
+  for (source, args) in atlasReporter.recentErrors:
+    writeMessage(atlasReporter, Error, source, args)
+
+proc writeSuccess(c: var Reporter; p: string; args: seq[string]) =
+  ## A command result is always visible, even at error-only verbosity.
+  if c.noColors:
+    writeMessageRaw(c, "[Success] ", p, args)
+  else:
+    stdout.styledWrite(fgGreen, styleBright, "[Success] ", resetStyle,
+                       fgCyan, "(", p, ")", resetStyle)
+    for arg in args:
+      stdout.styledWrite(fgWhite, " ", arg)
+    stdout.styledWriteLine(resetStyle, "")
+
+proc atlasWriteResultFooter*(succeeded: bool) =
+  if succeeded:
+    writeSuccess(atlasReporter, "atlas", @["completed successfully"])
+  else:
+    # Do not record the footer as another error.
+    writeMessage(atlasReporter, Error, "atlas", @["failed"])
+
+proc atlasWriteResultFooter*() =
+  atlasWriteResultFooter(atlasReporter.errors == 0)
+
 proc doInfoNow*(c: var Reporter; p: string, args: seq[string]) =
   writeMessage c, Info, p, @args
 
@@ -174,6 +213,7 @@ proc doFatal*(c: var Reporter, msg: string, prefix = "fatal", code: int) =
   when defined(debug):
     writeStackTrace()
   writeMessage(c, Error, prefix, @[msg])
+  atlasWriteResultFooter(false)
   quit code
 
 when not compiles($(Path("test"))):

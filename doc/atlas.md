@@ -83,6 +83,11 @@ When requirements conflict:
   rather than treating all historical dependencies as one combined requirement.
 - For more complex conflicts, Atlas lists root requirements and matching loaded
   releases. Use `--verbosity:debug` for release-level details.
+- If resolution fails, Atlas leaves the existing `nim.cfg` untouched and skips
+  dependency activation and build steps. Commands that record errors finish with
+  an error summary, repeating up to five recent errors so the failure stays visible.
+- Every command ends with a clear success or failure footer. The footer remains
+  visible at error-only verbosity.
 
 
 ## No magic

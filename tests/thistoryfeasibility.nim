@@ -10,6 +10,7 @@ const Workspace = "tests/ws_history_feasibility"
 var oldSiwinCommit = ""
 var newSiwinCommit = ""
 var cycleEscapeCommit = ""
+var featureEscapeCommit = ""
 
 proc initGitRepo() =
   exec("git init -b master")
@@ -206,6 +207,46 @@ proc createFixture() =
     ""
   ].join("\n"))
 
+proc createFeaturePreflightFixture() =
+  withDir Workspace / "buildGraph":
+    createDir("featurep")
+    withDir "featurep":
+      initGitRepo()
+      commitRelease("featurep", "1.0.0")
+      commitRelease("featurep", "2.0.0")
+      exec("git switch -c escape")
+      writePackage("featurep", "1.5.0")
+      exec("git add .")
+      exec("git commit -m untagged-feature-escape")
+      featureEscapeCommit = gitHead()
+      exec("git switch master")
+
+    createDir("featureconsumer")
+    withDir "featureconsumer":
+      initGitRepo()
+      writeFile("featureconsumer.nimble", [
+        "version = \"1.0.0\"",
+        "feature \"render\":",
+        "  requires \"featurep >= 1.5.0\"",
+        ""
+      ].join("\n"))
+      writeFile("featureconsumer.nim", "discard\n")
+      exec("git add .")
+      exec("git commit -m release-1.0.0")
+      exec("git tag v1.0.0")
+
+    createDir("featurerevealer")
+    withDir "featurerevealer":
+      initGitRepo()
+      commitRelease("featurerevealer", "1.0.0", [
+        "featurep#" & featureEscapeCommit[0..7]
+      ])
+
+    createDir("featuregateway")
+    withDir "featuregateway":
+      initGitRepo()
+      commitRelease("featuregateway", "1.0.0", ["featurerevealer"])
+
 proc configureFixture(eager: bool; algo = SemVer) =
   setContext(AtlasContext())
   context().nameOverrides = Patterns()
@@ -369,6 +410,28 @@ proc checkDeferredMetadataCanRevealCandidate() =
     let cyclea = graph.pkgs[nc.createUrl("cyclea")]
     doAssert cyclea.active
     doAssert cyclea.activeVersion.commit.h == cycleEscapeCommit
+
+proc checkFeaturePreflightAllowsCandidateDiscovery() =
+  withDir Workspace:
+    removeDir("deps")
+    writeFile("ws_history_feasibility.nimble", [
+      "version = \"0.1.0\"",
+      "requires \"featurep < 2.0.0\"",
+      "requires \"featureconsumer[render]\"",
+      "requires \"featuregateway\"",
+      ""
+    ].join("\n"))
+    configureFixture(eager = false)
+
+    var nc = createNimbleContext()
+    let errorsBefore = atlasErrors()
+    let graph = loadWorkspace(project(), nc, AllReleases, DoClone, doSolve = true)
+    doAssert atlasErrors() == errorsBefore
+    doAssert graph.root.active,
+      "preflight must allow mandatory deferred metadata to add a feature candidate"
+    let featurep = graph.pkgs[nc.createUrl("featurep")]
+    doAssert featurep.active
+    doAssert featurep.activeVersion.commit.h == featureEscapeCommit
 
 proc checkRootPinOverridesTransitiveHead() =
   withDir Workspace:
@@ -543,6 +606,14 @@ suite "dependency history feasibility":
       removeDir(Workspace)
 
     checkDeferredMetadataCanRevealCandidate()
+
+  test "feature preflight allows deferred candidate discovery":
+    createFixture()
+    defer:
+      removeDir(Workspace)
+
+    createFeaturePreflightFixture()
+    checkFeaturePreflightAllowsCandidateDiscovery()
 
   test "root commit pin overrides transitive head feature dependency":
     createFixture()

@@ -225,9 +225,10 @@ proc loadedVersionSummary(graph: DepGraph; url: PkgUrl): string =
     result.add " (and " & $(versions.len - 5) & " more)"
 
 proc findDependencyConflict*(graph: DepGraph): seq[string] =
-  ## Explains a proven conflict reachable from the root without running SAT.
+  ## Explains a conflict among loaded candidates reachable from the root.
   ## Only mandatory requirements restrict choices. Alternative releases and
   ## lazy dependencies remain possible until they can safely be ruled out.
+  ## Deferred metadata may still introduce candidates before solve reports it.
   if graph.root.isNil or graph.root.state != Processed:
     return
   var choices: Table[PkgUrl, seq[PackageVersion]]
@@ -651,6 +652,18 @@ proc collectLazyDependenciesForRetry(graph: DepGraph): seq[Package] =
           pending.add requiredDependencies(graph, pkg, ver, rel,
             requestedFeatures.getOrDefault(ver.vid))
 
+proc retryDeferredDependencies(graph: DepGraph; rerun: var bool): bool =
+  let lazyDeps = collectLazyDependenciesForRetry(graph)
+  if lazyDeps.len == 0:
+    return false
+  notice "atlas:resolved", "retrying resolution after conflict; loading reachable deferred packages:",
+    lazyDeps.mapIt(it.url.projectName).join(", ")
+  for pkg in lazyDeps:
+    pkg.state = DoLoad
+    pkg.versions.clear()
+  rerun = true
+  result = true
+
 proc toFormular*(graph: var DepGraph; algo: ResolutionAlgorithm): Form =
   result = Form()
   var b = Builder()
@@ -912,6 +925,10 @@ proc solve*(graph: var DepGraph; form: Form, rerun: var bool) =
 
   let conflict = findDependencyConflict(graph)
   if conflict.len > 0:
+    # This conflict is over currently loaded candidates. A reachable deferred
+    # manifest may introduce another explicit commit before we can reject it.
+    if retryDeferredDependencies(graph, rerun):
+      return
     error project(), conflict[0]
     for line in conflict[1..^1]:
       warn "atlas:resolved", line
@@ -1004,14 +1021,7 @@ proc solve*(graph: var DepGraph; form: Form, rerun: var bool) =
     # Deferred manifests can introduce explicit commits on already-loaded
     # packages, expanding their candidate sets. Retry only metadata reachable
     # through matching release-specific edges, never arbitrary loaded history.
-    let lazyDeps = collectLazyDependenciesForRetry(graph)
-    if lazyDeps.len > 0:
-      notice "atlas:resolved", "rerunning SAT after conflict; loading reachable deferred packages:",
-        lazyDeps.mapIt(it.url.projectName).join(", ")
-      for pkg in lazyDeps:
-        pkg.state = DoLoad
-        pkg.versions.clear()
-      rerun = true
+    if retryDeferredDependencies(graph, rerun):
       return
 
     error project(), "dependency conflict: no combination satisfies all required versions and features"
@@ -1090,8 +1100,6 @@ proc activateGraph*(graph: DepGraph): tuple[paths: seq[CfgPath], features: seq[s
   if NoExec notin context().flags:
     notice "atlas:graph", "Running build steps"
     runBuildSteps(graph)
-
-  notice "atlas:graph", "Wrote nim.cfg!"
 
   # Add feature defines for --feature:FOO flags (root project features without prefix)
   for feature in context().features:
