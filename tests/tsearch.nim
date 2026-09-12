@@ -1,4 +1,6 @@
-import std/[os, paths, unittest]
+{.define: atlasUnitTests.}
+
+import std/[httpclient, os, paths, unittest]
 import basic/[context, packageinfos]
 import atlas
 import pkgsearch
@@ -34,3 +36,11 @@ suite "search":
       let candidates = determineCandidates(pkgs, @["jwt"])
       check candidates[0].len == 0
       check candidates[1].len == 1
+
+    test "requests uncompressed GitHub responses":
+      let client = newGithubHttpClientForTests()
+      defer: client.close()
+      check not client.headers.hasKey("Accept-Encoding")
+
+    test "finds an exact GitHub repository match":
+      check getUrlFromGithub("balls") == "https://github.com/disruptek/balls"
