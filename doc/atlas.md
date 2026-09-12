@@ -44,6 +44,51 @@ Likewise, you can move a project to the `deps` directory, turning it into a depe
 The only distinction between a project and a dependency is its location. For dependency resolution
 a project always has a higher priority than a dependency.
 
+### Version constraints and root pins
+
+The *root project* is your application or library; *transitive dependencies* are
+the dependencies requested by its dependencies.
+
+What gets selected:
+
+- Atlas chooses one release of each required package that satisfies the applicable
+  requirements.
+- Only the selected release's dependencies apply. Reading an older manifest does
+  not activate its dependencies or combine them with a newer release's requirements.
+- Feature dependencies apply only when their feature is enabled.
+
+When your root pin wins:
+
+- If your project requires `siwin#6e37ac8` and a dependency requires `siwin#head`,
+  Atlas uses your pinned commit for that repository. You can keep a known-good
+  commit even when the repository's tip moves.
+- A pin in an enabled root feature works the same way. A disabled feature's pin
+  has no effect.
+
+What still has to agree:
+
+- Transitive version bounds, named branches, and explicit commit hashes remain
+  binding. The root-pin override applies only to transitive `#head` requests.
+- Two incompatible root requirements still conflict, including a root commit pin
+  paired with a root `#head` that points elsewhere.
+- A commit pin means that exact commit, not any later commit containing it.
+
+When requirements conflict:
+
+- Atlas reports the incompatible requirements and the packages or features that
+  requested them where it can identify the cause.
+- Lazy loading normally follows the selected releases. If a solve fails, Atlas
+  may load more reachable metadata: a dependency can introduce a previously
+  unknown commit candidate. These retries follow each release's version bounds,
+  rather than treating all historical dependencies as one combined requirement.
+- For more complex conflicts, Atlas lists root requirements and matching loaded
+  releases. Use `--verbosity:debug` for release-level details.
+- If resolution fails, Atlas leaves the existing `nim.cfg` untouched and skips
+  dependency activation and build steps. Commands that record errors finish with
+  an error summary, repeating up to five recent errors so the failure stays visible.
+- Every command ends with a clear success or failure footer. The footer remains
+  visible at error-only verbosity.
+
 
 ## No magic
 
