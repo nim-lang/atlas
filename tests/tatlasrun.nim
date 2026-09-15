@@ -15,6 +15,13 @@ proc freshDir(name: string): Path =
 proc normalizedPath(path: string): string =
   path.replace("\\", "/")
 
+proc supportsNimIc(): bool =
+  let (output, exitCode) = execCmdEx("nim --fullhelp")
+  if exitCode == 0:
+    for line in output.splitLines:
+      if line.strip.startsWith("ic "):
+        return true
+
 template withNimFlags(value: string; body: untyped) =
   let hadNimFlags = existsEnv("NIMFLAGS")
   let oldNimFlags = getEnv("NIMFLAGS")
@@ -213,6 +220,82 @@ namedBin = {"tool": "demo-tool"}.toTable
     check code == 0
     check fileExists($(dir / Path"dist" / Path("demo-tool".addFileExt(ExeExt))))
 
+  test "build selects Nim backend from CLI":
+    let
+      canRunIc = supportsNimIc()
+      backends = @["ic", "cpp", "js"]
+    for backend in backends:
+      let dir = freshDir("atlas_run_build_backend_" & backend)
+      try:
+        let srcDir = dir / Path"src"
+        createDir($srcDir)
+        writeFile($(srcDir / Path"tool.nim"), "echo \"backend build\"\n")
+
+        let nimbleFile = dir / Path"demo.nimble"
+        writeFile($nimbleFile, """
+version = "0.1.0"
+srcDir = "src"
+binDir = "dist"
+bin = @["tool"]
+namedBin = {"tool": "demo-tool"}.toTable
+""")
+
+        let binaries = listNimbleBinaries(
+          nimbleFile,
+          backendOverride = backend
+        )
+        check binaries.len == 1
+        check binaries[0].backend == backend
+        check binaries[0].commandLine.startsWith("nim " & backend)
+
+        if backend != "ic" or canRunIc:
+          let code = atlasRunMain(@[
+            "--project:" & $dir,
+            "build",
+            "--backend:" & backend
+          ])
+          check code == 0
+          let output =
+            if backend == "js":
+              dir / Path"dist" / Path"demo-tool.js"
+            else:
+              dir / Path"dist" / Path("demo-tool".addFileExt(ExeExt))
+          check fileExists($output)
+      finally:
+        removeDir($dir)
+
+  test "tests select Nim backend from CLI":
+    let
+      canRunIc = supportsNimIc()
+      backends = @["ic", "cpp", "js"]
+    for backend in backends:
+      let dir = freshDir("atlas_run_test_backend_" & backend)
+      try:
+        writeFile($(dir / Path"demo.nimble"), "version = \"0.1.0\"\n")
+        let testsDir = dir / Path"tests"
+        createDir($testsDir)
+        writeFile($(testsDir / Path"tbackend.nim"), "echo \"backend test\"\n")
+
+        if backend != "ic" or canRunIc:
+          let code = atlasRunMain(@[
+            "--project:" & $dir,
+            "tests",
+            "--backend:" & backend,
+            "--no-shuffle",
+            "--only-errors"
+          ])
+          check code == 0
+          let extension =
+            if backend == "js":
+              "js"
+            else:
+              ExeExt
+          check fileExists($(dir / Path"deps/.nimcache" / Path"atlas-run" /
+            Path"tests" / Path"tbackend" /
+            Path("tbackend".addFileExt(extension))))
+      finally:
+        removeDir($dir)
+
   test "discovers t-star test files":
     let dir = freshDir("atlas_run_discovers_tests")
     defer:
@@ -311,6 +394,7 @@ namedBin = {"tool": "demo-tool"}.toTable
     check not defaultOptions.stats
     check not defaultOptions.onlyErrors
     check not defaultOptions.showCompilerOutput
+    check defaultOptions.backend == ""
     check defaultOptions.compilerArgs.len == 0
     check defaultOptions.skipSelectors.len == 0
 

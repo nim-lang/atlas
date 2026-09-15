@@ -9,6 +9,7 @@
 import std/[os, paths, strutils]
 
 import basic/atlasversion
+import basic/nimbackends
 import nimble/nimblebuilder
 import nimble/nimbletaskrunner
 import testrunner
@@ -17,8 +18,8 @@ const Usage = "atlas-run - Atlas project runner Version " & AtlasVersion & """
 
 Usage:
   atlas-run [options] task [--list | task-name [arguments]]
-  atlas-run [options] build [--list] [-- nim-arg...]
-  atlas-run [options] tests [--list] [--jobs:N] [--stream] [--stats] [--compile-only] [selector...] [--skip selector...] [-- [nim-arg...]]
+  atlas-run [options] build [--list] [--backend:backend] [-- nim-arg...]
+  atlas-run [options] tests [--list] [--backend:backend] [--jobs:N] [--stream] [--stats] [--compile-only] [selector...] [--skip selector...] [-- [nim-arg...]]
 
 Commands:
   task                  list or run tasks declared in the project's Nimble file
@@ -33,6 +34,7 @@ Options:
   --version, -v         show the version
   --project=path, -p    use the project directory or Nimble file at path
   --nim=path            use the Nim executable at path
+  --backend=backend     use Nim backend: c, ic, cpp, or js
   --list                list tasks or tests without running them
   --jobs=N, -j:N        number of parallel test jobs, or auto
   --stream              periodically print output from running tests
@@ -62,6 +64,8 @@ type
     commandSet: bool
     projectArg: Path
     nimExe: string
+    backend: string
+    backendOptionSeen: bool
     nimcacheDir: Path
     listOnly: bool
     jobs: int
@@ -125,6 +129,13 @@ proc readJobsValue(params: seq[string]; i: var int; key, value: string): int =
     quit("atlas-run: invalid jobs value: " & raw, 2)
   if result <= 0:
     quit("atlas-run: jobs must be greater than zero or auto", 2)
+
+proc readBackendValue(params: seq[string]; i: var int; key, value: string): string =
+  let raw = readOptionValue(params, i, key, value)
+  result = normalizeNimBackend(raw)
+  if not isSupportedNimBackend(result):
+    quit("atlas-run: invalid backend: " & raw &
+      " (expected c, ic, cpp, or js)", 2)
 
 proc parseCliOptions(params: seq[string]): CliOptions =
   result.nimExe = "nim"
@@ -193,6 +204,9 @@ proc parseCliOptions(params: seq[string]): CliOptions =
         result.projectArg = Path readOptionValue(params, i, arg, value)
       of "nim":
         result.nimExe = readOptionValue(params, i, arg, value)
+      of "backend":
+        result.backend = readBackendValue(params, i, arg, value)
+        result.backendOptionSeen = true
       of "jobs":
         result.testOptionsSeen = true
         result.jobs = readJobsValue(params, i, arg, value)
@@ -260,6 +274,9 @@ proc parseCliOptions(params: seq[string]): CliOptions =
 
   if result.testOptionsSeen and result.command != cmdTests:
     quit("atlas-run: test options require the tests command", 2)
+  if result.backendOptionSeen and result.command != cmdBuild and
+      result.command != cmdTests:
+    quit("atlas-run: backend option requires the build or tests command", 2)
 
 proc printTasks(nimbleFile: Path) =
   let tasks = listNimbleTasks(nimbleFile)
@@ -285,8 +302,12 @@ proc printTests(projectDir: Path; selectors, skipSelectors: openArray[string]) =
   for path in tests:
     echo ($path.relativePath(projectDir, '/')).replace("\\", "/")
 
-proc printBinaries(nimbleFile: Path; nimExe: string) =
-  let binaries = listNimbleBinaries(nimbleFile, nimExe)
+proc printBinaries(nimbleFile: Path; nimExe, backend: string) =
+  let binaries = listNimbleBinaries(
+    nimbleFile,
+    nimExe,
+    backendOverride = backend
+  )
   if binaries.len == 0:
     echo "No binaries declared in " & $nimbleFile
     return
@@ -316,9 +337,14 @@ proc atlasRunMain*(params: seq[string]): int =
   of cmdBuild:
     let nimbleFile = resolveNimbleFile(opts.projectArg)
     if opts.listOnly:
-      printBinaries(nimbleFile, opts.nimExe)
+      printBinaries(nimbleFile, opts.nimExe, opts.backend)
       return 0
-    result = runNimbleBuild(nimbleFile, opts.nimExe, opts.buildCompilerArgs)
+    result = runNimbleBuild(
+      nimbleFile,
+      opts.nimExe,
+      opts.buildCompilerArgs,
+      opts.backend
+    )
   of cmdTests:
     let projectDir = resolveProjectDir(opts.projectArg)
     if opts.listOnly:
@@ -327,6 +353,7 @@ proc atlasRunMain*(params: seq[string]): int =
     result = runAtlasTests(initAtlasTestOptions(
       projectDir = projectDir,
       nimExe = opts.nimExe,
+      backend = opts.backend,
       nimcacheDir = opts.nimcacheDir,
       jobs = opts.jobs,
       selectors = opts.testSelectors,

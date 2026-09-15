@@ -14,12 +14,13 @@ import std/[
 when defined(posix):
   from std/posix import Pid, SIGKILL, SIGTERM, killpg, read, setpgid
 
-import basic/reporters
+import basic/[nimbackends, reporters]
 
 type
   AtlasTestOptions* = object
     projectDir*: Path
     nimExe*: string
+    backend*: string
     nimcacheDir*: Path
     compilerArgs*: seq[string]
     jobs*: int
@@ -136,10 +137,12 @@ proc initAtlasTestOptions*(projectDir = Path"";
                            stream = false;
                            stats = false;
                            onlyErrors = false;
-                           showCompilerOutput = false): AtlasTestOptions =
+                           showCompilerOutput = false;
+                           backend = ""): AtlasTestOptions =
   AtlasTestOptions(
     projectDir: projectDir,
     nimExe: nimExe,
+    backend: backend,
     nimcacheDir: nimcacheDir,
     compilerArgs: compilerArgs,
     jobs: jobs,
@@ -413,23 +416,36 @@ proc testNimcacheDir(projectDir, nimcacheRoot, path: Path): Path =
   else:
     result = nimcacheRoot / relativeTest
 
-proc testExecutablePath(nimcache, path: Path): Path =
-  nimcache / Path(($path.splitFile().name).addFileExt(ExeExt))
+proc testExecutablePath(nimcache, path: Path; backend: string): Path =
+  let extension =
+    if backend == "js":
+      "js"
+    else:
+      ExeExt
+  nimcache / Path(($path.splitFile().name).addFileExt(extension))
 
 proc nimFlagsArgs(): seq[string] =
   let flags = getEnv("NIMFLAGS").strip()
   if flags.len > 0:
     result = parseCmdLine(flags)
 
+proc effectiveTestBackend(backend: string): string =
+  result = normalizeNimBackend(backend)
+  if result.len == 0:
+    result = "c"
+  if not isSupportedNimBackend(result):
+    raise newException(ValueError, "unsupported test backend: " & backend)
+
 proc makeTestJob(projectDir, nimcacheRoot, path: Path;
                  nimExe: string;
+                 backend: string;
                  userCompilerArgs: openArray[string];
                  compileOnly: bool): TestJob =
   let
     label = testLabel(projectDir, path)
     nimcache = testNimcacheDir(projectDir, nimcacheRoot, path)
-    executable = testExecutablePath(nimcache, path)
-  var compileArgs = @["c"]
+    executable = testExecutablePath(nimcache, path, backend)
+  var compileArgs = @[backend]
   compileArgs.add nimFlagsArgs()
   compileArgs.add userCompilerArgs
   compileArgs.add @[
@@ -439,13 +455,19 @@ proc makeTestJob(projectDir, nimcacheRoot, path: Path;
     "--out:" & $executable,
     label
   ]
+  var runCommand = $executable
+  var runArgs: seq[string]
+  if backend == "js":
+    runCommand = "node"
+    runArgs = @[$executable]
   let
     compileCommandLine = quoteCommand(nimExe, compileArgs)
+    runCommandLine = quoteCommand(runCommand, runArgs)
     commandLine =
       if compileOnly:
         compileCommandLine
       else:
-        compileCommandLine & " && " & quoteShell($executable)
+        compileCommandLine & " && " & runCommandLine
   createDir($nimcache)
   TestJob(
     label: label,
@@ -454,8 +476,8 @@ proc makeTestJob(projectDir, nimcacheRoot, path: Path;
     executable: executable,
     compileCommand: nimExe,
     compileArgs: compileArgs,
-    runCommand: $executable,
-    runArgs: @[],
+    runCommand: runCommand,
+    runArgs: runArgs,
     workingDir: $projectDir,
     commandLine: commandLine
   )
@@ -1129,6 +1151,7 @@ proc runTestJobs(jobs: seq[TestJob];
 proc runAtlasTests*(options: AtlasTestOptions): int =
   let
     projectDir = effectiveProjectDir(options.projectDir)
+    backend = effectiveTestBackend(options.backend)
     nimcacheRoot = effectiveNimcacheRoot(projectDir, options.nimcacheDir)
     testFiles = discoverTestFiles(projectDir, options.selectors,
       options.skipSelectors)
@@ -1140,6 +1163,7 @@ proc runAtlasTests*(options: AtlasTestOptions): int =
       nimcacheRoot,
       path,
       options.nimExe,
+      backend,
       options.compilerArgs,
       options.compileOnly
     )

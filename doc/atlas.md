@@ -351,10 +351,16 @@ binary:
 ```
 atlas-run build
 atlas-run build --list
+atlas-run build --backend:cpp
+atlas-run build --backend:js
 atlas-run build -- -d:release --mm:orc
 ```
 
 Use `atlas-run tests` to run project tests matching `tests/t*.nim` in parallel.
+Use `--backend:ic`, `--backend:cpp`, or `--backend:js` to select the Nim
+compiler command; without it, tests use `nim c`. JavaScript tests are run with
+`node` after compilation. The same option works with `build` and overrides the
+backend from the project's `.nimble` file.
 Successful compiler output is hidden by default; use `--compiler-output` to
 include it, and `--only-errors` to print only failed test chunks. Use
 `--stream` to print output as it arrives with `--jobs:1`, or in labeled chunks
@@ -380,6 +386,9 @@ atlas-run tests
 atlas-run tests --jobs:4
 atlas-run tests --stream
 atlas-run tests --stats
+atlas-run tests --backend:ic
+atlas-run tests --backend:cpp
+atlas-run tests --backend:js
 atlas-run tests --nimcache:deps/.nimcache/atlas-run
 atlas-run tests --no-shuffle
 atlas-run tests --only-errors

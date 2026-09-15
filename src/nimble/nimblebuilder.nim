@@ -6,9 +6,10 @@
 #    distribution, for details about the copyright.
 #
 
-import std/[algorithm, os, osproc, paths, strutils, tables]
+import std/[algorithm, os, osproc, paths, tables]
 
 import ../basic/parse_requires
+import ../basic/nimbackends
 import ../basic/reporters
 
 type
@@ -54,7 +55,7 @@ proc sourcePath(projectDir: Path; srcDir: Path; binName: string): Path =
 
 proc outputPath(projectDir: Path; binDir: Path; name: string; backend: string): Path =
   let filename =
-    if backend.normalize == "js":
+    if normalizeNimBackend(backend) == "js":
       name.addFileExt("js")
     else:
       nativeOutputName(name)
@@ -63,10 +64,17 @@ proc outputPath(projectDir: Path; binDir: Path; name: string; backend: string): 
   else:
     projectDir / Path(filename)
 
-proc backendCommand(backend: string): string =
-  if backend.len > 0:
-    result = backend.normalize
-  else:
+proc backendCommand(backend, backendOverride: string): string =
+  if backendOverride.len > 0:
+    result = normalizeNimBackend(backendOverride)
+    if not isSupportedNimBackend(result):
+      raise newException(
+        ValueError, "unsupported build backend: " & backendOverride
+      )
+    return
+
+  result = normalizeNimBackend(backend)
+  if result.len == 0:
     result = "c"
 
 proc buildArgs(target: NimbleBinary;
@@ -89,12 +97,13 @@ proc binaryNames(info: NimbleFileInfo): seq[string] =
     result.sort()
 
 proc listNimbleBinaries*(nimbleFile: Path; nimExe = "nim";
-                         compilerArgs: openArray[string] = []): seq[NimbleBinary] =
+                         compilerArgs: openArray[string] = [];
+                         backendOverride = ""): seq[NimbleBinary] =
   let
     nimbleFile = nimbleFile.absolutePath()
     projectDir = nimbleFile.parentDir()
     info = extractRequiresInfo(nimbleFile)
-    backend = backendCommand(info.backend)
+    backend = backendCommand(info.backend, backendOverride)
     bins = binaryNames(info)
   if bins.len == 0:
     return
@@ -139,11 +148,17 @@ proc runBuildProcess(nimExe: string; projectDir: Path; target: NimbleBinary;
       close(process)
 
 proc runNimbleBuild*(nimbleFile: Path; nimExe = "nim";
-                     compilerArgs: openArray[string] = []): int =
+                     compilerArgs: openArray[string] = [];
+                     backendOverride = ""): int =
   let
     nimbleFile = nimbleFile.absolutePath()
     projectDir = nimbleFile.parentDir()
-    targets = listNimbleBinaries(nimbleFile, nimExe, compilerArgs)
+    targets = listNimbleBinaries(
+      nimbleFile,
+      nimExe,
+      compilerArgs,
+      backendOverride
+    )
 
   if targets.len == 0:
     raise newException(ValueError, "no binaries declared in: " & $nimbleFile)
