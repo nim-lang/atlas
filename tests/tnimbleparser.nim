@@ -13,6 +13,34 @@ proc doesContain(res: NimbleFileInfo, name: string): bool =
       result = true
 
 suite "nimbleparser":
+  test "compound requirements reach the resolver without losing bounds":
+    let nimbleFile = Path(genTempPath("atlas_compound_requirements_", ".nimble"))
+    defer: removeFile($nimbleFile)
+    var nc = createUnfilledNimbleContext()
+    discard nc.put("example", toPkgUriRaw(parseUri "https://example.com/example"))
+    for constraint in ["< 1.5.0 & >= 1.2.3", "^= 1.2.3 & < 1.5.0",
+        "< 1.5.0 & ^= 1.2.3"]:
+      writeFile($nimbleFile, "requires \"example " & constraint & "\"\n")
+      let release = nc.parseNimbleFile(nimbleFile)
+      check release.status == Normal
+      require release.requirements.len == 1
+      let query = release.requirements[0][1]
+      check not query.matches(Version"0.5.0")
+      check query.matches(Version"1.2.3")
+      check not query.matches(Version"1.8.0")
+
+  test "invalid compound requirements mark the manifest as broken":
+    let nimbleFile = Path(genTempPath("atlas_invalid_compound_requirements_", ".nimble"))
+    defer: removeFile($nimbleFile)
+    var nc = createUnfilledNimbleContext()
+    discard nc.put("example", toPkgUriRaw(parseUri "https://example.com/example"))
+    for constraint in [">= 1.0 &", ">= 1.0 & <", ">= 1.0 & < 2.0 & > 0.5"]:
+      writeFile($nimbleFile, "requires \"example " & constraint & "\"\n")
+      let release = nc.parseNimbleFile(nimbleFile)
+      check release.status == HasBrokenNimbleFile
+      check release.requirements.len == 0
+      check release.err.contains("invalid 'requires' syntax")
+
   test "parse nimble file when not defined(windows)":
     let nimbleFile = Path("tests" / "test_data" / "jester.nimble")
     var res = extractRequiresInfo(nimbleFile)
