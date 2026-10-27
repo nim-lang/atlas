@@ -262,4 +262,4 @@ The `deps/` directory contains:
 - Individual dependency directories
 - `nimble-link` files for linked projects
 
-Note that `atlas.config` file can be placed in the main project directory as well. In this case, the dependencies directory can be modified by setting the `deps` field.
+Note that the `atlas.config` file can be placed in the main project directory as well. In this case, the dependencies directory can be modified by setting the `deps` field.
