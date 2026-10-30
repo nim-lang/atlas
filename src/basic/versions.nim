@@ -24,7 +24,9 @@ type
     verLt, # < V
     verEq, # V
     verAny, # *
-    verSpecial # #head
+    verSpecial, # #head
+    verCaret, # ^= V
+    verTilde # ~= V
 
   VersionReq* = object
     r: VersionRelation
@@ -124,12 +126,6 @@ template versionKey*(i: VersionInterval): string = i.a.v.string
 
 proc createQueryEq*(v: Version): VersionInterval =
   VersionInterval(a: VersionReq(r: verEq, v: v))
-
-proc extractGeQuery*(i: VersionInterval): Version =
-  if i.a.r in {verGe, verGt, verEq}:
-    result = i.a.v
-  else:
-    result = Version""
 
 proc isSpecial(v: Version): bool {.inline.} =
   result = v.string.len > 1 and v.string[0] == '#'
@@ -343,6 +339,12 @@ proc `==`*(a, b: Version): bool =
   else:
     result = compareVersions(a.string, b.string) == 0
 
+proc extractGeQuery*(i: VersionInterval): Version =
+  for idx, req in [i.a, i.b]:
+    if (idx == 0 or i.isInterval) and req.r in {verGe, verGt, verEq, verCaret, verTilde}:
+      if result == Version"" or result < req.v:
+        result = req.v
+
 proc sortVersionsAsc*(a, b: VersionTag): int =
   (if a.v < b.v: -1
   elif a.v == b.v: 0
@@ -469,87 +471,72 @@ proc expandCompatibleVersion(v: Version; parts: VersionParts; op: char): Version
     b: VersionReq(r: verLt, v: upperBound),
     isInterval: true)
 
-proc parseSuffix(s: string; start: int; result: var VersionInterval; err: var bool) =
-  # >= 1.5 & <= 1.8
-  #        ^ we are here
-  var i = start
+proc parseRequirement(s: string; i: var int; err: var bool): VersionReq =
   while i < s.len and s[i] in Whitespace: inc i
-  # Nimble doesn't use the syntax `>= 1.5, < 1.6` but we do:
-  if i < s.len and s[i] in {'&', ','}:
+  if i == s.len:
+    err = true
+    return
+
+  result.r = verEq
+  case s[i]
+  of '*':
     inc i
-    while i < s.len and s[i] in Whitespace: inc i
-    if s[i] == '<':
+    result.r = verAny
+    return
+  of '=':
+    inc i
+    if i < s.len and s[i] == '=': inc i
+  of '<', '>':
+    let op = s[i]
+    inc i
+    result.r = if op == '<': verLt else: verGt
+    if i < s.len and s[i] == '=':
       inc i
-      var r = verLt
-      if s[i] == '=':
-        inc i
-        r = verLe
-      while i < s.len and s[i] in Whitespace: inc i
-      result.b = VersionReq(r: r, v: parseVer(s, i))
-      result.isInterval = true
-      while i < s.len and s[i] in Whitespace: inc i
-      # we must have parsed everything:
-      if i < s.len:
-        err = true
+      result.r = if op == '<': verLe else: verGe
+  of '^', '~':
+    result.r = if s[i] == '^': verCaret else: verTilde
+    inc i
+    if i == s.len or s[i] != '=':
+      err = true
+      return
+    inc i
+  of '#', '0'..'9': discard
+  else:
+    err = true
+    return
+
+  while i < s.len and s[i] in Whitespace: inc i
+  if i == s.len or s[i] in {'&', ',', '<', '>', '=', '^', '~', '*'}:
+    err = true
+    return
+  result.v = parseVer(s, i)
+  if result.r in {verCaret, verTilde} and parseVersionParts(result.v).count == 0:
+    err = true
 
 proc parseVersionInterval*(s: string; start: int; err: var bool): VersionInterval =
   var i = start
-  # Skip whitespace before the version spec
   while i < s.len and s[i] in Whitespace: inc i
-
-  # let invalidChars = PunctuationChars - {'*', '#', ',', '.', '&', '=', '<', '>'} - IdentChars
-
   result = VersionInterval(a: VersionReq(r: verAny, v: Version""))
+  if i == s.len:
+    return
+
+  result.a = parseRequirement(s, i, err)
+  if err: return
+  while i < s.len and s[i] in Whitespace: inc i
+  if i < s.len and s[i] in {'&', ','}:
+    # Keep compatible operators intact: each side can itself imply two bounds.
+    inc i
+    result.b = parseRequirement(s, i, err)
+    result.isInterval = true
+    if err: return
+    while i < s.len and s[i] in Whitespace: inc i
+  elif result.a.r in {verCaret, verTilde}:
+    let op = if result.a.r == verCaret: '^' else: '~'
+    result = expandCompatibleVersion(result.a.v, parseVersionParts(result.a.v), op)
+  # Nimble permits at most one explicit intersection. Consume the entire input
+  # so malformed suffixes can never silently weaken a requirement.
   if i < s.len:
-    case s[i]
-    of '*': result = VersionInterval(a: VersionReq(r: verAny, v: Version""))
-    of '#', '0'..'9':
-      result = VersionInterval(a: VersionReq(r: verEq, v: parseVer(s, i)))
-      # if result.a.v.isHead: result.a.r = verAny
-      err = i < s.len
-    of '=':
-      inc i
-      if i < s.len and s[i] == '=': inc i
-      while i < s.len and s[i] in Whitespace: inc i
-      result = VersionInterval(a: VersionReq(r: verEq, v: parseVer(s, i)))
-      err = i < s.len
-    of '<':
-      inc i
-      var r = verLt
-      if i < s.len and s[i] == '=':
-        r = verLe
-        inc i
-      while i < s.len and s[i] in Whitespace: inc i
-      result = VersionInterval(a: VersionReq(r: r, v: parseVer(s, i)))
-      parseSuffix(s, i, result, err)
-    of '>':
-      inc i
-      var r = verGt
-      if i < s.len and s[i] == '=':
-        r = verGe
-        inc i
-      while i < s.len and s[i] in Whitespace: inc i
-      result = VersionInterval(a: VersionReq(r: r, v: parseVer(s, i)))
-      parseSuffix(s, i, result, err)
-    of '^', '~':
-      let op = s[i]
-      inc i
-      if i < s.len and s[i] == '=':
-        inc i
-        while i < s.len and s[i] in Whitespace: inc i
-        let v = parseVer(s, i)
-        let parts = parseVersionParts(v)
-        if parts.count == 0:
-          err = true
-        else:
-          result = expandCompatibleVersion(v, parts, op)
-          err = i < s.len
-      else:
-        err = true
-    else:
-      err = true
-  else:
-    result = VersionInterval(a: VersionReq(r: verAny, v: Version""))
+    err = true
 
 proc parseTaggedVersions*(outp: string, requireVersions = true): seq[VersionTag] =
   result = @[]
@@ -625,6 +612,10 @@ proc matches(pattern: VersionReq; v: Version): bool =
       result = pattern.v == v
   of verAny:
     result = true
+  of verCaret, verTilde:
+    let op = if pattern.r == verCaret: '^' else: '~'
+    let interval = expandCompatibleVersion(pattern.v, parseVersionParts(pattern.v), op)
+    result = matches(interval.a, v) and matches(interval.b, v)
 
 proc matches*(pattern: VersionInterval; v: Version): bool =
   if pattern.isInterval:
@@ -742,53 +733,22 @@ proc toSemVer*(i: VersionInterval): VersionInterval =
 proc selectBestCommitSemVer*(data: openArray[VersionTag]; elem: VersionInterval): CommitHash =
   result = selectBestCommitMaxVer(data, elem.toSemVer)
 
+proc `$`(req: VersionReq): string =
+  case req.r
+  of verAny: result = "*"
+  of verEq, verSpecial: result = $req.v
+  of verGe: result = ">= " & $req.v
+  of verGt: result = "> " & $req.v
+  of verLe: result = "<= " & $req.v
+  of verLt: result = "< " & $req.v
+  of verCaret: result = "^= " & $req.v
+  of verTilde: result = "~= " & $req.v
+
 proc `$`*(i: VersionInterval): string =
-  ## Returns a string representation of a version interval
-  ## that matches the parser's format.
+  ## Returns a version requirement that can be parsed again without losing bounds.
+  result = $i.a
   if i.isInterval:
-    # Handle interval case like ">= 1.2 & < 1.4"
-    result = case i.a.r
-      of verGe: ">="
-      of verGt: ">"
-      of verLe: "<="
-      of verLt: "<"
-      of verEq: "=="
-      of verAny: "*"
-      of verSpecial: "#"
-    result &= " " & $i.a.v
-    result &= " & "
-    case i.b.r
-    of verGe: result &= ">="
-    of verGt: result &= ">"
-    of verLe: result &= "<="
-    of verLt: result &= "<"
-    of verEq: result &= "=="
-    of verAny: result &= "*"
-    of verSpecial: result &= "#"
-    result &= " " & $i.b.v
-  else:
-    # Handle single version requirement
-    case i.a.r
-    of verAny:
-      if i.a.v.string == "#head":
-        result = "#head"
-      else:
-        result = "*"
-    of verEq:
-      if i.a.v.isSpecial:
-        result = $i.a.v
-      else:
-        result = $i.a.v
-    of verGe:
-      result = ">= " & $i.a.v
-    of verGt:
-      result = "> " & $i.a.v
-    of verLe:
-      result = "<= " & $i.a.v
-    of verLt:
-      result = "< " & $i.a.v
-    of verSpecial:
-      result = $i.a.v
+    result.add " & " & $i.b
 
 proc toVersion*(str: string): Version =
   if str == "~": result = Version("")
