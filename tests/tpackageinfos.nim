@@ -14,7 +14,8 @@ proc nimbleVersion(): string =
   "0.0.0"
 
 proc gitDirty(dir: string): bool =
-  let (outp, code) = execCmdEx("git -C " & quoteShell(dir) & " status --porcelain")
+  let (outp, code) = execCmdEx("git -C " & quoteShell(dir) &
+    " status --porcelain --untracked-files=no")
   code == 0 and outp.strip().len > 0
 
 suite "packages list":
@@ -60,7 +61,7 @@ doAssert AtlasCommit == "unknown"
     writeFile($(tmp / Path"atlas.nimble"), "version = \"1.2.3\"\n")
     writeFile($mainFile, """
 import basic/atlasversion
-doAssert AtlasPackageVersion == "1.2.3+dirty"
+doAssert AtlasPackageVersion == "1.2.4+dirty"
 doAssert AtlasIsDirty
 """)
     discard execCmdEx("git -C " & quoteShell($tmp) & " init")
@@ -69,8 +70,9 @@ doAssert AtlasIsDirty
     discard execCmdEx("git -C " & quoteShell($tmp) & " add .")
     discard execCmdEx("git -C " & quoteShell($tmp) & " commit -m initial")
     writeFile($(tmp / Path"atlas.nimble"), "version = \"1.2.4\"\n")
+    check gitDirty($tmp)
 
-    let (outp, code) = execCmdEx("nim c --path:" & quoteShell($(tmp / Path"src")) & " " & quoteShell($mainFile))
+    let (outp, code) = execCmdEx("nim c -r --path:" & quoteShell($(tmp / Path"src")) & " " & quoteShell($mainFile))
     check code == 0
     check outp.len >= 0
 
@@ -97,8 +99,9 @@ doAssert not AtlasIsDirty
     discard execCmdEx("git -C " & quoteShell($tmp) & " add .")
     discard execCmdEx("git -C " & quoteShell($tmp) & " commit -m initial")
     writeFile($(tmp / Path"build-artifact.txt"), "artifact")
+    check not gitDirty($tmp)
 
-    let (outp, code) = execCmdEx("nim c --path:" & quoteShell($(tmp / Path"src")) & " " & quoteShell($mainFile))
+    let (outp, code) = execCmdEx("nim c -r --path:" & quoteShell($(tmp / Path"src")) & " " & quoteShell($mainFile))
     check code == 0
     check outp.len >= 0
 
