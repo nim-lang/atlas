@@ -614,13 +614,14 @@ suite "version interval matches":
     check interval.isSpecial == true
     check interval.matches(v"1.0.0") == false
   
-  test "special version with and without hash":
+  test "special version requires a hash prefix":
     let specialInterval = p"#branch"
     check specialInterval.matches(v"#branch") == true
     # check specialInterval.matches(v"branch") == true  # According to the matching logic
     
-    let noHashInterval = p"branch"
-    check noHashInterval.matches(v"#branch") == true  # According to the matching logic
+    var err = false
+    discard parseVersionInterval("branch", 0, err)
+    check err
   
   test "commit hash matching":
     # Create version tags for testing

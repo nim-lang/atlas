@@ -583,6 +583,15 @@ suite "json serde":
     query2.fromJson(jn2)
     check query == query2
 
+  test "json serde preserves compound compatible requirements":
+    for text in ["< 2.0 & >= 1.0", "^= 1.2.3 & < 1.5.0", "~= 1.2.3 & ^= 1.2.4"]:
+      let query = p(text)
+      var restored: VersionInterval
+      restored.fromJson(toJson(query))
+      check query == restored
+      for version in ["0.5", "1.2.3", "1.2.4", "1.3.0", "1.5.0", "2.0"]:
+        check restored.matches(Version(version)) == query.matches(Version(version))
+
   test "var ids":
     let var1 = VarId(1)
     let jn = toJson(var1)

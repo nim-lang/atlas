@@ -46,6 +46,27 @@ a project always has a higher priority than a dependency.
 
 ### Version constraints and root pins
 
+Atlas accepts Nimble's exact versions and comparison operators (`==`, `>`, `>=`,
+`<`, `<=`), plus the compatible-version operators `^=` and `~=`. For example,
+`^= 1.2.3` means `>= 1.2.3 & < 2.0.0`, while `~= 1.2.3` means
+`>= 1.2.3 & < 1.3.0`. For zero-major versions, `^= 0.4.1` stops before `0.5.0`
+and `^= 0.0.3` stops before `0.0.4`, while `~= 0.0.3` stops before `0.1.0`.
+Both `^= 0.2.3` and `~= 0.2.3` mean `>= 0.2.3 & < 0.3.0`. Nimble's shorter
+tilde form `~= 0.4` stops before `1.0.0`.
+
+Two requirements can be joined with `&`, using any supported version operator
+on either side, in either order:
+
+```nim
+requires "example < 2.0 & >= 1.0"
+requires "another ^= 1.2.3 & < 1.5.0"
+```
+
+Both sides must match. As in Nimble, at most one explicit `&` is allowed in each
+requirement string. Missing bounds and unparsed trailing text are errors. Atlas
+also retains its comma separator (`>= 1.0, < 2.0`), single `=` alias, and `*`
+for any version.
+
 The *root project* is your application or library; *transitive dependencies* are
 the dependencies requested by its dependencies.
 
