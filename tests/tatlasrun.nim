@@ -528,6 +528,65 @@ writeFile("two.out", "ok")
     check dirExists($(dir / Path"deps/.nimcache" / Path"atlas-run" / Path"tests" / Path"tone"))
     check dirExists($(dir / Path"deps/.nimcache" / Path"atlas-run" / Path"tests" / Path"ttwo"))
 
+  when defined(posix):
+    test "test cache mode defaults and overrides":
+      let dir = freshDir("atlas_run_cache_mode")
+      defer:
+        removeDir($dir)
+      writeFile($(dir / Path"demo.nimble"), "version = \"0.1.0\"\n")
+      createDir($(dir / Path"tests"))
+      writeFile($(dir / Path"tests/tone.nim"), "discard\n")
+      writeFile($(dir / Path"tests/ttwo.nim"), "discard\n")
+      let compiler = dir / Path"fake-nim"
+      writeFile($compiler, """#!/bin/sh
+printf '%s\n' "$@" >> compiler-args
+""")
+      setFilePermissions($compiler, {fpUserRead, fpUserWrite, fpUserExec})
+      let args = @["--project:" & $dir, "--nim:" & $compiler, "tests",
+        "--jobs:1", "--compile-only", "--no-shuffle", "--only-errors"]
+      let root = dir.absolutePath / Path"deps/.nimcache/atlas-run"
+      for (backend, mode, shared) in [
+          ("ic", "", true), ("ic", "separate", false),
+          ("c", "", false), ("c", "shared", true)]:
+        removeFile($(dir / Path"compiler-args"))
+        var command = args & @["--backend:" & backend]
+        if mode.len > 0:
+          command.add "--cache-mode:" & mode
+        check atlasRunMain(command) == 0
+        let output = readFile($(dir / Path"compiler-args"))
+        if shared:
+          check output.count("--nimcache:" & $(root / Path"shared") & "\n") == 2
+        else:
+          check "--nimcache:" & $(root / Path"tests/tone") & "\n" in output
+          check "--nimcache:" & $(root / Path"tests/ttwo") & "\n" in output
+        check "--out:" & $(root / Path"tests/tone/tone") & "\n" in output
+        check "--out:" & $(root / Path"tests/ttwo/ttwo") & "\n" in output
+
+    test "IC defaults to one test job and allows an explicit override":
+      let dir = freshDir("atlas_run_ic_jobs")
+      defer:
+        removeDir($dir)
+      writeFile($(dir / Path"demo.nimble"), "version = \"0.1.0\"\n")
+      createDir($(dir / Path"tests"))
+      writeFile($(dir / Path"tests/tone.nim"), "discard\n")
+      writeFile($(dir / Path"tests/ttwo.nim"), "discard\n")
+      let compiler = dir / Path"fake-nim"
+      writeFile($compiler, """#!/bin/sh
+if mkdir compiler.lock 2>/dev/null; then
+  sleep 1
+  rmdir compiler.lock
+else
+  touch overlap
+fi
+""")
+      setFilePermissions($compiler, {fpUserRead, fpUserWrite, fpUserExec})
+      let args = @["--project:" & $dir, "--nim:" & $compiler, "tests",
+        "--backend:ic", "--compile-only", "--no-shuffle", "--only-errors"]
+      check atlasRunMain(args) == 0
+      check not fileExists($(dir / Path"overlap"))
+      check atlasRunMain(args & @["--jobs:2"]) == 0
+      check fileExists($(dir / Path"overlap"))
+
   test "streams one job directly and parallel jobs in labeled chunks":
     let dir = freshDir("atlas_run_stream_tests")
     defer:

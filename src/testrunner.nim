@@ -17,11 +17,15 @@ when defined(posix):
 import basic/[nimbackends, reporters]
 
 type
+  AtlasTestCacheMode* = enum
+    tcmDefault, tcmShared, tcmSeparate
+
   AtlasTestOptions* = object
     projectDir*: Path
     nimExe*: string
     backend*: string
     nimcacheDir*: Path
+    cacheMode*: AtlasTestCacheMode
     compilerArgs*: seq[string]
     jobs*: int
     selectors*: seq[string]
@@ -112,6 +116,7 @@ type
 
 const
   DefaultAtlasTestJobs* = 0
+  AutoAtlasTestJobs* = -1
   TestProgressBarWidth = 24
   TestProgressRenderIntervalMs = 250
   TestProgressIdleRenderIntervalMs = 250
@@ -138,12 +143,14 @@ proc initAtlasTestOptions*(projectDir = Path"";
                            stats = false;
                            onlyErrors = false;
                            showCompilerOutput = false;
-                           backend = ""): AtlasTestOptions =
+                           backend = "";
+                           cacheMode = tcmDefault): AtlasTestOptions =
   AtlasTestOptions(
     projectDir: projectDir,
     nimExe: nimExe,
     backend: backend,
     nimcacheDir: nimcacheDir,
+    cacheMode: cacheMode,
     compilerArgs: compilerArgs,
     jobs: jobs,
     selectors: selectors,
@@ -439,12 +446,14 @@ proc effectiveTestBackend(backend: string): string =
 proc makeTestJob(projectDir, nimcacheRoot, path: Path;
                  nimExe: string;
                  backend: string;
+                 sharedCache: bool;
                  userCompilerArgs: openArray[string];
                  compileOnly: bool): TestJob =
   let
     label = testLabel(projectDir, path)
-    nimcache = testNimcacheDir(projectDir, nimcacheRoot, path)
-    executable = testExecutablePath(nimcache, path, backend)
+    outputDir = testNimcacheDir(projectDir, nimcacheRoot, path)
+    nimcache = if sharedCache: nimcacheRoot / Path"shared" else: outputDir
+    executable = testExecutablePath(outputDir, path, backend)
   var compileArgs = @[backend]
   compileArgs.add nimFlagsArgs()
   compileArgs.add userCompilerArgs
@@ -469,6 +478,7 @@ proc makeTestJob(projectDir, nimcacheRoot, path: Path;
       else:
         compileCommandLine & " && " & runCommandLine
   createDir($nimcache)
+  createDir($outputDir)
   TestJob(
     label: label,
     path: path,
@@ -876,9 +886,11 @@ proc testWorker(args: TestWorkerArgs) {.thread.} =
         runDurationMs: runDurationMs
       )
 
-proc effectiveJobs(requested, testCount: int): int =
+proc effectiveJobs(requested, testCount: int; backend: string): int =
   if requested > 0:
     max(1, min(requested, testCount))
+  elif requested == DefaultAtlasTestJobs and backend == "ic":
+    1
   else:
     let defaultJobs = max(1, countProcessors() div 2)
     max(1, min(defaultJobs, testCount))
@@ -1152,10 +1164,12 @@ proc runAtlasTests*(options: AtlasTestOptions): int =
   let
     projectDir = effectiveProjectDir(options.projectDir)
     backend = effectiveTestBackend(options.backend)
+    sharedCache = options.cacheMode == tcmShared or
+      (options.cacheMode == tcmDefault and backend == "ic")
     nimcacheRoot = effectiveNimcacheRoot(projectDir, options.nimcacheDir)
     testFiles = discoverTestFiles(projectDir, options.selectors,
       options.skipSelectors)
-    workerCount = effectiveJobs(options.jobs, testFiles.len)
+    workerCount = effectiveJobs(options.jobs, testFiles.len, backend)
   var jobs: seq[TestJob]
   for path in testFiles:
     jobs.add makeTestJob(
@@ -1164,6 +1178,7 @@ proc runAtlasTests*(options: AtlasTestOptions): int =
       path,
       options.nimExe,
       backend,
+      sharedCache,
       options.compilerArgs,
       options.compileOnly
     )

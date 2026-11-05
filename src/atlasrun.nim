@@ -36,10 +36,11 @@ Options:
   --nim=path            use the Nim executable at path
   --backend=backend     use Nim backend: c, ic, cpp, or js
   --list                list tasks or tests without running them
-  --jobs=N, -j:N        number of parallel test jobs, or auto
+  --jobs=N, -j:N        number of parallel test jobs, or auto (IC defaults to 1)
   --stream              periodically print output from running tests
   --stats               print compile and run time for each test
-  --nimcache=path       test cache root; each test gets a subdirectory
+  --nimcache=path       test cache root
+  --cache-mode=mode     shared or separate (default: shared for IC, separate otherwise)
   --no-shuffle          run tests in sorted discovery order
   --only-errors         only print output chunks for failed tests
   --compiler-output     include compiler output from successful test builds
@@ -67,6 +68,7 @@ type
     backend: string
     backendOptionSeen: bool
     nimcacheDir: Path
+    cacheMode: AtlasTestCacheMode
     listOnly: bool
     jobs: int
     testOptionsSeen: bool
@@ -122,7 +124,7 @@ proc splitLongOption(arg: string): tuple[key, value: string] =
 proc readJobsValue(params: seq[string]; i: var int; key, value: string): int =
   let raw = readOptionValue(params, i, key, value).normalize
   if raw == "auto":
-    return DefaultAtlasTestJobs
+    return AutoAtlasTestJobs
   try:
     result = parseInt(raw)
   except ValueError:
@@ -213,6 +215,14 @@ proc parseCliOptions(params: seq[string]): CliOptions =
       of "nimcache", "nimcache-dir", "nimcache-root":
         result.testOptionsSeen = true
         result.nimcacheDir = Path readOptionValue(params, i, arg, value)
+      of "cache-mode":
+        result.testOptionsSeen = true
+        let mode = readOptionValue(params, i, arg, value).normalize
+        case mode
+        of "shared": result.cacheMode = tcmShared
+        of "separate": result.cacheMode = tcmSeparate
+        else: quit("atlas-run: invalid cache mode: " & mode &
+          " (expected shared or separate)", 2)
       of "no-shuffle":
         result.testOptionsSeen = true
         result.shuffle = false
@@ -355,6 +365,7 @@ proc atlasRunMain*(params: seq[string]): int =
       nimExe = opts.nimExe,
       backend = opts.backend,
       nimcacheDir = opts.nimcacheDir,
+      cacheMode = opts.cacheMode,
       jobs = opts.jobs,
       selectors = opts.testSelectors,
       skipSelectors = opts.testSkipSelectors,
