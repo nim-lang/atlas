@@ -460,7 +460,7 @@ proc makeTestJob(projectDir, nimcacheRoot, path: Path;
   let
     label = testLabel(projectDir, path)
     outputDir = testNimcacheDir(projectDir, nimcacheRoot, path)
-    nimcache = if sharedCache: nimcacheRoot / Path"shared" else: outputDir
+    nimcache = if sharedCache: nimcacheRoot else: outputDir
     executable = testExecutablePath(outputDir, path, backend)
   var compileArgs = @[backend]
   compileArgs.add nimFlagsArgs()

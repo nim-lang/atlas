@@ -386,7 +386,8 @@ IC tests default to one test job because the compiler runs work in parallel;
 use `--jobs:N` or `--jobs:auto` to override this. IC tests share a compiler
 cache by default; other backends use a separate cache per test. Use
 `--cache-mode:separate` or `--cache-mode:shared` to override the default, and
-`--nimcache` to choose the cache root. When running multiple jobs, per-test
+`--nimcache` to choose the cache root. Shared mode uses the root directly as
+the compiler's cache directory. When running multiple jobs, per-test
 caches avoid concurrent compilers writing to the same cache.
 Some builds can exit successfully after a `std/unittest` failure. Atlas-run
 can treat a standard `[FAILED]` output line as a failure; this is enabled by

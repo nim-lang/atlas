@@ -607,12 +607,17 @@ printf '%s\n' "$@" >> compiler-args
         check atlasRunMain(command) == 0
         let output = readFile($(dir / Path"compiler-args"))
         if shared:
-          check output.count("--nimcache:" & $(root / Path"shared") & "\n") == 2
+          check output.count("--nimcache:" & $root & "\n") == 2
         else:
           check "--nimcache:" & $(root / Path"tests/tone") & "\n" in output
           check "--nimcache:" & $(root / Path"tests/ttwo") & "\n" in output
         check "--out:" & $(root / Path"tests/tone/tone") & "\n" in output
         check "--out:" & $(root / Path"tests/ttwo/ttwo") & "\n" in output
+      removeFile($(dir / Path"compiler-args"))
+      check atlasRunMain(args & @["--backend:ic", "--nimcache:deps/.nimcache/"]) == 0
+      let output = readFile($(dir / Path"compiler-args"))
+      check output.count("--nimcache:" & $(dir.absolutePath / Path"deps/.nimcache") &
+        "/\n") == 2
 
     test "IC defaults to one test job and allows an explicit override":
       let dir = freshDir("atlas_run_ic_jobs")
