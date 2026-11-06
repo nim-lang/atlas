@@ -604,8 +604,15 @@ printf '%s\n' "$@" >> compiler-args
         var command = args & @["--backend:" & backend]
         if mode.len > 0:
           command.add "--cache-mode:" & mode
-        check atlasRunMain(command) == 0
+        withNimFlags(""):
+          check atlasRunMain(command) == 0
         let output = readFile($(dir / Path"compiler-args"))
+        if backend == "ic":
+          check "--colors:on\n" notin output
+          check "-d:nimUnittestColor:on\n" notin output
+        else:
+          check output.count("--colors:on\n") == 2
+          check output.count("-d:nimUnittestColor:on\n") == 2
         let root = dir.absolutePath / Path"deps/.nimcache"
         if shared:
           check output.count("--nimcache:" & $root & "\n") == 2
@@ -619,6 +626,13 @@ printf '%s\n' "$@" >> compiler-args
       let output = readFile($(dir / Path"compiler-args"))
       check output.count("--nimcache:" & $(dir.absolutePath / Path"deps/.nimcache") &
         "/\n") == 2
+      removeFile($(dir / Path"compiler-args"))
+      withNimFlags(""):
+        check atlasRunMain(args & @["--backend:ic", "--", "--colors:on",
+          "-d:nimUnittestColor:on"]) == 0
+      let explicitOutput = readFile($(dir / Path"compiler-args"))
+      check explicitOutput.count("--colors:on\n") == 2
+      check explicitOutput.count("-d:nimUnittestColor:on\n") == 2
 
     test "IC defaults to one test job and allows an explicit override":
       let dir = freshDir("atlas_run_ic_jobs")

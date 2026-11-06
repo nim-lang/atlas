@@ -465,9 +465,9 @@ proc makeTestJob(projectDir, nimcacheRoot, path: Path;
   var compileArgs = @[backend]
   compileArgs.add nimFlagsArgs()
   compileArgs.add userCompilerArgs
+  if backend != "ic":
+    compileArgs.add @["--colors:on", "-d:nimUnittestColor:on"]
   compileArgs.add @[
-    "--colors:on",
-    "-d:nimUnittestColor:on",
     "--nimcache:" & $nimcache,
     "--out:" & $executable,
     label
