@@ -330,6 +330,24 @@ suite "failing":
       failing.selectors = @["fail"]
       check runAtlasTests(failing) != 0
 
+  test "unittest failure detection follows backend defaults and CLI overrides":
+    let dir = freshDir("atlas_run_unittest_detection")
+    defer:
+      removeDir($dir)
+    writeFile($(dir / Path"demo.nimble"), "version = \"0.1.0\"\n")
+    createDir($(dir / Path"tests"))
+    writeFile($(dir / Path"tests/tmarker.nim"),
+      "echo \"[FAILED] example\"\n")
+    let args = @["--project:" & $dir, "tests", "--backend:js", "--only-errors"]
+    check atlasRunMain(args) == 0
+    check atlasRunMain(args & @["--unittest-failures:on"]) != 0
+    check atlasRunMain(args & @["--unittest-failures:off"]) == 0
+    if supportsNimIc():
+      let icArgs = @["--project:" & $dir, "tests", "--backend:ic", "--only-errors"]
+      check atlasRunMain(icArgs) != 0
+      check atlasRunMain(icArgs & @["--unittest-failures:off"]) == 0
+      check atlasRunMain(icArgs & @["--unittest-failures:on"]) != 0
+
   test "discovers t-star test files":
     let dir = freshDir("atlas_run_discovers_tests")
     defer:

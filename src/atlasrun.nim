@@ -41,6 +41,7 @@ Options:
   --stats               print compile and run time for each test
   --nimcache=path       test cache root
   --cache-mode=mode     shared or separate (default: shared for IC, separate otherwise)
+  --unittest-failures=on|off  detect [FAILED] output (default: on for IC, off otherwise)
   --no-shuffle          run tests in sorted discovery order
   --only-errors         only print output chunks for failed tests
   --compiler-output     include compiler output from successful test builds
@@ -69,6 +70,7 @@ type
     backendOptionSeen: bool
     nimcacheDir: Path
     cacheMode: AtlasTestCacheMode
+    unittestFailures: AtlasTestFailureDetection
     listOnly: bool
     jobs: int
     testOptionsSeen: bool
@@ -223,6 +225,14 @@ proc parseCliOptions(params: seq[string]): CliOptions =
         of "separate": result.cacheMode = tcmSeparate
         else: quit("atlas-run: invalid cache mode: " & mode &
           " (expected shared or separate)", 2)
+      of "unittest-failures":
+        result.testOptionsSeen = true
+        let mode = readOptionValue(params, i, arg, value).normalize
+        case mode
+        of "on": result.unittestFailures = tfdOn
+        of "off": result.unittestFailures = tfdOff
+        else: quit("atlas-run: invalid unittest-failures value: " & mode &
+          " (expected on or off)", 2)
       of "no-shuffle":
         result.testOptionsSeen = true
         result.shuffle = false
@@ -366,6 +376,7 @@ proc atlasRunMain*(params: seq[string]): int =
       backend = opts.backend,
       nimcacheDir = opts.nimcacheDir,
       cacheMode = opts.cacheMode,
+      unittestFailures = opts.unittestFailures,
       jobs = opts.jobs,
       selectors = opts.testSelectors,
       skipSelectors = opts.testSkipSelectors,

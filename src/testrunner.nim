@@ -20,12 +20,16 @@ type
   AtlasTestCacheMode* = enum
     tcmDefault, tcmShared, tcmSeparate
 
+  AtlasTestFailureDetection* = enum
+    tfdDefault, tfdOn, tfdOff
+
   AtlasTestOptions* = object
     projectDir*: Path
     nimExe*: string
     backend*: string
     nimcacheDir*: Path
     cacheMode*: AtlasTestCacheMode
+    unittestFailures*: AtlasTestFailureDetection
     compilerArgs*: seq[string]
     jobs*: int
     selectors*: seq[string]
@@ -56,7 +60,7 @@ type
 
   TestJob = object
     label: string
-    backend: string
+    detectUnittestFailures: bool
     path: Path
     nimcache: Path
     executable: Path
@@ -145,13 +149,15 @@ proc initAtlasTestOptions*(projectDir = Path"";
                            onlyErrors = false;
                            showCompilerOutput = false;
                            backend = "";
-                           cacheMode = tcmDefault): AtlasTestOptions =
+                           cacheMode = tcmDefault;
+                           unittestFailures = tfdDefault): AtlasTestOptions =
   AtlasTestOptions(
     projectDir: projectDir,
     nimExe: nimExe,
     backend: backend,
     nimcacheDir: nimcacheDir,
     cacheMode: cacheMode,
+    unittestFailures: unittestFailures,
     compilerArgs: compilerArgs,
     jobs: jobs,
     selectors: selectors,
@@ -448,6 +454,7 @@ proc makeTestJob(projectDir, nimcacheRoot, path: Path;
                  nimExe: string;
                  backend: string;
                  sharedCache: bool;
+                 detectUnittestFailures: bool;
                  userCompilerArgs: openArray[string];
                  compileOnly: bool): TestJob =
   let
@@ -482,7 +489,7 @@ proc makeTestJob(projectDir, nimcacheRoot, path: Path;
   createDir($outputDir)
   TestJob(
     label: label,
-    backend: backend,
+    detectUnittestFailures: detectUnittestFailures,
     path: path,
     nimcache: nimcache,
     executable: executable,
@@ -871,7 +878,7 @@ proc testWorker(args: TestWorkerArgs) {.thread.} =
           )
           runOutput = runResult.output
           exitCode = runResult.exitCode
-          if exitCode == 0 and job.backend == "ic" and unittestFailed(runOutput):
+          if exitCode == 0 and job.detectUnittestFailures and unittestFailed(runOutput):
             exitCode = 1
         finally:
           runDurationMs = inMilliseconds(getMonoTime() - runStartedAt)
@@ -1187,6 +1194,8 @@ proc runAtlasTests*(options: AtlasTestOptions): int =
     backend = effectiveTestBackend(options.backend)
     sharedCache = options.cacheMode == tcmShared or
       (options.cacheMode == tcmDefault and backend == "ic")
+    detectUnittestFailures = options.unittestFailures == tfdOn or
+      (options.unittestFailures == tfdDefault and backend == "ic")
     nimcacheRoot = effectiveNimcacheRoot(projectDir, options.nimcacheDir)
     testFiles = discoverTestFiles(projectDir, options.selectors,
       options.skipSelectors)
@@ -1200,6 +1209,7 @@ proc runAtlasTests*(options: AtlasTestOptions): int =
       options.nimExe,
       backend,
       sharedCache,
+      detectUnittestFailures,
       options.compilerArgs,
       options.compileOnly
     )
