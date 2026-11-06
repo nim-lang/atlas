@@ -56,6 +56,7 @@ type
 
   TestJob = object
     label: string
+    backend: string
     path: Path
     nimcache: Path
     executable: Path
@@ -481,6 +482,7 @@ proc makeTestJob(projectDir, nimcacheRoot, path: Path;
   createDir($outputDir)
   TestJob(
     label: label,
+    backend: backend,
     path: path,
     nimcache: nimcache,
     executable: executable,
@@ -802,6 +804,23 @@ proc runTestProcess(job: TestJob;
       finally:
         release(workerArgs.startLock[])
 
+proc unittestFailed(output: string): bool =
+  for line in output.splitLines:
+    var plain = ""
+    var i = 0
+    while i < line.len:
+      if line[i] == '\e' and i + 1 < line.len and line[i + 1] == '[':
+        i += 2
+        while i < line.len and line[i] notin {'@'..'~'}:
+          inc i
+        if i < line.len:
+          inc i
+      else:
+        plain.add line[i]
+        inc i
+    if plain.strip.startsWith("[FAILED] "):
+      return true
+
 proc testWorker(args: TestWorkerArgs) {.thread.} =
   for indexedJob in args.jobs:
     let job = indexedJob.job
@@ -852,6 +871,8 @@ proc testWorker(args: TestWorkerArgs) {.thread.} =
           )
           runOutput = runResult.output
           exitCode = runResult.exitCode
+          if exitCode == 0 and job.backend == "ic" and unittestFailed(runOutput):
+            exitCode = 1
         finally:
           runDurationMs = inMilliseconds(getMonoTime() - runStartedAt)
 

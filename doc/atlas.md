@@ -388,6 +388,10 @@ cache by default; other backends use a separate cache per test. Use
 `--cache-mode:separate` or `--cache-mode:shared` to override the default, and
 `--nimcache` to choose the cache root. When running multiple jobs, per-test
 caches avoid concurrent compilers writing to the same cache.
+Some IC builds can exit successfully after a `std/unittest` failure. For IC
+tests, atlas-run also treats a standard `[FAILED]` output line as a failure.
+Custom formatters that suppress that line cannot be detected this way, and
+other output using the same line format is also treated as a failure.
 Successful compiler output is hidden by default; use `--compiler-output` to
 include it, and `--only-errors` to print only failed test chunks. Use
 `--stream` to print output as it arrives with `--jobs:1`, or in labeled chunks

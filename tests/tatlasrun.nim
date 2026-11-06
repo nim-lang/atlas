@@ -15,12 +15,20 @@ proc freshDir(name: string): Path =
 proc normalizedPath(path: string): string =
   path.replace("\\", "/")
 
+var nimIcAvailable = -1
+
 proc supportsNimIc(): bool =
-  let (output, exitCode) = execCmdEx("nim --fullhelp")
-  if exitCode == 0:
-    for line in output.splitLines:
-      if line.strip.startsWith("ic "):
-        return true
+  if nimIcAvailable < 0:
+    let dir = freshDir("atlas_run_ic_probe")
+    defer:
+      removeDir($dir)
+    writeFile($(dir / Path"probe.nim"), "discard\n")
+    let (_, exitCode) = execCmdEx("nim ic --nimcache:" &
+      quoteShell($(dir / Path"cache")) & " --out:" &
+      quoteShell($(dir / Path("probe".addFileExt(ExeExt)))) & " " &
+      quoteShell($(dir / Path"probe.nim")))
+    nimIcAvailable = if exitCode == 0: 1 else: 0
+  result = nimIcAvailable == 1
 
 template withNimFlags(value: string; body: untyped) =
   let hadNimFlags = existsEnv("NIMFLAGS")
@@ -295,6 +303,32 @@ namedBin = {"tool": "demo-tool"}.toTable
             Path("tbackend".addFileExt(extension))))
       finally:
         removeDir($dir)
+
+  test "IC reports unittest failures even when the executable exits zero":
+    if supportsNimIc():
+      let dir = freshDir("atlas_run_ic_unittest_failure")
+      defer:
+        removeDir($dir)
+      createDir($(dir / Path"tests"))
+      writeFile($(dir / Path"tests/tpass.nim"), """
+import std/unittest
+suite "passing":
+  test "check":
+    check 1 == 1
+""")
+      writeFile($(dir / Path"tests/tfail.nim"), """
+import std/unittest
+suite "failing":
+  test "check":
+    check 1 == 2
+""")
+      let options = initAtlasTestOptions(projectDir = dir, backend = "ic",
+        selectors = @["pass"], shuffle = false, showProgress = false,
+        showOutput = false)
+      check runAtlasTests(options) == 0
+      var failing = options
+      failing.selectors = @["fail"]
+      check runAtlasTests(failing) != 0
 
   test "discovers t-star test files":
     let dir = freshDir("atlas_run_discovers_tests")
