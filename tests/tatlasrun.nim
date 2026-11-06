@@ -298,8 +298,7 @@ namedBin = {"tool": "demo-tool"}.toTable
               "js"
             else:
               ExeExt
-          let cacheRoot = if backend == "ic": Path"deps/.nimcache" else:
-            Path"deps/.nimcache/atlas-run"
+          let cacheRoot = Path"deps/.nimcache"
           check fileExists($(dir / cacheRoot /
             Path"tests" / Path"tbackend" /
             Path("tbackend".addFileExt(extension))))
@@ -471,7 +470,7 @@ writeFile("ran.out", "ran")
       showOutput = false
     ))
     check code == 0
-    check fileExists($(dir / Path"deps/.nimcache" / Path"atlas-run" /
+    check fileExists($(dir / Path"deps/.nimcache" /
       Path"tests" / Path"tcompileonly" / Path("tcompileonly".addFileExt(ExeExt))))
     check not fileExists($(dir / Path"ran.out"))
 
@@ -498,9 +497,9 @@ writeFile("ran-two.out", "ran")
       showOutput = false
     ))
     check code == 0
-    check fileExists($(dir / Path"deps/.nimcache" / Path"atlas-run" /
+    check fileExists($(dir / Path"deps/.nimcache" /
       Path"examples" / Path"one" / Path("one".addFileExt(ExeExt))))
-    check fileExists($(dir / Path"deps/.nimcache" / Path"atlas-run" /
+    check fileExists($(dir / Path"deps/.nimcache" /
       Path"examples" / Path"two" / Path("two".addFileExt(ExeExt))))
     check not fileExists($(dir / Path"ran-one.out"))
     check not fileExists($(dir / Path"ran-two.out"))
@@ -579,8 +578,8 @@ writeFile("two.out", "ok")
     check code == 0
     check readFile($(dir / Path"one.out")) == "ok"
     check readFile($(dir / Path"two.out")) == "ok"
-    check dirExists($(dir / Path"deps/.nimcache" / Path"atlas-run" / Path"tests" / Path"tone"))
-    check dirExists($(dir / Path"deps/.nimcache" / Path"atlas-run" / Path"tests" / Path"ttwo"))
+    check dirExists($(dir / Path"deps/.nimcache" / Path"tests" / Path"tone"))
+    check dirExists($(dir / Path"deps/.nimcache" / Path"tests" / Path"ttwo"))
 
   when defined(posix):
     test "test cache mode defaults and overrides":
@@ -607,8 +606,7 @@ printf '%s\n' "$@" >> compiler-args
           command.add "--cache-mode:" & mode
         check atlasRunMain(command) == 0
         let output = readFile($(dir / Path"compiler-args"))
-        let root = dir.absolutePath / (if backend == "ic": Path"deps/.nimcache" else:
-          Path"deps/.nimcache/atlas-run")
+        let root = dir.absolutePath / Path"deps/.nimcache"
         if shared:
           check output.count("--nimcache:" & $root & "\n") == 2
         else:
