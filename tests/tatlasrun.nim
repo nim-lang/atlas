@@ -15,12 +15,20 @@ proc freshDir(name: string): Path =
 proc normalizedPath(path: string): string =
   path.replace("\\", "/")
 
+var nimIcAvailable = -1
+
 proc supportsNimIc(): bool =
-  let (output, exitCode) = execCmdEx("nim --fullhelp")
-  if exitCode == 0:
-    for line in output.splitLines:
-      if line.strip.startsWith("ic "):
-        return true
+  if nimIcAvailable < 0:
+    let dir = freshDir("atlas_run_ic_probe")
+    defer:
+      removeDir($dir)
+    writeFile($(dir / Path"probe.nim"), "discard\n")
+    let (_, exitCode) = execCmdEx("nim ic --nimcache:" &
+      quoteShell($(dir / Path"cache")) & " --out:" &
+      quoteShell($(dir / Path("probe".addFileExt(ExeExt)))) & " " &
+      quoteShell($(dir / Path"probe.nim")))
+    nimIcAvailable = if exitCode == 0: 1 else: 0
+  result = nimIcAvailable == 1
 
 template withNimFlags(value: string; body: untyped) =
   let hadNimFlags = existsEnv("NIMFLAGS")
@@ -290,11 +298,56 @@ namedBin = {"tool": "demo-tool"}.toTable
               "js"
             else:
               ExeExt
-          check fileExists($(dir / Path"deps/.nimcache" / Path"atlas-run" /
+          let cacheRoot = Path"deps/.nimcache"
+          check fileExists($(dir / cacheRoot /
             Path"tests" / Path"tbackend" /
             Path("tbackend".addFileExt(extension))))
       finally:
         removeDir($dir)
+
+  test "IC reports unittest failures even when the executable exits zero":
+    if supportsNimIc():
+      let dir = freshDir("atlas_run_ic_unittest_failure")
+      defer:
+        removeDir($dir)
+      createDir($(dir / Path"tests"))
+      writeFile($(dir / Path"tests/tpass.nim"), """
+import std/unittest
+suite "passing":
+  test "check":
+    check 1 == 1
+""")
+      writeFile($(dir / Path"tests/tfail.nim"), """
+import std/unittest
+suite "failing":
+  test "check":
+    check 1 == 2
+""")
+      let options = initAtlasTestOptions(projectDir = dir, backend = "ic",
+        selectors = @["pass"], shuffle = false, showProgress = false,
+        showOutput = false)
+      check runAtlasTests(options) == 0
+      var failing = options
+      failing.selectors = @["fail"]
+      check runAtlasTests(failing) != 0
+
+  test "unittest failure detection follows backend defaults and CLI overrides":
+    let dir = freshDir("atlas_run_unittest_detection")
+    defer:
+      removeDir($dir)
+    writeFile($(dir / Path"demo.nimble"), "version = \"0.1.0\"\n")
+    createDir($(dir / Path"tests"))
+    writeFile($(dir / Path"tests/tmarker.nim"),
+      "echo \"[FAILED] example\"\n")
+    let args = @["--project:" & $dir, "tests", "--backend:js", "--only-errors"]
+    check atlasRunMain(args) == 0
+    check atlasRunMain(args & @["--unittest-failures:on"]) != 0
+    check atlasRunMain(args & @["--unittest-failures:off"]) == 0
+    if supportsNimIc():
+      let icArgs = @["--project:" & $dir, "tests", "--backend:ic", "--only-errors"]
+      check atlasRunMain(icArgs) != 0
+      check atlasRunMain(icArgs & @["--unittest-failures:off"]) == 0
+      check atlasRunMain(icArgs & @["--unittest-failures:on"]) != 0
 
   test "discovers t-star test files":
     let dir = freshDir("atlas_run_discovers_tests")
@@ -417,7 +470,7 @@ writeFile("ran.out", "ran")
       showOutput = false
     ))
     check code == 0
-    check fileExists($(dir / Path"deps/.nimcache" / Path"atlas-run" /
+    check fileExists($(dir / Path"deps/.nimcache" /
       Path"tests" / Path"tcompileonly" / Path("tcompileonly".addFileExt(ExeExt))))
     check not fileExists($(dir / Path"ran.out"))
 
@@ -444,9 +497,9 @@ writeFile("ran-two.out", "ran")
       showOutput = false
     ))
     check code == 0
-    check fileExists($(dir / Path"deps/.nimcache" / Path"atlas-run" /
+    check fileExists($(dir / Path"deps/.nimcache" /
       Path"examples" / Path"one" / Path("one".addFileExt(ExeExt))))
-    check fileExists($(dir / Path"deps/.nimcache" / Path"atlas-run" /
+    check fileExists($(dir / Path"deps/.nimcache" /
       Path"examples" / Path"two" / Path("two".addFileExt(ExeExt))))
     check not fileExists($(dir / Path"ran-one.out"))
     check not fileExists($(dir / Path"ran-two.out"))
@@ -525,8 +578,86 @@ writeFile("two.out", "ok")
     check code == 0
     check readFile($(dir / Path"one.out")) == "ok"
     check readFile($(dir / Path"two.out")) == "ok"
-    check dirExists($(dir / Path"deps/.nimcache" / Path"atlas-run" / Path"tests" / Path"tone"))
-    check dirExists($(dir / Path"deps/.nimcache" / Path"atlas-run" / Path"tests" / Path"ttwo"))
+    check dirExists($(dir / Path"deps/.nimcache" / Path"tests" / Path"tone"))
+    check dirExists($(dir / Path"deps/.nimcache" / Path"tests" / Path"ttwo"))
+
+  when defined(posix):
+    test "test cache mode defaults and overrides":
+      let dir = freshDir("atlas_run_cache_mode")
+      defer:
+        removeDir($dir)
+      writeFile($(dir / Path"demo.nimble"), "version = \"0.1.0\"\n")
+      createDir($(dir / Path"tests"))
+      writeFile($(dir / Path"tests/tone.nim"), "discard\n")
+      writeFile($(dir / Path"tests/ttwo.nim"), "discard\n")
+      let compiler = dir / Path"fake-nim"
+      writeFile($compiler, """#!/bin/sh
+printf '%s\n' "$@" >> compiler-args
+""")
+      setFilePermissions($compiler, {fpUserRead, fpUserWrite, fpUserExec})
+      let args = @["--project:" & $dir, "--nim:" & $compiler, "tests",
+        "--jobs:1", "--compile-only", "--no-shuffle", "--only-errors"]
+      for (backend, mode, shared) in [
+          ("ic", "", true), ("ic", "separate", false),
+          ("c", "", false), ("c", "shared", true)]:
+        removeFile($(dir / Path"compiler-args"))
+        var command = args & @["--backend:" & backend]
+        if mode.len > 0:
+          command.add "--cache-mode:" & mode
+        withNimFlags(""):
+          check atlasRunMain(command) == 0
+        let output = readFile($(dir / Path"compiler-args"))
+        if backend == "ic":
+          check "--colors:on\n" notin output
+          check "-d:nimUnittestColor:on\n" notin output
+        else:
+          check output.count("--colors:on\n") == 2
+          check output.count("-d:nimUnittestColor:on\n") == 2
+        let root = dir.absolutePath / Path"deps/.nimcache"
+        if shared:
+          check output.count("--nimcache:" & $root & "\n") == 2
+        else:
+          check "--nimcache:" & $(root / Path"tests/tone") & "\n" in output
+          check "--nimcache:" & $(root / Path"tests/ttwo") & "\n" in output
+        check "--out:" & $(root / Path"tests/tone/tone") & "\n" in output
+        check "--out:" & $(root / Path"tests/ttwo/ttwo") & "\n" in output
+      removeFile($(dir / Path"compiler-args"))
+      check atlasRunMain(args & @["--backend:ic", "--nimcache:deps/.nimcache/"]) == 0
+      let output = readFile($(dir / Path"compiler-args"))
+      check output.count("--nimcache:" & $(dir.absolutePath / Path"deps/.nimcache") &
+        "/\n") == 2
+      removeFile($(dir / Path"compiler-args"))
+      withNimFlags(""):
+        check atlasRunMain(args & @["--backend:ic", "--", "--colors:on",
+          "-d:nimUnittestColor:on"]) == 0
+      let explicitOutput = readFile($(dir / Path"compiler-args"))
+      check explicitOutput.count("--colors:on\n") == 2
+      check explicitOutput.count("-d:nimUnittestColor:on\n") == 2
+
+    test "IC defaults to one test job and allows an explicit override":
+      let dir = freshDir("atlas_run_ic_jobs")
+      defer:
+        removeDir($dir)
+      writeFile($(dir / Path"demo.nimble"), "version = \"0.1.0\"\n")
+      createDir($(dir / Path"tests"))
+      writeFile($(dir / Path"tests/tone.nim"), "discard\n")
+      writeFile($(dir / Path"tests/ttwo.nim"), "discard\n")
+      let compiler = dir / Path"fake-nim"
+      writeFile($compiler, """#!/bin/sh
+if mkdir compiler.lock 2>/dev/null; then
+  sleep 1
+  rmdir compiler.lock
+else
+  touch overlap
+fi
+""")
+      setFilePermissions($compiler, {fpUserRead, fpUserWrite, fpUserExec})
+      let args = @["--project:" & $dir, "--nim:" & $compiler, "tests",
+        "--backend:ic", "--compile-only", "--no-shuffle", "--only-errors"]
+      check atlasRunMain(args) == 0
+      check not fileExists($(dir / Path"overlap"))
+      check atlasRunMain(args & @["--jobs:2"]) == 0
+      check fileExists($(dir / Path"overlap"))
 
   test "streams one job directly and parallel jobs in labeled chunks":
     let dir = freshDir("atlas_run_stream_tests")
