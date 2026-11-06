@@ -409,13 +409,15 @@ proc quoteCommand(command: string; args: openArray[string]): string =
     result.add " "
     result.add quoteShell(arg)
 
-proc effectiveNimcacheRoot(projectDir, nimcacheDir: Path): Path =
+proc effectiveNimcacheRoot(projectDir, nimcacheDir: Path; backend: string): Path =
   if ($nimcacheDir).len > 0:
     let expanded = nimcacheDir.expandTilde()
     if expanded.isAbsolute:
       result = expanded.absolutePath()
     else:
       result = projectDir / expanded
+  elif backend == "ic":
+    result = projectDir / Path"deps/.nimcache"
   else:
     result = projectDir / Path"deps/.nimcache" / Path"atlas-run"
 
@@ -1196,7 +1198,7 @@ proc runAtlasTests*(options: AtlasTestOptions): int =
       (options.cacheMode == tcmDefault and backend == "ic")
     detectUnittestFailures = options.unittestFailures == tfdOn or
       (options.unittestFailures == tfdDefault and backend == "ic")
-    nimcacheRoot = effectiveNimcacheRoot(projectDir, options.nimcacheDir)
+    nimcacheRoot = effectiveNimcacheRoot(projectDir, options.nimcacheDir, backend)
     testFiles = discoverTestFiles(projectDir, options.selectors,
       options.skipSelectors)
     workerCount = effectiveJobs(options.jobs, testFiles.len, backend)

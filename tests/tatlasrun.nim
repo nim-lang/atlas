@@ -298,7 +298,9 @@ namedBin = {"tool": "demo-tool"}.toTable
               "js"
             else:
               ExeExt
-          check fileExists($(dir / Path"deps/.nimcache" / Path"atlas-run" /
+          let cacheRoot = if backend == "ic": Path"deps/.nimcache" else:
+            Path"deps/.nimcache/atlas-run"
+          check fileExists($(dir / cacheRoot /
             Path"tests" / Path"tbackend" /
             Path("tbackend".addFileExt(extension))))
       finally:
@@ -596,7 +598,6 @@ printf '%s\n' "$@" >> compiler-args
       setFilePermissions($compiler, {fpUserRead, fpUserWrite, fpUserExec})
       let args = @["--project:" & $dir, "--nim:" & $compiler, "tests",
         "--jobs:1", "--compile-only", "--no-shuffle", "--only-errors"]
-      let root = dir.absolutePath / Path"deps/.nimcache/atlas-run"
       for (backend, mode, shared) in [
           ("ic", "", true), ("ic", "separate", false),
           ("c", "", false), ("c", "shared", true)]:
@@ -606,6 +607,8 @@ printf '%s\n' "$@" >> compiler-args
           command.add "--cache-mode:" & mode
         check atlasRunMain(command) == 0
         let output = readFile($(dir / Path"compiler-args"))
+        let root = dir.absolutePath / (if backend == "ic": Path"deps/.nimcache" else:
+          Path"deps/.nimcache/atlas-run")
         if shared:
           check output.count("--nimcache:" & $root & "\n") == 2
         else:
