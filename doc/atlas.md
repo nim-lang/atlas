@@ -382,6 +382,20 @@ Use `--backend:ic`, `--backend:cpp`, or `--backend:js` to select the Nim
 compiler command; without it, tests use `nim c`. JavaScript tests are run with
 `node` after compilation. The same option works with `build` and overrides the
 backend from the project's `.nimble` file.
+IC tests default to one test job because the compiler runs work in parallel;
+use `--jobs:N` or `--jobs:auto` to override this. IC tests share a compiler
+cache by default; other backends use a separate cache per test. Use
+`--cache-mode:separate` or `--cache-mode:shared` to override the default, and
+`--nimcache` to choose the cache root. Shared mode uses the root directly as
+the compiler's cache directory. The default root is `deps/.nimcache` for all
+backends. When running multiple jobs, per-test caches avoid concurrent
+compilers writing to the same cache.
+Some builds can exit successfully after a `std/unittest` failure. Atlas-run
+can treat a standard `[FAILED]` output line as a failure; this is enabled by
+default for IC and disabled for other backends. Use `--unittest-failures:on`
+or `--unittest-failures:off` to override it. Custom formatters that suppress
+that line cannot be detected this way, and other output using the same line
+format is also treated as a failure.
 Successful compiler output is hidden by default; use `--compiler-output` to
 include it, and `--only-errors` to print only failed test chunks. Use
 `--stream` to print output as it arrives with `--jobs:1`, or in labeled chunks
