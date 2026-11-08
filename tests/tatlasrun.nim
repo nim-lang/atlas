@@ -644,12 +644,23 @@ printf '%s\n' "$@" >> compiler-args
       writeFile($(dir / Path"tests/ttwo.nim"), "discard\n")
       let compiler = dir / Path"fake-nim"
       writeFile($compiler, """#!/bin/sh
-if mkdir compiler.lock 2>/dev/null; then
+for arg do :; done
+case "$arg" in
+  *tone.nim) own=one.running; other=two.running ;;
+  *ttwo.nim) own=two.running; other=one.running ;;
+  *) exit 1 ;;
+esac
+touch "$own"
+attempt=0
+while [ "$attempt" -lt 3 ]; do
+  if [ -f "$other" ]; then
+    touch overlap
+    break
+  fi
   sleep 1
-  rmdir compiler.lock
-else
-  touch overlap
-fi
+  attempt=$((attempt + 1))
+done
+rm "$own"
 """)
       setFilePermissions($compiler, {fpUserRead, fpUserWrite, fpUserExec})
       let args = @["--project:" & $dir, "--nim:" & $compiler, "tests",
