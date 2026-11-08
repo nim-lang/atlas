@@ -8,7 +8,7 @@
 
 ## Configuration handling.
 
-import std / [algorithm, strutils, os, streams, json, tables, jsonutils, uri, sequtils]
+import std / [algorithm, strutils, os, paths, streams, json, tables, jsonutils, uri, sequtils]
 import basic/[versions, nimblecontext, deptypesjson, context, reporters, compiledpatterns, parse_requires, deptypes, pkgurls]
 
 proc readPluginsDir(dir: Path) =
@@ -153,6 +153,18 @@ proc removeDepGraphCache*() =
     if fileExists($configFile):
       removeFile($configFile)
 
+proc portableOndisk*(path: Path): Path =
+  ## Stores `ondisk` paths that live inside the workspace relative to the
+  ## workspace directory, so that `atlas.active.json` keeps working when the
+  ## workspace is moved or shared between machines (#113). Paths outside the
+  ## workspace (e.g. from `atlas link`) are kept as they are.
+  let ws = project().absolutePath
+  if path.string.len > 0 and path.isAbsolute and path.isRelativeTo(ws):
+    # forward slashes so the cache file reads the same on every OS
+    result = Path(path.relativePath(ws, '/').string)
+  else:
+    result = path
+
 proc toJsonHook*(pkg: ActivatedPackage, opt: ToJsonOptions): JsonNode =
   result = newJObject()
   result["url"] = toJson(pkg.url, opt)
@@ -167,7 +179,7 @@ proc toJsonHook*(pkg: ActivatedPackage, opt: ToJsonOptions): JsonNode =
     result["license"] = toJson(pkg.license, opt)
   result["commit"] = toJson(pkg.commit, opt)
   result["features"] = toJson(pkg.features, opt)
-  result["ondisk"] = toJson(pkg.ondisk, opt)
+  result["ondisk"] = toJson(portableOndisk(pkg.ondisk), opt)
   result["srcDir"] = toJson(pkg.srcDir, opt)
   if pkg.bin.len > 0:
     result["bin"] = toJson(pkg.bin, opt)
@@ -246,6 +258,14 @@ proc loadActivationCache*(nimbleFile: Path): ActivationCache =
       $projectDir & " with this version of Atlas, then retry."
   debug "atlas", "reading activation cache from: ", $configFile
   result.fromJson(parseFile($configFile), Joptions(allowMissingKeys: true, allowExtraKeys: true))
+  # `ondisk` paths pointing inside the workspace are stored relative to the
+  # workspace directory (#113); resolve them for consumers. Absolute paths
+  # (old caches, or packages outside the workspace from `atlas link`) are
+  # kept as they are.
+  let ws = projectDir.absolutePath.Path
+  for p in mitems(result.packages):
+    if p.ondisk.string.len > 0 and not p.ondisk.isAbsolute:
+      p.ondisk = ws / p.ondisk
 
 proc loadDepGraph*(nc: var NimbleContext, nimbleFile: Path): DepGraph =
   doAssert nimbleFile.isAbsolute() and endsWith($nimbleFile, ".nimble") and fileExists($nimbleFile)
