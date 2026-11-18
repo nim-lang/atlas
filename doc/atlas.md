@@ -145,9 +145,13 @@ Unofficial URLs, including forks, use a name triplet of the form
 name. For example, Atlas would be `atlas.nim-lang.github.com`. Packages can be
 added using `nameOverrides` in `atlas.config`, which adds a new name-to-URL
 mapping.
-Atlas downloads `packages.json` from the `nim-lang/packages` GitHub repository
-into `deps/_packages` by default; pass `--packagesRepo` to keep the git-clone
-behavior for the full packages repo.
+Atlas refreshes `packages.json` in `deps/.cache` from the Git checkout in
+`deps/.packages` when one exists. Otherwise it downloads the index over HTTPS,
+requesting an uncompressed response on Windows and on systems without `gzip`.
+If the download fails, Atlas makes a shallow clone of `nim-lang/packages` in
+`deps/.packages` and reuses it on later refreshes. Pass `--packagesRepo` to use
+Git on the first refresh. Atlas moves an existing `deps/_packages` checkout to
+`deps/.packages` when it is available.
 If dependency URLs use `git://`, pass `--forceGitToHttps` to rewrite them to
 `https://` before cloning.
 
@@ -305,9 +309,10 @@ If a when statement isn't supported consider using `feature` statements instead.
 
 Features in Nimble files enable optional requirements for things different scenarios. This is useful when dealing with scenarios like testing only dependencies.
 
-*Note*: Features aren't saved to the Atlas config. Pass `atlas --feature=foobar`
-when doing commands that should enable a feature, or pass `--keepFeatures`/`-k`
-to reuse feature defines from the current `nim.cfg`.
+Pass `--feature=foobar` to enable a feature in the root package or
+`--feature=dependency.foobar` to enable one in a dependency. Feature requests
+apply to the current command. Pass `--keepFeatures` or `-k` to reuse feature
+defines from the current `nim.cfg`.
 
 ```nim
 require "normallib"
@@ -320,7 +325,8 @@ Features are lazily cloned by Atlas until they are specified by either a require
 
 Atlas automatically enables the root package's `dev` and `patch` features, matching
 Nimble. Declare development-only dependencies with `dev:`; `patch` uses a regular
-`feature "patch":` block. Compiler defines use the Nimble package name, defaulting
+`feature "patch":` block. Feature names are scoped to the package that declares
+them. Compiler defines use the Nimble package name, defaulting
 to the `.nimble` filename when no name is declared. For example,
 `--define:features.my_package.testing` is independent of the repository or
 dependency alias name.

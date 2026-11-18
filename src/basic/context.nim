@@ -17,7 +17,7 @@ const
 
 const
   AtlasProjectConfig = Path"atlas.config"
-  DefaultPackagesSubDir* = Path"_packages"
+  DefaultPackagesSubDir* = Path".packages"
   DefaultCachesSubDir* = Path".cache"
   DefaultNimbleCachesSubDir* = Path"_nimbles"
   DefaultParallelCloneWorkers* = 6
@@ -164,7 +164,7 @@ proc hasRequestedFeature*(pkgShortName, pkgProjectName, pkgDeclaredName,
   if AllFeatures in atlasContext.flags or
       (isRoot and feature in ["dev", "patch"]):
     return true
-  if atlasContext.features.containsFeature(feature):
+  if isRoot and atlasContext.features.containsFeature(feature):
     return true
   for candidate in [pkgShortName, pkgProjectName, pkgDeclaredName, pkgName]:
     if candidate.len > 0 and atlasContext.features.containsFeature(

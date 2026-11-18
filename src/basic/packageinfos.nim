@@ -12,6 +12,7 @@ import context, reporters, gitops, pkgurls, httpclientutils
 
 const
   UnitTests = defined(atlasUnitTests)
+  PackagesRepoUrl = "https://github.com/nim-lang/packages"
   PackagesJsonUrls* = [
     "https://raw.githubusercontent.com/nim-lang/packages/refs/heads/master/packages.json"
   ]
@@ -101,13 +102,23 @@ proc toTags*(j: JsonNode): seq[string] =
 proc packageInfosFile*(cacheDir = cachesDirectory()): Path =
   cacheDir / Path"packages.json"
 
-proc removeLegacyPackageCaches*(gitDir = packagesDirectory()) =
-  let oldNimbleCachesDir = depsDir() / Path"_nimble"
+proc migratePackageCaches*() =
+  let deps = depsDir()
+  if deps.len == 0:
+    return
+
+  let oldNimbleCachesDir = deps / Path"_nimble"
   if dirExists(oldNimbleCachesDir):
     removeDir($oldNimbleCachesDir)
 
-  if PackagesGit notin context().flags and dirExists(gitDir):
-    removeDir($gitDir)
+  let gitDir = $packagesDirectory()
+  let oldGitDir = $(deps / Path"_packages")
+  if dirExists(oldGitDir) and not (dirExists(gitDir) or fileExists(gitDir) or symlinkExists(gitDir)):
+    try:
+      moveDir(oldGitDir, gitDir)
+    except OSError:
+      if dirExists(oldGitDir) or not dirExists(gitDir):
+        raise
 
 proc getPackageInfos*(cacheDir = cachesDirectory()): seq[PackageInfo] =
   result = @[]
@@ -154,38 +165,74 @@ proc decodePackageList*(headers: HttpHeaders; contents: string): string =
   else:
     result = contents
 
-proc updatePackages*(cacheDir = cachesDirectory(); gitDir = packagesDirectory()) =
-  if $cacheDir == $cachesDirectory():
-    removeLegacyPackageCaches(gitDir)
+proc newPackageListHttpClient(): HttpClient =
+  let acceptGzip = not defined(windows) and findExe("gzip").len > 0
+  result = newAtlasHttpClient(acceptGzip = acceptGzip)
+  if not acceptGzip:
+    result.headers["Accept-Encoding"] = "identity"
+
+proc downloadPackageList(urls: openArray[string]): string =
+  var lastError = ""
+  for url in urls:
+    let client = newPackageListHttpClient()
+    try:
+      let response = client.get(url)
+      if not response.code.is2xx:
+        raise newException(HttpRequestError, response.status)
+      return decodePackageList(response.headers, response.bodyStream.readAll())
+    except CatchableError as e:
+      lastError = url & ": " & e.msg
+      warn DefaultCachesSubDir, "cannot download packages.json:", lastError
+    finally:
+      client.close()
+  raise newException(IOError, lastError)
+
+proc updatePackagesFrom(cacheDir, gitDir: Path; urls: openArray[string]; repoUrl: Uri) =
+  if cacheDir == cachesDirectory() or gitDir == packagesDirectory():
+    migratePackageCaches()
 
   if cacheDir.len > 0 and not dirExists(cacheDir):
     createDir(cacheDir)
 
+  let forceGit = PackagesGit in context().flags
+  var useGit = forceGit or dirExists(gitDir)
+  var contents, httpError: string
+  if not useGit:
+    try:
+      contents = downloadPackageList(urls)
+    except CatchableError as e:
+      info DefaultCachesSubDir, "trying Git for packages.json"
+      useGit = true
+      httpError = e.msg
+
+  if useGit:
+    try:
+      if dirExists(gitDir):
+        gitPull(gitDir, if forceGit: Error else: Warning)
+      else:
+        let (status, output) = clone(repoUrl, gitDir, shallow = not forceGit)
+        if status != Ok:
+          raise newException(IOError, "cannot clone packages repo: " & output)
+      contents = readFile($(gitDir / Path"packages.json"))
+    except CatchableError as e:
+      let reason = if httpError.len == 0: e.msg else: httpError & "\n" & e.msg
+      error DefaultCachesSubDir, "cannot refresh packages.json:", reason
+      return
+
   let pkgsFile = packageInfosFile(cacheDir)
-  if PackagesGit in context().flags:
-    if dirExists(gitDir):
-      gitPull(gitDir)
-    else:
-      let pkgsUrl = parseUri "https://github.com/nim-lang/packages"
-      let res = clone(pkgsUrl, gitDir)
-      if res[0] != Ok:
-        error DefaultPackagesSubDir, "cannot clone packages repo: " & res[1]
-    copyFile($(gitDir / Path"packages.json"), $pkgsFile)
-  else:
-    var lastError = ""
-    for url in PackagesJsonUrls:
-      let client = newAtlasHttpClient()
-      try:
-        let response = client.get(url)
-        if response.code.is4xx or response.code.is5xx:
-          raise newException(HttpRequestError, response.status)
-        let contents = decodePackageList(response.headers,
-                                         response.bodyStream.readAll())
-        writeFile($pkgsFile, contents)
-        return
-      except CatchableError as e:
-        lastError = url & ": " & e.msg
-        warn DefaultCachesSubDir, "cannot download packages.json:", lastError
-      finally:
-        client.close()
-    error DefaultCachesSubDir, "cannot download packages.json: " & lastError
+  try:
+    let (file, tempPath) = createTempFile("packages-", ".json.tmp", $pkgsFile.parentDir)
+    defer: removeFile(tempPath)
+    try:
+      file.write(contents)
+    finally:
+      close(file)
+    moveFile(tempPath, $pkgsFile)
+  except CatchableError as e:
+    error DefaultCachesSubDir, "cannot write packages.json:", e.msg
+
+proc updatePackages*(cacheDir = cachesDirectory(); gitDir = packagesDirectory()) =
+  updatePackagesFrom(cacheDir, gitDir, PackagesJsonUrls, parseUri(PackagesRepoUrl))
+
+when UnitTests:
+  export newPackageListHttpClient, updatePackagesFrom

@@ -1,9 +1,12 @@
+{.define: atlasUnitTests.}
+
 import std/[unittest, json, os, osproc, streams, times, paths, strutils,
-            httpclient, tempfiles]
+            httpclient, tempfiles, uri]
 import basic/context
 import basic/atlasversion
 import basic/httpclientutils
 import basic/packageinfos
+import basic/reporters
 
 const AtlasRootDir = currentSourcePath().parentDir().parentDir()
 
@@ -143,6 +146,67 @@ doAssert not AtlasIsDirty
       let headers = newHttpHeaders({"Content-Encoding": "gzip"})
       check decodePackageList(headers, compressed) == plain
 
+  test "package list requests identity when gzip is unavailable or on Windows":
+    let client = newPackageListHttpClient()
+    defer: client.close()
+    let encoding =
+      if defined(windows) or findExe("gzip").len == 0: "identity"
+      else: "gzip"
+    check client.headers["Accept-Encoding"] == encoding
+
+    let emptyPath = createTempDir("atlas-no-gzip-", "")
+    defer: removeDir(emptyPath)
+    let oldPath = getEnv("PATH")
+    putEnv("PATH", emptyPath)
+    defer: putEnv("PATH", oldPath)
+    let clientWithoutGzip = newPackageListHttpClient()
+    defer: clientWithoutGzip.close()
+    check clientWithoutGzip.headers["Accept-Encoding"] == "identity"
+
+  test "updatePackages retains and reuses a shallow Git checkout after HTTP failure":
+    let tmp = createTempDir("atlas-packages-test-", "")
+    defer: removeDir(tmp)
+    let repoDir = tmp / "registry"
+    createDir(repoDir)
+    let git = "git -C " & quoteShell(repoDir)
+    require execCmdEx(git & " init").exitCode == 0
+    writeFile(repoDir / "packages.json", "[]")
+    require execCmdEx(git & " add packages.json").exitCode == 0
+    require execCmdEx(git & " -c user.name=Atlas -c user.email=atlas@example.com" &
+      " -c commit.gpgsign=false commit -m Registry").exitCode == 0
+
+    let traceFile = tmp / "git-trace.log"
+    let oldTrace = getEnv("GIT_TRACE")
+    let hadTrace = existsEnv("GIT_TRACE")
+    putEnv("GIT_TRACE", traceFile)
+    defer:
+      if hadTrace: putEnv("GIT_TRACE", oldTrace)
+      else: delEnv("GIT_TRACE")
+
+    var repoUrl = parseUri("file:///")
+    repoUrl.path = repoDir.replace('\\', '/')
+    when defined(windows):
+      repoUrl.path = "/" & repoUrl.path
+    let cacheDir = Path(tmp / "cache")
+    let gitDir = Path(tmp / ".packages")
+    let urls = ["http://127.0.0.1:0/packages.json"]
+    createDir($cacheDir)
+    writeFile($packageInfosFile(cacheDir), "[{}]")
+    updatePackagesFrom(cacheDir, gitDir, urls, repoUrl)
+    check readFile($packageInfosFile(cacheDir)) == "[]"
+    check fileExists($(gitDir / Path".git" / Path"shallow"))
+
+    writeFile(repoDir / "packages.json", "[{}]")
+    require execCmdEx(git & " -c user.name=Atlas -c user.email=atlas@example.com" &
+      " -c commit.gpgsign=false commit -am Refresh").exitCode == 0
+    let warnings = atlasReporter.warnings
+    updatePackagesFrom(cacheDir, gitDir, urls, repoUrl)
+    check atlasReporter.warnings == warnings
+    check readFile($packageInfosFile(cacheDir)) == "[{}]"
+    let trace = readFile(traceFile)
+    check trace.count("built-in: git clone --depth=1") == 1
+    check "built-in: git pull" in trace
+
   test "package info parses registry subdir":
     let pkg = fromJson(parseJson("""
       {
@@ -168,42 +232,47 @@ doAssert not AtlasIsDirty
         removeFile($pkgsFile)
       if dirExists($pkgsDir):
         removeDir($pkgsDir)
-    updatePackages(pkgsDir)
+    updatePackages(pkgsDir, pkgsDir / Path".packages")
     check fileExists($pkgsFile)
     check getFileSize($pkgsFile) > 0
 
-  test "legacy package caches are removed by default":
+  test "existing package checkout migrates to deps/.packages":
     let oldCtx = context()
-    let ws = Path(getTempDir()) / Path("atlas_cleanup_" & $int(epochTime()))
+    let ws = createTempDir("atlas-package-migration-", "")
     defer:
       setContext(oldCtx)
-      if dirExists($ws):
-        removeDir($ws)
+      removeDir(ws)
+    setContext(AtlasContext(projectDir: Path(ws), depsDir: Path"deps"))
+    let oldCheckout = depsDir() / Path"_packages"
+    let newCheckout = depsDir() / Path".packages"
+    let oldNimbleCache = depsDir() / Path"_nimble"
+    createDir($(oldCheckout / Path".git"))
+    createDir($oldNimbleCache)
+    writeFile($(oldCheckout / Path"packages.json"), "[]")
 
-    setContext(AtlasContext(projectDir: ws, depsDir: Path"deps"))
-    createDir($depsDir())
-    createDir($(depsDir() / Path"_nimble"))
-    createDir($packagesDirectory())
+    migratePackageCaches()
+    migratePackageCaches()
 
-    removeLegacyPackageCaches()
+    check packagesDirectory() == newCheckout
+    check not dirExists($oldCheckout)
+    check not dirExists($oldNimbleCache)
+    check dirExists($(newCheckout / Path".git"))
+    check readFile($(newCheckout / Path"packages.json")) == "[]"
 
-    check not dirExists($(depsDir() / Path"_nimble"))
-    check not dirExists($packagesDirectory())
-
-  test "packages git cache is kept for packages repo mode":
+  test "migration preserves both checkouts if deps/.packages exists":
     let oldCtx = context()
-    let ws = Path(getTempDir()) / Path("atlas_cleanup_git_" & $int(epochTime()))
+    let ws = createTempDir("atlas-package-collision-", "")
     defer:
       setContext(oldCtx)
-      if dirExists($ws):
-        removeDir($ws)
-
-    setContext(AtlasContext(projectDir: ws, depsDir: Path"deps", flags: {PackagesGit}))
-    createDir($depsDir())
-    createDir($(depsDir() / Path"_nimble"))
+      removeDir(ws)
+    setContext(AtlasContext(projectDir: Path(ws), depsDir: Path"deps", flags: {PackagesGit}))
+    let oldCheckout = depsDir() / Path"_packages"
+    createDir($oldCheckout)
     createDir($packagesDirectory())
+    writeFile($(oldCheckout / Path"packages.json"), "[]")
+    writeFile($(packagesDirectory() / Path"packages.json"), "[{}]")
 
-    removeLegacyPackageCaches()
+    migratePackageCaches()
 
-    check not dirExists($(depsDir() / Path"_nimble"))
-    check dirExists($packagesDirectory())
+    check readFile($(oldCheckout / Path"packages.json")) == "[]"
+    check readFile($(packagesDirectory() / Path"packages.json")) == "[{}]"

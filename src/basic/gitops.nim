@@ -452,7 +452,7 @@ proc maybeUrlProxy*(url: Uri): Uri =
   if result.hostname == "github.com":
     result.path = result.path.strip(leading=false, trailing=true, {'/'})
 
-proc clone*(url: Uri, dest: Path; retries = 5): (CloneStatus, string) =
+proc clone*(url: Uri, dest: Path; retries = 5; shallow = false): (CloneStatus, string) =
   ## clone git repo.
   ##
   ## note clones don't use `--recursive` but rely in the `checkoutCommit`
@@ -461,7 +461,8 @@ proc clone*(url: Uri, dest: Path; retries = 5): (CloneStatus, string) =
 
   # retry multiple times to avoid annoying github timeouts:
   let extraArgs =
-    if $context().proxy != "" and DumbProxy in context().flags: ""
+    if shallow: "--depth=1"
+    elif $context().proxy != "" and DumbProxy in context().flags: ""
     elif ShallowClones in context().flags: "--depth=1"
     else: ""
 
@@ -827,11 +828,11 @@ proc checkoutGitCommitFull*(path: Path; commit: CommitHash; origin = "origin";
     else:
       debug($path, "updated submodules")
 
-proc gitPull*(path: Path) =
-  let (outp, status) = exec(GitPull, path, [])
+proc gitPull*(path: Path; errorReportLevel = Error) =
+  let (outp, status) = exec(GitPull, path, [], Debug)
   if status != RES_OK:
     debug path, "git pull error: \n" & outp.splitLines().mapIt("\n>>> " & it).join("")
-    error(path, "could not 'git pull'")
+    message(errorReportLevel, path, "could not 'git pull'")
 
 proc gitTag*(path: Path, tag: string) =
   let (_, status) = exec(GitTag, path, [tag])
