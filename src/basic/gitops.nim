@@ -452,7 +452,7 @@ proc maybeUrlProxy*(url: Uri): Uri =
   if result.hostname == "github.com":
     result.path = result.path.strip(leading=false, trailing=true, {'/'})
 
-proc clone*(url: Uri, dest: Path; retries = 5): (CloneStatus, string) =
+proc clone*(url: Uri, dest: Path; retries = 5; shallow = false): (CloneStatus, string) =
   ## clone git repo.
   ##
   ## note clones don't use `--recursive` but rely in the `checkoutCommit`
@@ -461,7 +461,8 @@ proc clone*(url: Uri, dest: Path; retries = 5): (CloneStatus, string) =
 
   # retry multiple times to avoid annoying github timeouts:
   let extraArgs =
-    if $context().proxy != "" and DumbProxy in context().flags: ""
+    if shallow: "--depth=1"
+    elif $context().proxy != "" and DumbProxy in context().flags: ""
     elif ShallowClones in context().flags: "--depth=1"
     else: ""
 

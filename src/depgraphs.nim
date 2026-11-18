@@ -542,23 +542,6 @@ proc addVersionConstraints(
           b.addNegated(featureVarId) # not this feature
           b.addCompatibleVersionChoice(compatibleVersions)
           debug pkg.url.projectName, "added compatVer feature dep variables:", $compatibleVersions.mapIt($it).join(", ")
-        
-        # Add implictations for globally set features
-        if hasContextFeature(pkg, rel, feature):
-          debug pkg.url.projectName, "checking global feature:", $feature, "in version:", $ver, "context().features:", $context().features.toSeq().mapIt($it).join(", ")
-          var featureVersions: Table[VarId, seq[VarId]]
-          for depVer, nimbleRelease in depNode.validVersions():
-            trace pkg.url.projectName, "checking global feature dependency:", depNode.url.projectName, "version:", $depVer
-            let declaredFeature = nimbleRelease.features.findFeature(feature)
-            if declaredFeature.len > 0:
-              let featureVarId = nimbleRelease.featureVars[declaredFeature]
-              featureVersions.mgetOrPut(depVer.vid, @[]).add(featureVarId)
-
-          # Add implication: if this version is selected, one of its compatible deps must be selected
-          if true:
-            withOpenBr(b, OrForm):
-              b.addNegated(ver.vid)  # not this version
-              b.addCompatibleVersionChoice(compatibleVersions, featureVersions)
 
   if not hasValidRelease:
     issues.trackNoVersionsFound(
@@ -1105,7 +1088,7 @@ proc activateGraph*(graph: DepGraph): tuple[paths: seq[CfgPath], features: seq[s
   for feature in context().features:
     result.features.addUniqueFeature graph.canonicalFeatureDefine(feature)
 
-  # Apply global feature flags to activeFeatures for introspection/tests.
+  # Record requested features for introspection and compiler defines.
   for pkg in graph.pkgs.values():
     if not pkg.active:
       continue

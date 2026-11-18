@@ -370,7 +370,7 @@ proc fillPackageLookupTable(c: var NimbleContext) =
   ## their target package names.
   if not c.hasPackageList:
     c.hasPackageList = true
-    removeLegacyPackageCaches()
+    migratePackageCaches()
     if not fileExists(packageInfosFile()):
       updatePackages()
     let packages = getPackageInfos()

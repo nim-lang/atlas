@@ -66,6 +66,51 @@ suite "duplicate feature dependencies":
     doAssert dependency.active, "automatic feature dependencies must be selected"
     doAssert root.activeFeatures.toHashSet == ["dev", "patch"].toHashSet
 
+  for scenario in [
+      (name: "bare CLI feature", requested: "dev", withinFeature: false, explicit: false),
+      (name: "requirement inside dev", requested: "", withinFeature: true, explicit: false),
+      (name: "scoped CLI feature", requested: "features.dependency.dev",
+        withinFeature: true, explicit: false),
+      (name: "explicit dependency feature", requested: "", withinFeature: false, explicit: true)]:
+    test "same-name dev features with " & scenario.name:
+      setContext(AtlasContext())
+      if scenario.requested.len > 0:
+        context().features.incl scenario.requested
+
+      var nc = createUnfilledNimbleContext()
+      let rootUrl = toPkgUriRaw(parseUri("https://example.com/root"))
+      let depUrl = toPkgUriRaw(parseUri("https://example.com/dependency"))
+      let dep = nc.initPackage(depUrl, Processed)
+      let depRelease = NimbleRelease(name: "dependency", version: Version"1.0.0", status: Normal)
+      depRelease.features["dev"] = @[]
+      dep.versions[toVersionTag("1.0.0@-").toPkgVer] = depRelease
+
+      var invalid = false
+      let query = (depUrl, parseVersionInterval(">= 1.0.0", 0, invalid))
+      require not invalid
+      let rootRelease = NimbleRelease(version: Version"#head", status: Normal)
+      rootRelease.features["dev"] = @[]
+      if scenario.withinFeature:
+        rootRelease.features["dev"].add query
+      else:
+        rootRelease.requirements.add query
+      if scenario.explicit:
+        rootRelease.reqsByFeatures[depUrl] = ["dev"].toHashSet
+
+      let root = nc.initPackage(rootUrl, Processed)
+      root.isRoot = true
+      root.versions[toVersionTag("*@head").toPkgVer] = rootRelease
+      var graph = DepGraph(root: root)
+      graph.pkgs[rootUrl] = root
+      graph.pkgs[depUrl] = dep
+
+      graph.solve(graph.toFormular(SemVer))
+
+      check root.activeFeatures == @["dev"]
+      check dep.active
+      check ("dev" in dep.activeFeatures) ==
+        (scenario.explicit or scenario.requested == "features.dependency.dev")
+
   test "required dependency features need not be declared":
     setContext(AtlasContext())
     context().flags.incl NoExec
