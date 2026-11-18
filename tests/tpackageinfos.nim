@@ -6,6 +6,7 @@ import basic/context
 import basic/atlasversion
 import basic/httpclientutils
 import basic/packageinfos
+import basic/reporters
 
 const AtlasRootDir = currentSourcePath().parentDir().parentDir()
 
@@ -162,7 +163,7 @@ doAssert not AtlasIsDirty
     defer: clientWithoutGzip.close()
     check clientWithoutGzip.headers["Accept-Encoding"] == "identity"
 
-  test "updatePackages falls back to a shallow Git clone after HTTP failure":
+  test "updatePackages retains and reuses a shallow Git checkout after HTTP failure":
     let tmp = createTempDir("atlas-packages-test-", "")
     defer: removeDir(tmp)
     let repoDir = tmp / "registry"
@@ -187,13 +188,24 @@ doAssert not AtlasIsDirty
     when defined(windows):
       repoUrl.path = "/" & repoUrl.path
     let cacheDir = Path(tmp / "cache")
-    let gitDir = Path(tmp / "persistent-checkout")
+    let gitDir = Path(tmp / ".packages")
+    let urls = ["http://127.0.0.1:0/packages.json"]
     createDir($cacheDir)
     writeFile($packageInfosFile(cacheDir), "[{}]")
-    updatePackagesFrom(cacheDir, gitDir, ["http://127.0.0.1:0/packages.json"], repoUrl)
+    updatePackagesFrom(cacheDir, gitDir, urls, repoUrl)
     check readFile($packageInfosFile(cacheDir)) == "[]"
-    check "clone --depth=1" in readFile(traceFile)
-    check not dirExists($gitDir)
+    check fileExists($(gitDir / Path".git" / Path"shallow"))
+
+    writeFile(repoDir / "packages.json", "[{}]")
+    require execCmdEx(git & " -c user.name=Atlas -c user.email=atlas@example.com" &
+      " -c commit.gpgsign=false commit -am Refresh").exitCode == 0
+    let warnings = atlasReporter.warnings
+    updatePackagesFrom(cacheDir, gitDir, urls, repoUrl)
+    check atlasReporter.warnings == warnings
+    check readFile($packageInfosFile(cacheDir)) == "[{}]"
+    let trace = readFile(traceFile)
+    check trace.count("built-in: git clone --depth=1") == 1
+    check "built-in: git pull" in trace
 
   test "package info parses registry subdir":
     let pkg = fromJson(parseJson("""
@@ -220,7 +232,7 @@ doAssert not AtlasIsDirty
         removeFile($pkgsFile)
       if dirExists($pkgsDir):
         removeDir($pkgsDir)
-    updatePackages(pkgsDir)
+    updatePackages(pkgsDir, pkgsDir / Path".packages")
     check fileExists($pkgsFile)
     check getFileSize($pkgsFile) > 0
 

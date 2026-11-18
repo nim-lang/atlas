@@ -145,11 +145,13 @@ Unofficial URLs, including forks, use a name triplet of the form
 name. For example, Atlas would be `atlas.nim-lang.github.com`. Packages can be
 added using `nameOverrides` in `atlas.config`, which adds a new name-to-URL
 mapping.
-Atlas downloads `packages.json` over HTTPS into `deps/.cache`. It requests an
-uncompressed response on Windows and on systems without `gzip`. If the download
-fails, Atlas tries a temporary shallow Git clone of `nim-lang/packages`. Pass
-`--packagesRepo` to keep and update the Git checkout in `deps/.packages`. Atlas
-moves an existing `deps/_packages` checkout to that path when it is available.
+Atlas refreshes `packages.json` in `deps/.cache` from the Git checkout in
+`deps/.packages` when one exists. Otherwise it downloads the index over HTTPS,
+requesting an uncompressed response on Windows and on systems without `gzip`.
+If the download fails, Atlas makes a shallow clone of `nim-lang/packages` in
+`deps/.packages` and reuses it on later refreshes. Pass `--packagesRepo` to use
+Git on the first refresh. Atlas moves an existing `deps/_packages` checkout to
+`deps/.packages` when it is available.
 If dependency URLs use `git://`, pass `--forceGitToHttps` to rewrite them to
 `https://` before cloning.
 

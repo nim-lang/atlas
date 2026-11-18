@@ -828,11 +828,11 @@ proc checkoutGitCommitFull*(path: Path; commit: CommitHash; origin = "origin";
     else:
       debug($path, "updated submodules")
 
-proc gitPull*(path: Path) =
-  let (outp, status) = exec(GitPull, path, [])
+proc gitPull*(path: Path; errorReportLevel = Error) =
+  let (outp, status) = exec(GitPull, path, [], Debug)
   if status != RES_OK:
     debug path, "git pull error: \n" & outp.splitLines().mapIt("\n>>> " & it).join("")
-    error(path, "could not 'git pull'")
+    message(errorReportLevel, path, "could not 'git pull'")
 
 proc gitTag*(path: Path, tag: string) =
   let (_, status) = exec(GitTag, path, [tag])

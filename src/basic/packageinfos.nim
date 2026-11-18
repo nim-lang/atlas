@@ -187,53 +187,49 @@ proc downloadPackageList(urls: openArray[string]): string =
       client.close()
   raise newException(IOError, lastError)
 
-proc clonePackageList(repoUrl: Uri): string =
-  let tempDir = createTempDir("atlas-packages-", "")
-  defer: removeDir(tempDir)
-  let checkout = Path(tempDir) / Path"packages"
-  let (status, output) = clone(repoUrl, checkout, shallow = true)
-  if status != Ok:
-    raise newException(IOError, "cannot clone packages repo: " & output)
-  readFile($(checkout / Path"packages.json"))
-
 proc updatePackagesFrom(cacheDir, gitDir: Path; urls: openArray[string]; repoUrl: Uri) =
-  if cacheDir == cachesDirectory() or
-      (PackagesGit in context().flags and gitDir == packagesDirectory()):
+  if cacheDir == cachesDirectory() or gitDir == packagesDirectory():
     migratePackageCaches()
 
   if cacheDir.len > 0 and not dirExists(cacheDir):
     createDir(cacheDir)
 
-  let pkgsFile = packageInfosFile(cacheDir)
-  if PackagesGit in context().flags:
-    if dirExists(gitDir):
-      gitPull(gitDir)
-    else:
-      let res = clone(repoUrl, gitDir)
-      if res[0] != Ok:
-        error DefaultPackagesSubDir, "cannot clone packages repo: " & res[1]
-    copyFile($(gitDir / Path"packages.json"), $pkgsFile)
-  else:
-    let contents = try:
-      downloadPackageList(urls)
-    except CatchableError as httpError:
-      info DefaultCachesSubDir, "trying Git for packages.json"
-      try:
-        clonePackageList(repoUrl)
-      except CatchableError as gitError:
-        error DefaultCachesSubDir, "cannot refresh packages.json via HTTPS or Git:",
-          httpError.msg & "; " & gitError.msg
-        return
+  let forceGit = PackagesGit in context().flags
+  var useGit = forceGit or dirExists(gitDir)
+  var contents, httpError: string
+  if not useGit:
     try:
-      let (file, tempPath) = createTempFile("packages-", ".json.tmp", $pkgsFile.parentDir)
-      defer: removeFile(tempPath)
-      try:
-        file.write(contents)
-      finally:
-        close(file)
-      moveFile(tempPath, $pkgsFile)
+      contents = downloadPackageList(urls)
     except CatchableError as e:
-      error DefaultCachesSubDir, "cannot write packages.json:", e.msg
+      info DefaultCachesSubDir, "trying Git for packages.json"
+      useGit = true
+      httpError = e.msg
+
+  if useGit:
+    try:
+      if dirExists(gitDir):
+        gitPull(gitDir, if forceGit: Error else: Warning)
+      else:
+        let (status, output) = clone(repoUrl, gitDir, shallow = not forceGit)
+        if status != Ok:
+          raise newException(IOError, "cannot clone packages repo: " & output)
+      contents = readFile($(gitDir / Path"packages.json"))
+    except CatchableError as e:
+      let reason = if httpError.len == 0: e.msg else: httpError & "\n" & e.msg
+      error DefaultCachesSubDir, "cannot refresh packages.json:", reason
+      return
+
+  let pkgsFile = packageInfosFile(cacheDir)
+  try:
+    let (file, tempPath) = createTempFile("packages-", ".json.tmp", $pkgsFile.parentDir)
+    defer: removeFile(tempPath)
+    try:
+      file.write(contents)
+    finally:
+      close(file)
+    moveFile(tempPath, $pkgsFile)
+  except CatchableError as e:
+    error DefaultCachesSubDir, "cannot write packages.json:", e.msg
 
 proc updatePackages*(cacheDir = cachesDirectory(); gitDir = packagesDirectory()) =
   updatePackagesFrom(cacheDir, gitDir, PackagesJsonUrls, parseUri(PackagesRepoUrl))
