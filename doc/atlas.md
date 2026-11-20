@@ -314,6 +314,10 @@ Pass `--feature=foobar` to enable a feature in the root package or
 apply to the current command. Pass `--keepFeatures` or `-k` to reuse feature
 defines from the current `nim.cfg`.
 
+Pass `--allFeatures` to enable every feature declared by the root package.
+Dependency features can still be requested with a qualified `--feature` flag
+or through Nimble requirements such as `requires "somelib[testing]"`.
+
 ```nim
 require "normallib"
 

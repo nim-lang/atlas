@@ -31,6 +31,7 @@ Commands:
   use <url|pkgname>     add package and its dependencies to the project
                         and patch the project's Nimble file
   install               use the nimble file to setup the project's dependencies
+    --update, -u        update dependency repositories before solving
   update [filter]       update every dependency that matches the filter
                         whether by name or URL. All dependencies are updated
                         if no filter is given.
@@ -39,6 +40,7 @@ Commands:
   link <path>           link an existing project into the current project
                         to share its dependencies
   unlink <package>      remove a linked package and its linked dependencies
+    --only              leave child dependencies linked
   tag [major|minor|patch|<semver>|a..z]
                         add and push a new tag, input must be one of:
                         ['major'|'minor'|'patch'] or a SemVer tag like ['1.0.3']
@@ -51,7 +53,13 @@ Commands:
   changed [atlas.lock]  list any packages that differ from the lock file
   outdated              list the packages that are outdated
   deps                  list the currently selected dependencies
+    --tree              show dependencies as a tree
   env <env-name>        setup a Nim virtual environment
+    --binary            require a prebuilt Nim release
+    --source            build Nim from source
+    --git-ref=ref       build this Git branch, tag, or commit from source
+    --git-url=url       use this Nim Git repository with --git-ref
+    --github-path       add Nim's bin directory to $GITHUB_PATH
 
 Options:
   --help, -h            show this help
@@ -63,25 +71,17 @@ Options:
                         for project specific use: `<project>.<feature>`
                         (note always be passed when you want to use features)
   --features=<list>     enables one or more features separated by commas or spaces
-  --allFeatures         enables every declared feature
+  --allFeatures         enables every feature declared by the root package
   --keepFeatures, -k    reuse feature defines from the current nim.cfg
   --resolver=minver|semver|maxver
                         which resolution algorithm to use, default is semver
   --list[=on|off]       list all available and installed versions
   --keepCommits         do not perform any `git checkouts`
   --keepworkspace       keep generated workspace artifacts
-  --binary              for `env`, require a prebuilt Nim release
-  --source              for `env`, build Nim from source
-  --git-ref=ref         for `env`, build this Git branch, tag, or commit from source
-  --git-url=url         for `env --git-ref`, use this Nim Git repository
-  --github-path         for `env`, add Nim's bin directory to $GITHUB_PATH
   --ignoreerrors        continue even when errors were recorded
   --dumpformular        dump SAT formula for debugging
   --dumpgraphs          dump dependency graphs for debugging
   --showGraph           show the dependency graph
-  --tree                show `atlas deps` output as a dependency tree
-  --update, -u          for `install`, update dependency repos before solving
-  --only                for `unlink`, leave child dependencies linked
   --noexec              do not perform any action that may run arbitrary code
   --autoenv             detect the minimal Nim $version and setup a
                         corresponding Nim virtual environment

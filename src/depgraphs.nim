@@ -335,24 +335,16 @@ proc hasSatisfiedFeatureDeps(graph: DepGraph; pkg: Package;
   true
 
 proc collectUnsatisfiedContextFeatures(graph: DepGraph): seq[string] =
-  ## Compare requested `--feature` flags with SAT-selected package features.
-  var requested: seq[string]
-  if allFeaturesRequested():
-    for pkg in allActiveNodes(graph):
-      let rel = pkg.activeNimbleRelease()
-      if rel.isNil:
-        continue
-      for featName in rel.features.keys():
-        requested.addUnique(FeatureDefinePrefix & pkg.packageFeatureName(rel) & "." & featName)
-  else:
-    requested = context().features.toSeq()
-    if not graph.root.isNil:
-      let rel = graph.root.activeNimbleRelease()
-      if not rel.isNil:
-        for feature in ["dev", "patch"]:
-          if feature in rel.features:
-            requested.addUnique(FeatureDefinePrefix &
-              graph.root.packageFeatureName(rel) & "." & feature)
+  ## Compare requested features with SAT-selected package features.
+  var requested = context().features.toSeq()
+  if not graph.root.isNil:
+    let rel = graph.root.activeNimbleRelease()
+    if not rel.isNil:
+      let allRootFeatures = allFeaturesRequested()
+      for feature in rel.features.keys():
+        if allRootFeatures or feature in ["dev", "patch"]:
+          requested.addUnique(FeatureDefinePrefix &
+            graph.root.packageFeatureName(rel) & "." & feature)
   requested.sort()
   for raw in requested:
     let qualified =

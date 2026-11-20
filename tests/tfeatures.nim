@@ -1,6 +1,6 @@
 # Small program that runs the test cases
 
-import std / [strutils, os, uri, jsonutils, json, tables, sequtils, sets, unittest]
+import std / [strutils, os, uri, jsonutils, json, tables, sequtils, sets, tempfiles, unittest]
 import std/terminal
 
 import basic/[sattypes, context, reporters, pkgurls, compiledpatterns, versions]
@@ -386,73 +386,63 @@ suite "test global features":
         check "features.proj_a.testing" in nimCfg
         check "features.proj_a.marker" in nimCfg
 
-  test "atlasRun install activates package feature deps from --allFeatures":
-      setAtlasVerbosity(Error)
-      withDir "tests/ws_features_global":
-        removeDir("deps")
-        removeDir("proj_feature_dep")
-        let rootNimble = "ws_features_global.nimble"
-        let originalRootNimble = readFile(rootNimble)
-        defer:
-          writeFile(rootNimble, originalRootNimble)
-        writeFile(rootNimble, "requires \"proj_a\"\n")
+  test "atlasRun install scopes --allFeatures to the root package":
+    setAtlasVerbosity(Error)
+    let workspace = createTempDir("atlas-all-features-", "")
+    defer: removeDir(workspace)
+    let root = workspace / "root"
+    let depUrl = toWindowsFileUrl("file://" & (workspace / "dependency"))
+    let rootExtraUrl = toWindowsFileUrl("file://" & (workspace / "root_extra"))
+    let depExtraUrl = toWindowsFileUrl("file://" & (workspace / "dep_extra"))
 
-        setContext(AtlasContext())
-        context().nameOverrides = Patterns()
-        context().urlOverrides = Patterns()
-        context().proxy = parseUri "http://localhost:4242"
-        context().flags = {DumbProxy}
-        context().depsDir = Path "deps"
-        context().defaultAlgo = SemVer
-        project(paths.getCurrentDir())
-
-        expectedVersionWithGitTags()
-        var nc = createNimbleContext()
-        nc.put("proj_a", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_a"))
-        nc.put("proj_b", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_b"))
-        nc.put("proj_c", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_c"))
-        nc.put("proj_d", toPkgUriRaw(parseUri "https://example.com/buildGraph/proj_d"))
-
-        let dir = paths.getCurrentDir().absolutePath
-        discard dir.loadWorkspace(nc, AllReleases, onClone=DoClone, doSolve=false)
-
-        let featureDepPath = (paths.getCurrentDir() / Path"proj_feature_dep").absolutePath
-        createDir($featureDepPath)
-        withDir $featureDepPath:
-          writeFile("proj_feature_dep.nimble", dedent"""
-          version "1.0.0"
-          """)
-          exec "git init"
-          exec "git add proj_feature_dep.nimble"
-          exec "git commit -m \"feat: add proj_feature_dep.nimble\""
-          exec "git tag v1.0.0"
-
-        withDir "deps" / "proj_a":
-          writeFile("proj_a.nimble", dedent"""
-          requires "proj_b >= 1.1.0"
-          feature "testing":
-            requires "$1 >= 1.0.0"
+    for (name, contents) in [
+        ("root_extra", "version = \"1.0.0\"\n"),
+        ("dep_extra", "version = \"1.0.0\"\n"),
+        ("dependency", dedent"""
+          version = "1.0.0"
           feature "marker":
             discard
-          """ % [toWindowsFileUrl("file://" & $featureDepPath)])
-          exec "git add proj_a.nimble"
-          exec "git commit -m \"feat: add proj_a feature deps for --allFeatures test\""
-          exec "git tag v1.2.0"
+          feature "testing":
+            requires "$1 >= 1.0.0"
+          """ % depExtraUrl)]:
+      let repo = workspace / name
+      createDir(repo)
+      withDir repo:
+        writeFile(name & ".nimble", contents)
+        exec "git init -q"
+        exec "git add ."
+        exec "git commit -qm initial"
+        exec "git tag v1.0.0"
 
-        setContext(AtlasContext())
-        atlasRun(@[
-          "--deps=deps",
-          "--proxy=http://localhost:4242/",
-          "--dumbproxy",
-          "--allFeatures",
-          "install"
-        ])
+    createDir(root / "deps" / ".cache")
+    withDir root:
+      writeFile("deps" / ".cache" / "packages.json", "[]\n")
+      writeFile("root.nimble", dedent"""
+        requires "$1 >= 1.0.0[marker]"
+        feature "testing":
+          requires "$2 >= 1.0.0"
+        feature "empty":
+          discard
+        """ % [depUrl, rootExtraUrl])
 
-        check dirExists("deps" / "proj_feature_dep")
-        let nimCfg = readFile("nim.cfg")
-        check "deps/proj_feature_dep" in nimCfg
-        check "features.proj_a.testing" in nimCfg
-        check "features.proj_a.marker" in nimCfg
+      setContext(AtlasContext())
+      atlasRun(@["install", "--allFeatures", "--noexec"])
+
+      let nimCfg = readFile("nim.cfg")
+      check "features.root.testing" in nimCfg
+      check "features.root.empty" in nimCfg
+      check "deps/root_extra" in nimCfg
+      check "features.dependency.marker" in nimCfg
+      check "features.dependency.testing" notin nimCfg
+      check not dirExists("deps" / "dep_extra")
+
+      setContext(AtlasContext())
+      atlasRun(@["install", "--allFeatures", "--feature=dependency.testing", "--noexec"])
+
+      let explicitCfg = readFile("nim.cfg")
+      check "features.root.testing" in explicitCfg
+      check "features.dependency.testing" in explicitCfg
+      check "deps/dep_extra" in explicitCfg
 
   test "requires dependency feature activates empty feature declaration":
       setAtlasVerbosity(Error)
