@@ -161,8 +161,7 @@ func featurePackageName*(declaredName, fallbackName: string): string =
 proc hasRequestedFeature*(pkgShortName, pkgProjectName, pkgDeclaredName,
                           pkgName, feature: string; isRoot: bool): bool =
   initAtlasContext()
-  if AllFeatures in atlasContext.flags or
-      (isRoot and feature in ["dev", "patch"]):
+  if isRoot and (AllFeatures in atlasContext.flags or feature in ["dev", "patch"]):
     return true
   if isRoot and atlasContext.features.containsFeature(feature):
     return true
