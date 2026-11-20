@@ -391,9 +391,6 @@ suite "test global features":
     let workspace = createTempDir("atlas-all-features-", "")
     defer: removeDir(workspace)
     let root = workspace / "root"
-    let depUrl = toWindowsFileUrl("file://" & (workspace / "dependency"))
-    let rootExtraUrl = toWindowsFileUrl("file://" & (workspace / "root_extra"))
-    let depExtraUrl = toWindowsFileUrl("file://" & (workspace / "dep_extra"))
 
     for (name, contents) in [
         ("root_extra", "version = \"1.0.0\"\n"),
@@ -403,9 +400,9 @@ suite "test global features":
           feature "marker":
             discard
           feature "testing":
-            requires "$1 >= 1.0.0"
-          """ % depExtraUrl)]:
-      let repo = workspace / name
+            requires "file://./repos/dep_extra >= 1.0.0"
+          """)]:
+      let repo = root / "repos" / name
       createDir(repo)
       withDir repo:
         writeFile(name & ".nimble", contents)
@@ -417,16 +414,18 @@ suite "test global features":
     createDir(root / "deps" / ".cache")
     withDir root:
       writeFile("deps" / ".cache" / "packages.json", "[]\n")
+      # Windows temp paths can contain '~', a Nimble version operator.
       writeFile("root.nimble", dedent"""
-        requires "$1 >= 1.0.0[marker]"
+        requires "file://./repos/dependency >= 1.0.0[marker]"
         feature "testing":
-          requires "$2 >= 1.0.0"
+          requires "file://./repos/root_extra >= 1.0.0"
         feature "empty":
           discard
-        """ % [depUrl, rootExtraUrl])
+        """)
 
       setContext(AtlasContext())
       atlasRun(@["install", "--allFeatures", "--noexec"])
+      require atlasErrors() == 0
 
       let nimCfg = readFile("nim.cfg")
       check "features.root.testing" in nimCfg
@@ -438,6 +437,7 @@ suite "test global features":
 
       setContext(AtlasContext())
       atlasRun(@["install", "--allFeatures", "--feature=dependency.testing", "--noexec"])
+      require atlasErrors() == 0
 
       let explicitCfg = readFile("nim.cfg")
       check "features.root.testing" in explicitCfg
